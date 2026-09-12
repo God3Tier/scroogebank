@@ -1,0 +1,43 @@
+### Env / secrets ###
+.env
+.env.*
+!.env.example
+
+### Java / Maven ###
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/
+!**/src/main/**
+!**/src/test/**
+
+### Node / Frontend ###
+node_modules/
+dist/
+build/
+frontend/.vite/
+npm-debug.log*
+
+### IDE ###
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Terraform ###
+infra/terraform/**/.terraform/
+infra/terraform/**/*.tfstate
+infra/terraform/**/*.tfstate.*
+infra/terraform/**/.terraform.lock.hcl
+infra/terraform/**/*.tfvars
+!infra/terraform/**/*.tfvars.example
+
+### Docker ###
+*.log
