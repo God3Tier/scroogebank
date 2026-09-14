@@ -32,12 +32,18 @@ npm-debug.log*
 Thumbs.db
 
 ### Terraform ###
-infra/terraform/**/.terraform/
-infra/terraform/**/*.tfstate
-infra/terraform/**/*.tfstate.*
-infra/terraform/**/.terraform.lock.hcl
-infra/terraform/**/*.tfvars
-!infra/terraform/**/*.tfvars.example
+# Unanchored: catches stray state from running terraform outside envs/prod.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
 
 ### Docker ###
 *.log
+
+### TypeScript ###
+*.tsbuildinfo
