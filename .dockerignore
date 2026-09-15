@@ -1,0 +1,9 @@
+# Build context for the service images (docker build -f services/<name>/Dockerfile .).
+# Allowlist: the Dockerfiles copy only the root pom.xml, each service's pom.xml
+# and the service's own directory, so send nothing else. Without this, every
+# build uploads frontend/node_modules, infra/ and all target/ directories.
+*
+!pom.xml
+!services/*/pom.xml
+!services/*/src/
+**/target/
