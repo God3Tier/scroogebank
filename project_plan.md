@@ -95,7 +95,7 @@ Humans and coding agents must synchronize frequently to minimize merge conflicts
 3. Rebase/merge the latest shared `feat/<feature-name>` branch into the subtask branch regularly during active work, especially before touching shared contracts, schemas, infrastructure, or documentation.
 4. Fetch/synchronize again before committing a substantial change and before opening/updating a PR.
 5. Never assume chat context reflects the latest repository state; **the repository is the source of truth**. Agents must inspect/fetch current Git state before making decisions that could conflict with teammates.
-6. Do not force-push shared branches (`dev`, `staging`, `prod`, any shared `feat/<feature-name>` branch, or another developer's branch).
+6. Do not force-push shared branches (`dev`, `staging`, `main`, any shared `feat/<feature-name>` branch, or another developer's branch).
 7. If upstream changes create ambiguity, stop, surface the conflict, update the feature plan/task ownership if necessary, then continue.
 
 Recommended rhythm during active collaborative work: fetch at task start, after any teammate merge notification, before changing shared files, and before PR/merge.
@@ -114,7 +114,7 @@ These rules apply to every human contributor and every AI coding agent.
 4. Every ADR must identify the **date/time** and the **human owner/decision-maker(s)**. AI assistants may draft an ADR, but a human team member must own/confirm the decision.
 5. Every feature starts with a `<feature-name>_plan.md` before substantial implementation.
 6. No feature is considered complete until its plan, code, tests, ADRs, docs, migrations, API changes and operational instructions are updated.
-7. All branch promotion follows the agreed flow and CI/CD gates. No direct `feat/...` push to `staging` or `prod`.
+7. All branch promotion follows the agreed flow and CI/CD gates. No direct `feat/...` push to `staging` or `main`.
 8. Secrets must never be committed. Use AWS secret/configuration mechanisms and environment-specific configuration.
 9. Never use production-like real personal/confidential banking data. Use synthetic/dummy data.
 10. All API behavior must remain documented and backward compatibility considered when APIs change.
@@ -124,7 +124,7 @@ These rules apply to every human contributor and every AI coding agent.
 14. Java 25 is the default backend runtime; other deployed runtimes require explicit justification and documentation.
 15. Every implementation task must have a named primary developer in the relevant feature plan before parallel work begins.
 16. Humans and agents must fetch/synchronize Git frequently and re-check upstream state before editing shared files or opening a PR.
-17. Branch ownership is recorded in feature plans/PRs; developer names are not required in branch names. Use `task/<feature>/<subtask>` for subtask work and merge only through `task/<feature>/<subtask> -> feat/<feature> -> dev -> staging -> prod`.
+17. Branch ownership is recorded in feature plans/PRs; developer names are not required in branch names. Use `task/<feature>/<subtask>` for subtask work and merge only through `task/<feature>/<subtask> -> feat/<feature> -> dev -> staging -> main`.
 18. Normal project spend MUST remain within USD 300; the reserved USD 100 buffer is protected contingency.
 
 ---
@@ -199,7 +199,7 @@ Do **not** let the folder structure imply an architecture decision that has not 
 The repository uses **three long-lived environment branches** and hierarchical short-lived feature branches:
 
 ```text
-prod
+main (production/release)
 └── staging
     └── dev
         ├── feat/base-features
@@ -226,14 +226,14 @@ dev
         ↓
 staging
         ↓
-prod
+main
 ```
 
-A subtask branch MUST NOT skip its parent feature branch. Likewise, a feature branch MUST NOT skip `dev` and merge directly into `staging` or `prod`.
+A subtask branch MUST NOT skip its parent feature branch. Likewise, a feature branch MUST NOT skip `dev` and merge directly into `staging` or `main`.
 
 ## 5.1 Long-lived branches
 
-### `prod`
+### `main` (production/release)
 
 - Represents the current release/demo-ready production state.
 - Protected branch.
@@ -325,11 +325,11 @@ dev
 - After integration testing in `dev`, promotion continues:
 
 ```text
-dev -> staging -> prod
+dev -> staging -> main
 ```
 
 - Feature/subtask branches should be deleted after successful merge unless there is a concrete reason to retain them.
-- No direct pushes to `dev`, `staging`, or `prod`; use reviewed PRs.
+- No direct pushes to `dev`, `staging`, or `main`; use reviewed PRs.
 - Do not force-push shared `feat/<feature-name>` branches.
 - Branch names identify the workstream/subtask, **not the developer**. Developer ownership is recorded in the corresponding feature plan and PR.
 - Example: `task/base-features/oauth` may be owned by Azeez in `base-features_plan.md`; the developer name does not need to appear in the branch name.
@@ -366,14 +366,14 @@ Agents must not rely on stale chat context. They must inspect the latest branch 
 
 The repository's initial branches predate this operating model. Migrate them without rewriting or discarding commit history:
 
-- Create `prod` and `staging` from the original stable `main` commit.
+- Use the existing protected `main` branch as the production/release branch; `staging` is the pre-release branch.
 - Create `dev` from the accepted shared foundation commit.
 - Create each `feat/<feature>` integration branch from `dev` or its accepted feature baseline.
 - Create replacement `task/<feature>/<subtask>` names at the exact commit IDs of existing work branches before changing any old name.
 - Preserve an archive ref for any older integrated line that is not a clean ancestor of the new feature branch.
 - Keep old branch names temporarily as compatibility aliases while contributors update local tracking branches and open PR targets.
 - Delete an old remote name only after its replacement SHA is verified, its open PRs are retargeted, and the owning developer confirms the migration. Never force-push as part of the rename.
-- Keep `main` as a compatibility/default-branch alias until repository settings, CI triggers, documentation, and branch protections have been updated for `prod`. Do not delete `main` casually.
+- The old `prod` ref is a legacy duplicate of `main`, not a promotion target. Keep it untouched during the no-deletion transition; retire it only after confirming no PR, automation, local tracking branch, or deployment workflow depends on it and the team explicitly approves removal. Do not create new work or PRs against `prod`.
 
 Recommended verification for every renamed branch:
 
@@ -555,7 +555,7 @@ Staging gate should validate:
 - Cost review before production promotion
 - Demo rehearsal
 
-## Step 9 — Promote `staging` to `prod`
+## Step 9 — Promote `staging` to `main`
 
 Production gate should require:
 
@@ -1201,7 +1201,7 @@ Use separate configuration/data boundaries for:
 
 - `dev`
 - `staging`
-- `prod` / demo
+- `main` / production demo
 
 Never run feature tests against the wrong database/environment.
 
@@ -1518,7 +1518,7 @@ Codex should use this order when structuring the repo and creating the first imp
 7. Create PR template.
 8. Create AI usage log template.
 9. Create cost budget/resource register.
-10. Configure branch protection rules/documentation for `prod`, `staging`, `dev`, and the `task/<feature-name>/<subtask> -> feat/<feature-name> -> dev -> staging -> prod` workflow.
+10. Configure branch protection rules/documentation for `main`, `staging`, `dev`, and the `task/<feature-name>/<subtask> -> feat/<feature-name> -> dev -> staging -> main` workflow.
 11. Record the 8-person team roster and feature-plan ownership template.
 12. Pin/document Java 25 as the default backend runtime baseline.
 13. Configure cost governance around the USD 300 hard limit + USD 100 protected buffer.
@@ -1604,4 +1604,4 @@ When this file is first introduced to Codex, Codex should:
 
 # 31. One-Line Operating Principle
 
-> **Plan the feature -> assign each subtask to a named developer -> create `task/<feature>/<subtask>` from `feat/<feature>` -> record every architectural/design decision in append-only ADRs -> implement and test -> merge subtask into its parent `feat/<feature>` -> merge the completed feature into `dev` -> promote `dev` to `staging` -> validate -> promote `staging` to `prod` -> keep docs, auditability, security, frequent Git synchronization, explicit developer ownership, and the USD 300 hard-limit / USD 100 contingency controls current throughout.**
+> **Plan the feature -> assign each subtask to a named developer -> create `task/<feature>/<subtask>` from `feat/<feature>` -> record every architectural/design decision in append-only ADRs -> implement and test -> merge subtask into its parent `feat/<feature>` -> merge the completed feature into `dev` -> promote `dev` to `staging` -> validate -> promote `staging` to `main` (production/release) -> keep docs, auditability, security, frequent Git synchronization, explicit developer ownership, and the USD 300 hard-limit / USD 100 contingency controls current throughout.**
