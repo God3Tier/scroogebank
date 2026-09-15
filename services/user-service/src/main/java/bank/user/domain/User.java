@@ -10,6 +10,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -24,19 +26,24 @@ public class User {
     private UUID id;
 
     @Column(nullable = false)
+    @Setter
     private String firstName;
 
     @Column(nullable = false)
+    @Setter
     private String lastName;
 
     @Column(nullable = false, unique = true)
+    @Setter
     private String email;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @Setter
     private Role role;
 
     @Column(nullable = false)
+    @Setter
     private boolean enabled = true;
 
     /** Root admin cannot be deleted or disabled. */
@@ -48,9 +55,13 @@ public class User {
     @Column(name = "idp_sub", nullable = false, unique = true)
     private String idpSub;
 
-    @Column(nullable = false)
+    /** Set by Hibernate on INSERT. */
+    @CreationTimestamp
+    @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    /** Set by Hibernate on INSERT and on each flush that writes an UPDATE. */
+    @UpdateTimestamp
     @Column(nullable = false)
     private Instant updatedAt;
 
@@ -61,41 +72,5 @@ public class User {
         this.email = email;
         this.role = role;
         this.idpSub = idpSub;
-        this.enabled = true;
-        this.deletable = true;
-        Instant now = Instant.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-    }
-
-    // Hand-written setters: each change also bumps updatedAt.
-
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-        touch();
-    }
-
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-        touch();
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-        touch();
-    }
-
-    public void setRole(Role role) {
-        this.role = role;
-        touch();
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        touch();
-    }
-
-    private void touch() {
-        this.updatedAt = Instant.now();
     }
 }
