@@ -6,12 +6,18 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
 @Table(name = "users")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {
 
     @Id
@@ -35,6 +41,7 @@ public class User {
 
     /** Root admin cannot be deleted or disabled. */
     @Column(nullable = false)
+    @Setter
     private boolean deletable = true;
 
     /** Cognito subject identifier ("sub") for this user. */
@@ -46,9 +53,6 @@ public class User {
 
     @Column(nullable = false)
     private Instant updatedAt;
-
-    protected User() {
-    }
 
     public User(UUID id, String firstName, String lastName, String email, Role role, String idpSub) {
         this.id = id;
@@ -64,21 +68,11 @@ public class User {
         this.updatedAt = now;
     }
 
-    public UUID getId() {
-        return id;
-    }
-
-    public String getFirstName() {
-        return firstName;
-    }
+    // Hand-written setters: each change also bumps updatedAt.
 
     public void setFirstName(String firstName) {
         this.firstName = firstName;
         touch();
-    }
-
-    public String getLastName() {
-        return lastName;
     }
 
     public void setLastName(String lastName) {
@@ -86,17 +80,9 @@ public class User {
         touch();
     }
 
-    public String getEmail() {
-        return email;
-    }
-
     public void setEmail(String email) {
         this.email = email;
         touch();
-    }
-
-    public Role getRole() {
-        return role;
     }
 
     public void setRole(Role role) {
@@ -104,33 +90,9 @@ public class User {
         touch();
     }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
         touch();
-    }
-
-    public boolean isDeletable() {
-        return deletable;
-    }
-
-    public void setDeletable(boolean deletable) {
-        this.deletable = deletable;
-    }
-
-    public String getIdpSub() {
-        return idpSub;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
     }
 
     private void touch() {

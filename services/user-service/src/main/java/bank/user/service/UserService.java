@@ -8,6 +8,7 @@ import bank.user.exception.ForbiddenOperationException;
 import bank.user.exception.NotFoundException;
 import bank.user.identity.IdentityProviderClient;
 import bank.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,15 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
     private final IdentityProviderClient identityProviderClient;
-
-    public UserService(UserRepository userRepository, IdentityProviderClient identityProviderClient) {
-        this.userRepository = userRepository;
-        this.identityProviderClient = identityProviderClient;
-    }
 
     @Transactional
     public User createUser(CreateUserRequest request) {

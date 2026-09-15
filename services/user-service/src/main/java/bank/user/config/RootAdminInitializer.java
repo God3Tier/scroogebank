@@ -4,6 +4,7 @@ import bank.user.domain.Role;
 import bank.user.domain.User;
 import bank.user.identity.IdentityProviderClient;
 import bank.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.CommandLineRunner;
@@ -27,21 +28,14 @@ import java.util.UUID;
  * not handled here becomes a crash loop rather than a failed request.
  */
 @Component
+@RequiredArgsConstructor
 public class RootAdminInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final IdentityProviderClient identityProviderClient;
-    private final String rootAdminEmail;
 
-    public RootAdminInitializer(
-            UserRepository userRepository,
-            IdentityProviderClient identityProviderClient,
-            @Value("${root-admin.email}") String rootAdminEmail
-    ) {
-        this.userRepository = userRepository;
-        this.identityProviderClient = identityProviderClient;
-        this.rootAdminEmail = rootAdminEmail;
-    }
+    @Value("${root-admin.email}")
+    private final String rootAdminEmail;
 
     @Override
     public void run(String... args) {
