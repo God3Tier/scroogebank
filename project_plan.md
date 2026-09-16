@@ -4,6 +4,8 @@
 >
 > **Rule:** This file describes *how the project is run*. Detailed implementation decisions belong in feature plans and ADRs. If this file conflicts with the official CS301 project specification or AI Usage Policy, the official course documents take precedence.
 
+Coding agents should use the root [`AGENTS.md`](AGENTS.md) as their entry point. It directs them to read this plan and the relevant feature plans, ADRs, and technical documentation before making changes.
+
 ---
 
 ## 1. Project Objective
