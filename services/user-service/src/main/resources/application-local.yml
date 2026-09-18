@@ -1,0 +1,7 @@
+# Local development only. Activate with SPRING_PROFILES_ACTIVE=local.
+# Never set this profile in a deployed task definition.
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
