@@ -3,6 +3,7 @@ package cronjob
 import (
 	"auditor/src/internal/models"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 )
@@ -11,6 +12,10 @@ func (i impl) ReadOffset(ctx context.Context, checked *Checked) {
 	raw, err := i.svc.VerifyChainByOffset(ctx, checked.sequence, checked.offset)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			checked.sequence = 0
+			return
+		}
 		log.Printf("Unable to get chain verify service %s\n", err.Error())
 		return
 	}
