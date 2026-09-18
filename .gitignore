@@ -41,3 +41,6 @@ infra/terraform/**/*.tfvars
 
 ### Docker ###
 *.log
+
+### Go ###
+**/orm/**

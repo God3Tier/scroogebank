@@ -4,7 +4,9 @@ package client
 // Refactor code (too eepy at time of commit)
 
 import (
+	"client-profile-management-service/src/internal/models"
 	"client-profile-management-service/src/internal/service"
+	"encoding/json"
 	"errors"
 	"net/http"
 )
@@ -28,10 +30,15 @@ func New(svc service.ClientService) ClientController {
 }
 
 func (c *clientController) CreateClientProfile(w http.ResponseWriter, r *http.Request) {
+	var client models.Client
+	err := json.NewDecoder(r.Body).Decode(&client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 
-
-	err := c.svc.CreateClientProfile()
+	err = c.svc.CreateClientProfile(client)
 	if err != nil {
 
 		switch {
