@@ -41,3 +41,7 @@ infra/terraform/**/*.tfvars
 
 ### Docker ###
 *.log
+
+/**/mocks*
+/**/mock_*
+/**/*.pb.go 
