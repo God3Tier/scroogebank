@@ -11,4 +11,14 @@ var (
 type ClientService interface {
 	CreateClientProfile() error
 	VerifyClientIdentity() error
+	UpdateClientInformation() error
+	GetClientProfile() error
+	DeleteClientProfile() error
+}
+
+func CreateClientProfile() error {
+
+
+
+	return nil;
 }

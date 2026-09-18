@@ -4,7 +4,7 @@ package client
 // Refactor code (too eepy at time of commit)
 
 import (
-	"client-profile-management-service/m/internal/service"
+	"client-profile-management-service/src/internal/service"
 	"errors"
 	"net/http"
 )
@@ -12,7 +12,9 @@ import (
 type ClientController interface {
 	CreateClientProfile(w http.ResponseWriter, r *http.Request)
 	VerifyClientIdentity(w http.ResponseWriter, r *http.Request)
-
+	UpdateClientInformation(w http.ResponseWriter, r *http.Request)
+	GetClientProfile(w http.ResponseWriter, r *http.Request)
+	DeleteClientProfile(w http.ResponseWriter, r *http.Request)
 }
 
 type clientController struct {
@@ -26,6 +28,9 @@ func New(svc service.ClientService) ClientController {
 }
 
 func (c *clientController) CreateClientProfile(w http.ResponseWriter, r *http.Request) {
+
+
+
 	err := c.svc.CreateClientProfile()
 	if err != nil {
 
@@ -48,4 +53,16 @@ func (c *clientController) CreateClientProfile(w http.ResponseWriter, r *http.Re
 
 func (c *clientController) VerifyClientIdentity(w http.ResponseWriter, r *http.Request) {
 	c.svc.VerifyClientIdentity()
+}
+
+func (c *clientController) UpdateClientInformation(w http.ResponseWriter, r *http.Request) {
+	c.svc.UpdateClientInformation()
+}
+
+func (c *clientController) GetClientProfile(w http.ResponseWriter, r *http.Request) {
+	c.svc.GetClientProfile()
+}
+
+func (c *clientController) DeleteClientProfile(w http.ResponseWriter, r *http.Request) {
+	c.svc.DeleteClientProfile()
 }
