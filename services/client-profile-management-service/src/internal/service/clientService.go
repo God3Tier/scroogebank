@@ -12,6 +12,7 @@ import (
 var (
 	ErrBadInput = errors.New("bad input")
 	ErrDuplicateClient = errors.New("duplicate client")
+	ErrClientNotFound = errors.New("client not found")
 )
 
 type ClientService interface {
