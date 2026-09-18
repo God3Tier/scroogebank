@@ -23,7 +23,7 @@ func (s ServiceType) IsValid() bool {
 func (s ServiceType) IsValidAction(action string) bool {
 	switch s {
 	case UserManagementServiceType:
-		return strings.EqualFold("USER_MANAGEMENT", action)
+		return strings.EqualFold("CRUD", action)
 
 	case CRMServiceType:
 		return strings.EqualFold("CRUD", action)

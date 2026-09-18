@@ -21,23 +21,6 @@ func InitKafkaReader(topic string, kafkaBrokers []string) *kafka.Reader {
 	return reader
 }
 
-type ValidEvent struct {
-	EventType     string       `json:"event_type"`
-	Action        string       `json:"action"`
-	SourceService string       `json:"source_service"`
-	ActorId       string       `json:"actor_id"`
-	Payload       ValidPayload `json:"payload"`
-}
-
-type ValidPayload struct {
-	AttributeName string `json:"attribute_name"`
-	BeforeValue   string `json:"before_value"`
-	AfterValue    string `json:"after_value"`
-	AgentID       string `json:"agent_id"`
-	ClientID      string `json:"client_id"`
-	DateTime      string `json:"datetime"`
-}
-
 func RunKafkaReader(ctx context.Context, kafkaReader *kafka.Reader, repo repository.Registry, rejectionQueue chan Rejection) {
 	for {
 		msg, err := kafkaReader.ReadMessage(ctx)
@@ -45,7 +28,7 @@ func RunKafkaReader(ctx context.Context, kafkaReader *kafka.Reader, repo reposit
 			continue
 		}
 
-		var event models.AuditLogInput
+		var event ValidEvent
 		if err := json.Unmarshal(msg.Value, &event); err != nil {
 			rejectionQueue <- Rejection{
 				msg,
@@ -54,7 +37,7 @@ func RunKafkaReader(ctx context.Context, kafkaReader *kafka.Reader, repo reposit
 			continue
 		}
 
-		if !event.SourceService.IsValidAction(event.EventType) {
+		if err := validatePayload(event); err != nil {
 			rejectionQueue <- Rejection{
 				msg,
 				fmt.Sprintf(
@@ -65,6 +48,14 @@ func RunKafkaReader(ctx context.Context, kafkaReader *kafka.Reader, repo reposit
 			continue
 		}
 
-		repo.GetAudit().StoreAuditChain(ctx, event) // only valid, authorized events make it into the actual chain
+		parsedEvent := models.AuditLogInput{
+			EventType:     event.EventType,
+			Action:        event.Action,
+			SourceService: models.ServiceType(event.SourceService),
+			ActorId:       event.ActorId,
+			Payload:       string(event.Payload),
+		}
+
+		repo.GetAudit().StoreAuditChain(ctx, parsedEvent) // only valid, authorized events make it into the actual chain
 	}
 }
