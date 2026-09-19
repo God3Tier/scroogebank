@@ -1,23 +1,13 @@
 package client
 
-// TODO: Implement clientService
-// Refactor code (too eepy at time of commit)
-
 import (
+	client "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	"client-profile-management-service/src/internal/service"
 	"encoding/json"
 	"errors"
 	"net/http"
 )
-
-type ClientController interface {
-	CreateClientProfile(w http.ResponseWriter, r *http.Request)
-	VerifyClientIdentity(w http.ResponseWriter, r *http.Request)
-	UpdateClientInformation(w http.ResponseWriter, r *http.Request)
-	GetClientProfile(w http.ResponseWriter, r *http.Request)
-	DeleteClientProfile(w http.ResponseWriter, r *http.Request)
-}
 
 type clientController struct {
 	svc service.ClientService
@@ -30,27 +20,26 @@ func New(svc service.ClientService) ClientController {
 }
 
 func (c *clientController) CreateClientProfile(w http.ResponseWriter, r *http.Request) {
-	var client models.Client
-	err := json.NewDecoder(r.Body).Decode(&client)
+	var cli models.Client
+	err := json.NewDecoder(r.Body).Decode(&cli)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "bad input", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	err = c.svc.CreateClientProfile(ctx, client)
+	err = c.svc.CreateClientProfile(ctx, cli)
 	if err != nil {
-
 		switch {
-			case errors.Is(err, service.ErrBadInput):
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			case errors.Is(err, service.ErrDuplicateClient):
-				http.Error(w, err.Error(), http.StatusConflict)
-				return
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+		case errors.Is(err, client.ErrDuplicateClient):
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		case errors.Is(err, client.ErrBadInput):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -64,12 +53,12 @@ func (c *clientController) VerifyClientIdentity(w http.ResponseWriter, r *http.R
 	err := c.svc.VerifyClientIdentity(ctx, idStr)
 	if err != nil {
 		switch {
-			case errors.Is(err, service.ErrClientNotFound):
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+		case errors.Is(err, client.ErrClientNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -80,21 +69,25 @@ func (c *clientController) VerifyClientIdentity(w http.ResponseWriter, r *http.R
 func (c *clientController) UpdateClientInformation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.URL.Query().Get("id")
-	var client models.Client
-	client.ClientID = idStr
-	err := json.NewDecoder(r.Body).Decode(&client)
+	var cli models.Client
+	cli.ClientID = idStr
+	err := json.NewDecoder(r.Body).Decode(&cli)
 	if err != nil {
-		switch {
-			case errors.Is(err, service.ErrBadInput):
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-		}
+		http.Error(w, "bad input", http.StatusBadRequest)
+		return
 	}
 
-	c.svc.UpdateClientInformation(ctx, client)
+	err = c.svc.UpdateClientInformation(ctx, cli)
+	if err != nil {
+		switch {
+		case errors.Is(err, client.ErrBadInput):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "Client information updated successfully"}`))
 }
@@ -105,12 +98,12 @@ func (c *clientController) GetClientProfile(w http.ResponseWriter, r *http.Reque
 	ret, err := c.svc.GetClientProfile(ctx, idStr)
 	if err != nil {
 		switch {
-			case errors.Is(err, service.ErrClientNotFound):
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+		case errors.Is(err, client.ErrClientNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -124,12 +117,12 @@ func (c *clientController) DeleteClientProfile(w http.ResponseWriter, r *http.Re
 	err := c.svc.DeleteClientProfile(ctx, idStr)
 	if err != nil {
 		switch {
-			case errors.Is(err, service.ErrClientNotFound):
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+		case errors.Is(err, client.ErrClientNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 

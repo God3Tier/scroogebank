@@ -1,20 +1,15 @@
 package repository
 
 import (
+	errors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	orm "client-profile-management-service/src/internal/repository/orm"
 	"context"
 	"time"
 
 	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/aarondl/sqlboiler/v4/queries/qm"
 )
-type ClientRepository interface {
-	CreateClient(ctx context.Context, exec boil.ContextExecutor, client *models.Client) error
-	VerifyClientIdentity(ctx context.Context, exec boil.ContextExecutor, clientID string) error
-	UpdateClientInformation(ctx context.Context, exec boil.ContextExecutor, clientID string, client *models.Client) error
-	GetClientProfile(ctx context.Context, exec boil.ContextExecutor, clientID string) (*models.Client, error)
-	DeleteClient(ctx context.Context, exec boil.ContextExecutor, clientID string) error
-}
 
 type clientRepository struct {
 }
@@ -70,47 +65,64 @@ func (r *clientRepository) DeleteClient(ctx context.Context, exec boil.ContextEx
 func (r *clientRepository) GetClientProfile(ctx context.Context, exec boil.ContextExecutor, clientID string) (*models.Client, error) {
 	client, err := orm.FindClient(ctx, exec, clientID)
 	if err != nil {
-		return nil, err
+		return nil, errors.ErrClientNotFound
 	}
 
 	return &models.Client{
-		ClientID: client.ClientID,
-		FirstName: client.FirstName,
-		LastName: client.LastName,
-		DateOfBirth: client.DateOfBirth,
-		Gender: client.Gender,
-		Email: client.Email,
-		PhoneNumber: client.PhoneNumber,
-		Address: client.Address,
-		City: client.City,
-		State: client.State,
-		Country: client.Country,
-		PostalCode: client.PostalCode,
+		ClientID:           client.ClientID,
+		FirstName:          client.FirstName,
+		LastName:           client.LastName,
+		DateOfBirth:        client.DateOfBirth,
+		Gender:             client.Gender,
+		Email:              client.Email,
+		PhoneNumber:        client.PhoneNumber,
+		Address:            client.Address,
+		City:               client.City,
+		State:              client.State,
+		Country:            client.Country,
+		PostalCode:         client.PostalCode,
 		VerificationStatus: client.VerificationStatus,
-		CreatedByAgentID: client.CreatedByAgentID,
+		CreatedByAgentID:   client.CreatedByAgentID,
 	}, nil
 }
 
 func (r *clientRepository) CreateClient(ctx context.Context, exec boil.ContextExecutor, client *models.Client) error {
+	if r.isClientDuplicate(ctx, exec, client.Email, client.PhoneNumber) {
+		return errors.ErrDuplicateClient
+	}
+
 	newClient := &orm.Client{
-		ClientID: client.ClientID,
-		FirstName: client.FirstName,
-		LastName: client.LastName,
-		DateOfBirth: client.DateOfBirth,
-		Gender: client.Gender,
-		Email: client.Email,
-		PhoneNumber: client.PhoneNumber,
-		Address: client.Address,
-		City: client.City,
-		State: client.State,
-		Country: client.Country,
-		PostalCode: client.PostalCode,
+		ClientID:           client.ClientID,
+		FirstName:          client.FirstName,
+		LastName:           client.LastName,
+		DateOfBirth:        client.DateOfBirth,
+		Gender:             client.Gender,
+		Email:              client.Email,
+		PhoneNumber:        client.PhoneNumber,
+		Address:            client.Address,
+		City:               client.City,
+		State:              client.State,
+		Country:            client.Country,
+		PostalCode:         client.PostalCode,
 		VerificationStatus: client.VerificationStatus,
-		CreatedByAgentID: client.CreatedByAgentID,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedByAgentID:   client.CreatedByAgentID,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 
 	err := newClient.Insert(ctx, exec, boil.Infer())
 	return err
+}
+
+func (r *clientRepository) isClientDuplicate(ctx context.Context, exec boil.ContextExecutor, clientEmail string, clientPhone string) bool {
+	exists, err := orm.Clients(
+		qm.Select(orm.ClientColumns.ClientID),
+		qm.Where("email = ?", clientEmail),
+		qm.Or2(qm.Where("phone_number = ?", clientPhone)),
+	).Exists(ctx, exec)
+	if err != nil {
+		return false
+	}
+
+	return exists
 }
