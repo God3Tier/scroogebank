@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"uuid"
 
 	clientErrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
@@ -36,12 +37,13 @@ func NewClientService(db *sql.DB, repo repository.ClientRepository) ClientServic
 }
 
 func validateClientProfile(client *models.Client, requireVerificationStatus bool) error {
+	// The field 'max: 0' represents no enforced maximum length
 	trimmedValues := []struct {
 		name  string
 		value string
 		max   int
 	}{
-		{name: "client_id", value: strings.TrimSpace(client.ClientID), max: 0},
+		{name: "client_id", value: strings.TrimSpace(client.ClientID.String()), max: 0},
 		{name: "first_name", value: strings.TrimSpace(client.FirstName), max: maxFirstNameLength},
 		{name: "last_name", value: strings.TrimSpace(client.LastName), max: maxLastNameLength},
 		{name: "gender", value: strings.TrimSpace(client.Gender), max: maxGenderLength},
@@ -88,6 +90,7 @@ func (s *clientService) CreateClientProfile(ctx context.Context, client models.C
 		return err
 	}
 
+	client.ClientID = uuid.New()
 	err := s.repo.CreateClient(ctx, s.db, &client)
 	if err != nil {
 		return err
@@ -115,7 +118,7 @@ func (s *clientService) UpdateClientInformation(ctx context.Context, client mode
 		return err
 	}
 
-	err := s.repo.UpdateClientInformation(ctx, s.db, client.ClientID, &client)
+	err := s.repo.UpdateClientInformation(ctx, s.db, client.ClientID.String(), &client)
 	if err != nil {
 		return err
 	}

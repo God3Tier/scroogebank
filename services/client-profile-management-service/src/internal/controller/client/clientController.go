@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"uuid"
 )
 
 type clientController struct {
@@ -68,10 +69,15 @@ func (c *clientController) VerifyClientIdentity(w http.ResponseWriter, r *http.R
 
 func (c *clientController) UpdateClientInformation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	idStr := r.URL.Query().Get("id")
 	var cli models.Client
-	cli.ClientID = idStr
 	err := json.NewDecoder(r.Body).Decode(&cli)
+	if err != nil {
+		http.Error(w, "bad input", http.StatusBadRequest)
+		return
+	}
+
+	idStr := r.URL.Query().Get("id")
+	cli.ClientID, err = uuid.Parse(idStr)
 	if err != nil {
 		http.Error(w, "bad input", http.StatusBadRequest)
 		return

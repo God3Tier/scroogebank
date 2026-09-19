@@ -6,6 +6,7 @@ import (
 	orm "client-profile-management-service/src/internal/repository/orm"
 	"context"
 	"time"
+	"uuid"
 
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/aarondl/sqlboiler/v4/queries/qm"
@@ -68,8 +69,13 @@ func (r *clientRepository) GetClientProfile(ctx context.Context, exec boil.Conte
 		return nil, errors.ErrClientNotFound
 	}
 
+	// Convert string clientID to uuid
+	c, err := uuid.Parse(client.ClientID)
+	if err != nil {
+		return nil, err
+	}
 	return &models.Client{
-		ClientID:           client.ClientID,
+		ClientID:           c,
 		FirstName:          client.FirstName,
 		LastName:           client.LastName,
 		DateOfBirth:        client.DateOfBirth,
@@ -92,7 +98,7 @@ func (r *clientRepository) CreateClient(ctx context.Context, exec boil.ContextEx
 	}
 
 	newClient := &orm.Client{
-		ClientID:           client.ClientID,
+		ClientID:           client.ClientID.String(),
 		FirstName:          client.FirstName,
 		LastName:           client.LastName,
 		DateOfBirth:        client.DateOfBirth,

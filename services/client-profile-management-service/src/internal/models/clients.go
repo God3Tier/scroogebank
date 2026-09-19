@@ -1,9 +1,12 @@
 package models
 
-import "time"
+import (
+	"time"
+	"uuid"
+)
 
 type Client struct {
-	ClientID           string
+	ClientID           uuid.UUID
 	FirstName          string
 	LastName           string
 	DateOfBirth        time.Time
