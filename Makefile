@@ -69,7 +69,7 @@ test:
 	@trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
 	$(TEST_COMPOSE) up -d postgres; \
 	until $(TEST_COMPOSE) exec -T postgres pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done; \
-	$(TEST_COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) < services/client-profile-management-service/$(SCHEMA_FILE); \
+	$(TEST_COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
 	$(TEST_COMPOSE) run --rm tools sqlboiler -c sqlboiler.docker.toml psql -o src/internal/repository/orm --wipe; \
 	for f in $(ORM_DIR)/*.go; do \
 		case "$$f" in \
