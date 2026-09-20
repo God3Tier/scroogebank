@@ -3,6 +3,7 @@ module client-profile-management-service
 go 1.27.1
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.4.1
 	github.com/aarondl/randomize v0.0.2
 	github.com/aarondl/sqlboiler/v4 v4.19.7
 	github.com/aarondl/strmangle v0.0.9
