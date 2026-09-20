@@ -22,9 +22,20 @@ import (
 */
 
 func RegisterRoutes(router *gin.Engine) {
-	router.GET("/health", func(c *gin.Context){
-		c.JSON(http.StatusOK, gin.H{
-			"status" : "OK",
-		})
-	})
+	api := router.Group("/api")
+
+	client := api.Group("/client")
+	{
+		client.POST("", client.CreateClientProfile)
+		client.POST("/:clientId/verify", client.VerifyClientIdentity)
+		client.PUT("/:clientId", client.UpdateClientInformation)
+		client.GET("/:clientId", client.GetClientProfile)
+		client.DELETE("/:clientId", client.DeleteClientProfile)
+	}
+
+	account := api.Group("/account")
+	{
+		account.POST("", account.CreateAccount)
+		account.DELETE("/:accountId", account.DeleteAccount)
+	}
 }
