@@ -5,9 +5,9 @@ DB_HOST      := localhost
 DB_PORT      := 5432
 
 SCHEMA_FILE  := data/audit_log_table.sql
-ORM_DIR      := services/auditor/src/internal/repository/orm
-PROTO_SRC    := services/auditor/proto/audit_request.proto
-PROTO_OUT    := services/auditor/src
+ORM_DIR      := src/internal/repository/orm
+PROTO_SRC    := proto/audit_request.proto
+PROTO_OUT    := src
 
 TEST_COMPOSE := docker compose -f docker-compose.test.yml -p auditor-test
 
