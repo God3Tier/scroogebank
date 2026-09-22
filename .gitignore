@@ -45,5 +45,10 @@ crash.*.log
 ### Docker ###
 *.log
 
+### Go ###
+**/orm/**
+/**/mocks*
+/**/mock_*
+/**/*.pb.go 
 ### TypeScript ###
 *.tsbuildinfo

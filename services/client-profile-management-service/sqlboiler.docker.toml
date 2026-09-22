@@ -1,0 +1,9 @@
+output = "models"
+
+[psql]
+dbname = "myapp"
+host   = "postgres"
+port   = 5432
+user   = "postgres"
+pass   = "postgres"
+sslmode = "disable"
