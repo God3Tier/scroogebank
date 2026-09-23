@@ -15,3 +15,8 @@ type ClientRepository interface {
 	GetClientProfile(ctx context.Context, exec boil.ContextExecutor, clientID string) (*models.Client, error)
 	DeleteClient(ctx context.Context, exec boil.ContextExecutor, clientID string) error
 }
+
+// ClientKeyProvider retrieves the AES key from the external key store.
+type ClientKeyProvider interface {
+	GetClientKey(ctx context.Context, clientID string) ([]byte, error)
+}

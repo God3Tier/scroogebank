@@ -12,7 +12,9 @@ type Client struct {
 	DateOfBirth        time.Time   `json:"date_of_birth"`
 	Gender             string      `json:"gender"`
 	Email              string      `json:"email"`
+	EmailHash		   string
 	PhoneNumber        string      `json:"phone_number"`
+	PhoneNumberHash    string
 	Address            string      `json:"address"`
 	City               string      `json:"city"`
 	State              string      `json:"state"`

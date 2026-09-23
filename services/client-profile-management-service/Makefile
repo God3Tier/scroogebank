@@ -5,9 +5,11 @@ DB_HOST     := localhost
 DB_PORT     := 5432
 SCHEMA_FILE := data/V1_init.sql
 ORM_DIR     := src/internal/repository/orm
-TEST_COMPOSE := docker compose -f docker-compose-test.yaml -p client-profile-management-test
+PROJECT_ROOT := $(abspath ../..)
+COMPOSE      := docker compose -f $(PROJECT_ROOT)/docker-compose.yaml
+TEST_COMPOSE := docker compose -f $(PROJECT_ROOT)/docker-compose-test.yaml -p client-profile-management-test
 TOOLS_IMAGE ?= client-profile-management-tools
-TOOLS_MOUNT := -v "$(PWD)":/workspace -w /workspace/services/client-profile-management-service
+TOOLS_MOUNT := -v "$(PROJECT_ROOT)":/workspace -w /workspace/services/client-profile-management-service
 TOOLS_RUN := docker run --rm $(TOOLS_MOUNT) --network host $(TOOLS_IMAGE)
 MOCKERY_ARGS ?=
 
@@ -15,22 +17,22 @@ MOCKERY_ARGS ?=
 
 ## Start Postgres and wait until it's ready
 db-up:
-	docker compose up -d
+	$(COMPOSE) up -d
 	@echo "Waiting for postgres to be healthy..."
-	@until docker compose exec -T postgres pg_isready -U $(DB_USER) >/dev/null 2>&1; do sleep 1; done
+	@until $(COMPOSE) exec -T postgres pg_isready -U $(DB_USER) >/dev/null 2>&1; do sleep 1; done
 	@echo "Postgres is up."
 
 ## Stop and remove the container (keeps the volume)
 db-down:
-	docker compose down
+	$(COMPOSE) down
 
 ## Stop, remove container AND wipe the data volume
 db-reset:
-	docker compose down -v
+	$(COMPOSE) down -v
 
 ## Tail postgres logs
 db-logs:
-	docker compose logs -f postgres
+	$(COMPOSE) logs -f postgres
 
 ## Load your .sql script into the running database
 load-schema:
@@ -42,7 +44,7 @@ psql:
 
 ## Build the generator image without installing tools locally
 tools-image:
-	docker build --target tools -t $(TOOLS_IMAGE) services/client-profile-management-service
+	docker build --target tools -t $(TOOLS_IMAGE) .
 
 ## Run SQLBoiler against a disposable Docker Postgres database
 sqlboiler:
