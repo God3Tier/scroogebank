@@ -346,13 +346,13 @@ Pull requests are the default integration method because they preserve review di
 3. If the user explicitly requests a direct push to a named unprotected `task/*` or `feat/*` branch, first warn them that the action may skip branch-level review, PR discussion, and CI gates that run only on PRs. State the exact destination branch.
 4. Before a user-authorized direct integration, fetch current remote refs, verify the source and destination ancestry, confirm the destination is not protected, inspect ownership and expected files, run the relevant tests/checks, and ensure the push is a non-forced fast-forward that will not overwrite another contributor's work.
 5. Record the user's choice, destination branch, checks run, and any safeguards skipped in the completion report. A direct push does not waive feature-plan, ADR, testing, documentation, ownership, or branch-path requirements.
-6. Azeez provides standing authorization for a direct commit/push to `dev` only when the entire change is project-wide Git-workflow or coding-agent instruction maintenance. A qualifying commit may change only `AGENTS.md`, `CLAUDE.md`, `SKILLS.md`, Git/agent-governance sections of `project_plan.md`, and the ADR that records that same governance decision. It must not include application code, CI workflows, infrastructure, deployment configuration, permissions, secrets, dependency changes, or unrelated documentation.
+6. Azeez provides standing authorization for a direct commit/push to `dev` only when the entire change is project-wide Git-workflow or coding-agent instruction maintenance. A qualifying commit may change only `AGENTS.md`, `CLAUDE.md`, `SKILLS.md`, Git/agent-governance sections of `project_plan.md`, `docs/adr/README.md`, and the ADR that records that same governance decision. It must not include application code, CI workflows, infrastructure, deployment configuration, permissions, secrets, dependency changes, or unrelated documentation.
 7. Before using this `dev` exception, warn that direct commit will skip PR discussion/review and possibly PR-only CI; fetch `origin/dev`; verify the qualifying file/content scope; run applicable documentation checks; confirm the push is a non-forced fast-forward; and report the commit, checks, and skipped safeguards. Azeez's standing authorization means no additional PR/direct-push question is required after the warning.
 8. If a proposed `dev` commit mixes qualifying governance maintenance with any other change, split it or use the normal task-to-feature-to-`dev` PR path. Repository branch protection remains authoritative; do not bypass it if it rejects the push.
 9. Except for this narrow `dev` exception, PRs remain mandatory for every integration or promotion into `dev`, `staging`, or `main`. Every promotion into `staging` or `main` requires a PR. Never bypass repository protection or required CI/review gates.
 10. Force pushes to shared branches and pushes that overwrite others' commits remain prohibited.
 
-This policy is established by `docs/adr/ADR-0001-user-directed-push-policy.md` and amended by `docs/adr/ADR-0002-direct-dev-governance-updates.md`. It applies to humans and coding agents.
+This policy is established by `docs/adr/ADR-0001-user-directed-push-policy.md` and amended by `docs/adr/ADR-0002-direct-dev-governance-updates.md` and `docs/adr/ADR-0003-maintain-one-line-adr-index.md`. It applies to humans and coding agents.
 
 ## 5.5 Synchronization rule for parallel development
 
@@ -618,6 +618,8 @@ Example:
 ```text
 docs/adr/ADR-0007-use-aurora-postgresql.md
 ```
+
+`docs/adr/README.md` is the mandatory ADR index. It lists each ADR as a link followed by a single-sentence summary so humans and agents can identify relevant records without loading every ADR. The index is a routing aid only: an applicable ADR must still be read in full. Add or update exactly one index entry whenever an ADR is created, superseded, deprecated, or has its status changed; never remove historical decisions from the index.
 
 ## 7.3 Required ADR format
 
