@@ -116,7 +116,7 @@ These rules apply to every human contributor and every AI coding agent.
 4. Every ADR must identify the **date/time** and the **human owner/decision-maker(s)**. AI assistants may draft an ADR, but a human team member must own/confirm the decision.
 5. Every feature starts with a `<feature-name>_plan.md` before substantial implementation.
 6. No feature is considered complete until its plan, code, tests, ADRs, docs, migrations, API changes and operational instructions are updated.
-7. All branch promotion follows the agreed flow and CI/CD gates. PRs are mandatory for promotion into `dev`, `staging`, or `main`; no direct `feat/...` push to an environment branch is allowed. Direct integration into an unprotected `task/*` or `feat/*` branch is permitted only under the confirmation, warning, synchronization, and reporting rules in Section 5.4.
+7. All branch promotion follows the agreed flow and CI/CD gates. PRs are mandatory for feature/code promotion into `dev` and for every promotion into `staging` or `main`; no direct `feat/...` push to an environment branch is allowed. Direct integration into an unprotected `task/*` or `feat/*` branch, plus the narrowly scoped project-wide Git/agent-governance exception for `dev`, is permitted only under Section 5.4.
 8. Secrets must never be committed. Use AWS secret/configuration mechanisms and environment-specific configuration.
 9. Never use production-like real personal/confidential banking data. Use synthetic/dummy data.
 10. All API behavior must remain documented and backward compatibility considered when APIs change.
@@ -254,6 +254,7 @@ A subtask branch MUST NOT skip its parent feature branch. Likewise, a feature br
 
 - Main integration branch for completed features.
 - Shared feature branches merge here only after feature-level CI and review pass.
+- The only direct-commit exception is qualifying project-wide Git-workflow or coding-agent instruction maintenance under Section 5.4.
 - Development environment/database must be isolated from staging and production.
 - Cross-feature integration issues are resolved here before promotion.
 
@@ -331,7 +332,7 @@ dev -> staging -> main
 ```
 
 - Feature/subtask branches should be deleted after successful merge unless there is a concrete reason to retain them.
-- No direct pushes to `dev`, `staging`, or `main`; use reviewed PRs.
+- No direct pushes to `dev`, `staging`, or `main`; use reviewed PRs, except for the narrow Git/agent-governance-to-`dev` rule in Section 5.4.
 - Do not force-push shared `feat/<feature-name>` branches.
 - Branch names identify the workstream/subtask, **not the developer**. Developer ownership is recorded in the corresponding feature plan and PR.
 - Example: `task/base-features/oauth` may be owned by Azeez in `base-features_plan.md`; the developer name does not need to appear in the branch name.
@@ -345,10 +346,13 @@ Pull requests are the default integration method because they preserve review di
 3. If the user explicitly requests a direct push to a named unprotected `task/*` or `feat/*` branch, first warn them that the action may skip branch-level review, PR discussion, and CI gates that run only on PRs. State the exact destination branch.
 4. Before a user-authorized direct integration, fetch current remote refs, verify the source and destination ancestry, confirm the destination is not protected, inspect ownership and expected files, run the relevant tests/checks, and ensure the push is a non-forced fast-forward that will not overwrite another contributor's work.
 5. Record the user's choice, destination branch, checks run, and any safeguards skipped in the completion report. A direct push does not waive feature-plan, ADR, testing, documentation, ownership, or branch-path requirements.
-6. PRs remain mandatory for every integration or promotion into `dev`, `staging`, or `main`. Never bypass repository protection or required CI/review gates.
-7. Force pushes to shared branches and pushes that overwrite others' commits remain prohibited.
+6. Azeez provides standing authorization for a direct commit/push to `dev` only when the entire change is project-wide Git-workflow or coding-agent instruction maintenance. A qualifying commit may change only `AGENTS.md`, `CLAUDE.md`, `SKILLS.md`, Git/agent-governance sections of `project_plan.md`, and the ADR that records that same governance decision. It must not include application code, CI workflows, infrastructure, deployment configuration, permissions, secrets, dependency changes, or unrelated documentation.
+7. Before using this `dev` exception, warn that direct commit will skip PR discussion/review and possibly PR-only CI; fetch `origin/dev`; verify the qualifying file/content scope; run applicable documentation checks; confirm the push is a non-forced fast-forward; and report the commit, checks, and skipped safeguards. Azeez's standing authorization means no additional PR/direct-push question is required after the warning.
+8. If a proposed `dev` commit mixes qualifying governance maintenance with any other change, split it or use the normal task-to-feature-to-`dev` PR path. Repository branch protection remains authoritative; do not bypass it if it rejects the push.
+9. Except for this narrow `dev` exception, PRs remain mandatory for every integration or promotion into `dev`, `staging`, or `main`. Every promotion into `staging` or `main` requires a PR. Never bypass repository protection or required CI/review gates.
+10. Force pushes to shared branches and pushes that overwrite others' commits remain prohibited.
 
-This policy is established by `docs/adr/ADR-0001-user-directed-push-policy.md` and applies to humans and coding agents.
+This policy is established by `docs/adr/ADR-0001-user-directed-push-policy.md` and amended by `docs/adr/ADR-0002-direct-dev-governance-updates.md`. It applies to humans and coding agents.
 
 ## 5.5 Synchronization rule for parallel development
 
