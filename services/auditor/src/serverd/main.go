@@ -1,8 +1,11 @@
-package serverd
+// This binary is the auditor's gRPC/HTTP server entrypoint. It is a
+// separate program from src/cronjob; anything both need (currently just
+// InitialiseDB) lives in src/internal/bootstrap instead of here, since a
+// main package cannot be imported by another package.
+package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -16,6 +19,7 @@ import (
 	"time"
 
 	"auditor/src/gen"
+	"auditor/src/internal/bootstrap"
 	"auditor/src/internal/controller"
 	"auditor/src/internal/repository"
 	"auditor/src/internal/service"
@@ -38,7 +42,7 @@ func main() {
 
 func run(ctx context.Context) error {
 	// Setup db and dependencies
-	db, err := IntialiseDB()
+	db, err := bootstrap.InitialiseDB()
 	if err != nil {
 		return err
 	}
@@ -133,16 +137,6 @@ func newSQSClient(ctx context.Context) (*sqs.Client, error) {
 			o.BaseEndpoint = aws.String(endpoint)
 		}
 	}), nil
-}
-
-func IntialiseDB() (*sql.DB, error) {
-	dbname := os.Getenv("DB_NAME")
-	host := os.Getenv("HOST")
-	user := os.Getenv("USER")
-	password := os.Getenv("PASSWORD")
-	sslmode := os.Getenv("SSLMODE")
-
-	return sql.Open("postgres", fmt.Sprintf("dbname=%s host=%s user=%s password=%s sslmode=%s", dbname, host, user, password, sslmode))
 }
 
 /*
