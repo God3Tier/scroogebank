@@ -20,16 +20,26 @@ cd project-2026-27t1-g3-t6
 
 ## Run the service locally
 
-Start the supporting services:
+Start the supporting services. `localstack` stands in for AWS SQS — see
+[ADR-0004](../../docs/adr/ADR-0004-auditor-kafka-to-sqs-migration.md) for why
+the auditor moved off Kafka. It creates the `audit-insert` and
+`audit-insert-dlq` queues automatically on startup:
 
 ```sh
-docker compose up -d postgres kafka
+docker compose up -d postgres localstack
 ```
 
-Run the auditor server from the `services/auditor` directory:
+Run the auditor server from the `services/auditor` directory. Since
+LocalStack doesn't check AWS credentials, any non-empty values work:
 
 ```sh
 cd services/auditor
+export AWS_REGION=us-east-1
+export AWS_ENDPOINT_URL=http://localhost:4566
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AUDIT_QUEUE_URL=http://localhost:4566/000000000000/audit-insert
+export AUDIT_DLQ_URL=http://localhost:4566/000000000000/audit-insert-dlq
 go run ./src/serverd
 ```
 
@@ -51,12 +61,34 @@ Expected response:
 {"status":"ok"}
 ```
 
+Send a test event to the local queue (requires the `awslocal` CLI, or use
+`aws --endpoint-url=http://localhost:4566` instead):
+
+```sh
+awslocal sqs send-message \
+  --queue-url http://localhost:4566/000000000000/audit-insert \
+  --message-body '{"event_id":"evt-1","event_type":"CRUD","action":"UPDATE","source_service":"CRM","actor_id":"agent-1","payload":{"agent_id":"AGT-1","client_id":"CLI-1","attribute_name":"Address","before_value":"A","after_value":"B","datetime":"2026-09-24T00:00:00Z"}}'
+```
+
+The auditor long-polls the queue (up to 20s), so it should pick the message
+up, store it, and delete it shortly after.
+
 Stop the supporting services when finished:
 
 ```sh
 cd ../..
 docker compose down
 ```
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `AWS_REGION` | AWS region for the SQS client |
+| `AUDIT_QUEUE_URL` | URL of the `audit-insert` queue |
+| `AUDIT_DLQ_URL` | URL of the `audit-insert-dlq` queue |
+| `AWS_ENDPOINT_URL` | Set only for LocalStack; omit in AWS so the SDK talks to real SQS |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Local/LocalStack only. In AWS, credentials come from the task's IAM role — never hardcode these |
 
 ## Run tests
 

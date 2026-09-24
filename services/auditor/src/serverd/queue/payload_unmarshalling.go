@@ -1,4 +1,4 @@
-package kafka
+package queue
 
 import (
 	"auditor/src/internal/models"
@@ -8,6 +8,10 @@ import (
 )
 
 type ValidEvent struct {
+	// EventID identifies this event for de-duplication. SQS standard queues
+	// deliver at-least-once, so the same message can be received more than
+	// once; the auditor uses EventID to skip an event it has already stored.
+	EventID       string          `json:"event_id"`
 	EventType     string          `json:"event_type"`
 	Action        string          `json:"action"`
 	SourceService string          `json:"source_service"`

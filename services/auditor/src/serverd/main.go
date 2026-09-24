@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,8 +19,11 @@ import (
 	"auditor/src/internal/controller"
 	"auditor/src/internal/repository"
 	"auditor/src/internal/service"
-	"auditor/src/serverd/kafka"
+	"auditor/src/serverd/queue"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"google.golang.org/grpc"
 )
 
@@ -48,7 +50,7 @@ func run(ctx context.Context) error {
 	// Set up wait group for goroutines
 	var wg sync.WaitGroup
 
-	wg.Add(4)
+	wg.Add(3)
 
 	// Set up grpc server
 	grpcPort := os.Getenv("GRPC_PORT")
@@ -67,22 +69,20 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	// Intiialise kafka listener
-	rejectionQueue := make(chan kafka.Rejection, 100)
-	kafkaBrokers := strings.Split(os.Getenv("KAFKABROKERS"), ",")
-	kafkaReader := kafka.InitKafkaReader("audit.insert", kafkaBrokers)
-	defer kafkaReader.Close()
-	kafkaWriter := kafka.InitKafkaWriter("dql.audit", os.Getenv("HANDLER_IP"))
-	defer kafkaWriter.Close()
+	// Initialise the SQS consumer for audit events
+	sqsClient, err := newSQSClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialise SQS client: %v", err)
+	}
+
+	rejecter := queue.NewRejecter(sqsClient, os.Getenv("AUDIT_DLQ_URL"))
+	consumer := queue.NewConsumer(sqsClient, os.Getenv("AUDIT_QUEUE_URL"), repository.GetAudit(), rejecter)
+
+	consumerCtx, stopConsumer := context.WithCancel(ctx)
 
 	go func() {
 		defer wg.Done()
-		kafka.RunKafkaReader(ctx, kafkaReader, repository, rejectionQueue)
-	}()
-
-	go func() {
-		defer wg.Done()
-		kafka.RunKafkaWriter(ctx, kafkaWriter, rejectionQueue)
+		consumer.Run(consumerCtx)
 	}()
 
 	// Setup HTTP health server
@@ -99,6 +99,7 @@ func run(ctx context.Context) error {
 	go func() {
 		defer wg.Done()
 		<-shutdownContext.Done()
+		stopConsumer() // interrupt an in-flight long poll instead of waiting up to 20s
 		shutdownDeadline, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
@@ -112,10 +113,26 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("server failed: %v", err)
 	}
 
-	close(rejectionQueue)
-
 	wg.Wait()
 	return nil
+}
+
+// newSQSClient builds an SQS client using the AWS SDK's default credential
+// chain (an IAM role in AWS, or environment variables locally) — no
+// credentials are ever hardcoded. When AWS_ENDPOINT_URL is set, requests are
+// pointed at that endpoint instead, so the same code path runs against
+// LocalStack in local development.
+func newSQSClient(ctx context.Context) (*sqs.Client, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(os.Getenv("AWS_REGION")))
+	if err != nil {
+		return nil, fmt.Errorf("load AWS config: %w", err)
+	}
+
+	return sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+		if endpoint := os.Getenv("AWS_ENDPOINT_URL"); endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+		}
+	}), nil
 }
 
 func IntialiseDB() (*sql.DB, error) {
