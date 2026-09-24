@@ -6,6 +6,7 @@ function NavBar() {
       <NavLink to="/">Home</NavLink>
       <NavLink to="/login">Login</NavLink>
       <NavLink to="/client-dashboard">Client Dashboard</NavLink>
+      <NavLink to="/agent-dashboard">Agent Dashboard</NavLink>
       <NavLink to="/admin-dashboard">Admin Dashboard</NavLink>
     </nav>
   )
