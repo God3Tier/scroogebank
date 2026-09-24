@@ -15,6 +15,7 @@ import (
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/aarondl/sqlboiler/v4/queries/qm"
+	"github.com/lib/pq"
 	pkgerrors "github.com/pkg/errors"
 )
 
@@ -51,6 +52,7 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 	newLog := &orm.AuditLog{
 		ID:            uuid,
 		SequenceNo:    null.Int64From(previousSequence + 1),
+		EventID:       null.NewString(auditLog.EventID, auditLog.EventID != ""),
 		EventType:     null.StringFrom(auditLog.EventType),
 		Action:        null.StringFrom(auditLog.Action),
 		SourceService: null.StringFrom(string(auditLog.SourceService)),
@@ -63,6 +65,9 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 
 	err = newLog.Insert(ctx, tx, boil.Infer())
 	if err != nil {
+		if auditLog.EventID != "" && isDuplicateEventID(err) {
+			return DuplicateEventError
+		}
 		return pkgerrors.WithStack(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -70,4 +75,15 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 	}
 
 	return nil
+}
+
+// isDuplicateEventID reports whether err is a Postgres unique-violation on
+// the audit_log_event_id_unique constraint — i.e. an SQS redelivery of an
+// event this service already stored, rather than a genuine failure.
+func isDuplicateEventID(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "23505" && pqErr.Constraint == "audit_log_event_id_unique"
+	}
+	return false
 }

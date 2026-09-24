@@ -10,9 +10,9 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"auditor/src/internal/bootstrap"
 	"auditor/src/internal/repository"
 	"auditor/src/internal/service"
-	"auditor/src/serverd"
 )
 
 type Checked struct {
@@ -40,7 +40,7 @@ func run() error {
 	defer cancel()
 
 	// Dependencies
-	db, err := serverd.IntialiseDB()
+	db, err := bootstrap.InitialiseDB()
 	if err != nil {
 		return err
 	}

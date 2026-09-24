@@ -1,4 +1,4 @@
-package serverd
+package main
 
 import (
 	"encoding/json"
