@@ -1,0 +1,121 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-crm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-db:
+    image: postgres:17-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  go-tools:
+    build:
+      context: ./receiver
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ./receiver:/workspace
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-crm}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      DB_NAME: ${POSTGRES_DB:-crm}
+      SFTP_ADDR: ${SFTP_ADDR:-sftp:22}
+      SFTP_USER: ${SFTP_USER:-reportuser}
+      SFTP_REMOTE_DIR: ${SFTP_REMOTE_DIR:-/reports}
+      SFTP_POLL_INTERVAL: ${SFTP_POLL_INTERVAL:-30s}
+    networks:
+      - backend
+    profiles: ["tools"]
+
+  sftp:
+    image: atmoz/sftp:alpine  # pin a specific version, not :latest
+    platform: linux/amd64
+    ports:
+      - "2222:22"
+    volumes:
+      - reports:/home/reportuser/reports
+      - ../../keys/authorized/:/home/reportuser/.ssh/keys/
+    command: "reportuser::${SFTP_UID:-1000}:${SFTP_GID:-1000}:reports"
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  producer:
+    build: ./producer
+    volumes:
+      - reports:/output
+      - ../../data:/app/data:ro
+    environment:
+      - OUTPUT_DIR=/output
+      - SOURCE_FILE=/app/data/report.json
+      - INTERVAL_SECONDS=${PUBLISH_INTERVAL_SECONDS:-300}
+    networks:
+      - backend
+    restart: unless-stopped
+    depends_on:
+      sftp:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  reports:
+  postgres_data:
