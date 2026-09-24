@@ -7,6 +7,7 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0001](ADR-0001-user-directed-push-policy.md) — PRs are the default, while warned and explicitly authorized direct integration is allowed only for unprotected task and feature branches.
 - [ADR-0002](ADR-0002-direct-dev-governance-updates.md) — Azeez authorizes narrowly scoped Git-workflow and agent-instruction updates directly to `dev`, subject to file allowlisting, warning, synchronization, and non-forced-push checks.
 - [ADR-0003](ADR-0003-maintain-one-line-adr-index.md) — Every ADR must have a one-line entry in the ADR index, which agents scan for relevance before reading applicable decisions in full.
+- [ADR-0004](ADR-0004-event-driven-alerts-mvp-charter.md) — Feature 4 is Event-Driven Client Alerts, owned by Azeez and Hayyun with approved MVP scope, data boundaries, guardrails, retention, and budget defaults.
 
 ## Maintenance rule
 

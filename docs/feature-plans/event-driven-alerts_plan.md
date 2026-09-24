@@ -4,19 +4,20 @@
 
 | Field | Value |
 |---|---|
-| Status | **PROPOSED / NOT READY FOR IMPLEMENTATION** |
-| Innovation slot | Candidate for Feature 4 (AI); requires team confirmation |
-| Human feature owner | Azeez (provisional until team confirmation) |
+| Status | **APPROVED FOR MILESTONE 0; IMPLEMENTATION REQUIRES PREREQUISITE ADRS/CONTRACTS** |
+| Innovation slot | Feature 4 (required AI integration) — confirmed 2026-09-24 |
+| Human feature owner | Azeez — confirmed 2026-09-24 |
 | Delivery team | Azeez — Search/AI/Platform; Hayyun — CRM/Domain/Experience |
 | Proposed feature branch | `feat/event-driven-alerts` |
 | Canonical plan location | `docs/feature-plans/event-driven-alerts_plan.md` |
 | Current draft location | `docs/feature-plans/event-driven-alerts_plan.md` |
 | Last reviewed against repository | 2026-09-24 (Asia/Singapore) |
-| Repository baseline | `origin/dev` at `b17690f` |
+| Repository baseline | `origin/dev` at `544ff66` |
 
-This document is a proposal, not an accepted architecture decision. Substantial
-implementation must not start until the team confirms the innovation slot, Azeez
-as feature owner, the Azeez/Hayyun task allocation, and the required ADRs.
+The feature charter and recommended MVP defaults were approved by Azeez on
+2026-09-24 and are recorded in ADR-0004. Substantial implementation must not start
+until the detailed prerequisite ADRs and API/data contracts named in this plan are
+accepted.
 
 Plan work is performed through `task/event-driven-alerts/plan` into
 `feat/event-driven-alerts`.
@@ -26,9 +27,13 @@ Plan work is performed through `task/event-driven-alerts/plan` into
 This plan follows `project_plan.md`, `AGENTS.md`, `CLAUDE.md`, and the currently
 available service documentation. The following facts constrain the design:
 
-- Features 4–6 are still **NOT YET CONFIRMED** in `project_plan.md`.
-- Java 25 is the default backend baseline. A different deployed runtime for this
-  feature requires a documented need and an accepted ADR.
+- Feature 4 is confirmed as Dynamic Event-Driven Client Alerts. Features 5 and 6
+  remain unconfirmed.
+- The repository is hybrid: `user-service` uses Java 25/Spring Boot/Maven, while
+  the auditor and client-profile services use Go 1.27.1. The current CI workflow
+  runs `mvn -B verify` and does not test the Go services. This feature will use a
+  Java 25 Maven module in the existing reactor; CI coverage for the Go services is
+  a separate repository gap and must not be described as Java coverage.
 - The current client/account schema has clients and bank accounts, but no
   securities, holdings, positions, prices, or portfolio valuations. Portfolio
   exposure cannot be calculated until a source and ownership model for those data
@@ -79,9 +84,9 @@ the source and scoring factors, and choose one of:
 - `MONITOR`
 - `DISMISS`
 
-An authorized admin may view alerts only if the team confirms that this is
-consistent with the role and privacy policy. Every decision and every AI-generated
-recommendation is auditable.
+An authorized admin may view all alerts for oversight but cannot record an agent's
+`INFORM_CLIENT`, `MONITOR`, or `DISMISS` decision. Every decision and every
+AI-generated recommendation is auditable.
 
 ## 5. Scope
 
@@ -324,10 +329,12 @@ before they become persisted contracts.
 - Return only clients the requesting agent is authorized to access.
 - Treat missing or stale price/valuation data as an explicit state, not zero.
 
-**Blocking dependency:** no holdings model or valuation source exists in the
-current repository. The team must decide whether holdings are added to Feature 2,
-provided by Feature 3's external transaction system, or represented by a small
-synthetic innovation-feature dataset.
+**Approved MVP boundary:** no holdings model or valuation source exists in the
+current repository, so the alert service will own a small synthetic holdings and
+valuation dataset with stable instrument IDs, currencies, valuation timestamps,
+and explicit stale/missing states. It is demonstration data, not a live market
+feed. The holdings/data ADR must freeze the schema, freshness rule, and later
+replacement boundary before implementation.
 
 ### FR-5 — Exposure and Alert Scoring
 
@@ -373,7 +380,7 @@ Exact contracts require OpenAPI/event-schema review. Candidate REST endpoints ar
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| `GET` | `/api/alerts` | Agent: own clients; Admin: policy TBD | List authorized alerts |
+| `GET` | `/api/alerts` | Agent: own clients; Admin: read-only oversight across clients | List authorized alerts |
 | `GET` | `/api/alerts/{alertId}` | Same ownership rule | Get evidence and briefing |
 | `POST` | `/api/alerts/{alertId}/decisions` | Assigned agent only | Record Inform/Monitor/Dismiss |
 | `POST` | `/internal/alerts/reprocess/{articleId}` | Admin/service role only | Controlled retry; optional |
@@ -385,10 +392,11 @@ correlation ID, occurred-at timestamp, producer, schema, and idempotency behavio
 Candidate names are `NewsArticleIngested`, `EventClassified`,
 `ClientAlertCreated`, `ClientAlertGenerationFailed`, and `AlertDecisionRecorded`.
 
-No broker is selected by this plan. EventBridge Scheduler is the proposed trigger
-for bounded discovery runs, but its exact integration and retry target remain
-ADR-gated. AgentCore Web Search is the proposed discovery provider; native Bedrock
-Mantle Search is not part of the MVP.
+EventBridge Scheduler invoking a bounded ECS batch task is the approved MVP trigger;
+no additional broker is introduced for alert processing. The existing auditor
+integration remains the audit path. Exact retry, idempotency, and audit-delivery
+contracts remain ADR-gated. AgentCore Web Search is the approved discovery
+provider candidate; native Bedrock Mantle Search is not part of the MVP.
 
 ## 9. Proposed Data Model
 
@@ -521,10 +529,9 @@ scans, contract/integration tests where feasible, and infrastructure validation.
 
 ## 16. Cost Constraints
 
-This feature has no approved total budget. The USD 300 hard limit applies to the
-entire project, not to this feature, and the plan must not assume an equal one-sixth
-allocation. The team may allocate a larger share to this AI feature only after
-accounting for core infrastructure and all other features. Record expected idle,
+This feature has a USD 25 monthly operating alert and a USD 50 development hard
+cap. Both remain subordinate to the USD 300 whole-project hard limit and do not
+grant access to the protected USD 100 contingency. Record expected idle,
 evaluation, load-test, and demo costs in
 `docs/cost/budget.md` and `docs/cost/resource-register.md`.
 
@@ -558,7 +565,8 @@ invocation without disabling access to existing alerts.
 Each ADR needs a human owner and must cover security, privacy, cost, operations,
 validation, and alternatives.
 
-1. **Feature approval and boundaries** — confirm innovation slot and MVP.
+1. **Feature approval and boundaries — accepted in ADR-0004** — Feature 4,
+   ownership, MVP guardrails, retention, and budget defaults are confirmed.
 2. **Holdings and valuation source/ownership** — define data, freshness, currency,
    service boundary, and synthetic demo source.
 3. **Processing architecture** — scheduled jobs versus EventBridge, SQS/SNS,
@@ -655,9 +663,9 @@ experiment only when a benchmark shows measurable value and its ADR is accepted.
 
 ## 19. Task and Ownership Plan
 
-Two developers are planned: Azeez and Hayyun. Azeez is the provisional feature
-owner; the team must confirm that ownership and the innovation slot before
-substantial implementation.
+Two developers are assigned: Azeez and Hayyun. Azeez is the confirmed feature
+owner. Azeez owns Search/AI/Platform; Hayyun owns CRM/Domain/Experience and leads
+final integration with Azeez collaborating.
 
 ### 19.1 Ownership Boundary
 
@@ -673,9 +681,9 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 
 | ID | Owner | Deliverable and completion evidence | Expected files/components | Branch | Depends on | Status | Last Sync |
 |---|---|---|---|---|---|---|---|
-| EDA-00 | Azeez, Hayyun | Confirm feature slot and Azeez as owner; approve canonical plan and create feature branch | Feature plan, ownership record | `task/event-driven-alerts/plan` | Team decision | In progress | 2026-09-24 |
-| EDA-D1-01 | Azeez | Singapore→Tokyo AgentCore spike with measured latency, sample filtered results, IAM notes, teardown, and actual cost | Spike code, architecture notes, AI/cost logs | `task/event-driven-alerts/search-spike` | EDA-00 | Blocked | 2026-09-24 |
-| EDA-D2-01 | Hayyun | Freeze event, holdings-read, alert, feedback, authorization, and OpenAPI contracts with synthetic fixtures | `docs/api/`, `docs/database/`, proposed service contracts/test fixtures | `task/event-driven-alerts/contracts` | EDA-00 | Blocked | 2026-09-24 |
+| EDA-00 | Azeez, Hayyun | Confirm feature slot and Azeez as owner; approve canonical plan and create feature branch | Feature plan, ownership record | `task/event-driven-alerts/plan` | Team decision | Complete | 2026-09-24 |
+| EDA-D1-01 | Azeez | Singapore→Tokyo AgentCore spike with measured latency, sample filtered results, IAM notes, teardown, and actual cost | Spike code, architecture notes, AI/cost logs | `task/event-driven-alerts/search-spike` | EDA-00 | Ready | 2026-09-24 |
+| EDA-D2-01 | Hayyun | Freeze event, holdings-read, alert, feedback, authorization, and OpenAPI contracts with synthetic fixtures | `docs/api/`, `docs/database/`, proposed service contracts/test fixtures | `task/event-driven-alerts/contracts` | EDA-00 | Ready | 2026-09-24 |
 | EDA-D1-02 | Azeez | Terraform/IaC for Tokyo Gateway/tool, IAM, Singapore scheduler/ECS worker, quotas, alarms, and cleanup; validated plan with no unapproved resources | `infrastructure/` paths confirmed by infra owner, cost register | `task/event-driven-alerts/search-infra` | EDA-D1-01, accepted ADRs | Blocked | 2026-09-24 |
 | EDA-D2-02 | Hayyun | Java 25 alert-service foundation, migrations, repositories, state machine, and deterministic fixture path; unit/migration tests pass | Proposed `services/event-alert-service/`, schema docs | `task/event-driven-alerts/service-foundation` | EDA-D2-01, DB ADR | Blocked | 2026-09-24 |
 | EDA-D1-03 | Azeez | Grouped-query builder, date watermark/overlap, URL deduplication, bounded retry, provider interface, and AgentCore adapter; contract/failure tests pass | Search/provider/ingestion/worker packages | `task/event-driven-alerts/ingestion` | EDA-D1-02, EDA-D2-01 | Blocked | 2026-09-24 |
@@ -771,33 +779,29 @@ The MVP is acceptable only when all are demonstrated with synthetic data:
 15. ADRs, OpenAPI/schema docs, runbooks, task status, and AI-usage records are
     current, reviewed, and merged.
 
-## 22. Open Questions Requiring Human Decisions
+## 22. Approved MVP Decisions
 
-1. Is this Feature 4, 5, or 6, and who is the human feature owner?
-2. Does the team confirm Azeez for Search/AI/Platform, Hayyun for
-   CRM/Domain/Experience and final integration, and Azeez as feature owner?
-3. What holdings/valuation data will exist, who owns it, and how fresh must it be?
-4. Does the team approve AgentCore Web Search in Tokyo, the proposed domain/date
-   controls, minimal-result storage, citation requirements, and initial 1,000-query
-   monthly quota?
-5. Does the team accept global cross-region Luna processing for public news, or
-   must a model with strict in-region processing be selected?
-6. Which domains belong in the production allowlist, and do their terms permit the
-   planned snippets, citations, retention, and demonstration?
-7. Is a separate alert service justified, or should an existing service own it?
-8. Does production use scheduled synchronous processing, managed AWS events or
-   queues, Kafka, or another mechanism?
-9. What visibility should admins have into client alerts and briefings?
-10. Is Jev evaluation still desired, and what exact product/API and data terms does
-   “Jev” refer to?
-11. What score threshold and maximum alert volume are acceptable for the demo?
-12. What retention periods apply to search metadata, prompts, briefs, feedback,
-    and audit records?
-13. What feature budget is available inside the USD 300 project limit after core
-    infrastructure and the other five features are budgeted?
+| Decision | Approved MVP baseline |
+|---|---|
+| Feature and owner | Feature 4; Azeez is feature owner |
+| Delivery ownership | Azeez — Search/AI/Platform; Hayyun — CRM/Domain/Experience and final integration |
+| Holdings/valuation | Small synthetic dataset owned by the alert service; timestamped, currency-aware, no live market feed |
+| Search | AgentCore Web Search in Tokyo; public terms only, approved domains/dates, 1,000-query monthly quota and kill switch |
+| AI model | GPT-5.6 Luna using global cross-region inference; public news only, no CRM/client/private data |
+| Initial sources | Regulators, exchanges, and official issuer investor-relations sites; commercial publishers require terms review |
+| Runtime | Separate Java 25 Spring Boot Maven module, subject to the detailed service-boundary ADR |
+| Processing | EventBridge Scheduler to bounded ECS batch task; no new alert broker; reuse auditor integration |
+| Admin access | Read-only oversight across alerts; only assigned agents record Inform/Monitor/Dismiss decisions |
+| Jev/semantic retrieval | Excluded from MVP |
+| Alert-volume guardrail | Maximum 10 new alerts per agent per day during MVP |
+| Retention | News metadata, prompts, and briefs: 90 days; audit events: one year; synthetic data only |
+| Budget | USD 25 monthly operating alert; USD 50 feature development hard cap; project USD 300 limit remains authoritative |
 
-Until questions 1–9 are answered and recorded, substantial implementation is
-blocked.
+These choices are recorded in ADR-0004. Detailed architecture, data, regional,
+model, source-governance, API, audit, and operational ADRs remain prerequisite
+gates. The AgentCore spike and contract-design tasks may start; production-shaped
+implementation remains blocked until their applicable ADRs and contracts are
+accepted.
 
 ## 23. Current AWS References
 
