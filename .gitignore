@@ -52,3 +52,6 @@ crash.*.log
 /**/*.pb.go 
 ### TypeScript ###
 *.tsbuildinfo
+
+### SFTP Server ### 
+secrets
