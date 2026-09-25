@@ -25,7 +25,40 @@ function AgentDashboard() {
                     <label>Date of Birth:<input type="date" /></label>
                     <label>Gender:<input type="text" /></label>
                     <label>Email:<input type="email" /></label>
-                    {/* Add more form fields as needed */}
+                    <label>Phone Number:<input type="tel" /></label>
+                    <label>Address:<input type="text" /></label>
+                    <label>City:<input type="text" /></label>
+                    <label>State:<input type="text" /></label>
+                    <label>Country:<input type="text" /></label>
+                    <label>Postal Code:<input type="text" /></label>
+                    <button onClick={() => {/* Add functionality to create client profile */}}>Create Profile</button>
+                    <button onClick={() => toggleSection('createClientProfile')}>Cancel</button>
+                </div>
+            )}
+
+            <button onClick={() => toggleSection('manageProfiles')}>
+                Manage Client Profiles
+            </button>
+
+            {openSection === 'manageProfiles' && (
+                <div>
+                    <h2>Manage Client Profiles</h2>
+                    {/* 
+                    Add functionality to manage client profiles 
+                    - Update profile
+                    - Delete profile
+                    */}
+                </div>
+            )}
+
+            <button onClick={() => toggleSection('viewTransactions')}>
+                View Transactions
+            </button>
+
+            {openSection === 'viewTransactions' && (
+                <div>
+                    <h2>View Transactions</h2>
+                    {/* Add functionality to view transactions */}
                 </div>
             )}
 
