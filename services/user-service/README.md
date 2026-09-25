@@ -12,6 +12,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 | Method | Path | Access | Purpose |
 |---|---|---|---|
 | POST | `/api/users` | ADMIN | Create a user (agent or admin) |
+| GET | `/api/users` | ADMIN | List users, paged; optional `role` (`ADMIN`/`AGENT`) and `enabled` filters, `page` (default 0) and `size` (default 20, max 100). Sorted by last name, first name |
 | GET | `/api/users/{id}` | ADMIN | Fetch a user |
 | PUT | `/api/users/{id}` | ADMIN | Update first/last name |
 | PATCH | `/api/users/{id}/disable` | ADMIN | Disable a user (root admin: rejected with 403) |

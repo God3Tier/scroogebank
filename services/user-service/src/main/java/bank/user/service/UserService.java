@@ -1,5 +1,13 @@
 package bank.user.service;
 
+import java.util.UUID;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import bank.user.domain.Role;
 import bank.user.domain.User;
 import bank.user.dto.CreateUserRequest;
 import bank.user.dto.UpdateUserRequest;
@@ -9,11 +17,6 @@ import bank.user.exception.NotFoundException;
 import bank.user.identity.IdentityProviderClient;
 import bank.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -53,6 +56,11 @@ public class UserService {
     public User getUser(UUID id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found: " + id));
+    }
+
+    // A null filter means "any". See UserRepository.search.
+    public Page<User> listUsers(Role role, Boolean enabled, int page, int size) {
+        return userRepository.search(role, enabled, page, size);
     }
 
     @Transactional

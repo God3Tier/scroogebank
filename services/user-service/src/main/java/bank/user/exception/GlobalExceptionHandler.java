@@ -5,6 +5,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.Map;
@@ -34,6 +36,20 @@ public class GlobalExceptionHandler {
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return body(HttpStatus.BAD_REQUEST, detail);
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<Object> handleParameterValidation(HandlerMethodValidationException ex) {
+        String detail = ex.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> result.getMethodParameter().getParameterName() + ": " + error.getDefaultMessage()))
+                .collect(Collectors.joining("; "));
+        return body(HttpStatus.BAD_REQUEST, detail);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Object> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return body(HttpStatus.BAD_REQUEST, ex.getName() + ": invalid value '" + ex.getValue() + "'");
     }
 
     private ResponseEntity<Object> body(HttpStatus status, String message) {
