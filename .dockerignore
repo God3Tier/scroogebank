@@ -6,4 +6,6 @@
 !pom.xml
 !services/*/pom.xml
 !services/*/src/
+# user-service generates its auditor gRPC client from the auditor's proto.
+!services/auditor/proto/
 **/target/

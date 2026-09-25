@@ -6,6 +6,8 @@ COPY pom.xml /build/pom.xml
 COPY services/user-service/pom.xml /build/services/user-service/pom.xml
 RUN mvn -f /build/services/user-service/pom.xml dependency:go-offline -B || true
 COPY services/user-service /build/services/user-service
+# The auditor's proto is the source for this service's gRPC client stubs.
+COPY services/auditor/proto /build/services/auditor/proto
 RUN mvn -f /build/services/user-service/pom.xml package -DskipTests -B
 
 FROM eclipse-temurin:25-jre-alpine

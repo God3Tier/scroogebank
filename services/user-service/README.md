@@ -13,6 +13,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 |---|---|---|---|
 | POST | `/api/users` | ADMIN | Create a user (agent or admin) |
 | GET | `/api/users/{id}` | ADMIN | Fetch a user |
+| GET | `/api/activities` | ADMIN | Audit log across all services, newest first; optional `agentId`, `from`/`to` (ISO-8601, `from` inclusive, `to` exclusive), `size` (default 20, max 100) and `cursor` (the previous page's `nextCursor`) |
 | PUT | `/api/users/{id}` | ADMIN | Update first/last name |
 | PATCH | `/api/users/{id}/disable` | ADMIN | Disable a user (root admin: rejected with 403) |
 | POST | `/api/users/{id}/reset-password` | ADMIN | Trigger the IdP's password-reset flow |
@@ -34,6 +35,7 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 - **Maintainability/Extensibility**: adding a role means a new Cognito group plus an enum value; swapping the IdP entirely means one new `IdentityProviderClient` implementation — no changes to controllers or the security config.
 - **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. Audit logging (spec requirement) is explicitly **excluded from this build** — no `AuditLog` table, no logging middleware for user actions.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
+- **Activity feed**: `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListAuditLogs`, stubs generated at build time from `services/auditor/proto`). Pages are keyed by sequence number, not offset, so new entries do not shift pages the admin has not read yet. The auditor call has a 3-second deadline, and an auditor failure returns `503`. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
 
 ## Configuration
 
@@ -42,6 +44,7 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 | `DB_HOST` / `DB_PORT` | This service's own RDS instance | Postgres connection |
 | `USER_DB_NAME` | `users_db` | Database name |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials |
+| `AUDITOR_GRPC_TARGET` | The auditor's Service Connect endpoint, e.g. `auditor:9090` | Activity feed reads |
 | `OIDC_ISSUER_URI` | `https://cognito-idp.<region>.amazonaws.com/<pool-id>` | Resource-server JWT validation |
 | `COGNITO_USER_POOL_ID`, `AWS_REGION` | Terraform | Cognito admin API access |
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |

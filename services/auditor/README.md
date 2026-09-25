@@ -116,6 +116,17 @@ The protobuf compiler and Go protobuf plugins must be installed locally for this
 make protobuf_setup
 ```
 
+## gRPC API
+
+`proto/audit_request.proto` defines `AuditService`. Other services call it over the internal network only. It is not exposed through API Gateway.
+
+| RPC | Purpose |
+|---|---|
+| `GetAuditLog` | All entries from one source service |
+| `ListAuditLogs` | Entries filtered by any of `source_service`, `actor_id` and a `from`/`to` time range, newest first. `page_size` must be 1 to 100. Pass the response's `next_before_sequence_no` as `before_sequence_no` to get the next page; `0` means there are no more pages. |
+
+The user service generates its Java client stubs from this same file at build time, so a change here must stay backward compatible. Add fields and RPCs; do not renumber or remove them.
+
 ## Build and run the production image
 
 Build the image:

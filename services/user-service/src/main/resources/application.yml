@@ -47,3 +47,7 @@ root-admin:
 logging:
   level:
     bank.user: INFO
+
+# The auditor's internal gRPC endpoint (host:port via ECS Service Connect), read by the activity feed.
+auditor:
+  grpc-target: ${AUDITOR_GRPC_TARGET}
