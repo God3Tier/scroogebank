@@ -15,6 +15,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 | GET | `/api/users` | ADMIN | List users, paged; optional `role` (`ADMIN`/`AGENT`) and `enabled` filters, `page` (default 0) and `size` (default 20, max 100). Sorted by last name, first name |
 | GET | `/api/users/{id}` | ADMIN | Fetch a user |
 | PUT | `/api/users/{id}` | ADMIN | Update first/last name |
+| PATCH | `/api/users/{id}/role` | ADMIN | Change role (`{"role":"ADMIN"}` or `AGENT`); root admin: rejected with 403 |
 | PATCH | `/api/users/{id}/disable` | ADMIN | Disable a user (root admin: rejected with 403) |
 | POST | `/api/users/{id}/reset-password` | ADMIN | Trigger the IdP's password-reset flow |
 
@@ -22,13 +23,15 @@ Full request/response shapes: Swagger UI at `http://localhost:8081/swagger-ui.ht
 
 ## Design choices
 
-**Cognito does the security-sensitive work.** OAuth2/OIDC, MFA, and password hashing/storage are Cognito's job, not this service's. `CognitoIdentityProviderClient` uses AWS SDK v2 (`AdminCreateUser`, `AdminAddUserToGroup`, `AdminDisableUser`, `AdminResetUserPassword`) against the configured user pool. This service has no login endpoint: users sign in through Cognito's Hosted UI from the frontend. It sits behind an `IdentityProviderClient` interface — one implementation, kept as an interface so the IdP can be swapped without touching controllers or the security config.
+**Cognito does the security-sensitive work.** OAuth2/OIDC, MFA, and password hashing/storage are Cognito's job, not this service's. `CognitoIdentityProviderClient` uses AWS SDK v2 (`AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminResetUserPassword`) against the configured user pool. This service has no login endpoint: users sign in through Cognito's Hosted UI from the frontend. It sits behind an `IdentityProviderClient` interface — one implementation, kept as an interface so the IdP can be swapped without touching controllers or the security config.
 
 Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read off the JWT's `cognito:groups` claim — see `security/JwtRoleConverter.java`. This is the single source of role truth; the local `User.role` column mirrors it for query convenience, but the JWT claim is what every service's `@PreAuthorize` actually checks.
 
 **Zero Trust.** `SecurityConfig` makes this service an OAuth2 Resource Server validating every request's JWT against `OIDC_ISSUER_URI` — no session state, and the gateway's own validation is not trusted as sufficient (defense in depth: every service re-validates independently).
 
-**Root admin.** Seeded on first startup by `RootAdminInitializer` (a `CommandLineRunner`) rather than a SQL migration, because seeding requires creating the corresponding Cognito account too (an API call Flyway can't make). Cognito emails the temporary password; MFA enrolment happens on first sign-in. `deletable=false` is enforced in `UserService.disableUser` (403 if violated) — the spec only requires "cannot be deleted," and disabling is the closest destructive-equivalent operation this service exposes, so it's guarded the same way.
+**Root admin.** Seeded on first startup by `RootAdminInitializer` (a `CommandLineRunner`) rather than a SQL migration, because seeding requires creating the corresponding Cognito account too (an API call Flyway can't make). Cognito emails the temporary password; MFA enrolment happens on first sign-in. `deletable=false` is enforced in `UserService.disableUser` (403 if violated) — the spec only requires "cannot be deleted," and disabling is the closest destructive-equivalent operation this service exposes, so it's guarded the same way. `UserService.changeRole` applies the same guard: demoting the root admin would leave the system without a guaranteed admin.
+
+**Role changes.** `PATCH /api/users/{id}/role` moves the user between Cognito groups and then updates the local `role` column. It adds the new group before removing the old one, so a failure part-way leaves the user in both groups rather than in none; both calls are idempotent, so repeating the request completes the change. Tokens already issued still carry the old `cognito:groups` claim until they expire and are refreshed, so a demoted admin keeps admin access for up to one access-token lifetime.
 
 ## NFR notes
 
@@ -49,7 +52,7 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 
 None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. All are set by the ECS task definition in `infra/terraform/envs/prod/main.tf`.
 
-This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool.
+This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool.
 
 ## Deploying
 
