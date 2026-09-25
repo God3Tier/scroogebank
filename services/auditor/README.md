@@ -127,6 +127,10 @@ make protobuf_setup
 
 The user service generates its Java client stubs from this same file at build time, so a change here must stay backward compatible. Add fields and RPCs; do not renumber or remove them.
 
+### `actor_id` convention
+
+Every producer sets an event's `actor_id` to the acting user's **agent id**: the user service's `users.id` UUID, the same value the client service stores in `created_by_agent_id`. Work that no user started uses `SYSTEM`. `ListAuditLogs` compares `actor_id` by exact text, and the admin activity feed filters on it (`GET /api/activities?agentId=<users.id>`). An event carrying any other id, such as the Cognito `sub`, will not match that agent's filter, and nothing reports the mismatch. A producer that has only the caller's token must map the token's `sub` to `users.id` first; the user service does this in `AuditRecorder`, looking the user up by `idp_sub`.
+
 ## Build and run the production image
 
 Build the image:
