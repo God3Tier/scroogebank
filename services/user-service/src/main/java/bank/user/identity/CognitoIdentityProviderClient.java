@@ -9,6 +9,7 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminCreate
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminDisableUserRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminGetUserResponse;
+import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminRemoveUserFromGroupRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminResetUserPasswordRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AdminUpdateUserAttributesRequest;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
@@ -93,6 +94,15 @@ public class CognitoIdentityProviderClient implements IdentityProviderClient {
     @Override
     public void addToGroup(String username, Role role) {
         cognito.adminAddUserToGroup(AdminAddUserToGroupRequest.builder()
+                .userPoolId(userPoolId)
+                .username(username)
+                .groupName(role.name())
+                .build());
+    }
+
+    @Override
+    public void removeFromGroup(String username, Role role) {
+        cognito.adminRemoveUserFromGroup(AdminRemoveUserFromGroupRequest.builder()
                 .userPoolId(userPoolId)
                 .username(username)
                 .groupName(role.name())

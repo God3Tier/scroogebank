@@ -28,6 +28,13 @@ public interface IdentityProviderClient {
      */
     void addToGroup(String username, Role role);
 
+    /**
+     * Removes a user from a role group. Same username contract as addToGroup:
+     * pass the email, never the sub. Removing a user who is not in the group
+     * is not an error, so a retried role change can repeat this safely.
+     */
+    void removeFromGroup(String username, Role role);
+
     void disableUser(String idpSub);
 
     void updateUser(String idpSub, String firstName, String lastName);
