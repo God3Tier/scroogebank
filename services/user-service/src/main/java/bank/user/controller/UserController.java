@@ -1,6 +1,7 @@
 package bank.user.controller;
 
 import bank.user.domain.User;
+import bank.user.dto.ChangeRoleRequest;
 import bank.user.dto.CreateUserRequest;
 import bank.user.dto.UpdateUserRequest;
 import bank.user.dto.UserResponse;
@@ -38,6 +39,12 @@ public class UserController {
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse updateUser(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
         return UserResponse.from(userService.updateUser(id, request));
+    }
+
+    @PatchMapping("/{id}/role")
+    @PreAuthorize("hasRole('ADMIN')")
+    public UserResponse changeRole(@PathVariable UUID id, @Valid @RequestBody ChangeRoleRequest request) {
+        return UserResponse.from(userService.changeRole(id, request.role()));
     }
 
     @PatchMapping("/{id}/disable")
