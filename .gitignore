@@ -50,5 +50,11 @@ crash.*.log
 /**/mocks*
 /**/mock_*
 /**/*.pb.go 
+!/services/auditor/src/gen/*.pb.go
 ### TypeScript ###
 *.tsbuildinfo
+
+## 
+secrets
+**/bruno/
+**/gen/ 
