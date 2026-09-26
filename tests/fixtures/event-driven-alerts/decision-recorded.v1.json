@@ -1,0 +1,19 @@
+{
+  "eventId": "60000000-0000-4000-8000-000000000001",
+  "eventType": "alert.decision-recorded",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-27T00:10:00Z",
+  "correlationId": "70000000-0000-4000-8000-000000000001",
+  "producer": "event-alert-service",
+  "payload": {
+    "decisionId": "80000000-0000-4000-8000-000000000001",
+    "alertId": "50000000-0000-4000-8000-000000000001",
+    "actorSubject": "syn-agent-001",
+    "actorRole": "AGENT",
+    "decision": "MONITOR",
+    "previousStatus": "NEW",
+    "newStatus": "MONITORING",
+    "alertVersion": 1,
+    "decidedAt": "2026-09-27T00:10:00Z"
+  }
+}
