@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 {/* Below imports are seeded data, testing purposes */}
 import clients from '../data/clients.js'
 
 function AgentDashboard() {
 
-    {/* States */}
+    {/* Variables and States */}
     const [openSection, setOpenSection] = useState(null)
+    const navigate = useNavigate()
 
     {/* Functions */}
     function toggleSection(section) {
@@ -73,7 +75,9 @@ function AgentDashboard() {
                                     {client.firstName} {client.lastName}
                                 </span>
 
-                                <button>View Transactions</button>
+                                <button onClick={() => navigate(`/agent/client/${client.clientId}/transactions`)}>
+                                    View Transactions
+                                </button>
                                 <button>Edit</button>
                                 <button>Delete</button>
                             </li>
