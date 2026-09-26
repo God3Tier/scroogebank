@@ -21,6 +21,7 @@
 
     <modules>
         <module>services/user-service</module>
+        <module>services/event-alert-service</module>
     </modules>
 
     <dependencyManagement>

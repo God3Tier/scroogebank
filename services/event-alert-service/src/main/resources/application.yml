@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: event-alert-service
+  datasource:
+    url: ${EVENT_ALERT_DB_URL:jdbc:postgresql://localhost:5432/event_alert}
+    username: ${EVENT_ALERT_DB_USERNAME:event_alert}
+    password: ${EVENT_ALERT_DB_PASSWORD:}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+alert:
+  mode: ${ALERT_MODE:API}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

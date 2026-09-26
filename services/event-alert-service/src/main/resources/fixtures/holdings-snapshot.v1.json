@@ -1,0 +1,36 @@
+{
+  "contractVersion": 1,
+  "asOf": "2026-09-27T00:00:00Z",
+  "positions": [
+    {
+      "snapshotId": "30000000-0000-4000-8000-000000000001",
+      "clientRef": "syn-client-001",
+      "accountRef": "syn-account-001",
+      "assignedAgentSubject": "syn-agent-001",
+      "instrumentId": "SYN-SGX-001",
+      "quantity": "100.00000000",
+      "unitPrice": "25.00000000",
+      "valuationCurrency": "SGD",
+      "fxToSgd": "1.00000000",
+      "valueSgd": "2500.0000",
+      "valuedAt": "2026-09-26T23:00:00Z",
+      "freshness": "FRESH",
+      "sourceVersion": "synthetic-holdings-v1"
+    },
+    {
+      "snapshotId": "30000000-0000-4000-8000-000000000002",
+      "clientRef": "syn-client-002",
+      "accountRef": "syn-account-002",
+      "assignedAgentSubject": "syn-agent-002",
+      "instrumentId": "SYN-SGX-001",
+      "quantity": "40.00000000",
+      "unitPrice": "25.00000000",
+      "valuationCurrency": "SGD",
+      "fxToSgd": "1.00000000",
+      "valueSgd": "1000.0000",
+      "valuedAt": "2026-09-25T00:00:00Z",
+      "freshness": "STALE",
+      "sourceVersion": "synthetic-holdings-v1"
+    }
+  ]
+}
