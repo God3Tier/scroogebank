@@ -1,14 +1,25 @@
 import { useState } from 'react'
 
-function AgentDashboard() {
-    const [isOpen, setIsOpen] = useState(false)
+{/* Below imports are seeded data, testing purposes */}
+import clients from '../data/clients.js'
 
+function AgentDashboard() {
+
+    {/* States */}
     const [openSection, setOpenSection] = useState(null)
 
+    {/* Functions */}
     function toggleSection(section) {
         setOpenSection(openSection === section ? null : section)
     }
 
+    function handleCreateClient(event) {
+        event.preventDefault()
+
+        console.log('Creating client profile...')
+    }
+
+    {/* Render */}
     return (
         <div>
             <h1>Agent Dashboard</h1>
@@ -18,12 +29,19 @@ function AgentDashboard() {
             </button>
 
             {openSection === 'createClientProfile' && (
-                <div>
+                <form onSubmit={handleCreateClient}>
                     <h2>Create Client Profile</h2>
                     <label>First Name:<input type="text" /></label>
                     <label>Last Name:<input type="text" /></label>
                     <label>Date of Birth:<input type="date" /></label>
-                    <label>Gender:<input type="text" /></label>
+                    <label>Gender:
+                        <select>
+                            <option value="">Select Gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </label>
                     <label>Email:<input type="email" /></label>
                     <label>Phone Number:<input type="tel" /></label>
                     <label>Address:<input type="text" /></label>
@@ -31,9 +49,9 @@ function AgentDashboard() {
                     <label>State:<input type="text" /></label>
                     <label>Country:<input type="text" /></label>
                     <label>Postal Code:<input type="text" /></label>
-                    <button onClick={() => {/* Add functionality to create client profile */}}>Create Profile</button>
+                    <button type="submit">Create Profile</button>
                     <button onClick={() => toggleSection('createClientProfile')}>Cancel</button>
-                </div>
+                </form>
             )}
 
             <button onClick={() => toggleSection('manageProfiles')}>
@@ -49,18 +67,17 @@ function AgentDashboard() {
                     - View Transactions, Edit and delete options for each profile
                     */}
                     <ul>
-                        <li>
-                            <span>John Doe</span>
-                            <button onClick={() => {/* Add functionality to view transactions */}}>View Transactions</button>
-                            <button onClick={() => {/* Add functionality to edit client profile */}}>Edit</button>
-                            <button onClick={() => {/* Add functionality to delete client profile */}}>Delete</button>
-                        </li>
-                        <li>
-                            <span>Jane Smith</span>
-                            <button onClick={() => {/* Add functionality to view transactions */}}>View Transactions</button>
-                            <button onClick={() => {/* Add functionality to edit client profile */}}>Edit</button>
-                            <button onClick={() => {/* Add functionality to delete client profile */}}>Delete</button>
-                        </li>
+                        {clients.map(client => (
+                            <li key={client.clientId}>
+                                <span>
+                                    {client.firstName} {client.lastName}
+                                </span>
+
+                                <button>View Transactions</button>
+                                <button>Edit</button>
+                                <button>Delete</button>
+                            </li>
+                        ))}
                     </ul>
                 </div>
             )}

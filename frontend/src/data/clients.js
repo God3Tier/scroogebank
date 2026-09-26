@@ -1,21 +1,31 @@
 const clients = [
   {
     clientId: 1,
-    name: "John Tan",
+    firstName: "John",
+    lastName: "Doe",
+    dateOfBirth: "1995-03-12",
+    gender: "Male",
     email: "john@example.com",
-    status: "verified"
+    phoneNumber: "91234567",
+    address: "123 Example Street",
+    city: "Singapore",
+    state: "",
+    country: "Singapore",
+    postalCode: "123456"
   },
   {
     clientId: 2,
-    name: "Alice Lim",
-    email: "alice@example.com",
-    status: "pending"
-  },
-  {
-    clientId: 3,
-    name: "Bob Lee",
-    email: "bob@example.com",
-    status: "verified"
+    firstName: "Jane",
+    lastName: "Smith",
+    dateOfBirth: "1998-07-21",
+    gender: "Female",
+    email: "jane@example.com",
+    phoneNumber: "98765432",
+    address: "456 Example Avenue",
+    city: "Singapore",
+    state: "",
+    country: "Singapore",
+    postalCode: "654321"
   }
 ]
 
