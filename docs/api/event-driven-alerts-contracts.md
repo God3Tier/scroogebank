@@ -40,14 +40,17 @@ event.
 
 ## Holdings read v1
 
-Input contains a set of supported instrument IDs and an `asOf` timestamp. Output
-contains synthetic client/account references and immutable position valuations:
+Input contains a set of supported instrument IDs, an `asOf` timestamp, and the
+assigned-agent subject used to scope the read. Output contains only that agent's
+synthetic client/account references and immutable position valuations:
 instrument, quantity, unit price, valuation currency, FX-to-SGD, SGD value,
 valuation timestamp, freshness, and source version. Missing and expired values
 are explicit result entries, not zeroes.
 
-The adapter is read-only. It cannot return client names, contact details, bank
-account numbers, notes, or authentication attributes.
+The adapter is read-only. A requested instrument outside the agent's assigned
+portfolio is reported as unavailable rather than leaking another agent's
+position. It cannot return client names, contact details, bank account numbers,
+notes, or authentication attributes.
 
 ## Alert-created v1
 

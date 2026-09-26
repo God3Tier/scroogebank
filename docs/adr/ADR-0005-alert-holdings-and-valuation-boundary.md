@@ -21,6 +21,9 @@ position uses opaque synthetic client and account references, an instrument ID,
 quantity, valuation currency, unit price, FX rate to SGD, valuation timestamp,
 and source label. Values use fixed-precision decimals. The service stores the
 exact valuation snapshot used by every score so results can be reproduced.
+Holdings reads require an assigned-agent subject and return positions only for
+that scope; mixed client, account, or agent positions cannot be combined into an
+exposure result.
 
 A valuation is `FRESH` for 24 hours, `STALE` from 24 to 72 hours, and `EXPIRED`
 after 72 hours. Missing or expired values cannot create an alert. Stale values may

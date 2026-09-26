@@ -21,6 +21,7 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0012](ADR-0012-alert-api-event-and-authorization-contracts.md) — Freeze versioned alert APIs/events with ownership-scoped agents and read-only admins.
 - [ADR-0013](ADR-0013-alert-audit-delivery-and-failure-policy.md) — Use a transactional outbox and explicit fail-closed/queued-audit behavior for tamper-resistant audit delivery.
 - [ADR-0014](ADR-0014-alert-observability-cost-and-kill-switches.md) — Add redacted metrics, hard quotas, budget alarms, and independent ingestion/model kill switches.
+- [ADR-0015](ADR-0015-deterministic-alert-materiality-scoring.md) — Use versioned fixed-decimal exposure and materiality rules that fail closed on unusable valuations.
 
 ## Maintenance rule
 

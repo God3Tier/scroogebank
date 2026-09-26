@@ -32,5 +32,6 @@
       "freshness": "STALE",
       "sourceVersion": "synthetic-holdings-v1"
     }
-  ]
+  ],
+  "unavailable": []
 }
