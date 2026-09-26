@@ -18,6 +18,7 @@ class SyntheticFixtureLoaderTest {
 
         assertThat(fixture.contractVersion()).isEqualTo(1);
         assertThat(fixture.positions()).hasSize(2);
+        assertThat(fixture.unavailable()).isEmpty();
         assertThat(loader.toSnapshots(fixture))
                 .extracting(snapshot -> snapshot.getFreshness())
                 .containsExactly(ValuationFreshness.FRESH, ValuationFreshness.STALE);
