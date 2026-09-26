@@ -2,17 +2,17 @@
 
 Design rationale that doesn't belong in any single service's README because it applies system-wide. See each service's own README for how it individually satisfies the mandatory NFRs (Scalability, Availability, Maintainability/Extensibility).
 
-## Deployment model: AWS only
+## Deployment model: AWS in production; local database profile with Cognito security
 
-This system has no local runtime. The services require a real RDS instance, a real Cognito user pool, and Cloud Map service discovery, and every configuration value is read from an environment variable **with no default**, so a missing one fails the container at startup rather than silently falling back to a local-shaped value.
+Production runs on AWS. The services use RDS, Cognito, and Cloud Map, and production configuration is supplied by task definitions and Secrets Manager rather than local defaults.
 
-This is a deliberate narrowing. An earlier revision ran the full stack locally via docker-compose (Postgres + a Keycloak container standing in for Cognito), which bought environment parity at the cost of a second IdP implementation, a second set of configuration defaults, and a standing risk of the two paths drifting. Removing it deleted `KeycloakIdentityProviderClient`, the `local`/`aws` Spring profile split, and the dual-claim role parsing in both the backend `JwtRoleConverter`s and the frontend's `roles.ts`.
+The user-service `local` profile uses local PostgreSQL and enables Swagger while retaining Cognito provisioning, JWT validation, and Admin-only method authorization. It is not an authentication bypass. Feature 2 independently validates Cognito access tokens and enforces agent ownership of client profiles and accounts; an API Gateway authorizer is an additional edge check, not a replacement for service-side validation.
 
-The cost is real and worth stating: there is no way to exercise the running system without deploying it, so the feedback loop for anything beyond unit and repository tests now runs through AWS. Testcontainers-backed tests still run on a developer machine (they need Docker, not the application stack), which keeps the data layer verifiable locally.
+Testcontainers-backed tests still run on a developer machine (they need Docker, not the application stack), which keeps the data layer verifiable locally.
 
 ## MFA
 
-Feature 1 requires MFA. The Cognito User Pool (`infra/terraform/modules/cognito`) sets `mfa_configuration = "ON"` with TOTP software tokens, so every user must enrol MFA on first sign-in — no custom code. The Spring Security resource-server config validates tokens identically regardless; MFA enforcement is entirely Cognito's responsibility and never touches application code.
+Feature 1 requires MFA. Cognito must enforce MFA in the user-pool configuration; the application does not implement MFA itself. The user-service validates access-token type, issuer, app-client ID, signature, and time claims, while MFA enrollment and challenge enforcement remain Cognito responsibilities. The infrastructure directory is absent in this checkout, so the deployed pool's MFA setting cannot be verified here.
 
 ## NFR 12 (Data Segregation): single-tenant assumption, not built
 
