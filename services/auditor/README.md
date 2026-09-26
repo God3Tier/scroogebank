@@ -12,10 +12,10 @@ Install the following on your computer:
 
 PostgreSQL, SQLBoiler, mockery, and the test database are provided through Docker. You do not need to install PostgreSQL, `psql`, SQLBoiler, or mockery locally for the commands below.
 
-Run all commands from the repository root:
+Run service commands from this directory:
 
 ```sh
-cd project-2026-27t1-g3-t6
+cd services/auditor
 ```
 
 ## Run the service locally
@@ -23,13 +23,12 @@ cd project-2026-27t1-g3-t6
 Start the supporting services:
 
 ```sh
-docker compose up -d postgres kafka
+docker compose -f compose.yaml up -d postgres kafka
 ```
 
 Run the auditor server from the `services/auditor` directory:
 
 ```sh
-cd services/auditor
 go run ./src/serverd
 ```
 
@@ -54,13 +53,12 @@ Expected response:
 Stop the supporting services when finished:
 
 ```sh
-cd ../..
-docker compose down
+docker compose -f compose.yaml down
 ```
 
 ## Run tests
 
-The recommended test command creates a disposable PostgreSQL container, loads `services/auditor/data/create_table.sql`, generates SQLBoiler models, prefixes generated files with `mocks_`, and runs all Go tests in a Go container:
+The recommended test command creates a disposable PostgreSQL container, loads `data/audit_log_table.sql`, generates SQLBoiler models, prefixes generated files with `mocks_`, and runs all Go tests in a Go container:
 
 ```sh
 make test
@@ -106,14 +104,14 @@ To pass additional mockery arguments:
 make mockery MOCKERY_ARGS="--log-level debug"
 ```
 
-The mockery configuration is in `services/auditor/.mockery.yml`. Generated protobuf code under `src/gen` is excluded from mock generation.
+The mockery configuration is in `.mockery.yml` and targets the service's interface packages.
 
 ## Generate protobuf code
 
-The protobuf compiler and Go protobuf plugins must be installed locally for this target:
+The protobuf compiler and Go protobuf plugins must be installed locally. Run this from `services/auditor`; it generates Go files under `src/gen`, matching the imports used by the server and controller:
 
 ```sh
-make protobuf_setup
+make proto
 ```
 
 ## Build and run the production image
