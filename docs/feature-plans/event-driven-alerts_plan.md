@@ -11,8 +11,8 @@
 | Proposed feature branch | `feat/event-driven-alerts` |
 | Canonical plan location | `docs/feature-plans/event-driven-alerts_plan.md` |
 | Current draft location | `docs/feature-plans/event-driven-alerts_plan.md` |
-| Last reviewed against repository | 2026-09-24 (Asia/Singapore) |
-| Repository baseline | `origin/dev` at `544ff66` |
+| Last reviewed against repository | 2026-09-27 (Asia/Singapore) |
+| Repository baseline | `origin/feat/event-driven-alerts` at `095d949` |
 
 The feature charter and recommended MVP defaults were approved by Azeez on
 2026-09-24 and are recorded in ADR-0004. Substantial implementation must not start
@@ -682,7 +682,7 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 | ID | Owner | Deliverable and completion evidence | Expected files/components | Branch | Depends on | Status | Last Sync |
 |---|---|---|---|---|---|---|---|
 | EDA-00 | Azeez, Hayyun | Confirm feature slot and Azeez as owner; approve canonical plan and create feature branch | Feature plan, ownership record | `task/event-driven-alerts/plan` | Team decision | Complete | 2026-09-24 |
-| EDA-D1-01 | Azeez | Singapore→Tokyo AgentCore spike with measured latency, sample filtered results, IAM notes, teardown, and actual cost | Spike code, architecture notes, AI/cost logs | `task/event-driven-alerts/search-spike` | EDA-00 | Ready | 2026-09-24 |
+| EDA-D1-01 | Azeez | Singapore→Tokyo AgentCore spike with measured latency, sample filtered results, IAM notes, teardown, and actual cost | Spike code, architecture notes, AI/cost logs | `task/event-driven-alerts/search-spike` | EDA-00 | In Progress — harness/tests complete; live evidence pending valid AWS credentials | 2026-09-27 |
 | EDA-D2-01 | Hayyun | Freeze event, holdings-read, alert, feedback, authorization, and OpenAPI contracts with synthetic fixtures | `docs/api/`, `docs/database/`, proposed service contracts/test fixtures | `task/event-driven-alerts/contracts` | EDA-00 | Ready | 2026-09-24 |
 | EDA-D1-02 | Azeez | Terraform/IaC for Tokyo Gateway/tool, IAM, Singapore scheduler/ECS worker, quotas, alarms, and cleanup; validated plan with no unapproved resources | `infrastructure/` paths confirmed by infra owner, cost register | `task/event-driven-alerts/search-infra` | EDA-D1-01, accepted ADRs | Blocked | 2026-09-24 |
 | EDA-D2-02 | Hayyun | Java 25 alert-service foundation, migrations, repositories, state machine, and deterministic fixture path; unit/migration tests pass | Proposed `services/event-alert-service/`, schema docs | `task/event-driven-alerts/service-foundation` | EDA-D2-01, DB ADR | Blocked | 2026-09-24 |
