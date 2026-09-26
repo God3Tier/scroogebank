@@ -45,23 +45,25 @@ function AgentDashboard() {
                     <h2>Manage Client Profiles</h2>
                     {/* 
                     Add functionality to manage client profiles 
-                    - Update profile
-                    - Delete profile
+                    - List of client profiles
+                    - View Transactions, Edit and delete options for each profile
                     */}
+                    <ul>
+                        <li>
+                            <span>John Doe</span>
+                            <button onClick={() => {/* Add functionality to view transactions */}}>View Transactions</button>
+                            <button onClick={() => {/* Add functionality to edit client profile */}}>Edit</button>
+                            <button onClick={() => {/* Add functionality to delete client profile */}}>Delete</button>
+                        </li>
+                        <li>
+                            <span>Jane Smith</span>
+                            <button onClick={() => {/* Add functionality to view transactions */}}>View Transactions</button>
+                            <button onClick={() => {/* Add functionality to edit client profile */}}>Edit</button>
+                            <button onClick={() => {/* Add functionality to delete client profile */}}>Delete</button>
+                        </li>
+                    </ul>
                 </div>
             )}
-
-            <button onClick={() => toggleSection('viewTransactions')}>
-                View Transactions
-            </button>
-
-            {openSection === 'viewTransactions' && (
-                <div>
-                    <h2>View Transactions</h2>
-                    {/* Add functionality to view transactions */}
-                </div>
-            )}
-
         </div>
     )
 }
