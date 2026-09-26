@@ -29,8 +29,8 @@ alert/public_event mutations 1--* audit_outbox
 | `alert` | Client-event result, exposure snapshot reference, score/rule version, state, creation time, optimistic version. Unique client/event/instrument. |
 | `alert_factor` | Ordered deterministic score factor code, contribution, and display explanation. |
 | `briefing` | Structured AI output, citation references, model/prompt versions, AI label, retention expiry; no CRM PII. |
-| `alert_decision` | Immutable agent decision, actor subject, prior/new state, note, idempotency key, and time. Unique actor/idempotency key. |
-| `alert_feedback` | Agent quality rating/reason/comment, actor, idempotency key, and time. Unique actor/idempotency key. |
+| `alert_decision` | Immutable agent decision, actor subject, prior/new state, resulting alert version, note, idempotency key, and time. Unique actor/idempotency key. |
+| `alert_feedback` | Agent quality rating/reason/comment, actor, observed alert version, idempotency key, and time. Unique actor/idempotency key. |
 | `processing_watermark` | Last successful provider window with overlap and optimistic version. |
 | `audit_outbox` | Event ID/type/version, redacted JSON payload, attempt/lease state, acknowledgement, and created time. Unique event ID. |
 
