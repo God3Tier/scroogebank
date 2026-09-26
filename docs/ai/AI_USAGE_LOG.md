@@ -29,3 +29,19 @@
   real client data, confidential bank data, or AWS services were used.
 - Verification: local Maven build and seven service tests passed against a
   disposable PostgreSQL 16 Testcontainer.
+
+## 2026-09-27 — EDA-D2-03 holdings and deterministic scoring
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/domain scope.
+- Tool: OpenAI Codex.
+- Use: synthetic agent-scoped holdings adapter, freshness policy, fixed-decimal
+  exposure calculations, versioned materiality scoring, failure-state design,
+  tests, documentation, and proposed ADR-0015.
+- Human verification required: review and calibrate prototype weights/thresholds,
+  confirm agent-scope behavior, and accept ADR-0005/ADR-0015 before promotion to
+  `dev`.
+- Data: repository content and synthetic positions only. No secrets, real client
+  data, external providers, or AWS services were used.
+- Verification: 21 local event-alert tests passed, including agent isolation,
+  freshness boundaries, multi-currency math, replay equality, stale penalties,
+  and fail-closed cases.
