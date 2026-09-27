@@ -54,6 +54,7 @@ crash.*.log
 ### TypeScript ###
 *.tsbuildinfo
 
+### SFTP Server ### 
 ## 
 secrets
 **/bruno/
