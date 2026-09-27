@@ -1,15 +1,60 @@
-# React + Vite
+# CRM Frontend
+Frontend Tree
+```
+frontend/
+├── public/
+├── src/
+│   ├── api/
+│   │   ├── authApi.js
+│   │   ├── clientApi.js
+│   │   └── transactionApi.js
+│   ├── components/
+│   │   └── NavBar.jsx
+│   ├── data/                   <--- Temporary Dataset
+│   │   ├── admins.js
+│   │   ├── agents.js
+│   │   ├── clients.js
+│   │   └── transactions.js
+│   ├── pages/
+│   │   ├── AdminDashboard.jsx
+│   │   ├── AgentDashboard.jsx
+│   │   ├── ClientTransactions.jsx
+│   │   ├── Home.jsx
+│   │   └── Login.jsx
+│   ├── styles/
+│   │   └── index.css
+│   ├── App.jsx
+│   ├── AppRouter.jsx
+│   └── main.jsx
+├── .env.example
+├── .gitignore
+├── package.json
+├── package-lock.json
+└── vite.config.js
+```
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Starting up frontend
 
-Currently, two official plugins are available:
+```
+cd frontend
+npm i
+npm run dev
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Folder allocation
 
-## React Compiler
+- All apis that calls the backend services should be placed in `frontend/src/api`.
+- All components that are made for this project should be placed in `frontend/src/components`.
+- All temporary dataset that we are only testing for frontend only should be placed in `frontend/src/data`
+- All pages that are made should be placed in `frontend/src/pages`
+- All CSS styles should be placed in `frontend/src/styles`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Future update
+- Reallocate `pages` and have subset, such as `pages/admin`, `pages/agent`.
+
+## Documentation (WIP)
+Only accessible using SMU account,
+https://docs.google.com/document/d/1wl43MPLxXKcpU2aMTF2B2nd0jSAcVojoHoeuVx3Rjes/edit?usp=sharing
 
 ## Expanding the ESLint configuration
 
