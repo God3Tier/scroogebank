@@ -58,5 +58,6 @@
   `dev`.
 - Data: repository content and synthetic identities/alerts only. No secrets,
   real client data, external providers, or AWS services were used.
-- Verification: 32 non-container event-alert tests passed. PostgreSQL-backed
-  repository and mutation tests remain to be rerun when Docker is available.
+- Verification: the full Maven build passed with 39 event-alert tests, including
+  Flyway migration, JPA schema validation, repository joins/authorization, and
+  mutation transactions against disposable PostgreSQL 16 Testcontainers.
