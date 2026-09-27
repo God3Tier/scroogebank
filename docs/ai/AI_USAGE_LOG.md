@@ -61,3 +61,21 @@
 - Verification: the full Maven build passed with 39 event-alert tests, including
   Flyway migration, JPA schema validation, repository joins/authorization, and
   mutation transactions against disposable PostgreSQL 16 Testcontainers.
+
+## 2026-09-28 — EDA-D2-05 event-alert dashboard
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/frontend scope.
+- Tool: OpenAI Codex.
+- Use: active frontend discovery, React alert queue/detail implementation,
+  evidence and explanation presentation, agent decisions and feedback,
+  read-only administrator oversight, responsive state design, API adapter,
+  synthetic fixtures, tests, and documentation.
+- Human verification required: Hayyun reviews the frontend integration and a
+  developer completes the visual desktop/mobile pass before promotion to
+  `feat/event-driven-alerts`.
+- Data: repository content and synthetic client, exposure, alert, and public
+  citation examples only. No secrets, real client data, external providers, or
+  AWS services were used.
+- Verification: frontend unit/interaction tests, ESLint, production build, and
+  static UI-pattern audit were run locally. Automated screenshot review was not
+  available because no controllable browser was exposed to the session.
