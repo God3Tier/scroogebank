@@ -44,7 +44,8 @@ public class AlertApiExceptionHandler {
             MethodArgumentNotValidException.class,
             ConstraintViolationException.class,
             MissingRequestHeaderException.class,
-            MethodArgumentTypeMismatchException.class
+            MethodArgumentTypeMismatchException.class,
+            IllegalArgumentException.class
     })
     ProblemDetail badRequest(Exception exception) {
         return problem(HttpStatus.BAD_REQUEST, "Invalid request", "request validation failed");
