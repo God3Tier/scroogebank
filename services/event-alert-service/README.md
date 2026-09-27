@@ -40,3 +40,8 @@ local verification does not contact Cognito or any AWS service.
 scoped in the database query to the authenticated subject; admins receive the
 global read-only view. Optional `status`, `minimumScore`, `cursor`, and `limit`
 parameters match the OpenAPI contract.
+
+`GET /api/alerts/{alertId}` applies the same database-level visibility rule and
+returns exposure, ordered explanation factors, public-source evidence, the
+structured briefing when available, and the latest recorded decision. Alerts
+outside an agent's assignment scope return `404` to prevent enumeration.

@@ -58,5 +58,5 @@
   `dev`.
 - Data: repository content and synthetic identities/alerts only. No secrets,
   real client data, external providers, or AWS services were used.
-- Verification: 29 non-container event-alert tests passed. PostgreSQL-backed
+- Verification: 32 non-container event-alert tests passed. PostgreSQL-backed
   repository and mutation tests remain to be rerun when Docker is available.
