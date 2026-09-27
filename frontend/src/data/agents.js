@@ -4,6 +4,7 @@ const agents = [
     firstName: "Sarah",
     lastName: "Lee",
     email: "sarah.agent@example.com",
+    password: "agent123",
     phoneNumber: "93456789",
     status: "Active"
   },
