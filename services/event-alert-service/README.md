@@ -35,3 +35,8 @@ requests require `Idempotency-Key`, accept `X-Correlation-Id`, and return `503`
 without committing the mutation when durable audit persistence is unavailable.
 The test profile uses a non-routable example issuer and mocked/local security;
 local verification does not contact Cognito or any AWS service.
+
+`GET /api/alerts` returns a stable, cursor-paginated list. Agent results are
+scoped in the database query to the authenticated subject; admins receive the
+global read-only view. Optional `status`, `minimumScore`, `cursor`, and `limit`
+parameters match the OpenAPI contract.
