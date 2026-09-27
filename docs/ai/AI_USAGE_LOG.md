@@ -45,3 +45,18 @@
 - Verification: 21 local event-alert tests passed, including agent isolation,
   freshness boundaries, multi-currency math, replay equality, stale penalties,
   and fail-closed cases.
+
+## 2026-09-27 — EDA-D2-04 alert mutation API and authorization
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/domain scope.
+- Tool: OpenAI Codex.
+- Use: decision/feedback REST mutations, JWT role mapping, assigned-agent
+  ownership enforcement, optimistic concurrency, idempotency, redacted audit
+  outbox writes, failure responses, tests, and contract documentation.
+- Human verification required: Hayyun reviews the API/security behavior and both
+  developers accept the proposed authorization/audit ADRs before promotion to
+  `dev`.
+- Data: repository content and synthetic identities/alerts only. No secrets,
+  real client data, external providers, or AWS services were used.
+- Verification: 24 non-container event-alert tests passed. PostgreSQL-backed
+  repository and mutation tests remain to be rerun when Docker is available.

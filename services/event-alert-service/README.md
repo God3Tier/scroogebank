@@ -27,3 +27,11 @@ mvn -B -pl services/event-alert-service -am verify
 Runtime database settings are supplied through `EVENT_ALERT_DB_URL`,
 `EVENT_ALERT_DB_USERNAME`, and `EVENT_ALERT_DB_PASSWORD`. Never commit real
 credentials. Flyway owns the schema and Hibernate validates it at startup.
+
+API mode also requires `COGNITO_ISSUER_URI`. JWT subjects identify actors and
+the `cognito:groups` claim supplies the `AGENT` or `ADMIN` role. Agents can post
+decisions and feedback only for assigned alerts; admins are read-only. Mutation
+requests require `Idempotency-Key`, accept `X-Correlation-Id`, and return `503`
+without committing the mutation when durable audit persistence is unavailable.
+The test profile uses a non-routable example issuer and mocked/local security;
+local verification does not contact Cognito or any AWS service.

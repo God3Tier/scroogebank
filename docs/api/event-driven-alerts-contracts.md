@@ -13,6 +13,10 @@ the feature owner's 2026-09-27 instruction).
 - All IDs and examples are synthetic. Public-provider payloads never contain
   client/account/holding/agent/audit data.
 - Logs identify correlation and event IDs only, not payload values.
+- REST mutations require an `Idempotency-Key` and accept an optional UUID
+  `X-Correlation-Id`. The service generates a correlation ID when it is absent.
+- Decision and feedback writes fail closed with `503` and `Retry-After: 5` when
+  durable audit persistence is unavailable or its bounded backlog is full.
 
 ## Envelope
 
