@@ -13,7 +13,7 @@ CREATE TABLE clients (
     country               VARCHAR(50)  NOT NULL,
     postal_code           VARCHAR(10)  NOT NULL,
     verification_status   VARCHAR(20)  NOT NULL DEFAULT 'UNVERIFIED',
-    created_by_agent_id   UUID         NOT NULL,
+    created_by_agent_id   VARCHAR(128) NOT NULL,
     created_at            TIMESTAMPTZ  NOT NULL,
     updated_at            TIMESTAMPTZ  NOT NULL,
     CONSTRAINT uk_clients_email UNIQUE (email),
