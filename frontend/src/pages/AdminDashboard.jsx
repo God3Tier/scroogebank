@@ -2,6 +2,8 @@ import { useState } from 'react'
 
 import admins from '../data/admins.js'
 import agents from '../data/agents.js'
+import clients from '../data/clients.js'
+import transactions from '../data/transactions.js'
 
 function AdminDashboard() {
   const [openSection, setOpenSection] = useState(null)
@@ -87,6 +89,43 @@ function AdminDashboard() {
           </ul>
         </div>
       )}
+
+      <h2>All Transactions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Transaction ID</th>
+            <th>Client</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            transactions.map((transaction) =>
+              {
+                const client = clients.find(
+                  (client) => client.clientId === transaction.clientId
+                )
+              
+              return (
+                <tr key={transaction.transactionId}>
+                  <td>{transaction.transactionId}</td>
+                  <td>{client ? `${client.firstName} ${client.lastName}`
+                  : 'Unknown Client'}
+                  </td>
+                  <td>{transaction.type}</td>
+                  <td>{transaction.amount}</td>
+                  <td>{transaction.date}</td>
+                  <td>{transaction.status}</td>
+                </tr>
+              )}
+            )
+          }
+        </tbody>
+      </table>
     </div>
   )
 }
