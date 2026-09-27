@@ -50,8 +50,12 @@ crash.*.log
 /**/mocks*
 /**/mock_*
 /**/*.pb.go 
+!/services/auditor/src/gen/*.pb.go
 ### TypeScript ###
 *.tsbuildinfo
 
 ### SFTP Server ### 
+## 
 secrets
+**/bruno/
+**/gen/ 

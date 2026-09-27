@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: myapp
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./data/test_init.sql:/docker-entrypoint-initdb.d/01-test_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myapp"]
+      interval: 2s
+      timeout: 5s
+      retries: 3
+
+  tools:
+    platform: linux/amd64
+    build:
+      context: .
+      target: tools
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+
+  test-runner:
+    image: golang:1.27.1
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ./sqlboiler.docker.toml:/workspace/sqlboiler.toml:ro
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: myapp
+    depends_on:
+      postgres:
+        condition: service_healthy
