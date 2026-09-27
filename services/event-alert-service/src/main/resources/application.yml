@@ -21,6 +21,25 @@ alert:
   mode: ${ALERT_MODE:API}
   audit:
     max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
+  ingestion:
+    # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
+    enabled: ${ALERT_INGESTION_ENABLED:false}
+    provider: agentcore-web-search-1.2.0
+    overlap: 5m
+    initial-lookback: 4h
+    max-queries-per-run: 4
+    max-results-per-query: 10
+    max-attempts: 3
+    retention: 90d
+    approved-domains:
+      - mas.gov.sg
+      - sgx.com
+    event-terms:
+      - earnings
+      - regulatory
+      - merger
+      - credit
+      - leadership
 
 management:
   endpoints:
