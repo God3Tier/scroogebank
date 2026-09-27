@@ -57,6 +57,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/AlertId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
@@ -84,6 +85,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/AlertId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
@@ -121,6 +123,12 @@ components:
       in: header
       required: true
       schema: {type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$'}
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Caller-supplied trace identifier; the service generates one when omitted.
+      schema: {type: string, format: uuid}
     Status:
       name: status
       in: query
@@ -207,7 +215,11 @@ components:
               type: array
               minItems: 1
               items: {$ref: '#/components/schemas/Evidence'}
-            briefing: {$ref: '#/components/schemas/Briefing'}
+            briefing:
+              description: Null only while an alert is awaiting its structured briefing.
+              oneOf:
+                - {$ref: '#/components/schemas/Briefing'}
+                - {type: 'null'}
             latestDecision:
               oneOf:
                 - {$ref: '#/components/schemas/DecisionRecord'}

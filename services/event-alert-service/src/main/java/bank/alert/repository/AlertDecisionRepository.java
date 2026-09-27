@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface AlertDecisionRepository extends JpaRepository<AlertDecision, UUID> {
 
     Optional<AlertDecision> findByActorSubjectAndIdempotencyKey(String actorSubject, String idempotencyKey);
+
+    Optional<AlertDecision> findFirstByAlertIdOrderByDecidedAtDesc(UUID alertId);
 }
