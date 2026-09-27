@@ -11,11 +11,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/alerts")
@@ -41,5 +43,15 @@ public class AlertQueryController {
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
         return queryService.listAlerts(
                 authentication.getName(), admin, status, minimumScore, cursor, limit);
+    }
+
+    @GetMapping("/{alertId}")
+    @PreAuthorize("hasAnyRole('AGENT', 'ADMIN')")
+    public AlertDetailResponse getAlert(
+            @PathVariable UUID alertId,
+            Authentication authentication) {
+        boolean admin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        return queryService.getAlert(alertId, authentication.getName(), admin);
     }
 }

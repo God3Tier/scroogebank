@@ -1,13 +1,18 @@
 package bank.alert.service;
 
+import bank.alert.api.AlertDetailResponse;
 import bank.alert.api.AlertPageResponse;
 import bank.alert.api.AlertSummaryResponse;
+import bank.alert.api.DecisionResponse;
+import bank.alert.api.ExposureResponse;
 import bank.alert.domain.AlertStatus;
+import bank.alert.repository.AlertDecisionRepository;
 import bank.alert.repository.AlertListRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -19,9 +24,13 @@ import java.util.UUID;
 public class AlertQueryService {
 
     private final AlertListRepository repository;
+    private final AlertDecisionRepository decisionRepository;
 
-    public AlertQueryService(AlertListRepository repository) {
+    public AlertQueryService(
+            AlertListRepository repository,
+            AlertDecisionRepository decisionRepository) {
         this.repository = repository;
+        this.decisionRepository = decisionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -46,6 +55,26 @@ public class AlertQueryService {
             nextCursor = encodeCursor(last.createdAt(), last.id());
         }
         return new AlertPageResponse(rows, nextCursor);
+    }
+
+    @Transactional(readOnly = true)
+    public AlertDetailResponse getAlert(UUID alertId, String actorSubject, boolean admin) {
+        AlertListRepository.DetailRow row = repository
+                .findVisibleDetail(alertId, actorSubject, admin)
+                .orElseThrow(AlertNotFoundException::new);
+        AlertSummaryResponse summary = row.summary();
+        DecisionResponse latestDecision = decisionRepository
+                .findFirstByAlertIdOrderByDecidedAtDesc(alertId)
+                .map(DecisionResponse::from)
+                .orElse(null);
+        return new AlertDetailResponse(
+                summary.id(), summary.clientRef(), summary.instrumentId(), summary.headline(),
+                summary.status(), summary.score(), summary.createdAt(), summary.version(),
+                new ExposureResponse(
+                        row.amountSgd().setScale(2, RoundingMode.HALF_UP).toPlainString(),
+                        row.portfolioPercentage(), row.valuationAsOf(), row.freshness()),
+                repository.findFactors(alertId), List.of(row.evidence()),
+                row.briefing(), latestDecision);
     }
 
     static String encodeCursor(Instant createdAt, UUID id) {

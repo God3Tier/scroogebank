@@ -167,6 +167,19 @@ class AlertRepositoryTest {
     void listsJoinedAlertSummariesWithinAgentScope() {
         HoldingSnapshot holding = holdingRepository.save(snapshot());
         Alert alert = alertRepository.saveAndFlush(alert(holding.getId()));
+        jdbcTemplate.update("""
+                INSERT INTO alert_factor
+                    (alert_id, sequence_number, code, contribution, description)
+                VALUES (?, 0, 'EXPOSURE', 35.00, 'Synthetic exposure factor')
+                """, alert.getId());
+        jdbcTemplate.update("""
+                INSERT INTO briefing
+                    (id, alert_id, summary, model_version, prompt_version,
+                     ai_generated, citation_refs, created_at, expires_at)
+                VALUES (?, ?, 'Synthetic summary', 'fixture-model', 'prompt-v1',
+                        TRUE, CAST(? AS jsonb),
+                        '2026-09-27T00:02:00Z', '2026-12-26T00:02:00Z')
+                """, UUID.randomUUID(), alert.getId(), "[]");
 
         assertThat(alertListRepository.findVisible(
                 "syn-agent-001", false, AlertStatus.NEW,
@@ -183,6 +196,20 @@ class AlertRepositoryTest {
                 "syn-admin-001", true, null, null, null, null, 26))
                 .extracting(summary -> summary.id())
                 .containsExactly(alert.getId());
+
+        assertThat(alertListRepository.findVisibleDetail(
+                alert.getId(), "syn-agent-001", false))
+                .hasValueSatisfying(detail -> {
+                    assertThat(detail.amountSgd()).isEqualByComparingTo("2500.0000");
+                    assertThat(detail.portfolioPercentage()).isEqualByComparingTo("100.0000");
+                    assertThat(detail.evidence().sourceDomain()).isEqualTo("example.invalid");
+                    assertThat(detail.briefing().summary()).isEqualTo("Synthetic summary");
+                });
+        assertThat(alertListRepository.findVisibleDetail(
+                alert.getId(), "syn-agent-999", false)).isEmpty();
+        assertThat(alertListRepository.findFactors(alert.getId()))
+                .singleElement()
+                .satisfies(factor -> assertThat(factor.code()).isEqualTo("EXPOSURE"));
     }
 
     private static HoldingSnapshot snapshot() {

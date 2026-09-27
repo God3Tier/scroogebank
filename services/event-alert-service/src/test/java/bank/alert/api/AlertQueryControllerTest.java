@@ -1,6 +1,7 @@
 package bank.alert.api;
 
 import bank.alert.domain.AlertStatus;
+import bank.alert.domain.ValuationFreshness;
 import bank.alert.security.JwtRoleConverter;
 import bank.alert.security.SecurityConfiguration;
 import bank.alert.service.AlertQueryService;
@@ -88,5 +89,33 @@ class AlertQueryControllerTest {
                         .queryParam("limit", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.correlationId").exists());
+    }
+
+    @Test
+    void agentCanReadAssignedAlertDetail() throws Exception {
+        AlertDetailResponse detail = new AlertDetailResponse(
+                ALERT_ID, "syn-client-001", "SYN-SGX-001", "Synthetic event",
+                AlertStatus.NEW, new BigDecimal("72.50"),
+                Instant.parse("2026-09-27T00:01:00Z"), 0L,
+                new ExposureResponse(
+                        "2500.00", new BigDecimal("25.0000"),
+                        Instant.parse("2026-09-26T23:00:00Z"), ValuationFreshness.FRESH),
+                List.of(new ExplanationFactorResponse(
+                        "EXPOSURE", new BigDecimal("35.00"), "Synthetic exposure factor")),
+                List.of(new EvidenceResponse(
+                        "Synthetic event", "https://example.invalid/event", "example.invalid",
+                        null, Instant.parse("2026-09-27T00:00:00Z"))),
+                new BriefingResponse("Synthetic summary", true, "fixture-model", "prompt-v1", null),
+                null);
+        when(queryService.getAlert(ALERT_ID, "syn-agent-001", false)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/alerts/{alertId}", ALERT_ID)
+                        .with(user("syn-agent-001").roles("AGENT")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(ALERT_ID.toString()))
+                .andExpect(jsonPath("$.exposure.amountSgd").value("2500.00"))
+                .andExpect(jsonPath("$.evidence[0].sourceDomain").value("example.invalid"));
+
+        verify(queryService).getAlert(ALERT_ID, "syn-agent-001", false);
     }
 }
