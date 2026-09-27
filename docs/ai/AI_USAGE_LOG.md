@@ -61,3 +61,20 @@
 - Verification: the full Maven build passed with 39 event-alert tests, including
   Flyway migration, JPA schema validation, repository joins/authorization, and
   mutation transactions against disposable PostgreSQL 16 Testcontainers.
+
+## 2026-09-28 — EDA-D1-03 offline ingestion core
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: provider-neutral public-search contracts, grouped-query controls,
+  watermark and lease persistence, canonical URL governance and deduplication,
+  bounded retries, AgentCore adapter boundary, worker-mode guard, tests, and
+  documentation.
+- Human verification required: review the provider contract and source controls;
+  accept the proposed processing/search/content-governance ADRs; supply the
+  separately approved IAM/Gateway implementation only after EDA-D1-02 clears.
+- Data: repository content and synthetic public-market terms only. No credentials,
+  client data, external provider calls, or AWS services were used.
+- Verification: Java unit/failure tests and PostgreSQL 16 Testcontainers schema
+  validation were run locally. Live AgentCore behavior, latency, cost, and IAM
+  enforcement are not claimed.
