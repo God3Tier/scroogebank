@@ -4,6 +4,7 @@ import admins from '../data/admins.js'
 import agents from '../data/agents.js'
 import clients from '../data/clients.js'
 import transactions from '../data/transactions.js'
+import StatCard from '../components/StatCard.jsx'
 
 function AdminDashboard() {
   const [openSection, setOpenSection] = useState(null)
@@ -24,6 +25,13 @@ function AdminDashboard() {
         <h1>Admin Dashboard</h1>
         <p className="page-subtitle">Manage staff accounts and review transactions</p>
       </header>
+
+      <div className="stat-grid">
+        <StatCard label="Total Admins" value={admins.length} icon="admin_panel_settings" />
+        <StatCard label="Total Agents" value={agents.length} icon="badge" />
+        <StatCard label="Total Clients" value={clients.length} icon="groups" />
+        <StatCard label="Transactions" value={transactions.length} icon="receipt_long" />
+      </div>
 
       <div className="action-bar">
         <button

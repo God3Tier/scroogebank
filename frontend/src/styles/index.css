@@ -239,6 +239,61 @@ p {
   background: var(--surface);
 }
 
+/* ---------- Stat tiles ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--stack-md);
+  margin-bottom: var(--stack-lg);
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  padding: var(--stack-lg);
+  background: var(--surface-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  transition: background-color 0.2s ease;
+}
+
+.stat-card:hover {
+  background: var(--row-hover);
+}
+
+.stat-icon {
+  position: absolute;
+  top: var(--stack-md);
+  right: var(--stack-md);
+  color: var(--primary);
+  font-size: 56px;
+  opacity: 0.1;
+  transition: opacity 0.2s ease;
+}
+
+.stat-card:hover .stat-icon {
+  opacity: 0.2;
+}
+
+.stat-label {
+  margin-bottom: var(--stack-sm);
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  color: var(--primary);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 40px;
+  letter-spacing: -0.02em;
+}
+
 /* ---------- Buttons ---------- */
 
 .main button {

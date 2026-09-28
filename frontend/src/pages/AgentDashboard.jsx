@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 
 // Below imports are seeded data, testing purposes
 import clients from '../data/clients.js'
+import transactions from '../data/transactions.js'
+import StatCard from '../components/StatCard.jsx'
 
 function AgentDashboard() {
 
@@ -28,6 +30,16 @@ function AgentDashboard() {
                 <h1>Agent Dashboard</h1>
                 <p className="page-subtitle">Create and manage client profiles</p>
             </header>
+
+            <div className="stat-grid">
+                <StatCard label="My Clients" value={clients.length} icon="groups" />
+                <StatCard label="Transactions" value={transactions.length} icon="receipt_long" />
+                <StatCard
+                    label="Pending Transactions"
+                    value={transactions.filter((transaction) => transaction.status === 'Pending').length}
+                    icon="pending_actions"
+                />
+            </div>
 
             <div className="action-bar">
                 <button
