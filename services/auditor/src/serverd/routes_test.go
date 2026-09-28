@@ -15,7 +15,7 @@ func TestHealthHandler(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
-	if got := recorder.Body.String(); got != "{\"status\":\"ok\"}\n" {
+	if got := recorder.Body.String(); got != "{\"status\":\"ok\"}" {
 		t.Fatalf("expected health response, got %q", got)
 	}
 }

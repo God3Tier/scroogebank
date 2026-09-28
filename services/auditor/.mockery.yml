@@ -6,6 +6,15 @@ include-auto-generated: false
 filename: mocks.go
 
 packages:
-  auditor/src:
+  auditor/src/cronjob:
     config:
-      recursive: true
+      all: true
+  auditor/src/internal/repository:
+    config:
+      all: true
+  auditor/src/internal/repository/audit:
+    config:
+      all: true
+  auditor/src/internal/service:
+    config:
+      all: true

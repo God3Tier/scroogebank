@@ -59,9 +59,38 @@ aws ecs update-service --cluster scrooge-crm-cluster --service user-service --fo
 
 **Tests**:
 ```bash
-mvn test
+make test
 ```
 `UserRepositoryTest` uses Testcontainers to spin up a real Postgres and verifies unique-constraint enforcement on email/idp_sub. Needs Docker running locally; it does not run the service itself.
+
+## Local development
+
+The `local` Spring profile selects the developer PostgreSQL container and enables Swagger. It does **not** disable Cognito provisioning, JWT validation, or Admin-only method authorization. Cognito and AWS credentials are required locally as well as in deployed environments.
+
+Set the user-pool configuration, then start the database and application:
+
+```bash
+export OIDC_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+export COGNITO_USER_POOL_ID=<user-pool-id>
+export COGNITO_APP_CLIENT_ID=<app-client-id>
+export AWS_REGION=<region>
+export ROOT_ADMIN_EMAIL=<root-admin-email>
+make run
+```
+
+The AWS SDK uses its normal credential provider chain for Cognito administration. The API listens at `http://localhost:8081`; Swagger UI is available at `http://localhost:8081/swagger-ui.html`. Local HTTP is for loopback development only.
+
+Use a Cognito **access token** from an `ADMIN` group member for the user-management API commands:
+
+```bash
+make health
+make create-user TOKEN="$TOKEN" FIRST_NAME=Alice LAST_NAME=Agent EMAIL=alice.local@example.test ROLE=AGENT
+make get-user TOKEN="$TOKEN" USER_ID=<id-from-create-response>
+make update-user TOKEN="$TOKEN" USER_ID=<id-from-create-response> FIRST_NAME=Alice LAST_NAME=Updated
+make disable-user TOKEN="$TOKEN" USER_ID=<id-from-create-response>
+```
+
+To stop the local database, run `make down`; to reset it and delete its data, run `make local-db-reset`. `make package`, `make clean`, `make image`, and `make test` provide the build and test workflows.
 
 ## Verifying it works
 
