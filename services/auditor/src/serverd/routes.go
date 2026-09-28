@@ -1,4 +1,4 @@
-package serverd
+package main
 
 import (
 	"net/http"

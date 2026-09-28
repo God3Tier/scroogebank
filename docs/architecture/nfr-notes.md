@@ -30,9 +30,11 @@ An earlier revision used a single shared instance to save cost. What killed it w
 
 The cost is one database instance per service instead of one shared instance, which is the honest price of removing a manual deployment step and getting real per-service isolation. Every instance holds actual CRM records, so all of them stay Multi-AZ for the mandatory Availability NFR.
 
-## No message broker
+## No message broker (superseded for the auditor service)
 
-Every service serves its own synchronous REST API, and no service consumes events from another, so there is no Kafka/RabbitMQ/SQS. A broker earns its cost when there are multiple consumers, ordering/backpressure requirements, or a need to decouple producer/consumer lifecycles — none of which apply today. Introducing one here would be infrastructure for its own sake.
+Every service serves its own synchronous REST API, and no service consumes events from another *except the auditor*, which reads audit events via a queue. A broker earns its cost when there are multiple consumers, ordering/backpressure requirements, or a need to decouple producer/consumer lifecycles — none of which apply to the rest of the system today, so this remains the default for every other service. Introducing one elsewhere would still be infrastructure for its own sake.
+
+The auditor's queue is Amazon SQS (previously Kafka before it) — see [ADR-0004](../adr/ADR-0004-auditor-kafka-to-sqs-migration.md) for the rationale and the earlier Kafka setup this replaced.
 
 ## Resiliency scope
 

@@ -1,4 +1,4 @@
-package kafka
+package queue
 
 import (
 	"auditor/src/internal/models"
@@ -155,5 +155,18 @@ func TestValidatePayload_MalformedFileCompletedPayload(t *testing.T) {
 
 	if err := validatePayload(event); err == nil {
 		t.Error("expected error for malformed FileCompletedPayload (wrong field type), got nil")
+	}
+}
+
+func TestValidEvent_JSONIncludesEventID(t *testing.T) {
+	raw := []byte(`{"event_id":"evt-123","event_type":"CRUD","action":"UPDATE","source_service":"CRM","actor_id":"a1","payload":{}}`)
+
+	var event ValidEvent
+	if err := json.Unmarshal(raw, &event); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if event.EventID != "evt-123" {
+		t.Errorf("expected event_id %q to be parsed, got %q", "evt-123", event.EventID)
 	}
 }

@@ -24,7 +24,7 @@ services:
 
   test-runner:
     platform: linux/amd64
-    image: golang:1.27.1
+    image: golang:1.27.1-bookworm
     working_dir: /workspace
     volumes:
       - .:/workspace

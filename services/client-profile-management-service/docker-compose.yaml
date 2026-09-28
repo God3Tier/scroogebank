@@ -17,5 +17,8 @@ services:
       timeout: 5s
       retries: 10
 
+  # The auditor's messaging moved from Kafka to SQS (ADR-0004). Local SQS
+  # is provided by the localstack service in compose.yaml, not here.
+
 volumes:
   pgdata:
