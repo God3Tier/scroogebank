@@ -1,12 +1,12 @@
 import { useParams, useNavigate } from "react-router-dom"
 
-{/* Below imports are seeded data, testing purposes */}
+// Below imports are seeded data, testing purposes
 import clients from '../data/clients.js'
 import transactions from '../data/transactions.js'
 
 function ClientTransactions() {
 
-    {/* Variables and States*/}
+    // Variables and States
     const {clientId} = useParams()
     const navigate = useNavigate()
 

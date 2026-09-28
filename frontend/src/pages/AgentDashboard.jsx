@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-{/* Below imports are seeded data, testing purposes */}
+// Below imports are seeded data, testing purposes
 import clients from '../data/clients.js'
 
 function AgentDashboard() {
 
-    {/* Variables and States */}
+    // Variables and States
     const [openSection, setOpenSection] = useState(null)
     const navigate = useNavigate()
 
-    {/* Functions */}
+    // Functions
     function toggleSection(section) {
         setOpenSection(openSection === section ? null : section)
     }
@@ -21,7 +21,7 @@ function AgentDashboard() {
         console.log('Creating client profile...')
     }
 
-    {/* Render */}
+    // Render
     return (
         <div className="page">
             <header className="page-header">
@@ -67,7 +67,7 @@ function AgentDashboard() {
                     <label>Postal Code:<input type="text" /></label>
                     <div className="form-actions">
                         <button type="submit">Create Profile</button>
-                        <button onClick={() => toggleSection('createClientProfile')}>Cancel</button>
+                        <button type="button" onClick={() => toggleSection('createClientProfile')}>Cancel</button>
                     </div>
                 </form>
             )}

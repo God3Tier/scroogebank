@@ -30,7 +30,7 @@ function Login() {
                 agent.password === password
         )
         if(agent) {
-            navigate('agent')
+            navigate('/agent')
             return
         }
 
