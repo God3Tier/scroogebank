@@ -10,6 +10,15 @@ The current foundation is offline and deterministic. It contains no AWS SDK,
 provider credentials, or outbound provider calls. Synthetic holdings are loaded
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
 
+The AI boundary is independently disabled by default with
+`ALERT_AI_ENABLED=false`. The offline adapters accept public evidence only,
+screen prompt-injection/private identifiers before invocation, send versioned
+closed-schema requests through `AiModelGateway`, validate citations and candidate
+instruments, cap input/output/retries/timeouts, and safely abstain or retain an
+event for deterministic rule review. Briefings are explicitly AI-labelled,
+source-cited, uncertainty-bearing, and rejected when they contain advice
+language. No model SDK, credentials, or outbound model connection is included.
+
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 60.00 threshold. Stale valuations carry a visible 10-point penalty; missing or
