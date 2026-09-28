@@ -23,15 +23,29 @@ function AgentDashboard() {
 
     {/* Render */}
     return (
-        <div>
-            <h1>Agent Dashboard</h1>
-            
-            <button onClick={() => toggleSection('createClientProfile')}>
-                Create Client Profile
-            </button>
+        <div className="page">
+            <header className="page-header">
+                <h1>Agent Dashboard</h1>
+                <p className="page-subtitle">Create and manage client profiles</p>
+            </header>
+
+            <div className="action-bar">
+                <button
+                    onClick={() => toggleSection('createClientProfile')}
+                    aria-expanded={openSection === 'createClientProfile'}
+                >
+                    Create Client Profile
+                </button>
+                <button
+                    onClick={() => toggleSection('manageProfiles')}
+                    aria-expanded={openSection === 'manageProfiles'}
+                >
+                    Manage Client Profiles
+                </button>
+            </div>
 
             {openSection === 'createClientProfile' && (
-                <form onSubmit={handleCreateClient}>
+                <form className="card form-grid" onSubmit={handleCreateClient}>
                     <h2>Create Client Profile</h2>
                     <label>First Name:<input type="text" /></label>
                     <label>Last Name:<input type="text" /></label>
@@ -51,24 +65,22 @@ function AgentDashboard() {
                     <label>State:<input type="text" /></label>
                     <label>Country:<input type="text" /></label>
                     <label>Postal Code:<input type="text" /></label>
-                    <button type="submit">Create Profile</button>
-                    <button onClick={() => toggleSection('createClientProfile')}>Cancel</button>
+                    <div className="form-actions">
+                        <button type="submit">Create Profile</button>
+                        <button onClick={() => toggleSection('createClientProfile')}>Cancel</button>
+                    </div>
                 </form>
             )}
 
-            <button onClick={() => toggleSection('manageProfiles')}>
-                Manage Client Profiles
-            </button>
-
             {openSection === 'manageProfiles' && (
-                <div>
+                <div className="card card-flush">
                     <h2>Manage Client Profiles</h2>
-                    {/* 
-                    Add functionality to manage client profiles 
+                    {/*
+                    Add functionality to manage client profiles
                     - List of client profiles
                     - View Transactions, Edit and delete options for each profile
                     */}
-                    <ul>
+                    <ul className="row-list">
                         {clients.map(client => (
                             <li key={client.clientId}>
                                 <span>

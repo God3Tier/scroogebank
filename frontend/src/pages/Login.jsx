@@ -38,9 +38,16 @@ function Login() {
     }
 
     return (
+        <div className='login-page'>
         <div className='login-container'>
-            <h1>Login</h1>
-            <form onSubmit={handleLogin}>
+            <div className='login-header'>
+                <div className='login-logo'>
+                    <span className='material-symbols-outlined' aria-hidden='true'>account_balance</span>
+                </div>
+                <h1>Login</h1>
+                <p>Scrooge Global staff access</p>
+            </div>
+            <form className='stack-form' onSubmit={handleLogin}>
                 <label>Email:
                     <input
                         type='email'
@@ -56,10 +63,11 @@ function Login() {
                     />
                 </label>
                 {error && (
-                    <p>{error}</p>
+                    <p className='error-text' role='alert'>{error}</p>
                 )}
                 <button type='submit'>Login</button>
             </form>
+        </div>
         </div>
     );
 }

@@ -19,15 +19,35 @@ function AdminDashboard() {
   }
 
   return (
-    <div>
-      <h1>Admin Dashboard</h1>
+    <div className="page">
+      <header className="page-header">
+        <h1>Admin Dashboard</h1>
+        <p className="page-subtitle">Manage staff accounts and review transactions</p>
+      </header>
 
-      <button onClick={() => toggleSection('createUser')}>
-        Create Admin / Agent
-      </button>
+      <div className="action-bar">
+        <button
+          onClick={() => toggleSection('createUser')}
+          aria-expanded={openSection === 'createUser'}
+        >
+          Create Admin / Agent
+        </button>
+        <button
+          onClick={() => toggleSection('manageAdmins')}
+          aria-expanded={openSection === 'manageAdmins'}
+        >
+          Manage Admins
+        </button>
+        <button
+          onClick={() => toggleSection('manageAgents')}
+          aria-expanded={openSection === 'manageAgents'}
+        >
+          Manage Agents
+        </button>
+      </div>
 
       {openSection === 'createUser' && (
-        <form onSubmit={handleCreateAccount}>
+        <form className="card form-grid" onSubmit={handleCreateAccount}>
           <h2>Create Admin / Agent</h2>
           <label>First Name:<input type="text" /></label>
           <label>Last Name:<input type="text" /></label>
@@ -40,19 +60,17 @@ function AdminDashboard() {
               <option value="agent">Agent</option>
             </select>
           </label>
-          <button type="submit">Create Account</button>
+          <div className="form-actions">
+            <button type="submit">Create Account</button>
+          </div>
         </form>
       )}
 
-      <button onClick={() => toggleSection('manageAdmins')}>
-        Manage Admins
-      </button>
-
       {openSection === 'manageAdmins' && (
-        <div>
+        <div className="card card-flush">
           <h2>Manage Admins</h2>
 
-          <ul>
+          <ul className="row-list">
             {admins.map((admin) => (
               <li key={admin.adminId}>
                 <span>
@@ -67,15 +85,11 @@ function AdminDashboard() {
         </div>
       )}
 
-      <button onClick={() => toggleSection('manageAgents')}>
-        Manage Agents
-      </button>
-
       {openSection === 'manageAgents' && (
-        <div>
+        <div className="card card-flush">
           <h2>Manage Agents</h2>
 
-          <ul>
+          <ul className="row-list">
             {agents.map((agent) => (
               <li key={agent.agentId}>
                 <span>
@@ -90,42 +104,50 @@ function AdminDashboard() {
         </div>
       )}
 
-      <h2>All Transactions</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Transaction ID</th>
-            <th>Client</th>
-            <th>Type</th>
-            <th>Amount</th>
-            <th>Date</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            transactions.map((transaction) =>
+      <section className="card card-flush">
+        <h2>All Transactions</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Transaction ID</th>
+                <th>Client</th>
+                <th>Type</th>
+                <th className="num">Amount</th>
+                <th>Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
               {
-                const client = clients.find(
-                  (client) => client.clientId === transaction.clientId
+                transactions.map((transaction) =>
+                  {
+                    const client = clients.find(
+                      (client) => client.clientId === transaction.clientId
+                    )
+
+                  return (
+                    <tr key={transaction.transactionId}>
+                      <td className="mono">{transaction.transactionId}</td>
+                      <td>{client ? `${client.firstName} ${client.lastName}`
+                      : 'Unknown Client'}
+                      </td>
+                      <td>{transaction.type}</td>
+                      <td className="num">{transaction.amount}</td>
+                      <td>{transaction.date}</td>
+                      <td>
+                        <span className={`badge badge-${String(transaction.status).toLowerCase()}`}>
+                          {transaction.status}
+                        </span>
+                      </td>
+                    </tr>
+                  )}
                 )
-              
-              return (
-                <tr key={transaction.transactionId}>
-                  <td>{transaction.transactionId}</td>
-                  <td>{client ? `${client.firstName} ${client.lastName}`
-                  : 'Unknown Client'}
-                  </td>
-                  <td>{transaction.type}</td>
-                  <td>{transaction.amount}</td>
-                  <td>{transaction.date}</td>
-                  <td>{transaction.status}</td>
-                </tr>
-              )}
-            )
-          }
-        </tbody>
-      </table>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   )
 }

@@ -19,32 +19,49 @@ function ClientTransactions() {
     )
 
     if(!client) {
-        return <h1>Client not found</h1>
+        return (
+            <div className="page">
+                <div className="card empty-state">
+                    <h1>Client not found</h1>
+                </div>
+            </div>
+        )
     }
 
     return (
-        <div>
-            <button onClick={() => navigate('/agent')}>
-                Back
-            </button>
+        <div className="page">
+            <div className="back-row">
+                <button onClick={() => navigate('/agent')}>
+                    Back
+                </button>
+            </div>
 
-            <h1>{client.firstName} {client.lastName}</h1>
+            <div className="card client-header">
+                <div className="client-avatar" aria-hidden="true">
+                    {client.firstName.charAt(0)}{client.lastName.charAt(0)}
+                </div>
+                <div>
+                    <h1>{client.firstName} {client.lastName}</h1>
 
-            <p>{client.email}</p>
+                    <p>{client.email}</p>
+                </div>
+            </div>
 
-            <h2>Transactions</h2>
+            <section className="card card-flush">
+                <h2>Transactions</h2>
 
-            {clientTransactions.length === 0 ? 
-                (<p>No transactions found.</p>)
-                :(
-                    <ul>
-                        {clientTransactions.map((transaction) => (
-                            <li key={transaction.transactionId}>
-                                Transaction ID: {transaction.transactionId}, Amount: {transaction.amount}, Status: {transaction.status}
-                            </li>
-                        ))}
-                    </ul>
-                )}
+                {clientTransactions.length === 0 ?
+                    (<p className="empty-state">No transactions found.</p>)
+                    :(
+                        <ul className="row-list plain-rows">
+                            {clientTransactions.map((transaction) => (
+                                <li key={transaction.transactionId}>
+                                    Transaction ID: {transaction.transactionId}, Amount: {transaction.amount}, Status: {transaction.status}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+            </section>
         </div>
     )
 }
