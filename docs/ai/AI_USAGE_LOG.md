@@ -61,3 +61,20 @@
 - Verification: the full Maven build passed with 39 event-alert tests, including
   Flyway migration, JPA schema validation, repository joins/authorization, and
   mutation transactions against disposable PostgreSQL 16 Testcontainers.
+
+## 2026-09-29 — EDA-D1-04 offline AI safety layer
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: public-only classifier and briefing contracts, model kill switch,
+  prompt-injection/private-field screening, strict structured-output validation,
+  citation/instrument enforcement, retry/timeout/token caps, deterministic
+  rule-review fallback, synthetic evaluation fixture, metric harness, tests, and
+  documentation.
+- Human verification required: accept ADR-0010, review safety patterns and
+  candidate benchmark gates, expand and label the held-out fixture set, and run
+  the live benchmark only through an approved provider connection.
+- Data: repository content and synthetic public-market examples only. No secrets,
+  real client data, model provider calls, or AWS services were used.
+- Limitation: offline tests verify contracts and failure behavior, not Luna model
+  quality, latency, tokens, cost, regional routing, or provider availability.
