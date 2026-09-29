@@ -54,6 +54,15 @@ alert:
     minimum-confidence: 0.60
     bedrock:
       region: ${ALERT_AI_BEDROCK_REGION:us-east-1}
+  operations:
+    # Independent outbound controls remain fail-closed until explicitly enabled.
+    ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
+    model-enabled: ${ALERT_MODEL_ENABLED:false}
+    monthly-search-quota: ${ALERT_MONTHLY_SEARCH_QUOTA:1000}
+    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:4}
+    monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}
+    max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
+    monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}
 
 management:
   endpoints:

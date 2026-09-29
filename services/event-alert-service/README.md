@@ -44,6 +44,13 @@ Measured gateway responses retain only output JSON and low-cardinality operation
 metadata: token counts, latency, and stop reason. The offline evaluation package
 turns complete versioned run files into explicit pass/fail benchmark reports.
 
+Outbound ingestion and model controls are independently disabled by default.
+The provider-neutral operations layer enforces per-run/monthly quotas and a
+monthly estimated-cost stop, exposes low-cardinality Micrometer metrics, and
+persists a redacted audit-outbox event before human re-enable. See
+`docs/runbooks/event-driven-alerts-operations.md` for configuration and current
+integration limits.
+
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 60.00 threshold. Stale valuations carry a visible 10-point penalty; missing or

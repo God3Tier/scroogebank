@@ -11,7 +11,8 @@ import java.time.Clock;
         AlertModeProperties.class,
         IngestionProperties.class,
         AiProperties.class,
-        BedrockAiProperties.class
+        BedrockAiProperties.class,
+        OperationalProperties.class
 })
 public class AlertServiceConfiguration {
 

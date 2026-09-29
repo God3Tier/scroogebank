@@ -179,3 +179,18 @@
   PostgreSQL Testcontainers classes because Docker Desktop was unavailable; the
   preceding full build passed 74 tests before this fixture-only change. No model
   quality, latency, routing, token, or cost result is claimed.
+
+## 2026-09-29 — EDA-D1-05 offline operations controls
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: provider-neutral default-off kill switches, hard search/token/budget
+  limits, low-cardinality metrics, durable redacted audit-outbox persistence for
+  re-enable, cost-control documentation, and an offline operations runbook.
+- Human verification required: accept ADR-0014, review limits and planning cost
+  assumptions, integrate provider/operator/audit adapters, and validate AWS
+  billing, IaC, alarms, and an operations drill before cloud enablement.
+- Data: repository content and synthetic test values only. No secrets, real
+  client data, external providers, or AWS services were used.
+- Verification: the full Maven build passed with 72 tests, including PostgreSQL
+  Testcontainers coverage for durable re-enable audit and outbox-capacity failure.
