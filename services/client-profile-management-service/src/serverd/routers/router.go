@@ -26,12 +26,13 @@ import (
 	http.StatusServiceUnavailable = 503
 */
 
-func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientController, accounts accountcontroller.AccountController, db *sql.DB, authenticate gin.HandlerFunc) {
+func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientController, accounts accountcontroller.AccountController, db *sql.DB, authenticate, auditLogger gin.HandlerFunc) {
 	api := router.Group("/api")
 	api.Use(authenticate)
 	api.Use(security.RequireCRMRole())
 
 	client := api.Group("/clients")
+	client.Use(auditLogger)
 	{
 		client.POST("", adaptHandler(clients.CreateClientProfile, ""))
 		client.POST("/:clientId/verify", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.VerifyClientIdentity, "clientId"))
@@ -41,6 +42,7 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 	}
 
 	account := api.Group("/accounts")
+	account.Use(auditLogger)
 	{
 		account.POST("", security.RequireClientBodyOwner(db), adaptHandler(accounts.CreateAccount, ""))
 		account.DELETE("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))

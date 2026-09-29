@@ -17,6 +17,7 @@ TEST_COMPOSE := docker compose -f docker-compose.test.yml -p auditor-test
 TOOLS_IMAGE  ?= auditor-tools
 TOOLS_MOUNT  := -v "$(CURDIR)":/workspace -w /workspace
 TOOLS_RUN    := docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) $(TOOLS_IMAGE)
+DOCKER_BUILD_PROGRESS ?= plain
 
 MOCKERY_ARGS ?=
 
@@ -87,7 +88,7 @@ psql:
 # ============================================================
 
 tools-image:
-	docker build --platform linux/amd64 \
+	docker build --progress=$(DOCKER_BUILD_PROGRESS) --platform linux/amd64 \
 		--target tools \
 		-t $(TOOLS_IMAGE) \
 		.
@@ -188,7 +189,7 @@ test:
 	echo "========================================"; \
 	echo "Running Go tests"; \
 	echo "========================================"; \
-	$(TEST_COMPOSE) run --rm -T test-runner go test ./... -cover
+	$(TEST_COMPOSE) run --rm -T test-runner go test -v ./... -cover
 
 
 # ============================================================

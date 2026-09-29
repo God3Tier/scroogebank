@@ -70,6 +70,12 @@ awslocal sqs send-message \
   --message-body '{"event_id":"evt-1","event_type":"CRUD","action":"UPDATE","source_service":"CRM","actor_id":"agent-1","payload":{"agent_id":"AGT-1","client_id":"CLI-1","attribute_name":"Address","before_value":"A","after_value":"B","datetime":"2026-09-24T00:00:00Z"}}'
 ```
 
+User-management producers use the same `CRUD` event type with
+`source_service=USER_MANAGEMENT`. Supported actions are `CREATE`, `READ`,
+`UPDATE`, `DISABLE`, and `PASSWORD_RESET`. Their payload records the target
+user ID, endpoint, HTTP method, response status, timestamp, and optional role;
+it must not contain passwords, names, email addresses, or request bodies.
+
 The auditor long-polls the queue (up to 20s), so it should pick the message
 up, store it, and delete it shortly after.
 

@@ -168,6 +168,10 @@ func (v *CognitoVerifier) Middleware() gin.HandlerFunc {
 			return
 		}
 		c.Set("principal", principal)
+		// Expose the verified Cognito subject as the acting agent ID for CRM
+		// handlers and audit-event middleware. Never accept this value from the
+		// request body or an unverified header.
+		c.Set("agent_id", principal.Subject)
 		// The controller consumes X-Agent-ID. Replace any caller-supplied value
 		// only after JWT verification so it cannot be used to impersonate another
 		// creator.

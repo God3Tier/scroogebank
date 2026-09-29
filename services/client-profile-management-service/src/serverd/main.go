@@ -8,6 +8,7 @@ import (
 	accountService "client-profile-management-service/src/internal/service/account"
 	clientservice "client-profile-management-service/src/internal/service/client"
 	"client-profile-management-service/src/serverd/routers"
+	auditqueue "client-profile-management-service/src/serverd/sqs"
 	"context"
 	"database/sql"
 	"fmt"
@@ -17,6 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 )
@@ -58,7 +62,26 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure Cognito authentication: %w", err)
 	}
-	routers.RegisterRoutes(router, client.New(clientSvc), account.NewAccountController(accountSvc), db, verifier.Middleware())
+
+	queueURL := os.Getenv("AUDIT_QUEUE_URL")
+	if queueURL == "" {
+		return fmt.Errorf("AUDIT_QUEUE_URL is required")
+	}
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		return fmt.Errorf("AWS_REGION is required")
+	}
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(region))
+	if err != nil {
+		return fmt.Errorf("load AWS configuration for Auditor SQS: %w", err)
+	}
+	sqsClient := awssqs.NewFromConfig(awsCfg, func(options *awssqs.Options) {
+		if endpoint := os.Getenv("AWS_ENDPOINT_URL"); endpoint != "" {
+			options.BaseEndpoint = aws.String(endpoint)
+		}
+	})
+	auditLogger := auditqueue.AuditLogger(sqsClient, queueURL)
+	routers.RegisterRoutes(router, client.New(clientSvc), account.NewAccountController(accountSvc), db, verifier.Middleware(), auditLogger)
 
 	server := &http.Server{
 		Addr:              envOrDefault("APP_ADDR", ":8080"),

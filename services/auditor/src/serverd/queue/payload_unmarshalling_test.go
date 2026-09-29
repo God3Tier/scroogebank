@@ -27,17 +27,37 @@ func buildEvent(t *testing.T, eventType, action, sourceService string, payload a
 }
 
 func TestValidatePayload_ValidCRUD_CRMService(t *testing.T) {
-	event := buildEvent(t, "CRUD", "UPDATE", string(models.CRMServiceType), ValidCRUDPayload{
-		AttributeName: "First Name|Address",
-		BeforeValue:   "LEE|ABC",
-		AfterValue:    "TAN|XX",
-		AgentID:       "AGT-001",
-		ClientID:      "CLI-001",
-		DateTime:      time.Now().Format(time.RFC3339),
-	})
+	for _, action := range []string{"CREATE", "GET", "UPDATE", "DELETE"} {
+		t.Run(action, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", action, string(models.CRMServiceType), ValidCRUDPayload{
+				AttributeName: "First Name|Address",
+				BeforeValue:   "LEE|ABC",
+				AfterValue:    "TAN|XX",
+				AgentID:       "AGT-001",
+				ClientID:      "CLI-001",
+				DateTime:      time.Now().Format(time.RFC3339),
+			})
 
-	if err := validatePayload(event); err != nil {
-		t.Errorf("expected valid CRUD event from CRM service to pass, got error: %v", err)
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected CRM CRUD action %q to pass, got error: %v", action, err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_CRMRejectsUnknownAction(t *testing.T) {
+	event := buildEvent(t, "CRUD", "UPSERT", string(models.CRMServiceType), ValidCRUDPayload{})
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected CRM to reject an unsupported action, got nil")
+	}
+}
+
+func TestValidatePayload_CRMRequiresCRUDEventType(t *testing.T) {
+	event := buildEvent(t, "TRANSACTION_INGESTION", "CREATE", string(models.CRMServiceType), ValidCRUDPayload{})
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected CRM to reject a non-CRUD event_type, got nil")
 	}
 }
 

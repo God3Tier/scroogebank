@@ -24,13 +24,13 @@ func TestGetAuditLog(t *testing.T) {
 	logs := []service.RetrieveAuditLogResponse{
 		{
 			EventType: "CRUD",
-			Action:    "CREATE_LEAD",
+			Action:    "CREATE",
 			Timestamp: timestamp,
 			Payload:   `{"lead":"1"}`,
 		},
 		{
 			EventType: "CRUD",
-			Action:    "UPDATE_LEAD",
+			Action:    "UPDATE",
 			Timestamp: timestamp.Add(time.Minute),
 			Payload:   `{"lead":"1"}`,
 		},
@@ -63,13 +63,13 @@ func TestGetAuditLog(t *testing.T) {
 				Logs: []*gen.AuditLog{
 					{
 						EventType: "CRUD",
-						Action:    "CREATE_LEAD",
+						Action:    "CREATE",
 						Timestamp: timestampProto(timestamp),
 						Payload:   `{"lead":"1"}`,
 					},
 					{
 						EventType: "CRUD",
-						Action:    "UPDATE_LEAD",
+						Action:    "UPDATE",
 						Timestamp: timestampProto(timestamp.Add(time.Minute)),
 						Payload:   `{"lead":"1"}`,
 					},

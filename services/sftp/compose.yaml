@@ -54,6 +54,12 @@ services:
       SFTP_USER: ${SFTP_USER:-reportuser}
       SFTP_REMOTE_DIR: ${SFTP_REMOTE_DIR:-/reports}
       SFTP_POLL_INTERVAL: ${SFTP_POLL_INTERVAL:-30s}
+      AWS_REGION: ${AWS_REGION:-}
+      AUDIT_QUEUE_URL: ${AUDIT_QUEUE_URL:-}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     networks:
       - backend
     profiles: ["tools"]
@@ -65,6 +71,7 @@ services:
       - "2222:22"
     volumes:
       - reports:/home/reportuser/reports
+      - sftp_ssh:/etc/ssh
       - ../../keys/authorized/:/home/reportuser/.ssh/keys/
     command: "reportuser::${SFTP_UID:-1000}:${SFTP_GID:-1000}:reports"
     networks:
@@ -119,3 +126,4 @@ networks:
 volumes:
   reports:
   postgres_data:
+  sftp_ssh:
