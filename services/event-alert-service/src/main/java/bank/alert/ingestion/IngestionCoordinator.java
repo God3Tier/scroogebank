@@ -148,8 +148,9 @@ public class IngestionCoordinator {
             }
         }
 
+        int durableResultCount = Math.toIntExact(sourceResults.countBySearchRunId(run.getId()));
         finalizer.succeed(run, properties.provider(), scheduledWindowTo, properties.overlap(),
-                accepted, clock.instant());
+                durableResultCount, clock.instant());
         return outcome(IngestionStatus.SUCCEEDED, run, attempts, accepted, duplicates, rejected, null);
     }
 

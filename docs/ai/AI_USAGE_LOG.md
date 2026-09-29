@@ -68,13 +68,14 @@
 - Tool: OpenAI Codex.
 - Use: provider-neutral public-search contracts, grouped-query controls,
   watermark and lease persistence, canonical URL governance and deduplication,
-  bounded retries, AgentCore adapter boundary, worker-mode guard, tests, and
-  documentation.
+  bounded retries, durable partial-run replay accounting, AgentCore adapter
+  boundary, worker-mode guard, tests, and documentation.
 - Human verification required: review the provider contract and source controls;
   accept the proposed processing/search/content-governance ADRs; supply the
   separately approved IAM/Gateway implementation only after EDA-D1-02 clears.
 - Data: repository content and synthetic public-market terms only. No credentials,
   client data, external provider calls, or AWS services were used.
-- Verification: Java unit/failure tests and PostgreSQL 16 Testcontainers schema
-  validation were run locally. Live AgentCore behavior, latency, cost, and IAM
-  enforcement are not claimed.
+- Verification: the full Maven build passed with 88 tests, including retry,
+  deduplication, durable replay accounting, and PostgreSQL 16 Testcontainers
+  schema validation. Live AgentCore behavior, latency, cost, and IAM enforcement
+  are not claimed.

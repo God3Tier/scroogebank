@@ -7,4 +7,6 @@ import java.util.UUID;
 
 public interface SourceResultRepository extends JpaRepository<SourceResult, UUID> {
     boolean existsByCanonicalUrlHash(String canonicalUrlHash);
+
+    long countBySearchRunId(UUID searchRunId);
 }

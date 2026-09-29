@@ -107,6 +107,23 @@ class IngestionCoordinatorTest {
         verify(provider, never()).search(any());
     }
 
+    @Test
+    void retryFinalizesUsingAllDurableResultsFromTheExistingRun() {
+        SearchRun retry = new SearchRun(java.util.UUID.randomUUID(),
+                NOW.minus(Duration.ofHours(4)), NOW, NOW.minus(Duration.ofMinutes(20)));
+        retry.fail("TIMEOUT", NOW.minus(Duration.ofMinutes(10)));
+        when(searchRuns.findByWindowFromAndWindowTo(any(), any())).thenReturn(Optional.of(retry));
+        when(provider.search(any())).thenReturn(List.of());
+        when(sourceResults.countBySearchRunId(retry.getId())).thenReturn(2L);
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.SUCCEEDED);
+        assertThat(outcome.acceptedResults()).isZero();
+        verify(finalizer).succeed(retry, "agentcore-web-search-1.2.0", NOW,
+                Duration.ofMinutes(5), 2, NOW);
+    }
+
     private IngestionCoordinator coordinator(boolean enabled) {
         IngestionProperties properties = new IngestionProperties(enabled,
                 "agentcore-web-search-1.2.0", Duration.ofMinutes(5), Duration.ofHours(4),

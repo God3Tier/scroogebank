@@ -15,7 +15,9 @@ The ingestion core is provider-neutral and outbound-disabled by default with
 queries, requests at most ten results per query, applies a five-minute watermark
 overlap, retries retryable provider failures at most three times, validates the
 approved-domain boundary, canonicalizes and deduplicates URLs, and advances the
-watermark only after the complete run succeeds. `IngestionJob` can run only in
+watermark only after the complete run succeeds. Retrying a partially persisted
+failed window derives its final result count from durable rows, preserving
+idempotent replay accounting. `IngestionJob` can run only in
 `WORKER` mode. Supplying the IAM-authenticated AgentCore Gateway client remains
 blocked on the approved infrastructure task; the application does not create or
 contact AWS resources by itself.
