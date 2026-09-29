@@ -67,12 +67,12 @@
 - Human owner: Azeez.
 - Tool: OpenAI Codex.
 - Use: provider-neutral default-off kill switches, hard search/token/budget
-  limits, low-cardinality metrics, an audited re-enable boundary, cost-control
-  documentation, and an offline operations runbook.
+  limits, low-cardinality metrics, durable redacted audit-outbox persistence for
+  re-enable, cost-control documentation, and an offline operations runbook.
 - Human verification required: accept ADR-0014, review limits and planning cost
   assumptions, integrate provider/operator/audit adapters, and validate AWS
   billing, IaC, alarms, and an operations drill before cloud enablement.
 - Data: repository content and synthetic test values only. No secrets, real
   client data, external providers, or AWS services were used.
-- Verification: the full Maven build passed with 70 tests, including the new
-  configuration/operational-control cases and PostgreSQL Testcontainers tests.
+- Verification: the full Maven build passed with 72 tests, including PostgreSQL
+  Testcontainers coverage for durable re-enable audit and outbox-capacity failure.

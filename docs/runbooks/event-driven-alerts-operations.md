@@ -27,8 +27,9 @@ and deployment evidence remain pending approved AWS access.
 
 There is intentionally no unauthenticated operator endpoint in this offline
 slice. Production controls must be exposed only through an authenticated,
-authorized adapter. The default audit adapter fails closed so re-enable cannot
-succeed before durable audit integration exists.
+authorized adapter. Re-enable writes a redacted event to the PostgreSQL audit
+outbox before changing in-memory control state. An unavailable or full outbox
+fails closed and leaves the capability disabled.
 
 ## Inspect health and consumption
 
@@ -89,7 +90,7 @@ Replay wiring is not yet implemented. Before a production replay:
 
 ## Current gaps
 
-CloudWatch/IaC, billing reconciliation, authenticated operator controls, durable
-audit-outbox wiring, ingestion integration, replay execution, and operational
-drill evidence are not implemented. This document must not be used as evidence
-that those cloud controls were tested.
+CloudWatch/IaC, billing reconciliation, authenticated operator controls,
+ingestion integration, replay execution, audit publication to the external
+auditor, and operational drill evidence are not implemented. This document must
+not be used as evidence that those cloud controls were tested.

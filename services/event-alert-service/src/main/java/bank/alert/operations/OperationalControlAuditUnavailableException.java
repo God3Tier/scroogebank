@@ -4,4 +4,12 @@ public class OperationalControlAuditUnavailableException extends RuntimeExceptio
     public OperationalControlAuditUnavailableException() {
         super("durable operational-control audit sink is not configured");
     }
+
+    public OperationalControlAuditUnavailableException(String message) {
+        super(message);
+    }
+
+    public OperationalControlAuditUnavailableException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

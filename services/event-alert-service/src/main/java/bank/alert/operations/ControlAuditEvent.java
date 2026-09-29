@@ -3,4 +3,5 @@ package bank.alert.operations;
 import java.time.Instant;
 
 public record ControlAuditEvent(OutboundCapability capability, String action,
-        String actorSubject, String correlationId, Instant occurredAt) { }
+        String actorSubject, String correlationId, ControlReason previousReason,
+        Instant occurredAt) { }

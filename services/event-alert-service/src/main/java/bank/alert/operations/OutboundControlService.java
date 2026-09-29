@@ -108,7 +108,7 @@ public class OutboundControlService {
             throw new IllegalStateException("monthly budget remains exhausted");
         }
         ControlAuditEvent event = new ControlAuditEvent(capability, "REENABLED",
-                actorSubject, correlationId, Instant.now(clock));
+                actorSubject, correlationId, disabledReasons.get(capability), Instant.now(clock));
         auditSink.record(event);
         disabledReasons.remove(capability);
         metrics.reenabled(capability);

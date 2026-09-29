@@ -95,6 +95,7 @@ class OutboundControlServiceTest {
             assertThat(event.action()).isEqualTo("REENABLED");
             assertThat(event.actorSubject()).isEqualTo("operator-subject");
             assertThat(event.correlationId()).isEqualTo("corr-1");
+            assertThat(event.previousReason()).isEqualTo(ControlReason.OPERATOR_DISABLED);
             assertThat(event.occurredAt()).isEqualTo(CLOCK.instant());
         });
     }
