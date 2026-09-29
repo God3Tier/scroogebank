@@ -95,3 +95,20 @@
 - Verification: mocked adapter tests exercise request construction, disabled and
   unapproved-model rejection, timeout propagation, and retryable throttling. Live
   IAM, routing, quality, latency, tokens, and cost remain unverified.
+
+## 2026-09-29 — EDA-D1-04 offline benchmark reporting
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: provider usage-metadata contract, Bedrock token/latency/stop-reason capture,
+  strict benchmark-run schema, complete fixture coverage checks, p95 latency and
+  token aggregation, candidate quality/safety gates, JSON report entry point,
+  tests, and evaluation documentation.
+- Human verification required: review fixture labels and candidate thresholds,
+  record the approved model price used for estimated cost, inspect every safety
+  result, and accept ADR-0010 before enabling the provider.
+- Data: repository content and synthetic benchmark observations only. No model,
+  AWS, credential, or private-data access occurred.
+- Verification: focused tests cover metadata capture, passing/failing gates,
+  complete-run enforcement, version propagation, cost recording, and p95 latency.
+  No live benchmark result is claimed.
