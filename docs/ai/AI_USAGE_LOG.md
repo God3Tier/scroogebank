@@ -194,3 +194,51 @@
   client data, external providers, or AWS services were used.
 - Verification: the full Maven build passed with 72 tests, including PostgreSQL
   Testcontainers coverage for durable re-enable audit and outbox-capacity failure.
+
+## 2026-09-28 — EDA-D2-05 event-alert dashboard
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/frontend scope.
+- Tool: OpenAI Codex.
+- Use: active frontend discovery, React alert queue/detail implementation,
+  evidence and explanation presentation, agent decisions and feedback,
+  read-only administrator oversight, responsive state design, API adapter,
+  synthetic fixtures, tests, and documentation.
+- Human verification required: Hayyun reviews the frontend integration and a
+  developer completes the visual desktop/mobile pass before promotion to
+  `feat/event-driven-alerts`.
+- Data: repository content and synthetic client, exposure, alert, and public
+  citation examples only. No secrets, real client data, external providers, or
+  AWS services were used.
+- Verification: frontend unit/interaction tests, ESLint, production build, and
+  static UI-pattern audit were run locally. Automated screenshot review was not
+  available because no controllable browser was exposed to the session.
+
+## 2026-09-30 — EDA-D2-05 dashboard workflow hardening
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/frontend scope.
+- Tool: OpenAI Codex.
+- Use: latest-decision presentation, immediate status synchronization after a
+  mutation, terminal-state decision guards, persistent feedback access, styling,
+  tests, and documentation.
+- Human verification required: Hayyun reviews the workflow and a developer
+  completes the desktop/mobile visual pass before feature-branch integration.
+- Data: repository content and synthetic alert/decision values only. No secrets,
+  real client data, external services, or AWS resources were used.
+- Verification: nine frontend unit/interaction tests, ESLint, and the production
+  Vite build passed. Automated screenshots remain pending because the local
+  headless browser could not establish its Chrome CDP channel after diagnostics
+  and restart.
+
+## 2026-09-30 — EDA-D2-05 authoritative decision-state handling
+
+- Human owner: Azeez; Hayyun review remains required for the CRM experience.
+- Tool: OpenAI Codex.
+- Use: aligned the synthetic decision adapter with the expanded API response and
+  changed the dashboard to render the audited server-supplied `newStatus` rather
+  than independently reconstructing the lifecycle transition.
+- Human verification required: Hayyun reviews the interaction and completes the
+  desktop/mobile visual pass before promotion to `dev`.
+- Data: repository content and synthetic alerts only. No secrets, real client
+  data, external providers, or AWS services were used.
+- Verification: all nine frontend tests passed, ESLint completed without errors,
+  and the Vite production build succeeded.
