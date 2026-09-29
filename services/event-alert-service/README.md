@@ -10,6 +10,13 @@ The current foundation is offline and deterministic. It contains no AWS SDK,
 provider credentials, or outbound provider calls. Synthetic holdings are loaded
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
 
+Outbound ingestion and model controls are independently disabled by default.
+The provider-neutral operations layer enforces per-run/monthly quotas and a
+monthly estimated-cost stop, exposes low-cardinality Micrometer metrics, and
+requires a successful audit before human re-enable. See
+`docs/runbooks/event-driven-alerts-operations.md` for configuration and current
+integration limits.
+
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 60.00 threshold. Stale valuations carry a visible 10-point penalty; missing or
