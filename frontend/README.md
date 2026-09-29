@@ -38,7 +38,8 @@ npm run build
 
 The alert tests cover scoped API requests, problem responses, evidence and
 exposure rendering, optimistic-version decisions, administrator read-only
-behavior, and empty/error states.
+behavior, latest-decision presentation, terminal-state action guards, and
+empty/error states.
 
 ## Conventions
 

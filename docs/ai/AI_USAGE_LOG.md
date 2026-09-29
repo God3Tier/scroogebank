@@ -79,3 +79,19 @@
 - Verification: frontend unit/interaction tests, ESLint, production build, and
   static UI-pattern audit were run locally. Automated screenshot review was not
   available because no controllable browser was exposed to the session.
+
+## 2026-09-30 — EDA-D2-05 dashboard workflow hardening
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/frontend scope.
+- Tool: OpenAI Codex.
+- Use: latest-decision presentation, immediate status synchronization after a
+  mutation, terminal-state decision guards, persistent feedback access, styling,
+  tests, and documentation.
+- Human verification required: Hayyun reviews the workflow and a developer
+  completes the desktop/mobile visual pass before feature-branch integration.
+- Data: repository content and synthetic alert/decision values only. No secrets,
+  real client data, external services, or AWS resources were used.
+- Verification: nine frontend unit/interaction tests, ESLint, and the production
+  Vite build passed. Automated screenshots remain pending because the local
+  headless browser could not establish its Chrome CDP channel after diagnostics
+  and restart.

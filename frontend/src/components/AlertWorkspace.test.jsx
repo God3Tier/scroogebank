@@ -64,6 +64,29 @@ describe('AlertWorkspace', () => {
       { decision: 'MONITOR', expectedVersion: 0, note: null },
     ))
     expect(await screen.findByText('Continue monitoring recorded.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Latest recorded decision')).toHaveTextContent('Continue monitoring')
+    expect(screen.getByLabelText('Latest recorded decision')).toHaveTextContent('alert v1')
+  })
+
+  it('prevents invalid terminal decisions while keeping feedback available', async () => {
+    getAlert.mockResolvedValue({
+      ...detail,
+      status: 'INFORMED',
+      version: 1,
+      latestDecision: {
+        decision: 'INFORM_CLIENT',
+        actorSubject: 'syn-agent-001',
+        decidedAt: '2026-09-28T00:05:00Z',
+        alertVersion: 1,
+      },
+    })
+
+    render(<AlertWorkspace />)
+
+    expect(await screen.findByText('Decision complete.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Yes' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Latest recorded decision')).toHaveTextContent('Plan client briefing')
   })
 
   it('keeps administrator oversight read-only', async () => {

@@ -31,6 +31,12 @@ const DECISIONS = [
   { value: 'DISMISS', label: 'Dismiss alert', help: 'Close this alert without contacting the client.' },
 ]
 
+const DECISION_STATUSES = {
+  INFORM_CLIENT: 'INFORMED',
+  MONITOR: 'MONITORING',
+  DISMISS: 'DISMISSED',
+}
+
 function formatDate(value, withTime = true) {
   if (!value) return 'Not supplied'
   return new Intl.DateTimeFormat('en-SG', {
@@ -85,6 +91,21 @@ function DetailError({ error, onRetry }) {
       <button className="button button--secondary" type="button" onClick={onRetry}>
         <RefreshCw aria-hidden="true" /> Retry
       </button>
+    </div>
+  )
+}
+
+function LatestDecision({ decision }) {
+  if (!decision) return null
+  const label = DECISIONS.find((item) => item.value === decision.decision)?.label || decision.decision
+  return (
+    <div className="decision-record" aria-label="Latest recorded decision">
+      <Check aria-hidden="true" />
+      <div>
+        <span>Latest recorded decision</span>
+        <strong>{label}</strong>
+        <small>{formatDate(decision.decidedAt)} SGT · {decision.actorSubject} · alert v{decision.alertVersion}</small>
+      </div>
     </div>
   )
 }
@@ -163,7 +184,12 @@ function AlertWorkspace({ readOnly = false }) {
         expectedVersion: detail.version,
         note: note.trim() || null,
       })
-      setDetail((current) => ({ ...current, version: result.alertVersion, latestDecision: result }))
+      setDetail((current) => ({
+        ...current,
+        status: DECISION_STATUSES[result.decision] || current.status,
+        version: result.alertVersion,
+        latestDecision: result,
+      }))
       setDecisionState({ saving: false, error: null, message: `${DECISIONS.find((item) => item.value === decision)?.label} recorded.` })
       setNote('')
       await loadQueue()
@@ -190,6 +216,7 @@ function AlertWorkspace({ readOnly = false }) {
 
   const selectedDecision = DECISIONS.find((item) => item.value === decision)
   const filtered = Boolean(status || minimumScore)
+  const canRecordDecision = detail?.status === 'NEW' || detail?.status === 'MONITORING'
 
   return (
     <main className="alerts-page" id="main-content">
@@ -375,7 +402,8 @@ function AlertWorkspace({ readOnly = false }) {
                     <div><Check aria-hidden="true" /><h3 id="decision-title">Record your decision</h3></div>
                     <span>No client contact is triggered</span>
                   </div>
-                  <form onSubmit={submitDecision}>
+                  <LatestDecision decision={detail.latestDecision} />
+                  {canRecordDecision ? <form onSubmit={submitDecision}>
                     <fieldset className="decision-options">
                       <legend>Choose the next step</legend>
                       {DECISIONS.map((item) => (
@@ -403,7 +431,12 @@ function AlertWorkspace({ readOnly = false }) {
                       </button>
                     </div>
                     <p className="success-message" aria-live="polite">{decisionState.message}</p>
-                  </form>
+                  </form> : (
+                    <div className="decision-closed">
+                      <ShieldCheck aria-hidden="true" />
+                      <span><strong>Decision complete.</strong> This alert is closed for further decisions; feedback remains available.</span>
+                    </div>
+                  )}
 
                   <div className="feedback-row">
                     <div><strong>Was this alert useful?</strong><span>Quality feedback does not change the decision.</span></div>
