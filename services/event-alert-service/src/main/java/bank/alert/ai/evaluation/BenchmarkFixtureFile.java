@@ -4,13 +4,13 @@ import bank.alert.ai.EventType;
 
 import java.util.List;
 
-public record BenchmarkFixtureFile(String version, String dataClassification,
+public record BenchmarkFixtureFile(String version, String dataClassification, String labelStatus,
         List<FixtureExample> examples) {
     public BenchmarkFixtureFile {
         if (version == null || version.isBlank() || !"synthetic-public-only".equals(dataClassification)
-                || examples == null) {
+                || labelStatus == null || labelStatus.isBlank() || examples == null) {
             throw new IllegalArgumentException(
-                    "fixture version, synthetic-public-only classification, and examples are required");
+                    "fixture version, synthetic-public-only classification, labelStatus, and examples are required");
         }
         examples = List.copyOf(examples);
     }

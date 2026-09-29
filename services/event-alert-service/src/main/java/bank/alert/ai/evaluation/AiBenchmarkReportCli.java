@@ -20,8 +20,9 @@ public final class AiBenchmarkReportCli {
         BenchmarkRunFile run = mapper.readValue(runPath.toFile(), BenchmarkRunFile.class);
         BenchmarkReport report = evaluator.evaluate(fixture.evaluationExamples(), run.observations(),
                 BenchmarkGates.candidateDefaults());
+        boolean eligible = report.passed() && "HUMAN_REVIEWED".equals(fixture.labelStatus());
         return new VersionedBenchmarkReport(fixture.version(), run.model(), run.promptVersion(),
-                run.estimatedCostUsd(), report);
+                fixture.labelStatus(), run.estimatedCostUsd(), eligible, report);
     }
 
     public static void main(String[] args) throws IOException {
