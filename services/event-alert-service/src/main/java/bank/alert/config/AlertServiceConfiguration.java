@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Bean;
 import java.time.Clock;
 
 @Configuration
-@EnableConfigurationProperties(AlertModeProperties.class)
+@EnableConfigurationProperties({AlertModeProperties.class, OperationalProperties.class})
 public class AlertServiceConfiguration {
 
     @Bean
