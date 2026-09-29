@@ -49,6 +49,7 @@ func RunKafkaReader(ctx context.Context, kafkaReader *kafka.Reader, repo reposit
 		}
 
 		parsedEvent := models.AuditLogInput{
+			EventId:       eventAlertID(event),
 			EventType:     event.EventType,
 			Action:        event.Action,
 			SourceService: models.ServiceType(event.SourceService),
@@ -58,4 +59,15 @@ func RunKafkaReader(ctx context.Context, kafkaReader *kafka.Reader, repo reposit
 
 		repo.GetAudit().StoreAuditChain(ctx, parsedEvent) // only valid, authorized events make it into the actual chain
 	}
+}
+
+func eventAlertID(event ValidEvent) string {
+	if models.ServiceType(event.SourceService) != models.EventAlertServiceType {
+		return ""
+	}
+	var payload ValidEventAlertPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return ""
+	}
+	return payload.EventID
 }

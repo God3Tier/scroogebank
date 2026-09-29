@@ -44,12 +44,15 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 
 	now := time.Now()
 
-	uuid := uuid.New().String()
+	auditID := auditLog.EventId
+	if auditID == "" {
+		auditID = uuid.New().String()
+	}
 
-	rawString := uuid + strconv.FormatInt(previousSequence+1, 10) + auditLog.EventType + auditLog.Action + string(auditLog.SourceService) + auditLog.ActorId + now.Format(time.RFC3339) + auditLog.Payload
+	rawString := auditID + strconv.FormatInt(previousSequence+1, 10) + auditLog.EventType + auditLog.Action + string(auditLog.SourceService) + auditLog.ActorId + now.Format(time.RFC3339) + auditLog.Payload
 
 	newLog := &orm.AuditLog{
-		ID:            uuid,
+		ID:            auditID,
 		SequenceNo:    null.Int64From(previousSequence + 1),
 		EventType:     null.StringFrom(auditLog.EventType),
 		Action:        null.StringFrom(auditLog.Action),

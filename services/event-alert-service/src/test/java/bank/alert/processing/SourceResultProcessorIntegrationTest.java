@@ -19,6 +19,8 @@ import bank.alert.repository.AlertRepository;
 import bank.alert.repository.AuditOutboxRepository;
 import bank.alert.repository.HoldingSnapshotRepository;
 import bank.alert.repository.SourceResultRepository;
+import bank.alert.retention.RetentionCleanupOutcome;
+import bank.alert.retention.RetentionCleanupService;
 import bank.alert.scoring.ExposureCalculator;
 import bank.alert.scoring.MaterialityScorer;
 import bank.alert.service.AuditUnavailableException;
@@ -118,6 +120,7 @@ class SourceResultProcessorIntegrationTest {
                         "alert.classification-recorded",
                         "alert.briefing-generated",
                         "alert.generated");
+        assertThat(outbox.findClaimable(NOW, 2, 10)).hasSize(2);
 
         UUID alertId = first.generation().alertIds().getFirst();
         assertThat(alertList.findVisibleDetail(alertId, "syn-agent-001", false))
@@ -141,6 +144,33 @@ class SourceResultProcessorIntegrationTest {
 
         assertThat(alerts.count()).isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public_event", Long.class)).isZero();
+    }
+
+    @Test
+    void boundedRetentionRemovesExpiredContentButPreservesAuditEvidence() {
+        SourceResult source = source();
+        sourceResults.saveAndFlush(source);
+        SourceProcessingOutcome processed = processor(100)
+                .process(request(source.getId(), "syn-agent-001"));
+        long auditEvidenceBeforeCleanup = outbox.count();
+        assertThat(auditEvidenceBeforeCleanup).isEqualTo(3L);
+        jdbc.update("UPDATE source_result SET expires_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(NOW.minusSeconds(1)), source.getId());
+        jdbc.update("UPDATE briefing SET expires_at = ? WHERE alert_id = ?",
+                java.sql.Timestamp.from(NOW.minusSeconds(1)),
+                processed.generation().alertIds().getFirst());
+
+        RetentionCleanupOutcome outcome = new RetentionCleanupService(jdbc, clock, 10)
+                .cleanExpired();
+
+        assertThat(outcome.briefingsDeleted()).isOne();
+        assertThat(outcome.sourcesRedacted()).isOne();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM briefing", Long.class)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT title FROM source_result WHERE id = ?", String.class, source.getId()))
+                .isEqualTo("[expired]");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_outbox", Long.class))
+                .isEqualTo(auditEvidenceBeforeCleanup);
     }
 
     private SourceResultProcessor processor(int auditCapacity) {

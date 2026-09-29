@@ -46,6 +46,13 @@ type ProcessingErrorPayload struct {
 	Error    string `json:"error"`
 }
 
+type ValidEventAlertPayload struct {
+	EventID      string          `json:"event_id"`
+	EventVersion int             `json:"event_version"`
+	OccurredAt   time.Time       `json:"occurred_at"`
+	Data         json.RawMessage `json:"data"`
+}
+
 func validatePayload(envelope ValidEvent) error {
 	svc := models.ServiceType(envelope.SourceService)
 	if !svc.IsValid() {
@@ -67,9 +74,35 @@ func validatePayload(envelope ValidEvent) error {
 		}
 		return nil
 
+	case models.EventAlertServiceType:
+		return validateEventAlertPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
+}
+
+func validateEventAlertPayload(envelope ValidEvent) error {
+	allowedActions := map[string]bool{
+		"CLASSIFICATION_RECORDED":     true,
+		"BRIEFING_GENERATED":          true,
+		"GENERATED":                   true,
+		"DECISION_RECORDED":           true,
+		"FEEDBACK_RECORDED":           true,
+		"OPERATIONAL_CONTROL_CHANGED": true,
+	}
+	if !allowedActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for EVENT_ALERT_SERVICE: %s", envelope.Action)
+	}
+
+	var payload ValidEventAlertPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid EventAlertPayload: %w", err)
+	}
+	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || len(payload.Data) == 0 {
+		return fmt.Errorf("invalid EventAlertPayload: required audit metadata is missing")
+	}
+	return nil
 }
 
 func validateTransactionPayload(envelope ValidEvent) error {

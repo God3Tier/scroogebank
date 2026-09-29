@@ -97,13 +97,18 @@ public class AlertGenerationService {
                 affectedIds, request.asOf(), request.assignedAgentSubject())).positions();
         Map<PortfolioKey, List<HoldingSnapshot>> portfolios = positions.stream()
                 .collect(Collectors.groupingBy(PortfolioKey::from, LinkedHashMap::new, Collectors.toList()));
-        UUID publicEventId = persistPublicEvent(source, classification);
-        long newPortfolioAlerts = portfolios.values().stream()
-                .filter(portfolio -> !hasExistingAlert(portfolio, affectedIds, publicEventId))
-                .count();
-        ensureAuditCapacity((auditOutbox.existsById(auditEventId(
-                        "alert.classification-recorded", publicEventId)) ? 0 : 1)
+        UUID existingPublicEventId = findPublicEventId(source.getId(), classification.modelVersion());
+        long newPortfolioAlerts = existingPublicEventId == null
+                ? portfolios.size()
+                : portfolios.values().stream()
+                        .filter(portfolio -> !hasExistingAlert(
+                                portfolio, affectedIds, existingPublicEventId))
+                        .count();
+        ensureAuditCapacity((existingPublicEventId != null && auditOutbox.existsById(auditEventId(
+                        "alert.classification-recorded", existingPublicEventId)) ? 0 : 1)
                 + newPortfolioAlerts * (request.briefing() == null ? 1 : 2));
+        UUID publicEventId = existingPublicEventId == null
+                ? persistPublicEvent(source, classification) : existingPublicEventId;
         persistClassificationAudit(publicEventId, source.getId(), classification);
 
         int created = 0;
@@ -163,13 +168,6 @@ public class AlertGenerationService {
 
     private UUID persistPublicEvent(SourceResult source, EventClassification classification) {
         String classifierVersion = classification.modelVersion();
-        List<UUID> existing = jdbc.query("""
-                SELECT id FROM public_event
-                 WHERE source_result_id = ? AND classifier_version = ?
-                """, (resultSet, row) -> resultSet.getObject(1, UUID.class),
-                source.getId(), classifierVersion);
-        if (!existing.isEmpty()) return existing.getFirst();
-
         UUID eventId = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO public_event
@@ -197,6 +195,15 @@ public class AlertGenerationService {
                     "Model classification cites " + affected.evidenceRef(), classification.confidence());
         }
         return persistedId;
+    }
+
+    private UUID findPublicEventId(UUID sourceResultId, String classifierVersion) {
+        List<UUID> existing = jdbc.query("""
+                SELECT id FROM public_event
+                 WHERE source_result_id = ? AND classifier_version = ?
+                """, (resultSet, row) -> resultSet.getObject(1, UUID.class),
+                sourceResultId, classifierVersion);
+        return existing.isEmpty() ? null : existing.getFirst();
     }
 
     private void persistFactors(UUID alertId, List<ScoreFactor> factors) {
@@ -270,7 +277,7 @@ public class AlertGenerationService {
                 (eventType + "|" + resourceId).getBytes(StandardCharsets.UTF_8));
     }
 
-    private void ensureAuditCapacity(int required) {
+    private void ensureAuditCapacity(long required) {
         long pending = auditOutbox.countByStatusIn(PENDING_AUDIT_STATUSES);
         if (required < 0 || pending + required > maxPendingAuditEvents) {
             throw new AuditUnavailableException("audit outbox is at capacity");

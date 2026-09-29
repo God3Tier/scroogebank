@@ -157,3 +157,43 @@ func TestValidatePayload_MalformedFileCompletedPayload(t *testing.T) {
 		t.Error("expected error for malformed FileCompletedPayload (wrong field type), got nil")
 	}
 }
+
+func TestValidatePayload_ValidEventAlert(t *testing.T) {
+	event := buildEvent(t, "EVENT_ALERT", "GENERATED", string(models.EventAlertServiceType), ValidEventAlertPayload{
+		EventID:      "70000000-0000-4000-8000-000000000001",
+		EventVersion: 1,
+		OccurredAt:   time.Now().UTC(),
+		Data:         json.RawMessage(`{"alertId":"70000000-0000-4000-8000-000000000002"}`),
+	})
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected valid event-alert audit event to pass, got error: %v", err)
+	}
+	if got := eventAlertID(event); got != "70000000-0000-4000-8000-000000000001" {
+		t.Errorf("expected source event ID to be propagated for deduplication, got %q", got)
+	}
+}
+
+func TestValidatePayload_RejectsUnknownEventAlertAction(t *testing.T) {
+	event := buildEvent(t, "EVENT_ALERT", "CLIENT_DATA_EXPORTED", string(models.EventAlertServiceType), ValidEventAlertPayload{
+		EventID:      "70000000-0000-4000-8000-000000000001",
+		EventVersion: 1,
+		OccurredAt:   time.Now().UTC(),
+		Data:         json.RawMessage(`{}`),
+	})
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected unknown event-alert action to be rejected")
+	}
+}
+
+func TestValidatePayload_RejectsIncompleteEventAlertMetadata(t *testing.T) {
+	event := buildEvent(t, "EVENT_ALERT", "GENERATED", string(models.EventAlertServiceType), map[string]any{
+		"event_version": 1,
+		"data":          map[string]string{"alertId": "synthetic"},
+	})
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected missing event ID and occurrence time to be rejected")
+	}
+}

@@ -11,6 +11,8 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  kafka:
+    bootstrap-servers: ${ALERT_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   security:
     oauth2:
       resourceserver:
@@ -21,6 +23,19 @@ alert:
   mode: ${ALERT_MODE:API}
   audit:
     max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
+    publisher:
+      # Local auditor integration is opt-in. The default never opens a broker connection.
+      enabled: ${ALERT_AUDIT_PUBLISHER_ENABLED:false}
+      topic: ${ALERT_AUDIT_TOPIC:audit.insert}
+      interval: ${ALERT_AUDIT_PUBLISH_INTERVAL:5s}
+      batch-size: ${ALERT_AUDIT_PUBLISH_BATCH_SIZE:50}
+      max-attempts: ${ALERT_AUDIT_PUBLISH_MAX_ATTEMPTS:10}
+      lease-duration: ${ALERT_AUDIT_LEASE_DURATION:30s}
+      send-timeout: ${ALERT_AUDIT_SEND_TIMEOUT:10s}
+  retention:
+    enabled: ${ALERT_RETENTION_ENABLED:true}
+    interval: ${ALERT_RETENTION_INTERVAL:1h}
+    batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
   ingestion:
     # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
     enabled: ${ALERT_INGESTION_ENABLED:false}

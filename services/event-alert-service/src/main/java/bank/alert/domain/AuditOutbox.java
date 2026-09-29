@@ -41,6 +41,9 @@ public class AuditOutbox {
     @Column(name = "acknowledged_at")
     private Instant acknowledgedAt;
 
+    @Column(name = "lease_until")
+    private Instant leaseUntil;
+
     protected AuditOutbox() {
     }
 
@@ -61,4 +64,22 @@ public class AuditOutbox {
     public int getAttemptCount() { return attemptCount; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getAcknowledgedAt() { return acknowledgedAt; }
+    public Instant getLeaseUntil() { return leaseUntil; }
+
+    public void leaseUntil(Instant until) {
+        status = "LEASED";
+        leaseUntil = Objects.requireNonNull(until);
+        attemptCount++;
+    }
+
+    public void delivered(Instant at) {
+        status = "DELIVERED";
+        acknowledgedAt = Objects.requireNonNull(at);
+        leaseUntil = null;
+    }
+
+    public void failed() {
+        status = "FAILED";
+        leaseUntil = null;
+    }
 }
