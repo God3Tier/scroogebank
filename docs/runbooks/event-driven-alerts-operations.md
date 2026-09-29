@@ -18,12 +18,15 @@ and deployment evidence remain pending approved AWS access.
 | Environment variable | Default | Meaning |
 |---|---:|---|
 | `ALERT_INGESTION_ENABLED` | `false` | Allows provider ingestion reservations |
-| `ALERT_MODEL_ENABLED` | `false` | Allows model-token reservations |
+| `ALERT_AI_ENABLED` | `false` | Allows model invocation and model-token reservations |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
 | `ALERT_MAX_SEARCHES_PER_RUN` | `4` | Search reservations per worker run |
 | `ALERT_MONTHLY_MODEL_TOKEN_QUOTA` | `200000` | Model-token reservations per UTC month |
 | `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `2000` | Tokens per model reservation |
 | `ALERT_MONTHLY_BUDGET_USD` | `25.00` | Estimated-cost stop threshold |
+| `ALERT_AUDIT_PUBLISHER_ENABLED` | `false` | Enables leased delivery to the existing local auditor Kafka topic |
+| `ALERT_AUDIT_PUBLISH_MAX_ATTEMPTS` | `10` | Maximum delivery claims before an event remains failed for investigation |
+| `ALERT_RETENTION_ENABLED` | `true` | Enables bounded local content expiry |
 
 There is intentionally no unauthenticated operator endpoint in this offline
 slice. Production controls must be exposed only through an authenticated,
@@ -68,7 +71,8 @@ cost as authoritative.
 
 ## Replay and recovery
 
-Replay wiring is not yet implemented. Before a production replay:
+Bounded historical ingestion replay is implemented behind the internal worker
+boundary. It does not move the scheduler watermark. Before a production replay:
 
 1. Select an explicit bounded run/event range and verify database idempotency.
 2. Keep outbound capabilities off while checking the candidate set.
@@ -78,6 +82,17 @@ Replay wiring is not yet implemented. Before a production replay:
 5. Enable only the required capability, execute the bounded replay, and disable
    it again if the drill requires containment.
 6. Confirm duplicate deliveries did not create duplicate alerts or audit events.
+
+For local auditor recovery, inspect `audit_outbox` by status and attempt count.
+`PENDING` and `FAILED` rows below the attempt cap are reclaimed in creation order;
+an expired `LEASED` row is also safe to reclaim. Confirm Kafka and the auditor are
+healthy before enabling the publisher. Never edit payloads or mark rows delivered
+manually; delivery state changes only after broker acknowledgement.
+
+The hourly retention job processes a bounded batch. It removes expired briefing
+text and redacts expired source metadata, but never deletes audit evidence. A
+backlog is safe to drain over repeated runs; increase the batch only after checking
+database load.
 
 ## Re-enable checklist
 
@@ -90,7 +105,9 @@ Replay wiring is not yet implemented. Before a production replay:
 
 ## Current gaps
 
-CloudWatch/IaC, billing reconciliation, authenticated operator controls,
-ingestion integration, replay execution, audit publication to the external
-auditor, and operational drill evidence are not implemented. This document must
-not be used as evidence that those cloud controls were tested.
+CloudWatch/IaC, billing reconciliation, authenticated operator controls, live
+provider integration, staging replay execution, and cloud operational-drill
+evidence are not implemented. Local auditor publication, bounded retry/recovery,
+and retention are implemented and tested, but no production broker or cloud
+control was exercised. This document must not be used as evidence that cloud
+controls were tested.

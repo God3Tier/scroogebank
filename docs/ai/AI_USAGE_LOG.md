@@ -242,3 +242,22 @@
   data, external providers, or AWS services were used.
 - Verification: all nine frontend tests passed, ESLint completed without errors,
   and the Vite production build succeeded.
+
+## 2026-09-30 — EDA-D2-06 offline integration and lifecycle controls
+
+- Human owner: Azeez; Hayyun review remains required for shared domain and
+  experience scope.
+- Tool: OpenAI Codex.
+- Use: integrate the API, ingestion, AI, operations, and dashboard task streams;
+  implement the source-to-alert persistence path, operational quota wiring,
+  leased Kafka audit publication, strict auditor allowlisting, bounded retention,
+  PostgreSQL end-to-end coverage, and desktop/mobile browser verification.
+- Human verification required: Hayyun reviews the integrated behavior and the
+  proposed ADRs; Azeez reviews the synthetic AI labels before any feature-to-dev
+  PR or provider enablement.
+- Data: repository content and synthetic fixtures only. No credentials, real
+  client data, AWS endpoint, model provider, or production broker was used.
+- Verification: focused Java/PostgreSQL tests and the Go auditor contract test
+  passed; the full clean Maven/frontend verification is recorded in the offline
+  integration evidence after completion. Desktop and mobile synthetic dashboard
+  screenshots were inspected locally.

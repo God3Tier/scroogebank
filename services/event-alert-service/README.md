@@ -6,8 +6,9 @@ artifact supports one explicit mode at a time:
 - `ALERT_MODE=API` for authenticated CRM alert operations.
 - `ALERT_MODE=WORKER` for bounded scheduled processing.
 
-The current foundation is offline and deterministic. It contains no AWS SDK,
-provider credentials, or outbound provider calls. Synthetic holdings are loaded
+The default runtime is offline and deterministic. It contains no provider
+credentials and makes no outbound provider calls unless an adapter and its
+independent enable switch are explicitly configured. Synthetic holdings are loaded
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
 
 The ingestion core is provider-neutral and outbound-disabled by default with
@@ -51,6 +52,25 @@ persists a redacted audit-outbox event before human re-enable. See
 `docs/runbooks/event-driven-alerts-operations.md` for configuration and current
 integration limits.
 
+Accepted source results can now run through the complete local processing path:
+strict classification, citation-bearing briefing, synthetic holdings lookup,
+deterministic exposure/materiality scoring, scoped alert persistence, factors,
+and durable audit events. Replaying the same source/model/client/instrument tuple
+does not create another alert, and generation stops before persistence when the
+bounded audit backlog has insufficient capacity.
+
+The audit publisher is disabled by default with
+`ALERT_AUDIT_PUBLISHER_ENABLED=false`. When deliberately enabled for the local
+auditor, it leases at most 50 rows, publishes the existing `audit.insert` Kafka
+envelope, and marks delivery only after broker acknowledgement. The auditor uses
+the source event ID as its audit-chain primary key for deduplication; expired
+leases are reclaimable and retries stop after the configured maximum. The auditor
+explicitly allowlists alert event actions.
+
+A bounded hourly retention job deletes expired briefing content and redacts
+expired source title/URL/domain/publication content while preserving stable IDs,
+deduplication hashes, relational integrity, and every audit-outbox record.
+
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 60.00 threshold. Stale valuations carry a visible 10-point penalty; missing or
@@ -78,6 +98,10 @@ Successful decision responses include the audited `previousStatus` and
 `newStatus`, so clients do not need to infer lifecycle transitions.
 The test profile uses a non-routable example issuer and mocked/local security;
 local verification does not contact Cognito or any AWS service.
+
+Local auditor delivery additionally requires Kafka on `localhost:9092` and the
+auditor consumer. Set `ALERT_AUDIT_PUBLISHER_ENABLED=true` only for that local
+integration; the default build and test path opens no broker connection.
 
 `GET /api/alerts` returns a stable, cursor-paginated list. Agent results are
 scoped in the database query to the authenticated subject; admins receive the
