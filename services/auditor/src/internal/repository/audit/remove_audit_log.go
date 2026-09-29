@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"auditor/src/internal/models"
 	orm "auditor/src/internal/repository/orm"
 	"context"
 	"database/sql"
@@ -12,11 +13,11 @@ import (
 	pkgerrors "github.com/pkg/errors"
 )
 
-func (i impl) RemoveAuditLog(ctx context.Context, hash string) error {
+func (i impl) RemoveAuditLog(ctx context.Context, hash string) (models.AuditLog, error) {
 
 	tx, err := i.db.BeginTx(ctx, nil)
 	if err != nil {
-		return pkgerrors.WithStack(err)
+		return models.AuditLog{}, pkgerrors.WithStack(err)
 	}
 
 	defer tx.Rollback()
@@ -26,7 +27,20 @@ func (i impl) RemoveAuditLog(ctx context.Context, hash string) error {
 	).One(ctx, tx)
 
 	if err != nil {
-		return err
+		return models.AuditLog{}, err
+	}
+	removedLog := models.AuditLog{
+		Id:            current.ID,
+		SequenceNo:    current.SequenceNo.Int64,
+		EventID:       current.EventID.String,
+		EventType:     current.EventType.String,
+		Action:        current.Action.String,
+		SourceService: models.ServiceType(current.SourceService.String),
+		ActorId:       current.ActorID.String,
+		Timestamp:     current.Timestamp.Time,
+		Payload:       string(current.Payload.JSON),
+		ParentHash:    current.ParentHash.String,
+		Hash:          current.Hash.String,
 	}
 
 	after, err := orm.AuditLogs(
@@ -38,19 +52,19 @@ func (i impl) RemoveAuditLog(ctx context.Context, hash string) error {
 			// In this case, we know it is the tail node
 			rowsAffected, err := current.Delete(ctx, tx)
 			if err != nil {
-				return err
+				return models.AuditLog{}, err
 			}
 
 			if rowsAffected == 0 {
-				return sql.ErrNoRows
+				return models.AuditLog{}, sql.ErrNoRows
 			}
 			if err := tx.Commit(); err != nil {
-				return pkgerrors.WithStack(err)
+				return models.AuditLog{}, pkgerrors.WithStack(err)
 			}
 
-			return nil
+			return removedLog, nil
 		}
-		return err
+		return models.AuditLog{}, err
 	}
 
 	before, err := orm.AuditLogs(
@@ -63,47 +77,47 @@ func (i impl) RemoveAuditLog(ctx context.Context, hash string) error {
 			after.ParentHash = null.StringFrom("")
 			rowsAffected, err := current.Delete(ctx, tx)
 			if err != nil {
-				return err
+				return models.AuditLog{}, err
 			}
 
 			if rowsAffected == 0 {
-				return sql.ErrNoRows
+				return models.AuditLog{}, sql.ErrNoRows
 			}
 			rowsAffected, err = after.Update(ctx, tx, boil.Infer())
 			if err != nil {
-				return err
+				return models.AuditLog{}, err
 			}
 
 			if rowsAffected == 0 {
-				return sql.ErrNoRows
+				return models.AuditLog{}, sql.ErrNoRows
 			}
 			if err := tx.Commit(); err != nil {
-				return pkgerrors.WithStack(err)
+				return models.AuditLog{}, pkgerrors.WithStack(err)
 			}
 
-			return nil
+			return removedLog, nil
 		}
-		return err
+		return models.AuditLog{}, err
 	}
 	after.ParentHash = before.Hash
 	rowsAffected, err := after.Update(ctx, tx, boil.Infer())
 	if err != nil {
-		return err
+		return models.AuditLog{}, err
 	}
 
 	if rowsAffected == 0 {
-		return sql.ErrNoRows
+		return models.AuditLog{}, sql.ErrNoRows
 	}
 	rowsAffected, err = current.Delete(ctx, tx)
 	if err != nil {
-		return err
+		return models.AuditLog{}, err
 	}
 	if rowsAffected == 0 {
-		return sql.ErrNoRows
+		return models.AuditLog{}, sql.ErrNoRows
 	}
 	if err := tx.Commit(); err != nil {
-		return pkgerrors.WithStack(err)
+		return models.AuditLog{}, pkgerrors.WithStack(err)
 	}
 
-	return nil
+	return removedLog, nil
 }

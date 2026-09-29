@@ -3,6 +3,7 @@ package cronjob
 import (
 	"auditor/src/internal/repository/audit"
 	auditSvc "auditor/src/internal/service/audit"
+	corruptedSvc "auditor/src/internal/service/corrupted_logs"
 	"context"
 )
 
@@ -13,12 +14,14 @@ type Controller interface {
 
 type impl struct {
 	auditSvc     auditSvc.Service
+	corruptedSvc corruptedSvc.Service
 	repo         audit.Repository
 }
 
-func New(auditSvc auditSvc.Service, repo audit.Repository) Controller {
+func New(auditSvc auditSvc.Service, corruptedSvc corruptedSvc.Service, repo audit.Repository) Controller {
 	return impl{
 		auditSvc,
+		corruptedSvc, 
 		repo,
 	}
 }

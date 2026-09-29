@@ -12,7 +12,7 @@ type Service interface {
 	RetrieveAuditLog(ctx context.Context, serviceType models.ServiceType) ([]RetrieveAuditLogResponse, error)
 	VerifyChain(ctx context.Context) (map[string]error, error)
 	VerifyChainByOffset(ctx context.Context, beginChain int, offset int) (map[string]error, error)
-	DeleteAuditLog(ctx context.Context, hash string) error
+	DeleteAuditLog(ctx context.Context, hash string) (models.AuditLog, error)
 }
 
 // TODO: Figure out specifically what is needed for this service

@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"auditor/src/internal/models"
 	"context"
 	"database/sql"
 	"testing"
@@ -28,10 +29,11 @@ func TestRemoveAuditLog(t *testing.T) {
 		{sequence: 11, hash: tailHash, parent: middleHash},
 	}
 	tests := map[string]struct {
-		fixture string
-		hash    string
-		want    []storedAuditLink
-		wantErr error
+		fixture     string
+		hash        string
+		want        []storedAuditLink
+		wantRemoved models.AuditLog
+		wantErr     error
 	}{
 		"removes the head and makes its successor the new head": {
 			fixture: "remove_audit_log_chain.sql",
@@ -39,6 +41,11 @@ func TestRemoveAuditLog(t *testing.T) {
 			want: []storedAuditLink{
 				{sequence: 7, hash: middleHash, parent: ""},
 				{sequence: 11, hash: tailHash, parent: middleHash},
+			},
+			wantRemoved: models.AuditLog{
+				Id: "00000000-0000-0000-0000-000000000601", SequenceNo: 2,
+				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-2", Payload: "{}", ParentHash: "", Hash: headHash,
 			},
 		},
 		"removes a middle log and reconnects its successor": {
@@ -48,6 +55,11 @@ func TestRemoveAuditLog(t *testing.T) {
 				{sequence: 2, hash: headHash, parent: ""},
 				{sequence: 11, hash: tailHash, parent: headHash},
 			},
+			wantRemoved: models.AuditLog{
+				Id: "00000000-0000-0000-0000-000000000602", SequenceNo: 7,
+				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-7", Payload: "{}", ParentHash: headHash, Hash: middleHash,
+			},
 		},
 		"removes the tail without changing the other links": {
 			fixture: "remove_audit_log_chain.sql",
@@ -56,11 +68,21 @@ func TestRemoveAuditLog(t *testing.T) {
 				{sequence: 2, hash: headHash, parent: ""},
 				{sequence: 7, hash: middleHash, parent: headHash},
 			},
+			wantRemoved: models.AuditLog{
+				Id: "00000000-0000-0000-0000-000000000603", SequenceNo: 11,
+				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-11", Payload: "{}", ParentHash: middleHash, Hash: tailHash,
+			},
 		},
 		"removes the only log": {
 			fixture: "remove_audit_log_single.sql",
 			hash:    "remove-only-hash",
 			want:    []storedAuditLink{},
+			wantRemoved: models.AuditLog{
+				Id: "00000000-0000-0000-0000-000000000604", SequenceNo: 15,
+				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-only", Payload: "{}", ParentHash: "", Hash: "remove-only-hash",
+			},
 		},
 		"returns no rows for an unknown hash": {
 			fixture: "remove_audit_log_chain.sql",
@@ -75,11 +97,23 @@ func TestRemoveAuditLog(t *testing.T) {
 			db := openTestDB(t)
 			loadTestFixture(t, db, test.fixture)
 
-			err := New(db).RemoveAuditLog(context.Background(), test.hash)
+			removed, err := New(db).RemoveAuditLog(context.Background(), test.hash)
 			if test.wantErr != nil {
 				require.ErrorIs(t, err, test.wantErr)
+				assert.Empty(t, removed)
 			} else {
 				require.NoError(t, err)
+				assert.Equal(t, test.wantRemoved.Id, removed.Id)
+				assert.Equal(t, test.wantRemoved.SequenceNo, removed.SequenceNo)
+				assert.Equal(t, test.wantRemoved.EventID, removed.EventID)
+				assert.Equal(t, test.wantRemoved.EventType, removed.EventType)
+				assert.Equal(t, test.wantRemoved.Action, removed.Action)
+				assert.Equal(t, test.wantRemoved.SourceService, removed.SourceService)
+				assert.Equal(t, test.wantRemoved.ActorId, removed.ActorId)
+				assert.NotZero(t, removed.Timestamp)
+				assert.Equal(t, test.wantRemoved.Payload, removed.Payload)
+				assert.Equal(t, test.wantRemoved.ParentHash, removed.ParentHash)
+				assert.Equal(t, test.wantRemoved.Hash, removed.Hash)
 			}
 
 			actual := readAuditLinks(t, db)

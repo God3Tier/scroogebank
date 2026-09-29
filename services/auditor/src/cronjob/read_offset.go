@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"time"
+	"uuid"
 )
 
 func (i impl) ReadOffset(ctx context.Context, checked *Checked) {
@@ -26,9 +28,20 @@ func (i impl) ReadOffset(ctx context.Context, checked *Checked) {
 	}
 
 	for hash, _ := range invalid_chain {
-		err := i.auditSvc.DeleteAuditLog(ctx, hash)
+		tamperedLog, err := i.auditSvc.DeleteAuditLog(ctx, hash)
 		if err != nil {
 			log.Printf("Unable to get remove audit chain  %s\n", err.Error())
+			continue
+		}
+		err = i.corruptedSvc.InsertCorruptedAuditLog(ctx, models.CorruptedAuditLog{
+			ID:           uuid.New().String(),
+			Payload:      tamperedLog,
+			DateOfDetect: time.Now(),
+		})
+
+		if err != nil {
+			log.Printf("Unable to insert to corrupted audit chain  %s\n", err.Error())
+			continue
 		}
 	}
 

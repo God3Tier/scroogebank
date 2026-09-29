@@ -5,9 +5,12 @@ import (
 	"auditor/src/internal/repository/audit"
 	"auditor/src/internal/service"
 	auditSvc "auditor/src/internal/service/audit"
+	corruptedSvc "auditor/src/internal/service/corrupted_logs"
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/mock"
 )
 
 func TestReadOffset(t *testing.T) {
@@ -54,10 +57,12 @@ func TestReadOffset(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			svc := auditSvc.NewMockService(t)
+			corrupted := corruptedSvc.NewMockService(t)
 			repo := audit.NewMockRepository(t)
 
 			t.Cleanup(func() {
 				svc.AssertExpectations(t)
+				corrupted.AssertExpectations(t)
 				repo.AssertExpectations(t)
 			})
 
@@ -70,8 +75,11 @@ func TestReadOffset(t *testing.T) {
 
 			for hash := range test.invalidChain {
 				svc.On("DeleteAuditLog", ctx, hash).
-					Return(nil).
+					Return(models.AuditLog{Hash: hash}, nil).
 					Once()
+				corrupted.On("InsertCorruptedAuditLog", ctx, mock.MatchedBy(func(log models.CorruptedAuditLog) bool {
+					return log.Payload.Hash == hash && log.ID != "" && !log.DateOfDetect.IsZero()
+				})).Return(nil).Once()
 			}
 
 			if test.wantLog != nil {
@@ -82,7 +90,7 @@ func TestReadOffset(t *testing.T) {
 				).Return(nil).Once()
 			}
 
-			New(svc, repo).ReadOffset(ctx, &Checked{
+			New(svc, corrupted, repo).ReadOffset(ctx, &Checked{
 				sequence: test.sequence,
 				offset:   test.offset,
 			})
