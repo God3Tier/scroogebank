@@ -79,3 +79,18 @@
   deduplication, durable replay accounting, and PostgreSQL 16 Testcontainers
   schema validation. Live AgentCore behavior, latency, cost, and IAM enforcement
   are not claimed.
+
+## 2026-09-30 — EDA-D1-03 bounded ingestion replay
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: explicit historical replay windows, worker-mode isolation, future/span
+  validation, idempotent run reuse, durable result accounting, watermark safety,
+  tests, and documentation.
+- Human verification required: review the replay span and connect this internal
+  boundary only through the future authenticated, audited operator workflow.
+- Data: repository content and synthetic public-market terms only. No secrets,
+  real client data, provider calls, or AWS services were used.
+- Verification: the full Maven build passed with 92 tests, including bounded,
+  future-window, worker-mode, durable-count, and watermark-regression cases plus
+  PostgreSQL 16 Testcontainers validation.

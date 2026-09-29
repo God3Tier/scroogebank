@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -122,6 +123,35 @@ class IngestionCoordinatorTest {
         assertThat(outcome.acceptedResults()).isZero();
         verify(finalizer).succeed(retry, "agentcore-web-search-1.2.0", NOW,
                 Duration.ofMinutes(5), 2, NOW);
+    }
+
+    @Test
+    void boundedHistoricalReplayDoesNotAdvanceTheSchedulerWatermark() {
+        Instant replayFrom = NOW.minus(Duration.ofHours(2));
+        when(provider.search(any())).thenReturn(List.of());
+
+        IngestionOutcome outcome = coordinator.replay(replayFrom, NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.SUCCEEDED);
+        assertThat(outcome.windowFrom()).isEqualTo(replayFrom);
+        assertThat(outcome.windowTo()).isEqualTo(NOW);
+        verify(finalizer).succeedReplay(any(SearchRun.class), any(Integer.class), any());
+        verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
+    }
+
+    @Test
+    void rejectsUnboundedOrFutureReplayWindowsBeforeProviderUse() {
+        assertThatThrownBy(() -> coordinator.replay(
+                NOW.minus(Duration.ofHours(5)), NOW, CATALOGUE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maximum span");
+        assertThatThrownBy(() -> coordinator.replay(
+                NOW.minus(Duration.ofHours(1)), NOW.plusSeconds(1), CATALOGUE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("future");
+
+        verify(provider, never()).search(any());
+        verify(searchRuns, never()).saveAndFlush(any());
     }
 
     private IngestionCoordinator coordinator(boolean enabled) {

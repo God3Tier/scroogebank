@@ -54,4 +54,19 @@ class IngestionRunFinalizerTest {
         verify(watermarks, never()).save(org.mockito.ArgumentMatchers.any());
         verify(runs).save(run);
     }
+
+    @Test
+    void replaySuccessLeavesTheSchedulerWatermarkUntouched() {
+        SearchRunRepository runs = mock(SearchRunRepository.class);
+        ProcessingWatermarkRepository watermarks = mock(ProcessingWatermarkRepository.class);
+        SearchRun run = new SearchRun(UUID.randomUUID(), FROM, TO, FROM);
+        IngestionRunFinalizer finalizer = new IngestionRunFinalizer(runs, watermarks);
+
+        finalizer.succeedReplay(run, 3, TO);
+
+        assertThat(run.getStatus()).isEqualTo("SUCCEEDED");
+        assertThat(run.getResultCount()).isEqualTo(3);
+        verify(watermarks, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(runs).save(run);
+    }
 }

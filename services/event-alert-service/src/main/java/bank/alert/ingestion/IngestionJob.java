@@ -27,13 +27,26 @@ public class IngestionJob {
 
     /** Entry point for one bounded ECS worker invocation. Scheduling remains an IaC responsibility. */
     public IngestionOutcome runScheduledWindow(Instant windowTo) {
-        if (mode.mode() != AlertMode.WORKER) {
-            throw new IllegalStateException("ingestion jobs may run only in WORKER mode");
-        }
-        List<InstrumentSearchTerms> catalogue = instruments.findByActiveTrueOrderByIdAsc().stream()
+        requireWorkerMode();
+        return coordinator.run(windowTo, catalogue());
+    }
+
+    /** Internal bounded replay entry point. Authentication/audit belongs to the future operator adapter. */
+    public IngestionOutcome replayWindow(Instant windowFrom, Instant windowTo) {
+        requireWorkerMode();
+        return coordinator.replay(windowFrom, windowTo, catalogue());
+    }
+
+    private List<InstrumentSearchTerms> catalogue() {
+        return instruments.findByActiveTrueOrderByIdAsc().stream()
                 .map(instrument -> new InstrumentSearchTerms(
                         instrument.getTicker(), instrument.getIssuerName(), List.of(), properties.eventTerms()))
                 .toList();
-        return coordinator.run(windowTo, catalogue);
+    }
+
+    private void requireWorkerMode() {
+        if (mode.mode() != AlertMode.WORKER) {
+            throw new IllegalStateException("ingestion jobs may run only in WORKER mode");
+        }
     }
 }

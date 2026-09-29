@@ -37,4 +37,10 @@ public class IngestionRunFinalizer {
         run.fail(errorCode, completedAt);
         searchRuns.save(run);
     }
+
+    @Transactional
+    public void succeedReplay(SearchRun run, int acceptedResults, Instant completedAt) {
+        run.succeed(acceptedResults, completedAt);
+        searchRuns.save(run);
+    }
 }

@@ -52,20 +52,31 @@ public class IngestionCoordinator {
 
     public IngestionOutcome run(Instant scheduledWindowTo, List<InstrumentSearchTerms> catalogue) {
         if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, scheduledWindowTo);
-
-        List<String> queries = queryBuilder.build(catalogue, properties.maxQueriesPerRun());
-        if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, scheduledWindowTo);
-
         Instant windowFrom = watermarks.findById(properties.provider())
                 .map(watermark -> watermark.getLastSuccessfulTo().minus(properties.overlap()))
                 .orElseGet(() -> scheduledWindowTo.minus(properties.initialLookback()));
-        if (!windowFrom.isBefore(scheduledWindowTo)) {
-            throw new IllegalArgumentException("scheduled window must advance beyond the current watermark");
+        return execute(windowFrom, scheduledWindowTo, catalogue, true);
+    }
+
+    /** Reprocesses one historical bounded window without moving the scheduler watermark. */
+    public IngestionOutcome replay(Instant windowFrom, Instant windowTo,
+            List<InstrumentSearchTerms> catalogue) {
+        if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
+        requireReplayWindow(windowFrom, windowTo);
+        return execute(windowFrom, windowTo, catalogue, false);
+    }
+
+    private IngestionOutcome execute(Instant windowFrom, Instant windowTo,
+            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark) {
+        if (!windowFrom.isBefore(windowTo)) {
+            throw new IllegalArgumentException("ingestion window start must precede its end");
         }
+        List<String> queries = queryBuilder.build(catalogue, properties.maxQueriesPerRun());
+        if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 
         Instant now = clock.instant();
-        SearchRun run = searchRuns.findByWindowFromAndWindowTo(windowFrom, scheduledWindowTo)
-                .orElseGet(() -> new SearchRun(UUID.randomUUID(), windowFrom, scheduledWindowTo, now));
+        SearchRun run = searchRuns.findByWindowFromAndWindowTo(windowFrom, windowTo)
+                .orElseGet(() -> new SearchRun(UUID.randomUUID(), windowFrom, windowTo, now));
         if ("SUCCEEDED".equals(run.getStatus())) {
             return outcome(IngestionStatus.ALREADY_SUCCEEDED, run, 0, run.getResultCount(), 0, 0, null);
         }
@@ -77,7 +88,7 @@ public class IngestionCoordinator {
         try {
             searchRuns.saveAndFlush(run);
         } catch (DataIntegrityViolationException concurrentClaim) {
-            SearchRun winner = searchRuns.findByWindowFromAndWindowTo(windowFrom, scheduledWindowTo)
+            SearchRun winner = searchRuns.findByWindowFromAndWindowTo(windowFrom, windowTo)
                     .orElseThrow(() -> concurrentClaim);
             IngestionStatus status = "SUCCEEDED".equals(winner.getStatus())
                     ? IngestionStatus.ALREADY_SUCCEEDED
@@ -96,7 +107,7 @@ public class IngestionCoordinator {
             try {
                 response = retryExecutor.execute(properties.maxAttempts(), () -> provider.search(
                         new PublicSearchRequest(query, properties.approvedDomains(), windowFrom,
-                                scheduledWindowTo, properties.maxResultsPerQuery())));
+                                windowTo, properties.maxResultsPerQuery())));
                 attempts += response.attempts();
                 run.recordSearchAttempts(response.attempts());
             } catch (RetryExhaustedException exception) {
@@ -120,7 +131,7 @@ public class IngestionCoordinator {
             }
 
             for (PublicSearchResult result : response.value()) {
-                if (!insideWindow(result.publishedAt(), windowFrom, scheduledWindowTo)) {
+                if (!insideWindow(result.publishedAt(), windowFrom, windowTo)) {
                     rejected++;
                     continue;
                 }
@@ -149,9 +160,25 @@ public class IngestionCoordinator {
         }
 
         int durableResultCount = Math.toIntExact(sourceResults.countBySearchRunId(run.getId()));
-        finalizer.succeed(run, properties.provider(), scheduledWindowTo, properties.overlap(),
-                durableResultCount, clock.instant());
+        if (advanceWatermark) {
+            finalizer.succeed(run, properties.provider(), windowTo, properties.overlap(),
+                    durableResultCount, clock.instant());
+        } else {
+            finalizer.succeedReplay(run, durableResultCount, clock.instant());
+        }
         return outcome(IngestionStatus.SUCCEEDED, run, attempts, accepted, duplicates, rejected, null);
+    }
+
+    private void requireReplayWindow(Instant windowFrom, Instant windowTo) {
+        if (windowFrom == null || windowTo == null || !windowFrom.isBefore(windowTo)) {
+            throw new IllegalArgumentException("replay window start must precede its end");
+        }
+        if (windowTo.isAfter(clock.instant())) {
+            throw new IllegalArgumentException("replay window cannot extend into the future");
+        }
+        if (Duration.between(windowFrom, windowTo).compareTo(properties.initialLookback()) > 0) {
+            throw new IllegalArgumentException("replay window exceeds the configured maximum span");
+        }
     }
 
     private static boolean insideWindow(Instant publishedAt, Instant from, Instant to) {
