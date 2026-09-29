@@ -70,7 +70,7 @@ public class SafeEventClassifier implements EventClassifier {
         for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
             attemptsMade = attempt;
             try {
-                String raw = gateway.invoke(request, properties.timeout());
+                String raw = gateway.invokeMeasured(request, properties.timeout()).outputJson();
                 if (raw == null || raw.length() > properties.maxOutputCharacters()) {
                     lastReason = "OUTPUT_TOO_LARGE";
                     continue;

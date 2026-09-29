@@ -33,6 +33,11 @@ public final class BedrockAiModelGateway implements AiModelGateway {
 
     @Override
     public String invoke(AiModelRequest request, Duration timeout) {
+        return invokeMeasured(request, timeout).outputJson();
+    }
+
+    @Override
+    public AiModelResponse invokeMeasured(AiModelRequest request, Duration timeout) {
         if (!properties.enabled()) {
             throw failure("MODEL_DISABLED", false);
         }
@@ -71,7 +76,14 @@ public final class BedrockAiModelGateway implements AiModelGateway {
                     .filter(Objects::nonNull)
                     .collect(Collectors.joining());
             if (output.isBlank()) throw failure("EMPTY_MODEL_RESPONSE", true);
-            return output;
+            int inputTokens = response.usage() == null || response.usage().inputTokens() == null
+                    ? 0 : response.usage().inputTokens();
+            int outputTokens = response.usage() == null || response.usage().outputTokens() == null
+                    ? 0 : response.usage().outputTokens();
+            long latencyMillis = response.metrics() == null || response.metrics().latencyMs() == null
+                    ? 0 : response.metrics().latencyMs();
+            return new AiModelResponse(output, inputTokens, outputTokens, latencyMillis,
+                    response.stopReasonAsString());
         } catch (ModelTimeoutException exception) {
             throw failure("MODEL_TIMEOUT", true);
         } catch (ThrottlingException exception) {

@@ -25,6 +25,9 @@ zero temperature, output-token cap, and per-request timeout. Enabling it require
 both `ALERT_AI_PROVIDER=bedrock` and `ALERT_AI_ENABLED=true`; keep both disabled
 until ADR-0010 is accepted and the benchmark gates pass. The committed tests mock
 the SDK and make no AWS call. Never put credentials in repository configuration.
+Measured gateway responses retain only output JSON and low-cardinality operational
+metadata: token counts, latency, and stop reason. The offline evaluation package
+turns complete versioned run files into explicit pass/fail benchmark reports.
 
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a

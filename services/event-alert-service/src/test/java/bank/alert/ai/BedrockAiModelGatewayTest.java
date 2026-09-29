@@ -6,10 +6,12 @@ import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.model.ContentBlock;
 import software.amazon.awssdk.services.bedrockruntime.model.ConverseOutput;
+import software.amazon.awssdk.services.bedrockruntime.model.ConverseMetrics;
 import software.amazon.awssdk.services.bedrockruntime.model.ConverseRequest;
 import software.amazon.awssdk.services.bedrockruntime.model.ConverseResponse;
 import software.amazon.awssdk.services.bedrockruntime.model.Message;
 import software.amazon.awssdk.services.bedrockruntime.model.ThrottlingException;
+import software.amazon.awssdk.services.bedrockruntime.model.TokenUsage;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -31,12 +33,20 @@ class BedrockAiModelGatewayTest {
         Message message = Message.builder().content(ContentBlock.fromText("{\"abstain\":true}"))
                 .build();
         when(client.converse(any(ConverseRequest.class))).thenReturn(ConverseResponse.builder()
-                .output(ConverseOutput.builder().message(message).build()).build());
+                .output(ConverseOutput.builder().message(message).build())
+                .usage(TokenUsage.builder().inputTokens(41).outputTokens(17).totalTokens(58).build())
+                .metrics(ConverseMetrics.builder().latencyMs(245L).build())
+                .stopReason("end_turn")
+                .build());
         BedrockAiModelGateway gateway = new BedrockAiModelGateway(client, properties(true));
 
-        String result = gateway.invoke(request(MODEL), Duration.ofSeconds(12));
+        AiModelResponse result = gateway.invokeMeasured(request(MODEL), Duration.ofSeconds(12));
 
-        assertThat(result).isEqualTo("{\"abstain\":true}");
+        assertThat(result.outputJson()).isEqualTo("{\"abstain\":true}");
+        assertThat(result.inputTokens()).isEqualTo(41);
+        assertThat(result.outputTokens()).isEqualTo(17);
+        assertThat(result.latencyMillis()).isEqualTo(245);
+        assertThat(result.stopReason()).isEqualTo("end_turn");
         ArgumentCaptor<ConverseRequest> captor = ArgumentCaptor.forClass(ConverseRequest.class);
         verify(client).converse(captor.capture());
         ConverseRequest sent = captor.getValue();
