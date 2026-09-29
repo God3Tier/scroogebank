@@ -4,8 +4,11 @@ Status: offline harness, versioned report evaluator, and mocked Bedrock Runtime
 adapter ready; no live model benchmark has been run.
 
 The versioned synthetic fixture is
-`tests/fixtures/event-driven-alerts/ai-evaluation.v1.json`. It contains public
-market examples only, including a negative example and a prompt-injection case.
+`tests/fixtures/event-driven-alerts/ai-evaluation.v1.json`. It contains 18
+synthetic public-market examples covering all seven event types, five negative
+or safety cases, prompt injection, and private-field rejection. Its current
+`labelStatus` is `AI_DRAFT_REQUIRES_HUMAN_REVIEW`; Azeez and Hayyun must inspect
+every label before changing it to `HUMAN_REVIEWED`.
 The Java benchmark utility reports precision, recall, F1, false positives, false
 negatives, and abstention rate without treating abstentions as correct answers.
 
@@ -23,10 +26,12 @@ These gates require Azeez's acceptance before `ALERT_AI_ENABLED` may be set to
 - p95 latency, tokens, estimated cost, model version, and prompt version are
   recorded for the same held-out fixture set.
 
-The small committed fixture proves harness behavior, not model quality. It must be
-expanded and manually reviewed before enablement. Live scores, latency, token
-usage, and cost remain pending an approved provider connection and are not
-claimed by the offline tests.
+The committed fixture proves harness behavior and provides an initial balanced
+test set; it does not prove model quality. Machine validation enforces unique IDs,
+synthetic identifiers, event-type coverage, negative cases, and expected safety
+screen outcomes. Manual label review is still required before enablement. Live
+scores, latency, token usage, and cost remain pending an approved provider
+connection and are not claimed by the offline tests.
 
 The adapter targets the Bedrock Runtime Converse API with
 `global.openai.gpt-5.6-luna`, as documented by the official
@@ -56,5 +61,6 @@ The JSON report includes fixture/model/prompt versions, precision, recall, F1,
 abstention rate, token totals, p95 latency, estimated cost, safety failures, and
 an explicit gate result. Missing usage metadata for an invoked model also fails
 the gate. Missing, duplicate, or extra fixture observations fail the report
-rather than silently biasing metrics. A passing offline-format report
-does not replace the required human review, IAM/routing check, or ADR acceptance.
+rather than silently biasing metrics. A technically passing report sets
+`eligibleForEnablement=false` unless the fixture is explicitly `HUMAN_REVIEWED`.
+It does not replace the IAM/routing check or ADR acceptance.

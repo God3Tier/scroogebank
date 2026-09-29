@@ -112,3 +112,22 @@
 - Verification: focused tests cover metadata capture, passing/failing gates,
   complete-run enforcement, version propagation, cost recording, and p95 latency.
   No live benchmark result is claimed.
+
+## 2026-09-29 — EDA-D1-04 synthetic fixture expansion
+
+- Human owner: Azeez; Hayyun review remains required before labels are accepted.
+- Tool: OpenAI Codex.
+- Use: expand the public-only evaluation fixture from five to eighteen synthetic
+  cases, add full event-type and negative/safety coverage, enforce unique IDs and
+  synthetic identifiers, verify expected safety-screen outcomes, and prevent an
+  AI-draft fixture from qualifying as model-enablement evidence.
+- Human verification required: Azeez and Hayyun inspect every expected event type,
+  negative label, and safety outcome before changing `labelStatus` to
+  `HUMAN_REVIEWED` or using results for an enablement decision.
+- Data: invented issuer/news examples and synthetic identifiers only. No real
+  market article, client data, credentials, model call, or AWS service was used.
+- Verification: 54 non-Docker service tests, including fixture-integrity and
+  report-eligibility tests, pass locally. The full rerun could not start its two
+  PostgreSQL Testcontainers classes because Docker Desktop was unavailable; the
+  preceding full build passed 74 tests before this fixture-only change. No model
+  quality, latency, routing, token, or cost result is claimed.
