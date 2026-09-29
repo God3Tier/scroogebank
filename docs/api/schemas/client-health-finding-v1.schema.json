@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scrooge-bank.example/schemas/client-health-finding-v1.schema.json",
+  "title": "ClientHealthFinding V1",
+  "description": "In-process handoff from relationship-health detection to task management.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "findingId",
+    "clientId",
+    "analysisRunId",
+    "rulesetVersion",
+    "analysisWindow",
+    "signals",
+    "priorityInputs",
+    "correlationId",
+    "detectedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1"
+    },
+    "findingId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "clientId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "analysisRunId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "rulesetVersion": {
+      "$ref": "#/$defs/identifier"
+    },
+    "analysisWindow": {
+      "$ref": "#/$defs/analysisWindow"
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/recurringCreditSignal"
+          },
+          {
+            "$ref": "#/$defs/activityDeclineSignal"
+          },
+          {
+            "$ref": "#/$defs/netOutflowSignal"
+          }
+        ]
+      }
+    },
+    "priorityInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "highestSeverity",
+        "signalCount"
+      ],
+      "properties": {
+        "highestSeverity": {
+          "$ref": "#/$defs/severity"
+        },
+        "signalCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "correlationId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "detectedAt": {
+      "$ref": "#/$defs/dateTime"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH"
+      ]
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
+    },
+    "negativeDecimal": {
+      "type": "string",
+      "pattern": "^-(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "analysisWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "end": {
+          "$ref": "#/$defs/dateTime"
+        }
+      }
+    },
+    "signalWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baselineStart",
+        "baselineEnd",
+        "comparisonStart",
+        "comparisonEnd"
+      ],
+      "properties": {
+        "baselineStart": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "baselineEnd": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "comparisonStart": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "comparisonEnd": {
+          "$ref": "#/$defs/dateTime"
+        }
+      }
+    },
+    "signalBase": {
+      "type": "object",
+      "required": [
+        "signalId",
+        "accountId",
+        "type",
+        "ruleVersion",
+        "severity",
+        "window",
+        "evidence",
+        "fingerprint"
+      ],
+      "properties": {
+        "signalId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "accountId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "ruleVersion": {
+          "$ref": "#/$defs/identifier"
+        },
+        "severity": {
+          "$ref": "#/$defs/severity"
+        },
+        "window": {
+          "$ref": "#/$defs/signalWindow"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/fingerprint"
+        }
+      }
+    },
+    "recurringCreditSignal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/signalBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "evidence"
+          ],
+          "properties": {
+            "type": {
+              "const": "RECURRING_CREDIT_INTERRUPTION"
+            },
+            "evidence": {
+              "$ref": "#/$defs/recurringCreditEvidence"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "activityDeclineSignal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/signalBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "evidence"
+          ],
+          "properties": {
+            "type": {
+              "const": "TRANSACTION_ACTIVITY_DECLINE"
+            },
+            "evidence": {
+              "$ref": "#/$defs/activityDeclineEvidence"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "netOutflowSignal": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/signalBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "evidence"
+          ],
+          "properties": {
+            "type": {
+              "const": "SUSTAINED_NET_OUTFLOW"
+            },
+            "evidence": {
+              "$ref": "#/$defs/netOutflowEvidence"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "recurringCreditEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedCadenceDays",
+        "previousOccurrenceCount",
+        "daysSinceLastOccurrence"
+      ],
+      "properties": {
+        "expectedCadenceDays": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "previousOccurrenceCount": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "daysSinceLastOccurrence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "activityDeclineEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baselineMonthlyAverageCount",
+        "comparisonCount",
+        "changePercent"
+      ],
+      "properties": {
+        "baselineMonthlyAverageCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "comparisonCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changePercent": {
+          "$ref": "#/$defs/negativeDecimal"
+        }
+      }
+    },
+    "netOutflowEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "periodCount",
+        "totalDeposits",
+        "totalWithdrawals",
+        "netFlow",
+        "currency",
+        "changeFromBaselinePercent"
+      ],
+      "properties": {
+        "periodCount": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "totalDeposits": {
+          "$ref": "#/$defs/decimal"
+        },
+        "totalWithdrawals": {
+          "$ref": "#/$defs/decimal"
+        },
+        "netFlow": {
+          "$ref": "#/$defs/negativeDecimal"
+        },
+        "currency": {
+          "$ref": "#/$defs/currency"
+        },
+        "changeFromBaselinePercent": {
+          "$ref": "#/$defs/negativeDecimal"
+        }
+      }
+    }
+  }
+}

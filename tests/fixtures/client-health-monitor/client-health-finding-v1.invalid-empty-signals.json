@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1",
+  "findingId": "finding-empty",
+  "clientId": "client-000001",
+  "analysisRunId": "run-000002",
+  "rulesetVersion": "relationship-health-v1",
+  "analysisWindow": {
+    "start": "2026-03-01T00:00:00Z",
+    "end": "2026-09-28T00:00:00Z"
+  },
+  "signals": [],
+  "priorityInputs": {
+    "highestSeverity": "LOW",
+    "signalCount": 1
+  },
+  "correlationId": "correlation-empty",
+  "detectedAt": "2026-09-29T04:05:00Z"
+}

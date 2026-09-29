@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1",
+  "findingId": "finding-000001",
+  "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
+  "analysisRunId": "run-000001",
+  "rulesetVersion": "relationship-health-v1",
+  "analysisWindow": {
+    "start": "2026-03-01T00:00:00Z",
+    "end": "2026-09-28T00:00:00Z"
+  },
+  "signals": [
+    {
+      "signalId": "signal-recurring-000001",
+      "accountId": "account-000001",
+      "type": "RECURRING_CREDIT_INTERRUPTION",
+      "ruleVersion": "recurring-credit-v1",
+      "severity": "MEDIUM",
+      "window": {
+        "baselineStart": "2026-05-31T00:00:00Z",
+        "baselineEnd": "2026-08-29T00:00:00Z",
+        "comparisonStart": "2026-08-29T00:00:00Z",
+        "comparisonEnd": "2026-09-28T00:00:00Z"
+      },
+      "evidence": {
+        "expectedCadenceDays": 30,
+        "previousOccurrenceCount": 3,
+        "daysSinceLastOccurrence": 67
+      },
+      "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "signalId": "signal-activity-000001",
+      "accountId": "account-000001",
+      "type": "TRANSACTION_ACTIVITY_DECLINE",
+      "ruleVersion": "activity-decline-v1",
+      "severity": "LOW",
+      "window": {
+        "baselineStart": "2026-05-31T00:00:00Z",
+        "baselineEnd": "2026-08-29T00:00:00Z",
+        "comparisonStart": "2026-08-29T00:00:00Z",
+        "comparisonEnd": "2026-09-28T00:00:00Z"
+      },
+      "evidence": {
+        "baselineMonthlyAverageCount": 24,
+        "comparisonCount": 8,
+        "changePercent": "-66.67"
+      },
+      "fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "signalId": "signal-outflow-000001",
+      "accountId": "account-000002",
+      "type": "SUSTAINED_NET_OUTFLOW",
+      "ruleVersion": "net-outflow-v1",
+      "severity": "HIGH",
+      "window": {
+        "baselineStart": "2026-03-01T00:00:00Z",
+        "baselineEnd": "2026-07-29T00:00:00Z",
+        "comparisonStart": "2026-07-29T00:00:00Z",
+        "comparisonEnd": "2026-09-28T00:00:00Z"
+      },
+      "evidence": {
+        "periodCount": 2,
+        "totalDeposits": "2000.00",
+        "totalWithdrawals": "6500.00",
+        "netFlow": "-4500.00",
+        "currency": "SGD",
+        "changeFromBaselinePercent": "-40.00"
+      },
+      "fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "priorityInputs": {
+    "highestSeverity": "HIGH",
+    "signalCount": 3
+  },
+  "correlationId": "20ccf613-b37e-420f-8e9c-cd22ac21571b",
+  "detectedAt": "2026-09-29T04:05:00Z"
+}
