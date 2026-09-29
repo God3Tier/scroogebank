@@ -10,6 +10,21 @@ The current foundation is offline and deterministic. It contains no AWS SDK,
 provider credentials, or outbound provider calls. Synthetic holdings are loaded
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
 
+The ingestion core is provider-neutral and outbound-disabled by default with
+`ALERT_INGESTION_ENABLED=false`. It builds at most four grouped public-market
+queries, requests at most ten results per query, applies a five-minute watermark
+overlap, retries retryable provider failures at most three times, validates the
+approved-domain boundary, canonicalizes and deduplicates URLs, and advances the
+watermark only after the complete run succeeds. Retrying a partially persisted
+failed window derives its final result count from durable rows, preserving
+idempotent replay accounting. Historical replay is restricted to `WORKER` mode,
+cannot extend into the future or exceed the configured lookback span, and never
+moves the scheduler watermark. The replay method remains an internal boundary
+until an authenticated, audited operator adapter is integrated. `IngestionJob`
+can run only in `WORKER` mode. Supplying the IAM-authenticated AgentCore Gateway client remains
+blocked on the approved infrastructure task; the application does not create or
+contact AWS resources by itself.
+
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 60.00 threshold. Stale valuations carry a visible 10-point penalty; missing or

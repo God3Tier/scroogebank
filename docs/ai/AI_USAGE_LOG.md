@@ -76,3 +76,36 @@
   real client data, external providers, or AWS services were used.
 - Verification: the full 92-test Maven reactor build passed with no failures or
   errors, including disposable PostgreSQL 16 Testcontainers coverage.
+
+## 2026-09-28 — EDA-D1-03 offline ingestion core
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: provider-neutral public-search contracts, grouped-query controls,
+  watermark and lease persistence, canonical URL governance and deduplication,
+  bounded retries, durable partial-run replay accounting, AgentCore adapter
+  boundary, worker-mode guard, tests, and documentation.
+- Human verification required: review the provider contract and source controls;
+  accept the proposed processing/search/content-governance ADRs; supply the
+  separately approved IAM/Gateway implementation only after EDA-D1-02 clears.
+- Data: repository content and synthetic public-market terms only. No credentials,
+  client data, external provider calls, or AWS services were used.
+- Verification: the full Maven build passed with 88 tests, including retry,
+  deduplication, durable replay accounting, and PostgreSQL 16 Testcontainers
+  schema validation. Live AgentCore behavior, latency, cost, and IAM enforcement
+  are not claimed.
+
+## 2026-09-30 — EDA-D1-03 bounded ingestion replay
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: explicit historical replay windows, worker-mode isolation, future/span
+  validation, idempotent run reuse, durable result accounting, watermark safety,
+  tests, and documentation.
+- Human verification required: review the replay span and connect this internal
+  boundary only through the future authenticated, audited operator workflow.
+- Data: repository content and synthetic public-market terms only. No secrets,
+  real client data, provider calls, or AWS services were used.
+- Verification: the full Maven build passed with 92 tests, including bounded,
+  future-window, worker-mode, durable-count, and watermark-regression cases plus
+  PostgreSQL 16 Testcontainers validation.
