@@ -4,9 +4,13 @@ import (
 	"auditor/src/internal/models"
 	"auditor/src/internal/repository/audit"
 	"auditor/src/internal/service"
+	auditSvc "auditor/src/internal/service/audit"
+	corruptedSvc "auditor/src/internal/service/corrupted_logs"
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/mock"
 )
 
 func TestReadOffset(t *testing.T) {
@@ -16,29 +20,29 @@ func TestReadOffset(t *testing.T) {
 	tests := map[string]struct {
 		sequence     int
 		offset       int
-		invalidChain map[int]error
+		invalidChain map[string]error
 		svcErr       error
 		wantLog      *models.AuditLogInput
 	}{
 		"does nothing when chain is valid": {
 			sequence:     1,
 			offset:       2,
-			invalidChain: map[int]error{},
+			invalidChain: map[string]error{},
 			wantLog:      nil,
 		},
 		"stores invalid chain errors": {
 			sequence: 1,
 			offset:   3,
-			invalidChain: map[int]error{
-				1: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				3: service.InvalidChainError("Sequence 3 and 4 out of sync\n"),
+			invalidChain: map[string]error{
+				"hash-1": service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
+				"hash-3": service.InvalidChainError("Sequence 3 and 4 out of sync\n"),
 			},
 			wantLog: &models.AuditLogInput{
 				EventType:     "Historical",
 				Action:        "Error logging",
 				SourceService: models.AuditService,
 				ActorId:       "Historical-chain",
-				Payload:       `{"1":{},"3":{}}`,
+				Payload:       `{"hash-1":{},"hash-3":{}}`,
 			},
 		},
 		"does nothing when verify chain returns an error": {
@@ -52,11 +56,13 @@ func TestReadOffset(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			svc := service.NewMockAudit(t)
+			svc := auditSvc.NewMockService(t)
+			corrupted := corruptedSvc.NewMockService(t)
 			repo := audit.NewMockRepository(t)
 
 			t.Cleanup(func() {
 				svc.AssertExpectations(t)
+				corrupted.AssertExpectations(t)
 				repo.AssertExpectations(t)
 			})
 
@@ -67,6 +73,15 @@ func TestReadOffset(t *testing.T) {
 				test.offset,
 			).Return(test.invalidChain, test.svcErr).Once()
 
+			for hash := range test.invalidChain {
+				svc.On("DeleteAuditLog", ctx, hash).
+					Return(models.AuditLog{Hash: hash}, nil).
+					Once()
+				corrupted.On("InsertCorruptedAuditLog", ctx, mock.MatchedBy(func(log models.CorruptedAuditLog) bool {
+					return log.Payload.Hash == hash && log.ID != "" && !log.DateOfDetect.IsZero()
+				})).Return(nil).Once()
+			}
+
 			if test.wantLog != nil {
 				repo.On(
 					"StoreAuditChain",
@@ -75,7 +90,7 @@ func TestReadOffset(t *testing.T) {
 				).Return(nil).Once()
 			}
 
-			New(svc, repo).ReadOffset(ctx, &Checked{
+			New(svc, corrupted, repo).ReadOffset(ctx, &Checked{
 				sequence: test.sequence,
 				offset:   test.offset,
 			})

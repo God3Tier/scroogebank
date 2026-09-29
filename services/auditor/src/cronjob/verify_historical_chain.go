@@ -5,15 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"time"
+	"uuid"
 )
 
 func (i impl) VerifyHistoricalChain(ctx context.Context) {
 
-	invalid_chain, err := i.svc.VerifyChain(ctx)
+	invalid_chain, err := i.auditSvc.VerifyChain(ctx)
 
 	if err != nil {
 		log.Printf("Error running verify chain: %s\n", err.Error())
-		return 
+		return
 	}
 
 	if len(invalid_chain) == 0 {
@@ -21,11 +23,29 @@ func (i impl) VerifyHistoricalChain(ctx context.Context) {
 		return
 	}
 
+	for hash, _ := range invalid_chain {
+		tamperedLog, err := i.auditSvc.DeleteAuditLog(ctx, hash)
+		if err != nil {
+			log.Printf("Unable to get remove audit chain  %s\n", err.Error())
+			continue
+		}
+		err = i.corruptedSvc.InsertCorruptedAuditLog(ctx, models.CorruptedAuditLog{
+			ID:           uuid.New().String(),
+			Payload:      tamperedLog,
+			DateOfDetect: time.Now(),
+		})
+
+		if err != nil {
+			log.Printf("Unable to insert to corrupted audit chain  %s\n", err.Error())
+			continue
+		}
+	}
+
 	payload, err := json.Marshal(invalid_chain)
 
 	if err != nil {
 		log.Printf("Unable to marshal errors\n")
-		return 
+		return
 	}
 
 	chain_log := models.AuditLogInput{

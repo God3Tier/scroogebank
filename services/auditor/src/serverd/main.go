@@ -20,9 +20,11 @@ import (
 
 	"auditor/src/gen"
 	"auditor/src/internal/bootstrap"
-	"auditor/src/internal/controller"
+	"auditor/src/internal/controller/audit"
+	corruptedLogController "auditor/src/internal/controller/corrupted_log"
 	"auditor/src/internal/repository"
-	"auditor/src/internal/service"
+	audtiSvc "auditor/src/internal/service/audit"
+	corruptedLogService "auditor/src/internal/service/corrupted_logs"
 	"auditor/src/serverd/queue"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -48,8 +50,10 @@ func run(ctx context.Context) error {
 	}
 
 	repository := repository.New(db)
-	service := service.New(repository.GetAudit())
-	controller := controller.New(service)
+	service := audtiSvc.New(repository.GetAudit())
+	controller := audit.New(service)
+	corruptedLogsService := corruptedLogService.New(repository.GetCorruptedLog())
+	corruptedLogsController := corruptedLogController.New(corruptedLogsService)
 
 	// Set up wait group for goroutines
 	var wg sync.WaitGroup
@@ -93,7 +97,7 @@ func run(ctx context.Context) error {
 	port := getHTTPPort()
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(port),
-		Handler:           newHandler(),
+		Handler:           newHandler(corruptedLogsController),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

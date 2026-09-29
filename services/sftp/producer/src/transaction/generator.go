@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"time"
+	"uuid"
 )
 
 var (
@@ -17,7 +18,7 @@ var (
 
 func generateTransaction() Transaction {
 	return Transaction{
-		TransactionID:   fmt.Sprintf("TXM-%06d", rand.Intn(999999)),
+		TransactionID:   uuid.New().String(),
 		AccountID:       fmt.Sprintf("ACC-%06d", rand.Intn(999999)),
 		TransferDate:    generateRandomRecent(),
 		TransactionType: txnTypes[rand.Intn(100)%2],

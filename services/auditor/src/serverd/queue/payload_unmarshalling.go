@@ -4,6 +4,7 @@ import (
 	"auditor/src/internal/models"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,19 @@ type ValidCRUDPayload struct {
 	AgentID       string `json:"agent_id"`
 	ClientID      string `json:"client_id"`
 	DateTime      string `json:"datetime"`
+}
+
+// ValidUserAuditPayload describes user-service endpoint activity. It records
+// the target user and operation metadata without copying names, email
+// addresses, passwords, or request bodies into the audit chain.
+type ValidUserAuditPayload struct {
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
+	Endpoint     string `json:"endpoint"`
+	HTTPMethod   string `json:"http_method"`
+	StatusCode   int    `json:"status_code"`
+	DateTime     string `json:"datetime"`
+	UserRole     string `json:"user_role,omitempty"`
 }
 
 type ValidFileCompletedPayload struct {
@@ -55,7 +69,16 @@ func validatePayload(envelope ValidEvent) error {
 	if !svc.IsValid() {
 		return fmt.Errorf("unknown source_service: %s", envelope.SourceService)
 	}
-	if !svc.IsValidAction(envelope.EventType) {
+	if svc == models.CRMServiceType {
+		if envelope.EventType != "CRUD" {
+			return fmt.Errorf("%s is not permitted to send event_type %s",
+				envelope.SourceService, envelope.EventType)
+		}
+		if !svc.IsValidAction(envelope.Action) {
+			return fmt.Errorf("%s is not permitted to send action %s",
+				envelope.SourceService, envelope.Action)
+		}
+	} else if !svc.IsValidAction(envelope.EventType) {
 		return fmt.Errorf("%s is not permitted to send event_type %s",
 			envelope.SourceService, envelope.EventType)
 	}
@@ -64,7 +87,10 @@ func validatePayload(envelope ValidEvent) error {
 	case models.TransactionServiceType:
 		return validateTransactionPayload(envelope)
 
-	case models.CRMServiceType, models.UserManagementServiceType:
+	case models.UserManagementServiceType:
+		return validateUserManagementPayload(envelope)
+
+	case models.CRMServiceType:
 		var p ValidCRUDPayload
 		if err := json.Unmarshal(envelope.Payload, &p); err != nil {
 			return fmt.Errorf("invalid CRUDPayload: %w", err)
@@ -74,6 +100,36 @@ func validatePayload(envelope ValidEvent) error {
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
+}
+
+func validateUserManagementPayload(envelope ValidEvent) error {
+	if !models.UserManagementServiceType.IsValidAction(envelope.Action) || strings.EqualFold(envelope.Action, "CRUD") {
+		return fmt.Errorf("unrecognized action for USER_MANAGEMENT: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorId) == "" {
+		return fmt.Errorf("USER_MANAGEMENT event requires actor_id")
+	}
+	var payload ValidUserAuditPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid UserAuditPayload: %w", err)
+	}
+	if payload.ResourceType == "" {
+		// Accept the previous generic CRUD payload during rollout so messages
+		// already queued before the user-service deployment remain consumable.
+		var legacy ValidCRUDPayload
+		if err := json.Unmarshal(envelope.Payload, &legacy); err != nil {
+			return fmt.Errorf("invalid legacy CRUDPayload: %w", err)
+		}
+		return nil
+	}
+	if payload.ResourceType != "USER" || (payload.ResourceID == "" && payload.StatusCode < 400) || payload.Endpoint == "" ||
+		payload.HTTPMethod == "" || payload.StatusCode < 100 || payload.StatusCode > 599 {
+		return fmt.Errorf("invalid UserAuditPayload: missing or invalid user operation fields")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
+		return fmt.Errorf("invalid UserAuditPayload datetime: %w", err)
+	}
+	return nil
 }
 
 func validateTransactionPayload(envelope ValidEvent) error {

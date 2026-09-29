@@ -1,4 +1,4 @@
-package service
+package audit
 
 import (
 	"auditor/src/internal/models"
@@ -17,17 +17,17 @@ func TestRetrieveAuditLog(t *testing.T) {
 	databaseErr := errors.New("database unavailable")
 	rawLogs := []models.AuditLog{
 		{
-			EventType: "CRUD", Action: "CREATE_LEAD", SourceService: models.CRMServiceType,
+			EventType: "CRUD", Action: "CREATE", SourceService: models.CRMServiceType,
 			ActorId: "actor-1", Timestamp: timestamp, Payload: `{"lead":"1"}`,
 		},
 		{
-			EventType: "CRUD", Action: "UPDATE_LEAD", SourceService: models.CRMServiceType,
+			EventType: "CRUD", Action: "UPDATE", SourceService: models.CRMServiceType,
 			ActorId: "actor-2", Timestamp: timestamp.Add(time.Minute), Payload: `{"lead":"1"}`,
 		},
 	}
 	wantLogs := []RetrieveAuditLogResponse{
-		{EventType: "CRUD", Action: "CREATE_LEAD", Timestamp: timestamp, Payload: `{"lead":"1"}`},
-		{EventType: "CRUD", Action: "UPDATE_LEAD", Timestamp: timestamp.Add(time.Minute), Payload: `{"lead":"1"}`},
+		{EventType: "CRUD", Action: "CREATE", Timestamp: timestamp, Payload: `{"lead":"1"}`},
+		{EventType: "CRUD", Action: "UPDATE", Timestamp: timestamp.Add(time.Minute), Payload: `{"lead":"1"}`},
 	}
 
 	tests := map[string]struct {

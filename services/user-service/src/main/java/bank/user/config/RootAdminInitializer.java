@@ -1,5 +1,6 @@
 package bank.user.config;
 
+import bank.user.audit.AuditEventPublisher;
 import bank.user.domain.Role;
 import bank.user.domain.User;
 import bank.user.identity.IdentityProviderClient;
@@ -33,6 +34,7 @@ public class RootAdminInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final IdentityProviderClient identityProviderClient;
+    private final AuditEventPublisher auditEventPublisher;
 
     @Value("${root-admin.email}")
     private final String rootAdminEmail;
@@ -51,6 +53,8 @@ public class RootAdminInitializer implements CommandLineRunner {
         rootAdmin.setDeletable(false);
         try {
             userRepository.save(rootAdmin);
+            auditEventPublisher.publish("CREATE", "system:root-admin-initializer", rootAdmin.getId().toString(),
+                    "/internal/root-admin", "SYSTEM", 201, Role.ADMIN.name());
         } catch (DataIntegrityViolationException e) {
             // The other replica committed the same root admin first. The
             // desired end state is reached either way, so this is not a

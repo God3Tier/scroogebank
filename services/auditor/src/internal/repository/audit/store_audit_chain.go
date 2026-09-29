@@ -14,7 +14,6 @@ import (
 
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
-	"github.com/aarondl/sqlboiler/v4/queries/qm"
 	"github.com/lib/pq"
 	pkgerrors "github.com/pkg/errors"
 )
@@ -26,21 +25,30 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 	}
 	defer tx.Rollback()
 
-	prevChain, err := orm.AuditLogs(
-		qm.OrderBy("sequence_no desc"),
-		qm.Limit(1),
-		qm.For("UPDATE"),
-	).One(ctx, tx)
-
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return pkgerrors.WithStack(err)
-	}
-
+	// The head is the log entry that no other entry references as its parent.
+	// Use the sequence only to choose among multiple leaves; sequence numbers
+	// can have gaps and therefore must not be derived from row counts.
 	var previousSequence int64
-	var parentHash = ""
-	if prevChain != nil {
-		previousSequence = prevChain.SequenceNo.Int64
-		parentHash = prevChain.Hash.String
+	var parentHash string
+	err = tx.QueryRowContext(ctx, `
+		SELECT COALESCE(candidate.sequence_no, 0), COALESCE(candidate.hash, '')
+		FROM audit_log AS candidate
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM audit_log AS successor
+			WHERE successor.parent_hash = candidate.hash
+		)
+		ORDER BY candidate.sequence_no DESC NULLS LAST
+		LIMIT 1
+		FOR UPDATE OF candidate`,
+	).Scan(&previousSequence, &parentHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		// An empty table has no head. Start a new chain at sequence 1 with no
+		// parent; this is the only case where no previous sequence exists.
+		previousSequence = 0
+		parentHash = ""
+	} else if err != nil {
+		return pkgerrors.WithStack(err)
 	}
 
 	now := time.Now()

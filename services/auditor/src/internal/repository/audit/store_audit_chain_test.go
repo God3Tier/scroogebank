@@ -35,6 +35,15 @@ func TestStoreAuditChain(t *testing.T) {
 			wantSequence: 4,
 			wantParent:   "chain-hash-3",
 		},
+		"finds the linked-list head with gaps in sequence numbers": {
+			fixture: "store_audit_chain_sparse.sql",
+			request: models.AuditLogInput{
+				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-after-gap", Payload: `{}`,
+			},
+			wantSequence: 8,
+			wantParent:   "sparse-head-hash",
+		},
 		"stores the event_id alongside the log": {
 			fixture: "store_audit_chain_empty.sql",
 			request: models.AuditLogInput{

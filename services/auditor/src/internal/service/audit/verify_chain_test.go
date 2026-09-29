@@ -1,17 +1,20 @@
-package service
+package audit
 
 import (
 	"auditor/src/internal/models"
+	"auditor/src/internal/pkg"
 	"auditor/src/internal/repository/audit"
+	"auditor/src/internal/service"
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestVerifyChainByOffset(t *testing.T) {
+func TestVerifyChain(t *testing.T) {
 	ctx := context.Background()
 	timestamp := time.Date(2026, 9, 15, 5, 0, 0, 0, time.UTC)
 	databaseErr := errors.New("database unavailable")
@@ -39,6 +42,7 @@ func TestVerifyChainByOffset(t *testing.T) {
 		Payload:       `{}`,
 		ParentHash:    first.Hash,
 	}
+
 	second.Hash = hashAuditLog(second)
 
 	third := models.AuditLog{
@@ -81,30 +85,22 @@ func TestVerifyChainByOffset(t *testing.T) {
 	fifth.Hash = hashAuditLog(fifth)
 
 	tests := map[string]struct {
-		beginChain int
-		offset     int
-		chain      []models.AuditLog
-		repoErr    error
-		want       map[int]error
-		wantErr    error
+		chain   []models.AuditLog
+		repoErr error
+		want    map[string]error
+		wantErr error
 	}{
 		"returns no mismatch for empty chain": {
-			beginChain: 1,
-			offset:     2,
-			chain:      []models.AuditLog{},
-			want:       map[int]error{},
+			chain: []models.AuditLog{},
+			want:  map[string]error{},
 		},
 
 		"returns no mismatch for one log": {
-			beginChain: 1,
-			offset:     0,
-			chain:      []models.AuditLog{first},
-			want:       map[int]error{},
+			chain: []models.AuditLog{first},
+			want:  map[string]error{},
 		},
 
 		"returns no mismatch for valid chain": {
-			beginChain: 1,
-			offset:     4,
 			chain: []models.AuditLog{
 				first,
 				second,
@@ -112,101 +108,90 @@ func TestVerifyChainByOffset(t *testing.T) {
 				fourth,
 				fifth,
 			},
-			want: map[int]error{},
-		},
-
-		"returns no mismatch for valid partial chain": {
-			beginChain: 2,
-			offset:     2,
-			chain: []models.AuditLog{
-				second,
-				third,
-				fourth,
-			},
-			want: map[int]error{},
+			want: map[string]error{},
 		},
 
 		"returns one mismatch": {
-			beginChain: 1,
-			offset:     2,
 			chain: []models.AuditLog{
 				first,
 				{
 					Id:         "id-2",
 					SequenceNo: 2,
 					ParentHash: first.Hash,
+					Hash:       second.Hash,
 				},
 				third,
 			},
-			want: map[int]error{
-				1: InvalidChainError("Sequence 1 and 2 out of sync\n"),
+			want: map[string]error{
+				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
 			},
 		},
 
 		"returns multiple consecutive mismatches": {
-			beginChain: 1,
-			offset:     3,
 			chain: []models.AuditLog{
 				first,
 				{
 					Id:         "id-2",
 					SequenceNo: 2,
 					ParentHash: first.Hash,
+					Hash:       second.Hash,
 				},
 				{
 					Id:         "id-3",
 					SequenceNo: 3,
 					ParentHash: second.Hash,
+					Hash:       third.Hash,
 				},
 				fourth,
 			},
-			want: map[int]error{
-				1: InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				2: InvalidChainError("Sequence 2 and 3 out of sync\n"),
+			want: map[string]error{
+				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
+				third.Hash:  service.InvalidChainError("Sequence 2 and 3 out of sync\n"),
 			},
 		},
 
 		"returns multiple non-consecutive mismatches": {
-			beginChain: 1,
-			offset:     4,
 			chain: []models.AuditLog{
 				first,
 				{
 					Id:         "id-2",
 					SequenceNo: 2,
 					ParentHash: first.Hash,
+					Hash:       second.Hash,
 				},
 				third,
 				{
 					Id:         "id-4",
 					SequenceNo: 4,
 					ParentHash: third.Hash,
+					Hash:       fourth.Hash,
 				},
 				fifth,
 			},
-			want: map[int]error{
-				1: InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				3: InvalidChainError("Sequence 3 and 4 out of sync\n"),
+			want: map[string]error{
+				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
+				fourth.Hash: service.InvalidChainError("Sequence 3 and 4 out of sync\n"),
 			},
 		},
 
 		"returns all mismatches": {
-			beginChain: 1,
-			offset:     3,
 			chain: []models.AuditLog{
 				{
 					Id:         "id-1",
 					SequenceNo: 1,
+					Hash:       first.Hash,
 				},
 				{
 					Id:         "id-2",
 					SequenceNo: 2,
 					ParentHash: first.Hash,
+					Hash:       second.Hash,
 				},
 				{
 					Id:         "id-3",
 					SequenceNo: 3,
 					ParentHash: second.Hash,
+					Hash:       third.Hash,
 				},
 				{
 					Id:         "id-4",
@@ -214,20 +199,18 @@ func TestVerifyChainByOffset(t *testing.T) {
 					ParentHash: fourth.Hash,
 				},
 			},
-			want: map[int]error{
-				0: InvalidChainError("Sequence 0 and 1 out of sync\n"),
-				1: InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				2: InvalidChainError("Sequence 2 and 3 out of sync\n"),
+			want: map[string]error{
+				first.Hash:  service.InvalidChainError("Sequence 0 and 1 out of sync\n"),
+				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
+				third.Hash:  service.InvalidChainError("Sequence 2 and 3 out of sync\n"),
 			},
 		},
 
 		"returns repository error": {
-			beginChain: 1,
-			offset:     4,
-			chain:      nil,
-			repoErr:    databaseErr,
-			want:       nil,
-			wantErr:    databaseErr,
+			chain:   nil,
+			repoErr: databaseErr,
+			want:    nil,
+			wantErr: databaseErr,
 		},
 	}
 
@@ -239,20 +222,11 @@ func TestVerifyChainByOffset(t *testing.T) {
 				repo.AssertExpectations(t)
 			})
 
-			repo.On(
-				"GetChainByOffset",
-				ctx,
-				test.beginChain,
-				test.offset,
-			).
+			repo.On("GetChain", ctx).
 				Return(test.chain, test.repoErr).
 				Once()
 
-			actual, err := New(repo).VerifyChainByOffset(
-				ctx,
-				test.beginChain,
-				test.offset,
-			)
+			actual, err := New(repo).VerifyChain(ctx)
 
 			assert.Equal(t, test.want, actual)
 
@@ -263,4 +237,9 @@ func TestVerifyChainByOffset(t *testing.T) {
 			}
 		})
 	}
+}
+
+func hashAuditLog(log models.AuditLog) string {
+	rawString := log.Id + strconv.FormatInt(log.SequenceNo, 10) + log.EventType + log.Action + string(log.SourceService) + log.ActorId + log.Timestamp.Format(time.RFC3339) + log.Payload
+	return pkg.Hash(rawString)
 }

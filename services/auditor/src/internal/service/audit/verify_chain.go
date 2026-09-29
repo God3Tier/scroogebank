@@ -1,7 +1,8 @@
-package service
+package audit
 
 import (
 	"auditor/src/internal/pkg"
+	"auditor/src/internal/service"
 	"context"
 	"fmt"
 	"strconv"
@@ -12,14 +13,14 @@ import (
  * This function verifies whether the chain is valid. If not, we can confirm that primary indx is out of sync
  * and we need to decide what to do with that error in audit
  */
-func (i impl) VerifyChain(ctx context.Context) (map[int]error, error) {
+func (i impl) VerifyChain(ctx context.Context) (map[string]error, error) {
 	chainList, err := i.repo.GetChain(ctx)
 
 	if err != nil {
 		return nil, err
 	}
 
-	response := map[int]error{}
+	response := map[string]error{}
 
 	for indx, chain := range chainList {
 		if indx == len(chainList)-1 {
@@ -29,7 +30,7 @@ func (i impl) VerifyChain(ctx context.Context) (map[int]error, error) {
 		rawString := chain.Id + strconv.FormatInt(chain.SequenceNo, 10) + chain.EventType + chain.Action + string(chain.SourceService) + chain.ActorId + chain.Timestamp.Format(time.RFC3339) + chain.Payload
 
 		if pkg.Hash(rawString) != chainList[indx+1].ParentHash {
-			response[indx] = InvalidChainError(fmt.Sprintf("Sequence %d and %d out of sync\n", indx, indx+1))
+			response[chain.Hash] = service.InvalidChainError(fmt.Sprintf("Sequence %d and %d out of sync\n", indx, indx+1))
 		}
 	}
 

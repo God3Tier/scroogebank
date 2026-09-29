@@ -5,26 +5,26 @@ import (
 	"time"
 )
 
-// type Transaction struct {
-// 	TransactionID   string
-// 	AccountNo       string
-// 	TransferDate    time.Time
-// 	TransactionType string
-// 	Amount          float64
-// 
-// 	Currency        string
-// 	Description     string
-// 	Status          string
-// }
+//	type Transaction struct {
+//		TransactionID   string
+//		AccountNo       string
+//		TransferDate    time.Time
+//		TransactionType string
+//		Amount          float64
+//
+//		Currency        string
+//		Description     string
+//		Status          string
+//	}
 type Transaction struct {
-    TransactionID   string
-    AccountID       string 
-    TransactionType string 
-    Amount          float64
-    Currency        string
-    TransferDate    time.Time
-    Status          string
-    Description     string
+	TransactionID   string    `json:"transaction_id"`
+	AccountID       string    `json:"account_id"`
+	TransactionType string    `json:"transaction_type"`
+	Amount          float64   `json:"amount"`
+	Currency        string    `json:"currency"`
+	TransferDate    time.Time `json:"transfer_date"`
+	Status          string    `json:"status"`
+	Description     string    `json:"description"`
 }
 
 func GenerateRandomSet() []Transaction {
@@ -37,13 +37,13 @@ func GenerateRandomSet() []Transaction {
 
 		baseTransaction := generateTransaction()
 
-		// TODO: Add very very small chance of failure 
+		// TODO: Add very very small chance of failure
 		switch {
 		case weight < 0.001:
 			baseTransaction.Amount = -26.0
-		case weight < 0.005: 
+		case weight < 0.005:
 			baseTransaction.Status = "Invalid status"
-		case weight < 0.010: 
+		case weight < 0.010:
 			baseTransaction.Currency = "Unsupported"
 		}
 

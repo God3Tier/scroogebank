@@ -5,4 +5,10 @@ WORKDIR /work
 COPY go.mod .
 COPY src ./src
 
-RUN go build -o /producer ./src/main.go
+RUN CGO_ENABLED=0 go build -o /producer ./src/main.go
+
+FROM scratch
+
+COPY --from=build /producer /producer
+
+ENTRYPOINT ["/producer"]

@@ -1,4 +1,5 @@
 MVN ?= mvn
+MVN_ARGS ?= -e
 DOCKER ?= docker
 CURL ?= curl
 IMAGE ?= user-service:local
@@ -25,15 +26,15 @@ help:
 
 ## Run user-service unit and Testcontainers tests (Docker must be available)
 test: ## Run the Maven test suite
-	$(MVN) -f pom.xml test
+	$(MVN) $(MVN_ARGS) -f pom.xml test
 
 ## Build the executable Spring Boot JAR
 package: ## Package the service
-	$(MVN) -f pom.xml package -DskipTests
+	$(MVN) $(MVN_ARGS) -f pom.xml package -DskipTests
 
 ## Remove Maven build outputs
 clean: ## Clean the Maven build
-	$(MVN) -f pom.xml clean
+	$(MVN) $(MVN_ARGS) -f pom.xml clean
 
 ## Build the container image from the repository root context
 image: ## Build the user-service Docker image
@@ -56,7 +57,7 @@ local-db-reset: ## Reset the local database and delete its volume
 
 ## Start the local API with Cognito authentication and authorization enabled
 run: local-security-config local-db-up ## Start the local database and run on localhost:8081 with Cognito security
-	OIDC_ISSUER_URI="$(OIDC_ISSUER_URI)" COGNITO_USER_POOL_ID="$(COGNITO_USER_POOL_ID)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" AWS_REGION="$(AWS_REGION)" ROOT_ADMIN_EMAIL="$(ROOT_ADMIN_EMAIL)" SPRING_PROFILES_ACTIVE=local $(MVN) -f pom.xml spring-boot:run
+	OIDC_ISSUER_URI="$(OIDC_ISSUER_URI)" COGNITO_USER_POOL_ID="$(COGNITO_USER_POOL_ID)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" AWS_REGION="$(AWS_REGION)" ROOT_ADMIN_EMAIL="$(ROOT_ADMIN_EMAIL)" SPRING_PROFILES_ACTIVE=local $(MVN) $(MVN_ARGS) -f pom.xml spring-boot:run
 
 ## Require Cognito configuration before starting the local application
 local-security-config:

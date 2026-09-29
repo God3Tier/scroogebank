@@ -6,7 +6,7 @@ DB_PORT      := 5432
 HTTP_PORT    ?= 8080
 GRPC_PORT    ?= :9091
 
-SCHEMA_FILE  := data/audit_log_table.sql
+SCHEMA_FILE  := data/schema.sql
 ORM_DIR      := src/internal/repository/orm
 PROTO_SRC    := proto/audit_request.proto
 PROTO_OUT    := src
@@ -17,6 +17,7 @@ TEST_COMPOSE := docker compose -f docker-compose.test.yml -p auditor-test
 TOOLS_IMAGE  ?= auditor-tools
 TOOLS_MOUNT  := -v "$(CURDIR)":/workspace -w /workspace
 TOOLS_RUN    := docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) $(TOOLS_IMAGE)
+DOCKER_BUILD_PROGRESS ?= plain
 
 MOCKERY_ARGS ?=
 
@@ -87,7 +88,7 @@ psql:
 # ============================================================
 
 tools-image:
-	docker build --platform linux/amd64 \
+	docker build --progress=$(DOCKER_BUILD_PROGRESS) --platform linux/amd64 \
 		--target tools \
 		-t $(TOOLS_IMAGE) \
 		.
@@ -153,18 +154,6 @@ generate-orm: test-db-up
 		psql \
 		-o src/internal/repository/orm \
 		--wipe
-
-	@echo "Renaming generated ORM files..."
-
-	@for f in $(ORM_DIR)/*.go; do \
-		if [ -f "$$f" ]; then \
-			base=$$(basename "$$f"); \
-			case "$$base" in \
-				mocks_*) ;; \
-				*) mv "$$f" "$(ORM_DIR)/mocks_$$base" ;; \
-			esac \
-		fi \
-	done
 
 	@echo "ORM generation complete."
 
