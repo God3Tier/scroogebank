@@ -1,6 +1,7 @@
 # Event-driven alerts AI evaluation
 
-Status: offline harness ready; no live model benchmark has been run.
+Status: offline harness and mocked Bedrock Runtime adapter ready; no live model
+benchmark has been run.
 
 The versioned synthetic fixture is
 `tests/fixtures/event-driven-alerts/ai-evaluation.v1.json`. It contains public
@@ -26,3 +27,10 @@ The small committed fixture proves harness behavior, not model quality. It must 
 expanded and manually reviewed before enablement. Live scores, latency, token
 usage, and cost remain pending an approved provider connection and are not
 claimed by the offline tests.
+
+The adapter targets the Bedrock Runtime Converse API with
+`global.openai.gpt-5.6-luna`, as documented by the official
+[Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-luna.html)
+and [AWS SDK for Java Converse example](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/java_bedrock-runtime_code_examples.html).
+It remains fail-closed and default-off; its unit tests use a mocked client and do
+not prove IAM, routing, availability, latency, quality, or cost.

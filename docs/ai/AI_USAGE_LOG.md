@@ -78,3 +78,20 @@
   real client data, model provider calls, or AWS services were used.
 - Limitation: offline tests verify contracts and failure behavior, not Luna model
   quality, latency, tokens, cost, regional routing, or provider availability.
+
+## 2026-09-29 — EDA-D1-04 Bedrock Runtime adapter
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: official-contract review, pinned AWS SDK integration, default-off Bedrock
+  Runtime Converse adapter, global Luna inference-profile configuration, bounded
+  timeouts/tokens, fail-closed model allowlisting, safe provider-error mapping,
+  mocked tests, and documentation.
+- Human verification required: accept ADR-0010, review the IAM policy and global
+  cross-region data boundary, then run the held-out benchmark only through the
+  approved lower-environment connection.
+- Data: repository content and synthetic public JSON only. No credentials, real
+  client data, model requests, or AWS service calls were used.
+- Verification: mocked adapter tests exercise request construction, disabled and
+  unapproved-model rejection, timeout propagation, and retryable throttling. Live
+  IAM, routing, quality, latency, tokens, and cost remain unverified.
