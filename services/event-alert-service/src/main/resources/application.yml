@@ -57,7 +57,7 @@ alert:
   operations:
     # Independent outbound controls remain fail-closed until explicitly enabled.
     ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
-    model-enabled: ${ALERT_MODEL_ENABLED:false}
+    model-enabled: ${ALERT_AI_ENABLED:false}
     monthly-search-quota: ${ALERT_MONTHLY_SEARCH_QUOTA:1000}
     max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:4}
     monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}

@@ -5,6 +5,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import bank.alert.operations.OutboundControlService;
+import bank.alert.operations.ReservationResult;
 
 import java.time.Clock;
 import java.util.HashSet;
@@ -36,14 +39,23 @@ public class SafeBriefingGenerator implements BriefingGenerator {
     private final AiModelGateway gateway;
     private final AiSafetyScreen safety;
     private final ObjectMapper mapper;
+    private final OutboundControlService outboundControls;
     private final Clock clock;
 
     public SafeBriefingGenerator(AiProperties properties, AiModelGateway gateway,
             AiSafetyScreen safety, ObjectMapper mapper, Clock clock) {
+        this(properties, gateway, safety, mapper, null, clock);
+    }
+
+    @Autowired
+    public SafeBriefingGenerator(AiProperties properties, AiModelGateway gateway,
+            AiSafetyScreen safety, ObjectMapper mapper,
+            OutboundControlService outboundControls, Clock clock) {
         this.properties = properties;
         this.gateway = gateway;
         this.safety = safety;
         this.mapper = mapper.copy().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        this.outboundControls = outboundControls;
         this.clock = clock;
     }
 
@@ -70,6 +82,13 @@ public class SafeBriefingGenerator implements BriefingGenerator {
         int attemptsMade = 0;
         for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
             attemptsMade = attempt;
+            if (outboundControls != null) {
+                ReservationResult reservation = outboundControls.reserveModelTokens(
+                        properties.maxOutputTokens());
+                if (!reservation.allowed()) {
+                    return outcome(BriefingStatus.PENDING, null, reservation.code(), attempt - 1);
+                }
+            }
             try {
                 String raw = gateway.invokeMeasured(request, properties.timeout()).outputJson();
                 if (raw == null || raw.length() > properties.maxOutputCharacters()) {

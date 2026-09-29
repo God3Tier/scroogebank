@@ -12,6 +12,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import bank.alert.config.OperationalProperties;
+import bank.alert.operations.OperationalMetrics;
+import bank.alert.operations.OutboundControlService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -91,6 +95,25 @@ class SafeEventClassifierTest {
         assertThat(calls).hasValue(2);
         assertThat(outcome.reasonCode()).isEqualTo("TIMEOUT");
         assertThat(outcome.classification()).isNull();
+    }
+
+    @Test
+    void operationalTokenControlPreventsGatewayCalls() {
+        AtomicInteger calls = new AtomicInteger();
+        AiModelGateway gateway = (request, timeout) -> { calls.incrementAndGet(); return "{}"; };
+        OutboundControlService controls = new OutboundControlService(
+                new OperationalProperties(true, false, 100, 4, 10_000, 2_000, BigDecimal.TEN),
+                event -> { }, new OperationalMetrics(new SimpleMeterRegistry()),
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        SafeEventClassifier classifier = new SafeEventClassifier(properties(true), gateway,
+                new AiSafetyScreen(), new RuleFallbackEvaluator(),
+                new ObjectMapper().findAndRegisterModules(), controls,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+
+        ClassificationOutcome outcome = classifier.classify(evidence("Synthetic earnings update."));
+
+        assertThat(calls).hasValue(0);
+        assertThat(outcome.reasonCode()).isEqualTo("CONFIG_DISABLED");
     }
 
     private static SafeEventClassifier classifier(AiModelGateway gateway, boolean enabled) {

@@ -5,6 +5,8 @@ import bank.alert.domain.SearchRun;
 import bank.alert.repository.ProcessingWatermarkRepository;
 import bank.alert.repository.SearchRunRepository;
 import bank.alert.repository.SourceResultRepository;
+import bank.alert.operations.OutboundControlService;
+import bank.alert.operations.ReservationResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +41,7 @@ class IngestionCoordinatorTest {
     @Mock SourceResultRepository sourceResults;
     @Mock ProcessingWatermarkRepository watermarks;
     @Mock IngestionRunFinalizer finalizer;
+    @Mock OutboundControlService outboundControls;
 
     private IngestionCoordinator coordinator;
 
@@ -48,6 +51,8 @@ class IngestionCoordinatorTest {
         lenient().when(watermarks.findById("agentcore-web-search-1.2.0")).thenReturn(Optional.empty());
         lenient().when(searchRuns.findByWindowFromAndWindowTo(any(), any())).thenReturn(Optional.empty());
         lenient().when(searchRuns.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(outboundControls.reserveSearches(any(Integer.class)))
+                .thenReturn(ReservationResult.allowed(999));
     }
 
     @Test
@@ -88,6 +93,19 @@ class IngestionCoordinatorTest {
         IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
 
         assertThat(outcome.status()).isEqualTo(IngestionStatus.DISABLED);
+        verify(provider, never()).search(any());
+        verify(searchRuns, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void operationalControlPreventsProviderAndRunPersistence() {
+        when(outboundControls.reserveSearches(any(Integer.class)))
+                .thenReturn(ReservationResult.denied("SEARCH_QUOTA_REACHED", 0));
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.CONTROL_BLOCKED);
+        assertThat(outcome.errorCode()).isEqualTo("SEARCH_QUOTA_REACHED");
         verify(provider, never()).search(any());
         verify(searchRuns, never()).saveAndFlush(any());
     }
@@ -161,7 +179,7 @@ class IngestionCoordinatorTest {
                 List.of("earnings"));
         return new IngestionCoordinator(properties, provider, new GroupedQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,
-                watermarks, finalizer, Clock.fixed(NOW, ZoneOffset.UTC));
+                watermarks, finalizer, outboundControls, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static PublicSearchResult result(String id, String url) {

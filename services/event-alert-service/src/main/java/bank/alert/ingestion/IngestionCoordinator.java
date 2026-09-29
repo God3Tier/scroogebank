@@ -6,6 +6,8 @@ import bank.alert.domain.SourceResult;
 import bank.alert.repository.ProcessingWatermarkRepository;
 import bank.alert.repository.SearchRunRepository;
 import bank.alert.repository.SourceResultRepository;
+import bank.alert.operations.OutboundControlService;
+import bank.alert.operations.ReservationResult;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -31,13 +33,14 @@ public class IngestionCoordinator {
     private final SourceResultRepository sourceResults;
     private final ProcessingWatermarkRepository watermarks;
     private final IngestionRunFinalizer finalizer;
+    private final OutboundControlService outboundControls;
     private final Clock clock;
 
     public IngestionCoordinator(IngestionProperties properties, PublicSearchProvider provider,
             GroupedQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
             PublicUrlCanonicalizer canonicalizer, SearchRunRepository searchRuns,
             SourceResultRepository sourceResults, ProcessingWatermarkRepository watermarks,
-            IngestionRunFinalizer finalizer, Clock clock) {
+            IngestionRunFinalizer finalizer, OutboundControlService outboundControls, Clock clock) {
         this.properties = properties;
         this.provider = provider;
         this.queryBuilder = queryBuilder;
@@ -47,6 +50,7 @@ public class IngestionCoordinator {
         this.sourceResults = sourceResults;
         this.watermarks = watermarks;
         this.finalizer = finalizer;
+        this.outboundControls = outboundControls;
         this.clock = clock;
     }
 
@@ -82,6 +86,11 @@ public class IngestionCoordinator {
         }
         if (run.hasActiveLeaseAt(now)) {
             return outcome(IngestionStatus.ALREADY_RUNNING, run, 0, 0, 0, 0, null);
+        }
+        ReservationResult reservation = outboundControls.reserveSearches(queries.size());
+        if (!reservation.allowed()) {
+            return new IngestionOutcome(IngestionStatus.CONTROL_BLOCKED, null, windowFrom, windowTo,
+                    0, 0, 0, 0, reservation.code());
         }
         run.restart();
         run.claimUntil(now.plus(RUN_LEASE));
