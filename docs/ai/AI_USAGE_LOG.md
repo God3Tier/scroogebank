@@ -109,3 +109,73 @@
 - Verification: the full Maven build passed with 92 tests, including bounded,
   future-window, worker-mode, durable-count, and watermark-regression cases plus
   PostgreSQL 16 Testcontainers validation.
+
+## 2026-09-29 — EDA-D1-04 offline AI safety layer
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: public-only classifier and briefing contracts, model kill switch,
+  prompt-injection/private-field screening, strict structured-output validation,
+  citation/instrument enforcement, retry/timeout/token caps, deterministic
+  rule-review fallback, synthetic evaluation fixture, metric harness, tests, and
+  documentation.
+- Human verification required: accept ADR-0010, review safety patterns and
+  candidate benchmark gates, expand and label the held-out fixture set, and run
+  the live benchmark only through an approved provider connection.
+- Data: repository content and synthetic public-market examples only. No secrets,
+  real client data, model provider calls, or AWS services were used.
+- Limitation: offline tests verify contracts and failure behavior, not Luna model
+  quality, latency, tokens, cost, regional routing, or provider availability.
+
+## 2026-09-29 — EDA-D1-04 Bedrock Runtime adapter
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: official-contract review, pinned AWS SDK integration, default-off Bedrock
+  Runtime Converse adapter, global Luna inference-profile configuration, bounded
+  timeouts/tokens, fail-closed model allowlisting, safe provider-error mapping,
+  mocked tests, and documentation.
+- Human verification required: accept ADR-0010, review the IAM policy and global
+  cross-region data boundary, then run the held-out benchmark only through the
+  approved lower-environment connection.
+- Data: repository content and synthetic public JSON only. No credentials, real
+  client data, model requests, or AWS service calls were used.
+- Verification: mocked adapter tests exercise request construction, disabled and
+  unapproved-model rejection, timeout propagation, and retryable throttling. Live
+  IAM, routing, quality, latency, tokens, and cost remain unverified.
+
+## 2026-09-29 — EDA-D1-04 offline benchmark reporting
+
+- Human owner: Azeez.
+- Tool: OpenAI Codex.
+- Use: provider usage-metadata contract, Bedrock token/latency/stop-reason capture,
+  strict benchmark-run schema, complete fixture coverage checks, p95 latency and
+  token aggregation, candidate quality/safety gates, JSON report entry point,
+  tests, and evaluation documentation.
+- Human verification required: review fixture labels and candidate thresholds,
+  record the approved model price used for estimated cost, inspect every safety
+  result, and accept ADR-0010 before enabling the provider.
+- Data: repository content and synthetic benchmark observations only. No model,
+  AWS, credential, or private-data access occurred.
+- Verification: focused tests cover metadata capture, passing/failing gates,
+  complete-run enforcement, version propagation, cost recording, and p95 latency.
+  No live benchmark result is claimed.
+
+## 2026-09-29 — EDA-D1-04 synthetic fixture expansion
+
+- Human owner: Azeez; Hayyun review remains required before labels are accepted.
+- Tool: OpenAI Codex.
+- Use: expand the public-only evaluation fixture from five to eighteen synthetic
+  cases, add full event-type and negative/safety coverage, enforce unique IDs and
+  synthetic identifiers, verify expected safety-screen outcomes, and prevent an
+  AI-draft fixture from qualifying as model-enablement evidence.
+- Human verification required: Azeez and Hayyun inspect every expected event type,
+  negative label, and safety outcome before changing `labelStatus` to
+  `HUMAN_REVIEWED` or using results for an enablement decision.
+- Data: invented issuer/news examples and synthetic identifiers only. No real
+  market article, client data, credentials, model call, or AWS service was used.
+- Verification: 54 non-Docker service tests, including fixture-integrity and
+  report-eligibility tests, pass locally. The full rerun could not start its two
+  PostgreSQL Testcontainers classes because Docker Desktop was unavailable; the
+  preceding full build passed 74 tests before this fixture-only change. No model
+  quality, latency, routing, token, or cost result is claimed.

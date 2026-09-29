@@ -40,6 +40,20 @@ alert:
       - merger
       - credit
       - leadership
+  ai:
+    # Independent fail-closed switch; no model can be invoked by default.
+    enabled: ${ALERT_AI_ENABLED:false}
+    provider: ${ALERT_AI_PROVIDER:none}
+    model: global.openai.gpt-5.6-luna
+    prompt-version: alert-public-v1
+    max-input-characters: 12000
+    max-output-characters: 8000
+    max-output-tokens: 1200
+    max-attempts: 2
+    timeout: 20s
+    minimum-confidence: 0.60
+    bedrock:
+      region: ${ALERT_AI_BEDROCK_REGION:us-east-1}
 
 management:
   endpoints:

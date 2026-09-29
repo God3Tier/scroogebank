@@ -25,6 +25,25 @@ can run only in `WORKER` mode. Supplying the IAM-authenticated AgentCore Gateway
 blocked on the approved infrastructure task; the application does not create or
 contact AWS resources by itself.
 
+The AI boundary is independently disabled by default with
+`ALERT_AI_ENABLED=false` and `ALERT_AI_PROVIDER=none`. The adapters accept public evidence only,
+screen prompt-injection/private identifiers before invocation, send versioned
+closed-schema requests through `AiModelGateway`, validate citations and candidate
+instruments, cap input/output/retries/timeouts, and safely abstain or retain an
+event for deterministic rule review. Briefings are explicitly AI-labelled,
+source-cited, uncertainty-bearing, and rejected when they contain advice
+language.
+
+An opt-in Bedrock Runtime implementation uses the Converse API with the pinned
+global Luna inference profile, AWS default credential chain, configured region,
+zero temperature, output-token cap, and per-request timeout. Enabling it requires
+both `ALERT_AI_PROVIDER=bedrock` and `ALERT_AI_ENABLED=true`; keep both disabled
+until ADR-0010 is accepted and the benchmark gates pass. The committed tests mock
+the SDK and make no AWS call. Never put credentials in repository configuration.
+Measured gateway responses retain only output JSON and low-cardinality operational
+metadata: token counts, latency, and stop reason. The offline evaluation package
+turns complete versioned run files into explicit pass/fail benchmark reports.
+
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 60.00 threshold. Stale valuations carry a visible 10-point penalty; missing or
