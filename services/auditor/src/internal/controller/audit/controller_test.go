@@ -1,9 +1,9 @@
-package controller
+package audit
 
 import (
 	"auditor/src/gen"
 	"auditor/src/internal/models"
-	"auditor/src/internal/service"
+	auditSvc "auditor/src/internal/service/audit"
 	"context"
 	"database/sql"
 	"errors"
@@ -21,7 +21,7 @@ func TestGetAuditLog(t *testing.T) {
 	timestamp := time.Date(2026, 9, 16, 4, 0, 0, 0, time.UTC)
 	databaseErr := errors.New("database unavailable")
 
-	logs := []service.RetrieveAuditLogResponse{
+	logs := []auditSvc.RetrieveAuditLogResponse{
 		{
 			EventType: "CRUD",
 			Action:    "CREATE",
@@ -38,7 +38,7 @@ func TestGetAuditLog(t *testing.T) {
 
 	tests := map[string]struct {
 		request      *gen.GetAuditLogRequest
-		serviceLogs  []service.RetrieveAuditLogResponse
+		serviceLogs  []auditSvc.RetrieveAuditLogResponse
 		serviceError error
 		wantCode     codes.Code
 		wantResponse *gen.GetAuditLogResponse
@@ -80,7 +80,7 @@ func TestGetAuditLog(t *testing.T) {
 
 		"returns empty logs": {
 			request:      &gen.GetAuditLogRequest{Service: "CRM"},
-			serviceLogs:  []service.RetrieveAuditLogResponse{},
+			serviceLogs:  []auditSvc.RetrieveAuditLogResponse{},
 			wantResponse: &gen.GetAuditLogResponse{Logs: []*gen.AuditLog{}},
 			callService:  true,
 		},
@@ -102,7 +102,7 @@ func TestGetAuditLog(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			svc := service.NewMockAudit(t)
+			svc := auditSvc.NewMockService(t)
 
 			if test.callService {
 				svc.EXPECT().

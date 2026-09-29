@@ -114,6 +114,6 @@ test:
 			*) mv "$$f" "$(ORM_DIR)/mocks_$$(basename "$$f")" ;; \
 		esac; \
 	done; \
-	$(TEST_COMPOSE) run --rm test-runner go test -v ./...
+	$(TEST_COMPOSE) run --rm test-runner go test ./... -cover
 
 all: test

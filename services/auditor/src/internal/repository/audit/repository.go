@@ -12,6 +12,7 @@ type Repository interface {
 	StoreAuditChain(ctx context.Context, auditRequest models.AuditLogInput) error
 	GetChain(ctx context.Context) ([]models.AuditLog, error)
 	GetChainByOffset(ctx context.Context, startChain int, offset int) ([]models.AuditLog, error)
+	RemoveAuditLog(ctx context.Context, hash string) error
 }
 
 type impl struct {

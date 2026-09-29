@@ -1,9 +1,9 @@
-package controller
+package audit
 
 import (
 	"auditor/src/gen"
 	"auditor/src/internal/models"
-	"auditor/src/internal/service"
+	auditSvc "auditor/src/internal/service/audit"
 	"context"
 	"database/sql"
 	"errors"
@@ -17,7 +17,7 @@ import (
 // Controller is the placeholder for auditor request handlers.
 type Controller struct {
 	gen.UnimplementedAuditServiceServer
-	svc service.Audit
+	svc auditSvc.Service
 }
 
 func (s Controller) GetAuditLog(ctx context.Context, req *gen.GetAuditLogRequest) (*gen.GetAuditLogResponse, error) {
@@ -51,7 +51,7 @@ func (s Controller) GetAuditLog(ctx context.Context, req *gen.GetAuditLogRequest
 	return &gen.GetAuditLogResponse{Logs: logs}, nil
 }
 
-func New(svc service.Audit) Controller {
+func New(svc auditSvc.Service) Controller {
 	return Controller{
 		svc: svc,
 	}

@@ -46,8 +46,9 @@ Consequences).
   plan (owned by Azeez) or choose a broker for *future* alerting features.
 - Does not provision the AWS SQS queues themselves — see Deployment/
   Migration Plan below for what must be requested from Joseph's team.
-- Does not change the auditor's gRPC API, HTTP health endpoint, or database
-  schema beyond the new `event_id` column.
+- Does not change the auditor's gRPC API or health endpoint. A later
+  user-directed extension adds HTTP CRUD endpoints for corrupted audit logs;
+  those endpoints do not alter the health or gRPC contracts.
 
 ## Acceptance Criteria
 
@@ -85,14 +86,20 @@ Consequences).
 
 ## Proposed APIs/Events/Jobs
 
-- No new API. Message contract for `audit.insert` events gains a required
-  `event_id` (string, unique per event) field, used for de-duplication.
+- The SQS migration adds no API. Its `audit.insert` message contract gains a
+  required `event_id` (string, unique per event) field for de-duplication.
+- Corrupted audit log management is exposed over HTTP:
+  `GET /api/corrupted-logs`, `POST /api/corrupted-logs`, and
+  `DELETE /api/corrupted-logs/{id}`. The POST body contains a UUID `id` and
+  the original audit `payload`; detection time is assigned by the server.
 
 ## Proposed Data Model/Schema Changes
 
 - Add a unique `event_id` column to `audit_log_table.sql` and
   `test_init.sql` (auditor's own audit log table) to support
   idempotent writes.
+- Persist corrupted audit log records in `corrupted_audit_log`, with the
+  original log payload and server-assigned detection timestamp.
 
 ## Authorization/Access Rules
 

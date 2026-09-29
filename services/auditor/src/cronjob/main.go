@@ -12,7 +12,7 @@ import (
 
 	"auditor/src/internal/bootstrap"
 	"auditor/src/internal/repository"
-	"auditor/src/internal/service"
+	auditSvc "auditor/src/internal/service/audit"
 )
 
 type Checked struct {
@@ -46,10 +46,10 @@ func run() error {
 	}
 
 	repo := repository.New(db)
-	svc := service.New(repo.GetAudit())
+	auditSvc := auditSvc.New(repo.GetAudit())
 
 	// Jobs
-	jobs := New(svc, repo.GetAudit())
+	jobs := New(auditSvc, repo.GetAudit())
 
 	// Scheduler
 	c := cron.New()

@@ -6,7 +6,7 @@ DB_PORT      := 5432
 HTTP_PORT    ?= 8080
 GRPC_PORT    ?= :9091
 
-SCHEMA_FILE  := data/audit_log_table.sql
+SCHEMA_FILE  := data/schema.sql
 ORM_DIR      := src/internal/repository/orm
 PROTO_SRC    := proto/audit_request.proto
 PROTO_OUT    := src
@@ -155,18 +155,6 @@ generate-orm: test-db-up
 		-o src/internal/repository/orm \
 		--wipe
 
-	@echo "Renaming generated ORM files..."
-
-	@for f in $(ORM_DIR)/*.go; do \
-		if [ -f "$$f" ]; then \
-			base=$$(basename "$$f"); \
-			case "$$base" in \
-				mocks_*) ;; \
-				*) mv "$$f" "$(ORM_DIR)/mocks_$$base" ;; \
-			esac \
-		fi \
-	done
-
 	@echo "ORM generation complete."
 
 
@@ -189,7 +177,7 @@ test:
 	echo "========================================"; \
 	echo "Running Go tests"; \
 	echo "========================================"; \
-	$(TEST_COMPOSE) run --rm -T test-runner go test -v ./... -cover
+	$(TEST_COMPOSE) run --rm -T test-runner go test ./... -cover
 
 
 # ============================================================

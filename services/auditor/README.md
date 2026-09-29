@@ -61,6 +61,28 @@ Expected response:
 {"status":"ok"}
 ```
 
+### Corrupted audit log endpoints
+
+The auditor exposes these HTTP endpoints for reviewing and removing corrupted
+audit entries:
+
+| Method | Path | Behavior |
+|---|---|---|
+| `GET` | `/api/corrupted-logs` | Return all decodable corrupted audit logs as JSON. |
+| `POST` | `/api/corrupted-logs` | Store a corrupted log. The request body contains `id` (UUID) and `payload` (the original audit log). The server sets `date_of_detect`. |
+| `DELETE` | `/api/corrupted-logs/{id}` | Delete the entry with the given UUID. |
+
+Malformed JSON or UUIDs return `400`, a missing entry returns `404`, and
+unexpected storage failures return `500`.
+
+```sh
+curl http://localhost:8080/api/corrupted-logs
+curl -X POST http://localhost:8080/api/corrupted-logs \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"Id":"audit-1","EventType":"CRUD","Action":"UPDATE"}}'
+curl -X DELETE http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
+```
+
 Send a test event to the local queue (requires the `awslocal` CLI, or use
 `aws --endpoint-url=http://localhost:4566` instead):
 

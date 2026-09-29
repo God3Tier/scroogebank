@@ -1,4 +1,4 @@
-package service
+package audit
 
 import (
 	"auditor/src/internal/models"
