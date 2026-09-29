@@ -36,11 +36,15 @@ type remoteConnector func(context.Context) (remoteSFTP, func(), error)
 type Poller struct {
 	config    Config
 	store     transactionStore
+	audit     AuditWriter
 	connector remoteConnector
 }
 
-func New(cfg Config, store transactionStore) *Poller {
+func New(cfg Config, store transactionStore, auditWriters ...AuditWriter) *Poller {
 	p := &Poller{config: cfg, store: store}
+	if len(auditWriters) > 0 {
+		p.audit = auditWriters[0]
+	}
 	p.connector = p.connectSFTP
 	return p
 }
@@ -69,13 +73,14 @@ func pollAndLog(ctx context.Context, p *Poller) {
 func (p *Poller) Poll(ctx context.Context) error {
 	client, closeClient, err := p.connector(ctx)
 	if err != nil {
-		return err
+		return errors.Join(err, p.writeProcessingError(ctx, ProcessingError{Action: "CONNECTION_FAILURE", Stage: "CONNECTION", Error: err.Error()}))
 	}
 	defer closeClient()
 
 	entries, err := client.ReadDir(p.config.RemoteDir)
 	if err != nil {
-		return fmt.Errorf("list remote directory %q: %w", p.config.RemoteDir, err)
+		wrapped := fmt.Errorf("list remote directory %q: %w", p.config.RemoteDir, err)
+		return errors.Join(wrapped, p.writeProcessingError(ctx, ProcessingError{Action: "CONNECTION_FAILURE", Stage: "CONNECTION", Error: wrapped.Error()}))
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
@@ -89,4 +94,11 @@ func (p *Poller) Poll(ctx context.Context) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+func (p *Poller) writeProcessingError(ctx context.Context, item ProcessingError) error {
+	if p.audit == nil {
+		return nil
+	}
+	return p.audit.WriteProcessingError(ctx, item)
 }
