@@ -11,13 +11,20 @@ provider credentials, or outbound provider calls. Synthetic holdings are loaded
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
 
 The AI boundary is independently disabled by default with
-`ALERT_AI_ENABLED=false`. The offline adapters accept public evidence only,
+`ALERT_AI_ENABLED=false` and `ALERT_AI_PROVIDER=none`. The adapters accept public evidence only,
 screen prompt-injection/private identifiers before invocation, send versioned
 closed-schema requests through `AiModelGateway`, validate citations and candidate
 instruments, cap input/output/retries/timeouts, and safely abstain or retain an
 event for deterministic rule review. Briefings are explicitly AI-labelled,
 source-cited, uncertainty-bearing, and rejected when they contain advice
-language. No model SDK, credentials, or outbound model connection is included.
+language.
+
+An opt-in Bedrock Runtime implementation uses the Converse API with the pinned
+global Luna inference profile, AWS default credential chain, configured region,
+zero temperature, output-token cap, and per-request timeout. Enabling it requires
+both `ALERT_AI_PROVIDER=bedrock` and `ALERT_AI_ENABLED=true`; keep both disabled
+until ADR-0010 is accepted and the benchmark gates pass. The committed tests mock
+the SDK and make no AWS call. Never put credentials in repository configuration.
 
 The read adapter requires an assigned-agent subject and never returns another
 agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
