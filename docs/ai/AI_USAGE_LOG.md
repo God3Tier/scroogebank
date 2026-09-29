@@ -95,3 +95,17 @@
   Vite build passed. Automated screenshots remain pending because the local
   headless browser could not establish its Chrome CDP channel after diagnostics
   and restart.
+
+## 2026-09-30 — EDA-D2-05 authoritative decision-state handling
+
+- Human owner: Azeez; Hayyun review remains required for the CRM experience.
+- Tool: OpenAI Codex.
+- Use: aligned the synthetic decision adapter with the expanded API response and
+  changed the dashboard to render the audited server-supplied `newStatus` rather
+  than independently reconstructing the lifecycle transition.
+- Human verification required: Hayyun reviews the interaction and completes the
+  desktop/mobile visual pass before promotion to `dev`.
+- Data: repository content and synthetic alerts only. No secrets, real client
+  data, external providers, or AWS services were used.
+- Verification: all nine frontend tests passed, ESLint completed without errors,
+  and the Vite production build succeeded.

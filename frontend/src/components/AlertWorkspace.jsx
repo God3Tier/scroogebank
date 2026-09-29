@@ -31,12 +31,6 @@ const DECISIONS = [
   { value: 'DISMISS', label: 'Dismiss alert', help: 'Close this alert without contacting the client.' },
 ]
 
-const DECISION_STATUSES = {
-  INFORM_CLIENT: 'INFORMED',
-  MONITOR: 'MONITORING',
-  DISMISS: 'DISMISSED',
-}
-
 function formatDate(value, withTime = true) {
   if (!value) return 'Not supplied'
   return new Intl.DateTimeFormat('en-SG', {
@@ -186,7 +180,7 @@ function AlertWorkspace({ readOnly = false }) {
       })
       setDetail((current) => ({
         ...current,
-        status: DECISION_STATUSES[result.decision] || current.status,
+        status: result.newStatus,
         version: result.alertVersion,
         latestDecision: result,
       }))

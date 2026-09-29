@@ -2,6 +2,11 @@ import { syntheticAlerts, syntheticDetail } from '../data/alerts.js'
 
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 const DEMO_MODE = import.meta.env.VITE_USE_SYNTHETIC_ALERTS === 'true'
+const SYNTHETIC_DECISION_STATUSES = {
+  INFORM_CLIENT: 'INFORMED',
+  MONITOR: 'MONITORING',
+  DISMISS: 'DISMISSED',
+}
 
 function headers(extra = {}) {
   const token = window.localStorage.getItem('access_token')
@@ -60,10 +65,13 @@ export async function getAlert(alertId) {
 
 export async function recordDecision(alertId, body, idempotencyKey = crypto.randomUUID()) {
   if (DEMO_MODE) {
+    const alert = syntheticAlerts.find((item) => item.id === alertId)
     return {
       id: crypto.randomUUID(),
       alertId,
       decision: body.decision,
+      previousStatus: alert?.status || 'NEW',
+      newStatus: SYNTHETIC_DECISION_STATUSES[body.decision],
       actorSubject: 'syn-agent-001',
       decidedAt: new Date().toISOString(),
       alertVersion: body.expectedVersion + 1,
