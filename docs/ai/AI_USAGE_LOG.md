@@ -61,3 +61,18 @@
 - Verification: the full Maven build passed with 39 event-alert tests, including
   Flyway migration, JPA schema validation, repository joins/authorization, and
   mutation transactions against disposable PostgreSQL 16 Testcontainers.
+
+## 2026-09-30 — EDA-D2-04 explicit decision-state contract
+
+- Human owner: Azeez; Hayyun review remains required for the CRM/domain scope.
+- Tool: OpenAI Codex.
+- Use: exposed the persisted previous and new alert states in decision responses,
+  synchronized the OpenAPI and narrative contracts, and extended the controller
+  contract test so clients do not need to infer lifecycle transitions.
+- Human verification required: Hayyun reviews the API behavior and both
+  developers accept the proposed authorization/audit ADRs before promotion to
+  `dev`.
+- Data: repository content and synthetic identities/alerts only. No secrets,
+  real client data, external providers, or AWS services were used.
+- Verification: the full 92-test Maven reactor build passed with no failures or
+  errors, including disposable PostgreSQL 16 Testcontainers coverage.

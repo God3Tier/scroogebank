@@ -68,7 +68,8 @@ text; consumers retrieve authorized detail through the REST API.
 The event includes decision ID, alert ID, actor subject and role, decision code,
 previous/new status, alert version, correlation ID, and timestamp. It never means
 that the client was contacted; `INFORM_CLIENT` records the agent's chosen next
-step only.
+step only. REST decision responses expose the same `previousStatus` and
+`newStatus` state codes so clients do not infer transitions independently.
 
 ## Audit mapping
 

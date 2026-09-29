@@ -33,6 +33,8 @@ the `cognito:groups` claim supplies the `AGENT` or `ADMIN` role. Agents can post
 decisions and feedback only for assigned alerts; admins are read-only. Mutation
 requests require `Idempotency-Key`, accept `X-Correlation-Id`, and return `503`
 without committing the mutation when durable audit persistence is unavailable.
+Successful decision responses include the audited `previousStatus` and
+`newStatus`, so clients do not need to infer lifecycle transitions.
 The test profile uses a non-routable example issuer and mocked/local security;
 local verification does not contact Cognito or any AWS service.
 

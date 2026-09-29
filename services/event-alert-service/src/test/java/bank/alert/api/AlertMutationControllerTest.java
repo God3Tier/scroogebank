@@ -65,6 +65,8 @@ class AlertMutationControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.actorSubject").value("syn-agent-001"))
+                .andExpect(jsonPath("$.previousStatus").value("NEW"))
+                .andExpect(jsonPath("$.newStatus").value("MONITORING"))
                 .andExpect(jsonPath("$.alertVersion").value(1));
 
         verify(mutationService).recordDecision(

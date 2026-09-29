@@ -272,11 +272,13 @@ components:
     DecisionRecord:
       type: object
       additionalProperties: false
-      required: [id, alertId, decision, actorSubject, decidedAt, alertVersion]
+      required: [id, alertId, decision, previousStatus, newStatus, actorSubject, decidedAt, alertVersion]
       properties:
         id: {type: string, format: uuid}
         alertId: {type: string, format: uuid}
         decision: {$ref: '#/components/schemas/Decision'}
+        previousStatus: {$ref: '#/components/schemas/AlertStatus'}
+        newStatus: {$ref: '#/components/schemas/AlertStatus'}
         actorSubject: {type: string, maxLength: 128}
         decidedAt: {type: string, format: date-time}
         alertVersion: {type: integer, minimum: 1}
