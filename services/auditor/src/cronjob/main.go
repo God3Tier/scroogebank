@@ -10,9 +10,10 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"auditor/src/internal/bootstrap"
 	"auditor/src/internal/repository"
-	"auditor/src/internal/service"
-	"auditor/src/serverd"
+	auditSvc "auditor/src/internal/service/audit"
+	corruptedSvc "auditor/src/internal/service/corrupted_logs"
 )
 
 type Checked struct {
@@ -40,16 +41,18 @@ func run() error {
 	defer cancel()
 
 	// Dependencies
-	db, err := serverd.IntialiseDB()
+	db, err := bootstrap.InitialiseDB()
 	if err != nil {
 		return err
 	}
 
 	repo := repository.New(db)
-	svc := service.New(repo.GetAudit())
+	auditSvc := auditSvc.New(repo.GetAudit())
+	corruptedSvc := corruptedSvc.New(repo.GetCorruptedLog())
+	
 
 	// Jobs
-	jobs := New(svc, repo.GetAudit())
+	jobs := New(auditSvc, corruptedSvc, repo.GetAudit())
 
 	// Scheduler
 	c := cron.New()

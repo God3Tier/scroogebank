@@ -15,6 +15,8 @@ func TestStoreAuditChain(t *testing.T) {
 		request      models.AuditLogInput
 		wantSequence int64
 		wantParent   string
+		wantEventID  string
+		wantErr      error
 	}{
 		"stores first log without parent": {
 			fixture: "store_audit_chain_empty.sql",
@@ -33,6 +35,34 @@ func TestStoreAuditChain(t *testing.T) {
 			wantSequence: 4,
 			wantParent:   "chain-hash-3",
 		},
+		"finds the linked-list head with gaps in sequence numbers": {
+			fixture: "store_audit_chain_sparse.sql",
+			request: models.AuditLogInput{
+				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-after-gap", Payload: `{}`,
+			},
+			wantSequence: 8,
+			wantParent:   "sparse-head-hash",
+		},
+		"stores the event_id alongside the log": {
+			fixture: "store_audit_chain_empty.sql",
+			request: models.AuditLogInput{
+				EventID: "evt-new", EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-first", Payload: `{}`,
+			},
+			wantSequence: 1,
+			wantEventID:  "evt-new",
+		},
+		"rejects a redelivered event_id without writing a new entry": {
+			fixture: "store_audit_chain_duplicate.sql",
+			request: models.AuditLogInput{
+				EventID: "evt-existing", EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
+				ActorId: "actor-retry", Payload: `{}`,
+			},
+			wantSequence: 1, // unchanged: the duplicate must not be inserted
+			wantEventID:  "evt-existing",
+			wantErr:      DuplicateEventError,
+		},
 	}
 
 	for name, test := range tests {
@@ -42,15 +72,21 @@ func TestStoreAuditChain(t *testing.T) {
 
 			err := New(db).StoreAuditChain(context.Background(), test.request)
 
-			require.NoError(t, err)
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
 			var sequence int64
-			var parent string
+			var parent, eventID string
 			err = db.QueryRowContext(context.Background(),
-				`SELECT sequence_no, parent_hash FROM audit_log ORDER BY sequence_no DESC LIMIT 1`,
-			).Scan(&sequence, &parent)
+				`SELECT sequence_no, parent_hash, COALESCE(event_id, '') FROM audit_log ORDER BY sequence_no DESC LIMIT 1`,
+			).Scan(&sequence, &parent, &eventID)
 			require.NoError(t, err)
 			assert.Equal(t, test.wantSequence, sequence)
 			assert.Equal(t, test.wantParent, parent)
+			assert.Equal(t, test.wantEventID, eventID)
 		})
 	}
 }

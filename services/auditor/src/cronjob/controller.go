@@ -2,23 +2,26 @@ package cronjob
 
 import (
 	"auditor/src/internal/repository/audit"
-	"auditor/src/internal/service"
+	auditSvc "auditor/src/internal/service/audit"
+	corruptedSvc "auditor/src/internal/service/corrupted_logs"
 	"context"
 )
 
 type Controller interface {
-	VerifyHistoricalChain(ctx context.Context) 
-	ReadOffset(ctx context.Context, checked *Checked) 
+	VerifyHistoricalChain(ctx context.Context)
+	ReadOffset(ctx context.Context, checked *Checked)
 }
 
 type impl struct {
-	svc  service.Audit
-	repo audit.Repository
+	auditSvc     auditSvc.Service
+	corruptedSvc corruptedSvc.Service
+	repo         audit.Repository
 }
 
-func New(svc service.Audit, repo audit.Repository) Controller {
+func New(auditSvc auditSvc.Service, corruptedSvc corruptedSvc.Service, repo audit.Repository) Controller {
 	return impl{
-		svc,
+		auditSvc,
+		corruptedSvc, 
 		repo,
 	}
 }

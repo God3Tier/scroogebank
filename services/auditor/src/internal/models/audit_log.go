@@ -7,6 +7,7 @@ import (
 type AuditLog struct {
 	Id            string
 	SequenceNo    int64
+	EventID       string
 	EventType     string
 	Action        string
 	ActorId       string

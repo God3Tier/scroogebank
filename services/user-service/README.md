@@ -18,6 +18,9 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 | PATCH | `/api/users/{id}/role` | ADMIN | Change role (`{"role":"ADMIN"}` or `AGENT`); root admin: rejected with 403 |
 | PATCH | `/api/users/{id}/disable` | ADMIN | Disable a user (root admin: rejected with 403) |
 | POST | `/api/users/{id}/reset-password` | ADMIN | Trigger the IdP's password-reset flow |
+| GET | `/api/corrupted-logs` | ADMIN | List corrupted audit logs from the Auditor service |
+| POST | `/api/corrupted-logs` | ADMIN | Create a corrupted audit log in the Auditor service |
+| DELETE | `/api/corrupted-logs/{id}` | ADMIN | Delete a corrupted audit log from the Auditor service |
 
 Full request/response shapes: Swagger UI at `http://localhost:8081/swagger-ui.html` when run locally with the `local` profile. See [API docs (Swagger UI)](../../README.md#api-docs-swagger-ui) in the root README.
 
@@ -36,7 +39,7 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 ## NFR notes
 
 - **Maintainability/Extensibility**: adding a role means a new Cognito group plus an enum value; swapping the IdP entirely means one new `IdentityProviderClient` implementation — no changes to controllers or the security config.
-- **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. Audit logging (spec requirement) is explicitly **excluded from this build** — no `AuditLog` table, no logging middleware for user actions.
+- **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through SQS; audit payloads omit names, email addresses, passwords, and request bodies.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
 
 ## Configuration
@@ -48,11 +51,19 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials |
 | `OIDC_ISSUER_URI` | `https://cognito-idp.<region>.amazonaws.com/<pool-id>` | Resource-server JWT validation |
 | `COGNITO_USER_POOL_ID`, `AWS_REGION` | Terraform | Cognito admin API access |
+| `AUDIT_QUEUE_URL` | ECS task definition / local environment | Auditor's `audit-insert` SQS queue; when empty, user audit publishing is disabled |
+| `AUDITOR_BASE_URL` | ECS task definition / local environment | Base URL of the Auditor HTTP service (defaults to `http://localhost:8080`) |
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |
 
 None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. All are set by the ECS task definition in `infra/terraform/envs/prod/main.tf`.
 
-This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool.
+This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool. It also needs `sqs:SendMessage` scoped to the Auditor's `audit-insert` queue when audit publishing is enabled. AWS credentials use the standard SDK provider chain; no credentials are configured in application properties.
+
+## Audit events
+
+After each user API request completes, the service publishes an SQS event for user creation, retrieval, update, disable, and password-reset operations. Corrupted-log proxy operations are also recorded as read/create/delete events, without copying their request bodies. The successful root-admin bootstrap also publishes a system-attributed create event. Events use `event_type=CRUD` and `source_service=USER_MANAGEMENT`. `actor_id` is the verified Cognito `sub` (or `system:root-admin-initializer` for bootstrap); the payload records the resource ID, endpoint, HTTP method, response status, timestamp, and role where available. It does not copy user names, email addresses, passwords, or request bodies into the queue. This service has no login endpoint because sign-in is handled by Cognito Hosted UI, so login/logout events are outside its request audit scope.
+
+SQS publishing is best-effort: a send failure is logged with its event ID and does not change the API response. Set `AUDIT_QUEUE_URL` to the standard `audit-insert` queue to enable publishing. The Auditor accepts the user-service payload while continuing to accept its existing generic CRUD payload during rollout.
 
 ## Deploying
 
@@ -63,9 +74,38 @@ aws ecs update-service --cluster scrooge-crm-cluster --service user-service --fo
 
 **Tests**:
 ```bash
-mvn test
+make test
 ```
 `UserRepositoryTest` uses Testcontainers to spin up a real Postgres and verifies unique-constraint enforcement on email/idp_sub. Needs Docker running locally; it does not run the service itself.
+
+## Local development
+
+The `local` Spring profile selects the developer PostgreSQL container and enables Swagger. It does **not** disable Cognito provisioning, JWT validation, or Admin-only method authorization. Cognito and AWS credentials are required locally as well as in deployed environments.
+
+Set the user-pool configuration, then start the database and application:
+
+```bash
+export OIDC_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+export COGNITO_USER_POOL_ID=<user-pool-id>
+export COGNITO_APP_CLIENT_ID=<app-client-id>
+export AWS_REGION=<region>
+export ROOT_ADMIN_EMAIL=<root-admin-email>
+make run
+```
+
+The AWS SDK uses its normal credential provider chain for Cognito administration. The API listens at `http://localhost:8081`; Swagger UI is available at `http://localhost:8081/swagger-ui.html`. Local HTTP is for loopback development only.
+
+Use a Cognito **access token** from an `ADMIN` group member for the user-management API commands:
+
+```bash
+make health
+make create-user TOKEN="$TOKEN" FIRST_NAME=Alice LAST_NAME=Agent EMAIL=alice.local@example.test ROLE=AGENT
+make get-user TOKEN="$TOKEN" USER_ID=<id-from-create-response>
+make update-user TOKEN="$TOKEN" USER_ID=<id-from-create-response> FIRST_NAME=Alice LAST_NAME=Updated
+make disable-user TOKEN="$TOKEN" USER_ID=<id-from-create-response>
+```
+
+To stop the local database, run `make down`; to reset it and delete its data, run `make local-db-reset`. `make package`, `make clean`, `make image`, and `make test` provide the build and test workflows.
 
 ## Verifying it works
 

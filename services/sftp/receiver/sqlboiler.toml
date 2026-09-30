@@ -1,0 +1,11 @@
+output = "src/internal/repository/orm"
+pkgname = "orm"
+
+[psql]
+dbname = "crm"
+host = "db"
+port = 5432
+user = "crm"
+pass = "crm"
+sslmode = "disable"
+schema = "public"

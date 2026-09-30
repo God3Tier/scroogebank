@@ -1,0 +1,24 @@
+package client
+
+import (
+	service "client-profile-management-service/src/internal/service/client"
+	"net/http"
+)
+
+type ClientController interface {
+	CreateClientProfile(w http.ResponseWriter, r *http.Request)
+	VerifyClientIdentity(w http.ResponseWriter, r *http.Request)
+	UpdateClientInformation(w http.ResponseWriter, r *http.Request)
+	GetClientProfile(w http.ResponseWriter, r *http.Request)
+	DeleteClientProfile(w http.ResponseWriter, r *http.Request)
+}
+
+type clientController struct {
+	svc service.ClientService
+}
+
+func New(svc service.ClientService) ClientController {
+	return clientController{
+		svc: svc,
+	}
+}

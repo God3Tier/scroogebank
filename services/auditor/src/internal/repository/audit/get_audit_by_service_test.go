@@ -22,7 +22,7 @@ func TestGetAuditByService(t *testing.T) {
 			service: models.CRMServiceType,
 			want: []models.AuditLog{{
 				Id: "00000000-0000-0000-0000-000000000101", SequenceNo: 1,
-				EventType: "CRUD", Action: "CREATE_LEAD", SourceService: models.CRMServiceType,
+				EventType: "CRUD", Action: "CREATE", SourceService: models.CRMServiceType,
 				ActorId: "actor-crm", Timestamp: timestamp, Payload: `{"lead": "lead-101"}`,
 				ParentHash: "", Hash: "crm-hash-1",
 			}},
