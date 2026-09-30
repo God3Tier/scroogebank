@@ -65,7 +65,9 @@ auditor, it leases at most 50 rows, publishes the existing `audit.insert` Kafka
 envelope, and marks delivery only after broker acknowledgement. The auditor uses
 the source event ID as its audit-chain primary key for deduplication; expired
 leases are reclaimable and retries stop after the configured maximum. The auditor
-explicitly allowlists alert event actions.
+explicitly allowlists alert event actions. The test suite starts an in-process
+Kafka broker to verify the acknowledged envelope round trip without requiring a
+developer-managed broker or any cloud connection.
 
 A bounded hourly retention job deletes expired briefing content and redacts
 expired source title/URL/domain/publication content while preserving stable IDs,

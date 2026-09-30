@@ -261,3 +261,21 @@
   passed; the full clean Maven/frontend verification is recorded in the offline
   integration evidence after completion. Desktop and mobile synthetic dashboard
   screenshots were inspected locally.
+
+## 2026-09-30 — EDA-D2-06 offline delivery and recovery closure
+
+- Human owner: Azeez; Hayyun review remains required for shared auditor and
+  domain behavior.
+- Tool: OpenAI Codex.
+- Use: add an embedded-Kafka producer/consumer acknowledgement test, verify that
+  a failed event does not stop its publisher batch, exercise expired lease
+  recovery and the retry cap against PostgreSQL, and add the Go auditor contract
+  suite to CI with a disposable healthy database.
+- Human verification required: Hayyun reviews the cross-service contract and
+  proposed ADRs before feature promotion; the authenticated operator role
+  contract remains a human design decision.
+- Data: repository content and synthetic UUIDs/payloads only. No credentials,
+  real client data, AWS endpoint, production broker, or external model was used.
+- Verification: the clean Java reactor, disposable Go/PostgreSQL auditor tests,
+  frontend tests/lint/build, Compose validation, and diff checks are recorded in
+  the offline integration evidence.

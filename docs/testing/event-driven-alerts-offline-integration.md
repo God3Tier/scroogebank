@@ -25,7 +25,9 @@ CloudWatch resource, or production Kafka broker was contacted.
 5. Replay does not duplicate the alert; another agent cannot read it.
 6. Audit-capacity exhaustion fails before event or alert persistence.
 7. The publisher claims bounded rows with leases, emits the auditor-compatible
-   envelope, and changes delivery state only after acknowledgement.
+   envelope, and changes delivery state only after acknowledgement. An embedded
+   Kafka round trip verifies the actual producer/consumer wire contract; one
+   failed record does not block the rest of its claimed batch.
 8. The Go auditor accepts the explicit event-alert allowlist and rejects unknown
    actions; the source event ID becomes the audit-chain primary key so duplicate
    Kafka delivery cannot create a second audit record.
@@ -42,13 +44,17 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-The auditor contract was formatted and tested in the repository's disposable Go
-1.27.1 Docker toolchain after generating its ignored SQLBoiler models.
+The auditor contract is also enforced by CI in the repository's disposable Go
+1.27.1 Docker toolchain after generating its ignored SQLBoiler models. Its
+PostgreSQL service must report healthy before generation and testing begin, and
+the stack is removed after every run.
 
-Results: the clean Maven reactor build passed all 100 Java tests and packaged the
+Results: the clean Maven reactor build passed all 103 Java tests and packaged the
 service. The frontend passed 9 tests across 2 files, ESLint, and the Vite
 production build. Focused Go Kafka validation and audit-repository deduplication
-tests passed against the disposable PostgreSQL stack.
+tests passed against the disposable PostgreSQL stack. Recovery coverage verifies
+expired audit-lease reclamation, the retry cap, and isolation between records in
+a publisher batch.
 
 ## Browser evidence
 
