@@ -1,0 +1,90 @@
+spring:
+  application:
+    name: event-alert-service
+  datasource:
+    url: ${EVENT_ALERT_DB_URL:jdbc:postgresql://localhost:5432/event_alert}
+    username: ${EVENT_ALERT_DB_USERNAME:event_alert}
+    password: ${EVENT_ALERT_DB_PASSWORD:}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  kafka:
+    bootstrap-servers: ${ALERT_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI}
+
+alert:
+  mode: ${ALERT_MODE:API}
+  audit:
+    max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
+    publisher:
+      # Local auditor integration is opt-in. The default never opens a broker connection.
+      enabled: ${ALERT_AUDIT_PUBLISHER_ENABLED:false}
+      topic: ${ALERT_AUDIT_TOPIC:audit.insert}
+      interval: ${ALERT_AUDIT_PUBLISH_INTERVAL:5s}
+      batch-size: ${ALERT_AUDIT_PUBLISH_BATCH_SIZE:50}
+      max-attempts: ${ALERT_AUDIT_PUBLISH_MAX_ATTEMPTS:10}
+      lease-duration: ${ALERT_AUDIT_LEASE_DURATION:30s}
+      send-timeout: ${ALERT_AUDIT_SEND_TIMEOUT:10s}
+  retention:
+    enabled: ${ALERT_RETENTION_ENABLED:true}
+    interval: ${ALERT_RETENTION_INTERVAL:1h}
+    batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
+  ingestion:
+    # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
+    enabled: ${ALERT_INGESTION_ENABLED:false}
+    provider: agentcore-web-search-1.2.0
+    overlap: 5m
+    initial-lookback: 4h
+    max-queries-per-run: 4
+    max-results-per-query: 10
+    max-attempts: 3
+    retention: 90d
+    # Select public search terms in Singapore from sufficiently common holdings.
+    # Only public ticker/issuer/sector terms leave the private boundary.
+    minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.05}
+    minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
+    approved-domains:
+      - mas.gov.sg
+      - sgx.com
+    event-terms:
+      - earnings
+      - regulatory
+      - merger
+      - credit
+      - leadership
+  ai:
+    # Independent fail-closed switch; no model can be invoked by default.
+    enabled: ${ALERT_AI_ENABLED:false}
+    provider: ${ALERT_AI_PROVIDER:none}
+    model: global.openai.gpt-5.6-luna
+    prompt-version: alert-public-v1
+    max-input-characters: 12000
+    max-output-characters: 8000
+    max-output-tokens: 1200
+    max-attempts: 2
+    timeout: 20s
+    minimum-confidence: 0.60
+    bedrock:
+      region: ${ALERT_AI_BEDROCK_REGION:us-east-1}
+  operations:
+    # Independent outbound controls remain fail-closed until explicitly enabled.
+    ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
+    model-enabled: ${ALERT_AI_ENABLED:false}
+    monthly-search-quota: ${ALERT_MONTHLY_SEARCH_QUOTA:1000}
+    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:4}
+    monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}
+    max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
+    monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
