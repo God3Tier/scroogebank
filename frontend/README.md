@@ -49,6 +49,16 @@ npm run dev
 - All pages that are made should be placed in `frontend/src/pages`
 - All CSS styles should be placed in `frontend/src/styles`
 
+## Business dashboard mockup (demo only)
+
+This exists only on the local branch `task/business-dashboard/frontend-mockup`, which is never pushed or merged. It mocks the business dashboard proposed on `feat/business-dashboard`.
+
+- `/insights/admin`: bank-wide dashboard with KPI tiles, daily activity, transaction health, ingestion freshness, portfolio composition, agent performance and action items.
+- `/insights/agent`: one agent's own book with KPI tiles, action queue, team comparison, portfolio and client transactions.
+- Data: synthetic, from `src/data/dashboard.js`. It follows the response shape in `docs/api/dashboard-api.yaml` on `feat/business-dashboard`. The window selector (7, 30, 90 days) changes the figures.
+- Styling: Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision). Dashboard styles are in `src/styles/dashboard.css`, chart colours in `src/styles/chartTheme.js`.
+- Charts: Recharts.
+
 ## Future update
 - Reallocate `pages` and have subset, such as `pages/admin`, `pages/agent`.
 

@@ -27,6 +27,14 @@ function NavBar() {
           <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
           Admin Dashboard
         </NavLink>
+        <NavLink to="/insights/admin">
+          <span className="material-symbols-outlined" aria-hidden="true">insights</span>
+          Admin Insights
+        </NavLink>
+        <NavLink to="/insights/agent">
+          <span className="material-symbols-outlined" aria-hidden="true">monitoring</span>
+          Agent Insights
+        </NavLink>
       </nav>
     </aside>
   )

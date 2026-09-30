@@ -4,6 +4,8 @@ import Login from './pages/Login.jsx'
 import AgentDashboard from './pages/AgentDashboard.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
 import ClientTransactions from './pages/ClientTransactions.jsx'
+import AdminBusinessDashboard from './pages/AdminBusinessDashboard.jsx'
+import AgentBusinessDashboard from './pages/AgentBusinessDashboard.jsx'
 
 function AppRouter() {
   return (
@@ -13,6 +15,8 @@ function AppRouter() {
       <Route path="/agent" element={<AgentDashboard />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/agent/client/:clientId/transactions" element={<ClientTransactions />} />
+      <Route path="/insights/admin" element={<AdminBusinessDashboard />} />
+      <Route path="/insights/agent" element={<AgentBusinessDashboard />} />
     </Routes>
   )
 }
