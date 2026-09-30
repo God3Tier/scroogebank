@@ -1,5 +1,13 @@
 package bank.user.service;
 
+import java.util.UUID;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import bank.user.domain.Role;
 import bank.user.domain.User;
 import bank.user.dto.CreateUserRequest;
 import bank.user.dto.UpdateUserRequest;
@@ -9,11 +17,6 @@ import bank.user.exception.NotFoundException;
 import bank.user.identity.IdentityProviderClient;
 import bank.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -55,12 +58,44 @@ public class UserService {
                 .orElseThrow(() -> new NotFoundException("User not found: " + id));
     }
 
+    // A null filter means "any". See UserRepository.search.
+    public Page<User> listUsers(Role role, Boolean enabled, int page, int size) {
+        return userRepository.search(role, enabled, page, size);
+    }
+
     @Transactional
     public User updateUser(UUID id, UpdateUserRequest request) {
         User user = getUser(id);
         identityProviderClient.updateUser(user.getIdpSub(), request.firstName(), request.lastName());
         user.setFirstName(request.firstName());
         user.setLastName(request.lastName());
+        return user;
+    }
+
+    /**
+     * Moves a user to another role. Cognito group membership is the role
+     * that tokens carry, so it is changed first and the local column follows.
+     *
+     * The new group is added before the old one is removed. If the second
+     * call fails, the user is briefly in both groups, which grants no more
+     * than the admin asked for; removing first could instead leave the user
+     * in no group and unable to use the system. Both calls are idempotent,
+     * so repeating the request completes a change that stopped half-way.
+     */
+    @Transactional
+    public User changeRole(UUID id, Role newRole) {
+        User user = getUser(id);
+        if (!user.isDeletable()) {
+            throw new ForbiddenOperationException("Root admin's role cannot be changed");
+        }
+        Role oldRole = user.getRole();
+        if (oldRole == newRole) {
+            return user;
+        }
+        // Must be the IdP username (email), not idpSub -- see addToGroup's contract.
+        identityProviderClient.addToGroup(user.getEmail(), newRole);
+        identityProviderClient.removeFromGroup(user.getEmail(), oldRole);
+        user.setRole(newRole);
         return user;
     }
 
