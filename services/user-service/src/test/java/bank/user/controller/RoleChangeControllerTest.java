@@ -1,5 +1,6 @@
 package bank.user.controller;
 
+import bank.user.audit.AuditEventPublisher;
 import bank.user.domain.Role;
 import bank.user.domain.User;
 import bank.user.exception.ForbiddenOperationException;
@@ -12,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -33,6 +35,14 @@ class RoleChangeControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    // Required by UserAuditInterceptor, which @WebMvcTest loads.
+    @MockitoBean
+    private AuditEventPublisher auditEventPublisher;
+
+    // SecurityConfig's decoder fetches the issuer's OIDC metadata when created.
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     private final UUID id = UUID.randomUUID();
 
