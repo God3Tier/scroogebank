@@ -46,6 +46,9 @@ audit:
   sqs:
     queue-url: ${AUDIT_QUEUE_URL:}
 
+auditor:
+  base-url: ${AUDITOR_BASE_URL:http://localhost:8080}
+
 root-admin:
   email: ${ROOT_ADMIN_EMAIL}
 
