@@ -27,7 +27,7 @@ type Transaction struct {
 	Description     string    `json:"description"`
 }
 
-func GenerateRandomSet() []Transaction {
+func GenerateRandomSet(accountIDs ...string) []Transaction {
 	roll := rand.Intn(10)
 	roll += 1
 	transactionSet := make([]Transaction, 0, roll)
@@ -35,7 +35,7 @@ func GenerateRandomSet() []Transaction {
 	for _ = range roll {
 		weight := rand.Float64()
 
-		baseTransaction := generateTransaction()
+		baseTransaction := generateTransaction(accountIDs)
 
 		// TODO: Add very very small chance of failure
 		switch {

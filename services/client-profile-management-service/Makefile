@@ -24,7 +24,7 @@ APP_ENV ?= local
 APP_TLS_CERT_FILE ?=
 APP_TLS_KEY_FILE ?=
 
-.PHONY: db-up db-down db-logs db-reset load-schema psql check-security-config run down tools-image sqlboiler mockery test all
+.PHONY: db-up db-down db-logs db-reset load-schema psql check-security-config run run-shared-db down tools-image sqlboiler mockery test all
 
 ## Start Postgres and wait until it's ready
 db-up:
@@ -72,6 +72,10 @@ run: check-security-config db-up
 	fi
 	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < data/V2_agent_subject.sql
 	DB_HOST=$(DB_HOST) DB_PORT=$(DB_PORT) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) DB_SSLMODE=$(DB_SSLMODE) DB_SSLROOTCERT="$(DB_SSLROOTCERT)" APP_ENV=$(APP_ENV) APP_TLS_CERT_FILE="$(APP_TLS_CERT_FILE)" APP_TLS_KEY_FILE="$(APP_TLS_KEY_FILE)" COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" go run ./src/serverd
+
+## Run against the CRM database started by services/sftp without starting this service's separate PostgreSQL container
+run-shared-db: check-security-config
+	DB_HOST=$${CRM_DB_HOST:-localhost} DB_PORT=$${CRM_DB_PORT:-5432} DB_USER=$${CRM_DB_USER:-crm} DB_PASSWORD=$${CRM_DB_PASSWORD:-crm} DB_NAME=$${CRM_DB_NAME:-crm} DB_SSLMODE=disable APP_ENV=local COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" go run ./src/serverd
 
 ## Open a psql shell into the running database
 psql:

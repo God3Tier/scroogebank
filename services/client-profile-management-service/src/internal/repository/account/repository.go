@@ -2,14 +2,14 @@ package account
 
 import (
 	"client-profile-management-service/src/internal/models"
+	orm "client-profile-management-service/src/internal/repository/orm"
 	"context"
 	"database/sql"
 )
 
 type Repository interface {
 	CreateAccount(ctx context.Context, account models.CreateAccountInput) error
-	// GetAccount(ctx context.Context, exec boil.ContextExecutor, accountID string) (*models.Account, error)
-	// UpdateAccount(ctx context.Context, exec boil.ContextExecutor, account *models.Account) error
+	GetAccount(ctx context.Context, accountID string) (*orm.Account, error)
 	DeleteAccount(ctx context.Context, accountID string) error
 }
 

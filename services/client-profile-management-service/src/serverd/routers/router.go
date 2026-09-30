@@ -45,6 +45,7 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 	account.Use(auditLogger)
 	{
 		account.POST("", security.RequireClientBodyOwner(db), adaptHandler(accounts.CreateAccount, ""))
+		account.GET("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.GetAccount, "accountId"))
 		account.DELETE("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))
 	}
 }

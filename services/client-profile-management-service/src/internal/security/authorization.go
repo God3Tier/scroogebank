@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 
+	orm "client-profile-management-service/src/internal/repository/orm"
 	"github.com/gin-gonic/gin"
 )
 
@@ -109,10 +110,26 @@ func RequireAccountOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		query := `SELECT c.created_by_agent_id
-			FROM accounts a JOIN clients c ON c.client_id = a.client_id
-			WHERE a.id = $1`
-		if !ownsClient(c, db, query, accountID, principal.Subject) {
+		account, err := orm.FindAccount(c.Request.Context(), db, accountID)
+		if errors.Is(err, sql.ErrNoRows) {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+			return
+		}
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "unable to authorize resource access"})
+			return
+		}
+		client, err := orm.FindClient(c.Request.Context(), db, account.ClientID)
+		if errors.Is(err, sql.ErrNoRows) {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+			return
+		}
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "unable to authorize resource access"})
+			return
+		}
+		if client.CreatedByAgentID != principal.Subject {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 			return
 		}
 		c.Next()

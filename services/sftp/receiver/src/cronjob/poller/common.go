@@ -17,7 +17,7 @@ func envOrDefault(name, fallback string) string {
 }
 
 func normalizeTransaction(transaction *models.Transaction) error {
-	fmt.Printf("Transaction result %+v", transaction)
+	transaction.AccountID = strings.TrimSpace(transaction.AccountID)
 	if strings.TrimSpace(transaction.TransactionID) == "" {
 		return fmt.Errorf("transaction ID is required")
 	}
