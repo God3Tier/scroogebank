@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-{/* Below imports are seeded data, testing purposes */}
+// Below imports are seeded data, testing purposes
 import clients from '../data/clients.js'
+import transactions from '../data/transactions.js'
+import StatCard from '../components/StatCard.jsx'
 
 function AgentDashboard() {
 
-    {/* Variables and States */}
+    // Variables and States
     const [openSection, setOpenSection] = useState(null)
     const navigate = useNavigate()
 
-    {/* Functions */}
+    // Functions
     function toggleSection(section) {
         setOpenSection(openSection === section ? null : section)
     }
@@ -21,21 +23,44 @@ function AgentDashboard() {
         console.log('Creating client profile...')
     }
 
-    {/* Render */}
+    // Render
     return (
-        <div>
-            <h1>Agent Dashboard</h1>
+        <div className="page">
+            <header className="page-header">
+                <h1>Agent Dashboard</h1>
+                <p className="page-subtitle">Create and manage client profiles</p>
+            </header>
 
-            <button onClick={() => navigate('/agent/alerts')}>
-                Review Event Alerts
-            </button>
-            
-            <button onClick={() => toggleSection('createClientProfile')}>
-                Create Client Profile
-            </button>
+            <div className="stat-grid">
+                <StatCard label="My Clients" value={clients.length} icon="groups" />
+                <StatCard label="Transactions" value={transactions.length} icon="receipt_long" />
+                <StatCard
+                    label="Pending Transactions"
+                    value={transactions.filter((transaction) => transaction.status === 'Pending').length}
+                    icon="pending_actions"
+                />
+            </div>
+
+            <div className="action-bar">
+                <button onClick={() => navigate('/agent/alerts')}>
+                    Review Event Alerts
+                </button>
+                <button
+                    onClick={() => toggleSection('createClientProfile')}
+                    aria-expanded={openSection === 'createClientProfile'}
+                >
+                    Create Client Profile
+                </button>
+                <button
+                    onClick={() => toggleSection('manageProfiles')}
+                    aria-expanded={openSection === 'manageProfiles'}
+                >
+                    Manage Client Profiles
+                </button>
+            </div>
 
             {openSection === 'createClientProfile' && (
-                <form onSubmit={handleCreateClient}>
+                <form className="card form-grid" onSubmit={handleCreateClient}>
                     <h2>Create Client Profile</h2>
                     <label>First Name:<input type="text" /></label>
                     <label>Last Name:<input type="text" /></label>
@@ -55,24 +80,22 @@ function AgentDashboard() {
                     <label>State:<input type="text" /></label>
                     <label>Country:<input type="text" /></label>
                     <label>Postal Code:<input type="text" /></label>
-                    <button type="submit">Create Profile</button>
-                    <button onClick={() => toggleSection('createClientProfile')}>Cancel</button>
+                    <div className="form-actions">
+                        <button type="submit">Create Profile</button>
+                        <button type="button" onClick={() => toggleSection('createClientProfile')}>Cancel</button>
+                    </div>
                 </form>
             )}
 
-            <button onClick={() => toggleSection('manageProfiles')}>
-                Manage Client Profiles
-            </button>
-
             {openSection === 'manageProfiles' && (
-                <div>
+                <div className="card card-flush">
                     <h2>Manage Client Profiles</h2>
-                    {/* 
-                    Add functionality to manage client profiles 
+                    {/*
+                    Add functionality to manage client profiles
                     - List of client profiles
                     - View Transactions, Edit and delete options for each profile
                     */}
-                    <ul>
+                    <ul className="row-list">
                         {clients.map(client => (
                             <li key={client.clientId}>
                                 <span>

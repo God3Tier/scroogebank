@@ -1,22 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  ArrowUpRight,
-  BellRing,
-  Check,
-  ChevronRight,
-  CircleAlert,
-  Clock3,
-  FileSearch,
-  Filter,
-  LoaderCircle,
-  RefreshCw,
-  ShieldCheck,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-} from 'lucide-react'
 
 import { getAlert, listAlerts, recordDecision, recordFeedback } from '../api/alerts.js'
+
+function Icon({ name, className = '' }) {
+  return <span className={`material-symbols-outlined ${className}`.trim()} aria-hidden="true">{name}</span>
+}
 
 const STATUS_LABELS = {
   NEW: 'New',
@@ -66,7 +54,7 @@ function LoadingDetail() {
 function EmptyQueue({ filtered }) {
   return (
     <div className="queue-empty">
-      <ShieldCheck aria-hidden="true" />
+      <Icon name="verified_user" />
       <h2>{filtered ? 'No alerts match these filters' : 'No alerts need review'}</h2>
       <p>{filtered ? 'Change the status or minimum score to widen the queue.' : 'New assigned alerts will appear here after deterministic checks pass.'}</p>
     </div>
@@ -77,13 +65,13 @@ function DetailError({ error, onRetry }) {
   const hidden = error?.status === 404
   return (
     <div className="state-notice state-notice--error" role="alert">
-      <CircleAlert aria-hidden="true" />
+      <Icon name="error" />
       <div>
         <h2>{hidden ? 'Alert not available' : 'Alert detail could not be loaded'}</h2>
         <p>{hidden ? 'It may have moved outside your assigned scope.' : 'The queue is still available. Retry the detail request when ready.'}</p>
       </div>
       <button className="button button--secondary" type="button" onClick={onRetry}>
-        <RefreshCw aria-hidden="true" /> Retry
+        <Icon name="refresh" /> Retry
       </button>
     </div>
   )
@@ -94,7 +82,7 @@ function LatestDecision({ decision }) {
   const label = DECISIONS.find((item) => item.value === decision.decision)?.label || decision.decision
   return (
     <div className="decision-record" aria-label="Latest recorded decision">
-      <Check aria-hidden="true" />
+      <Icon name="check" />
       <div>
         <span>Latest recorded decision</span>
         <strong>{label}</strong>
@@ -213,14 +201,14 @@ function AlertWorkspace({ readOnly = false }) {
   const canRecordDecision = detail?.status === 'NEW' || detail?.status === 'MONITORING'
 
   return (
-    <main className="alerts-page" id="main-content">
+    <div className="alerts-page" id="main-content">
       <header className="alerts-heading">
         <div>
           <h1>Event alerts</h1>
           <p>Review public evidence against assigned synthetic portfolio exposure.</p>
         </div>
         <div className="queue-summary" aria-label={`${activeCount} active alerts in this page`}>
-          <BellRing aria-hidden="true" />
+          <Icon name="notifications" />
           <span><strong>{activeCount}</strong> active in this view</span>
         </div>
       </header>
@@ -229,11 +217,11 @@ function AlertWorkspace({ readOnly = false }) {
         <aside className="alert-queue" aria-label="Alert queue">
           <div className="queue-toolbar">
             <div className="queue-toolbar__title">
-              <Filter aria-hidden="true" />
+              <Icon name="filter_list" />
               <span>Review queue</span>
             </div>
             <button className="icon-button" type="button" onClick={() => loadQueue()} aria-label="Refresh alert queue">
-              <RefreshCw aria-hidden="true" />
+              <Icon name="refresh" />
             </button>
           </div>
 
@@ -265,14 +253,14 @@ function AlertWorkspace({ readOnly = false }) {
 
           {listState.error && (
             <div className="queue-error" role="alert">
-              <CircleAlert aria-hidden="true" />
+              <Icon name="error" />
               <p>Queue unavailable. Check the API and retry.</p>
               <button type="button" onClick={() => loadQueue()}>Retry</button>
             </div>
           )}
 
           {listState.loading && alerts.length === 0 ? (
-            <div className="queue-loading" role="status"><LoaderCircle aria-hidden="true" /> Loading assigned alerts…</div>
+            <div className="queue-loading" role="status"><Icon name="autorenew" /> Loading assigned alerts…</div>
           ) : alerts.length === 0 && !listState.error ? (
             <EmptyQueue filtered={filtered} />
           ) : (
@@ -293,7 +281,7 @@ function AlertWorkspace({ readOnly = false }) {
                       <span className="score"><strong>{Number(alert.score).toFixed(1)}</strong>/100</span>
                     </span>
                     <span className="alert-row__client">{alert.clientRef} · {alert.instrumentId}</span>
-                    <ChevronRight className="alert-row__chevron" aria-hidden="true" />
+                    <Icon name="chevron_right" className="alert-row__chevron" />
                   </button>
                 </li>
               ))}
@@ -320,7 +308,7 @@ function AlertWorkspace({ readOnly = false }) {
                 </div>
                 <h2>{detail.headline}</h2>
                 <div className="detail-header__foot">
-                  <span><Clock3 aria-hidden="true" /> {formatDate(detail.createdAt)} SGT</span>
+                  <span><Icon name="schedule" /> {formatDate(detail.createdAt)} SGT</span>
                   <span className="score score--large"><strong>{Number(detail.score).toFixed(1)}</strong>/100 materiality</span>
                   <span>v{detail.version}</span>
                 </div>
@@ -341,25 +329,25 @@ function AlertWorkspace({ readOnly = false }) {
               <div className="detail-columns">
                 <section className="detail-section" aria-labelledby="brief-title">
                   <div className="section-heading">
-                    <div><Sparkles aria-hidden="true" /><h3 id="brief-title">AI-generated briefing</h3></div>
+                    <div><Icon name="auto_awesome" /><h3 id="brief-title">AI-generated briefing</h3></div>
                     <span>Decision support</span>
                   </div>
                   {detail.briefing ? (
                     <div className="briefing">
                       <p>{detail.briefing.summary}</p>
                       {detail.briefing.uncertainty && (
-                        <div className="uncertainty"><CircleAlert aria-hidden="true" /><span><strong>Uncertainty:</strong> {detail.briefing.uncertainty}</span></div>
+                        <div className="uncertainty"><Icon name="error" /><span><strong>Uncertainty:</strong> {detail.briefing.uncertainty}</span></div>
                       )}
                       <p className="model-note">{detail.briefing.modelVersion} · {detail.briefing.promptVersion}</p>
                     </div>
                   ) : (
-                    <div className="inline-empty"><LoaderCircle aria-hidden="true" /> Structured briefing is still being prepared.</div>
+                    <div className="inline-empty"><Icon name="autorenew" /> Structured briefing is still being prepared.</div>
                   )}
                 </section>
 
                 <section className="detail-section" aria-labelledby="factors-title">
                   <div className="section-heading">
-                    <div><FileSearch aria-hidden="true" /><h3 id="factors-title">Why this appeared</h3></div>
+                    <div><Icon name="find_in_page" /><h3 id="factors-title">Why this appeared</h3></div>
                     <span>Rule materiality-v1</span>
                   </div>
                   <ol className="factor-list">
@@ -375,25 +363,25 @@ function AlertWorkspace({ readOnly = false }) {
 
               <section className="detail-section evidence-section" aria-labelledby="evidence-title">
                 <div className="section-heading">
-                  <div><ShieldCheck aria-hidden="true" /><h3 id="evidence-title">Public evidence</h3></div>
+                  <div><Icon name="verified_user" /><h3 id="evidence-title">Public evidence</h3></div>
                   <span>{detail.evidence.length} cited source{detail.evidence.length === 1 ? '' : 's'}</span>
                 </div>
                 <ul className="evidence-list">
                   {detail.evidence.map((item) => (
                     <li key={item.url}>
                       <div><strong>{item.title}</strong><span>{item.sourceDomain} · retrieved {formatDate(item.retrievedAt)}</span></div>
-                      <a href={item.url} target="_blank" rel="noreferrer">Open source <ArrowUpRight aria-hidden="true" /></a>
+                      <a href={item.url} target="_blank" rel="noreferrer">Open source <Icon name="arrow_outward" /></a>
                     </li>
                   ))}
                 </ul>
               </section>
 
               {readOnly ? (
-                <div className="read-only-notice"><ShieldCheck aria-hidden="true" /><span><strong>Read-only oversight.</strong> Only the assigned agent can record a decision or feedback.</span></div>
+                <div className="read-only-notice"><Icon name="verified_user" /><span><strong>Read-only oversight.</strong> Only the assigned agent can record a decision or feedback.</span></div>
               ) : (
                 <section className="decision-section" aria-labelledby="decision-title">
                   <div className="section-heading">
-                    <div><Check aria-hidden="true" /><h3 id="decision-title">Record your decision</h3></div>
+                    <div><Icon name="check" /><h3 id="decision-title">Record your decision</h3></div>
                     <span>No client contact is triggered</span>
                   </div>
                   <LatestDecision decision={detail.latestDecision} />
@@ -413,21 +401,21 @@ function AlertWorkspace({ readOnly = false }) {
                     </label>
                     {decisionState.error && (
                       <div className="form-error" role="alert">
-                        <CircleAlert aria-hidden="true" />
+                        <Icon name="error" />
                         <span>{decisionState.error.status === 409 ? 'This alert changed. Refresh it before recording a decision.' : decisionState.error.status === 503 ? `Audit persistence is unavailable. Retry${decisionState.error.retryAfter ? ` after ${decisionState.error.retryAfter} seconds` : ' shortly'}.` : decisionState.error.message}</span>
                       </div>
                     )}
                     <div className="decision-submit">
                       <p>{selectedDecision.help}</p>
                       <button className="button button--primary" type="submit" disabled={decisionState.saving}>
-                        {decisionState.saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
+                        <Icon name={decisionState.saving ? 'autorenew' : 'check'} className={decisionState.saving ? 'spin' : ''} />
                         {decisionState.saving ? 'Recording…' : 'Record decision'}
                       </button>
                     </div>
                     <p className="success-message" aria-live="polite">{decisionState.message}</p>
                   </form> : (
                     <div className="decision-closed">
-                      <ShieldCheck aria-hidden="true" />
+                      <Icon name="verified_user" />
                       <span><strong>Decision complete.</strong> This alert is closed for further decisions; feedback remains available.</span>
                     </div>
                   )}
@@ -435,8 +423,8 @@ function AlertWorkspace({ readOnly = false }) {
                   <div className="feedback-row">
                     <div><strong>Was this alert useful?</strong><span>Quality feedback does not change the decision.</span></div>
                     <div>
-                      <button type="button" disabled={feedbackState.saving} onClick={() => submitFeedback('USEFUL')}><ThumbsUp aria-hidden="true" /> Yes</button>
-                      <button type="button" disabled={feedbackState.saving} onClick={() => submitFeedback('NOT_USEFUL')}><ThumbsDown aria-hidden="true" /> No</button>
+                      <button type="button" disabled={feedbackState.saving} onClick={() => submitFeedback('USEFUL')}><Icon name="thumb_up" /> Yes</button>
+                      <button type="button" disabled={feedbackState.saving} onClick={() => submitFeedback('NOT_USEFUL')}><Icon name="thumb_down" /> No</button>
                     </div>
                     <span className={feedbackState.error ? 'feedback-message feedback-message--error' : 'feedback-message'} aria-live="polite">
                       {feedbackState.error?.message || feedbackState.message}
@@ -446,11 +434,11 @@ function AlertWorkspace({ readOnly = false }) {
               )}
             </>
           ) : (
-            <div className="detail-empty"><FileSearch aria-hidden="true" /><h2>Select an alert to review</h2><p>Evidence, exposure, and decision controls will open here.</p></div>
+            <div className="detail-empty"><Icon name="find_in_page" /><h2>Select an alert to review</h2><p>Evidence, exposure, and decision controls will open here.</p></div>
           )}
         </article>
       </section>
-    </main>
+    </div>
   )
 }
 
