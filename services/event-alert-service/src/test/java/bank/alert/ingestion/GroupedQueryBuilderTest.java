@@ -15,12 +15,13 @@ class GroupedQueryBuilderTest {
     @Test
     void groupsPublicTermsWithoutEmbeddingInternalInstrumentIds() {
         List<String> queries = builder.build(List.of(
-                new InstrumentSearchTerms("SYN", "Synthetic Holdings Ltd", List.of("Synthetic Holdings"),
-                        List.of("earnings", "regulatory"))), 4);
+                new InstrumentSearchTerms("SYN", "Synthetic Holdings Ltd", "Industrials",
+                        List.of("Synthetic Holdings"), List.of("earnings", "regulatory"))), 4);
 
         assertThat(queries).singleElement()
                 .asString()
-                .contains("\"SYN\"", "\"Synthetic Holdings Ltd\"", "\"earnings\"")
+                .contains("\"SYN\"", "\"Synthetic Holdings Ltd\"", "\"Industrials\"",
+                        "\"earnings\"")
                 .doesNotContain("syn-client", "account", "holding");
     }
 
@@ -28,7 +29,7 @@ class GroupedQueryBuilderTest {
     void refusesToSilentlyDropAnOversizedCatalogue() {
         List<InstrumentSearchTerms> catalogue = IntStream.range(0, 33)
                 .mapToObj(index -> new InstrumentSearchTerms("T" + index, "Issuer " + index,
-                        List.of(), List.of("earnings")))
+                        "Sector " + index, List.of(), List.of("earnings")))
                 .toList();
 
         assertThatThrownBy(() -> builder.build(catalogue, 4))

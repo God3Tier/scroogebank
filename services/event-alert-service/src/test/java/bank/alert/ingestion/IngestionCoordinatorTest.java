@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,7 +35,8 @@ class IngestionCoordinatorTest {
 
     private static final Instant NOW = Instant.parse("2026-09-28T04:00:00Z");
     private static final List<InstrumentSearchTerms> CATALOGUE = List.of(
-            new InstrumentSearchTerms("SYN", "Synthetic Issuer", List.of(), List.of("earnings")));
+            new InstrumentSearchTerms("SYN", "Synthetic Issuer", "Synthetic",
+                    List.of(), List.of("earnings")));
 
     @Mock PublicSearchProvider provider;
     @Mock SearchRunRepository searchRuns;
@@ -172,11 +174,20 @@ class IngestionCoordinatorTest {
         verify(searchRuns, never()).saveAndFlush(any());
     }
 
+    @Test
+    void performsNoSearchWhenNoHoldingMeetsTheUniverseControls() {
+        IngestionOutcome outcome = coordinator(true).run(NOW, List.of());
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.NO_QUERIES);
+        verify(provider, never()).search(any());
+        verify(searchRuns, never()).saveAndFlush(any());
+    }
+
     private IngestionCoordinator coordinator(boolean enabled) {
         IngestionProperties properties = new IngestionProperties(enabled,
                 "agentcore-web-search-1.2.0", Duration.ofMinutes(5), Duration.ofHours(4),
-                4, 10, 3, Duration.ofDays(90), List.of("mas.gov.sg", "sgx.com"),
-                List.of("earnings"));
+                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.05"), 2,
+                List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
         return new IngestionCoordinator(properties, provider, new GroupedQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,
                 watermarks, finalizer, outboundControls, Clock.fixed(NOW, ZoneOffset.UTC));

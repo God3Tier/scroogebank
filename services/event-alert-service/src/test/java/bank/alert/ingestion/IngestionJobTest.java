@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,29 +23,40 @@ class IngestionJobTest {
     @Test
     void refusesToRunInsideTheApiProcess() {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
+        SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
         IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
         IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.API), properties(),
-                instruments, coordinator);
+                searchUniverse, instruments, coordinator);
 
         assertThatThrownBy(() -> job.runScheduledWindow(Instant.parse("2026-09-28T04:00:00Z")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("WORKER mode");
-        verify(instruments, never()).findByActiveTrueOrderByIdAsc();
+        verify(searchUniverse, never()).eligibleInstrumentIds();
         verify(coordinator, never()).run(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void invokesBoundedReplayOnlyFromTheWorkerProcess() {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
+        SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
         IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
         IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
-                instruments, coordinator);
+                searchUniverse, instruments, coordinator);
         Instant from = Instant.parse("2026-09-28T02:00:00Z");
         Instant to = Instant.parse("2026-09-28T04:00:00Z");
         Instrument instrument = mock(Instrument.class);
         when(instrument.getTicker()).thenReturn("SYN");
         when(instrument.getIssuerName()).thenReturn("Synthetic Issuer");
-        when(instruments.findByActiveTrueOrderByIdAsc()).thenReturn(List.of(instrument));
+        when(instrument.getSector()).thenReturn("Synthetic");
+        when(instrument.getId()).thenReturn("SYN-SGX-001");
+        when(instrument.isActive()).thenReturn(true);
+        Instrument inactive = mock(Instrument.class);
+        when(inactive.getId()).thenReturn("INACTIVE");
+        when(inactive.isActive()).thenReturn(false);
+        when(searchUniverse.eligibleInstrumentIds())
+                .thenReturn(List.of("SYN-SGX-001", "INACTIVE", "UNKNOWN"));
+        when(instruments.findAllById(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(inactive, instrument));
 
         job.replayWindow(from, to);
 
@@ -55,7 +67,7 @@ class IngestionJobTest {
 
     private static IngestionProperties properties() {
         return new IngestionProperties(false, "agentcore-web-search-1.2.0", Duration.ofMinutes(5),
-                Duration.ofHours(4), 4, 10, 3, Duration.ofDays(90), List.of("sgx.com"),
-                List.of("earnings"));
+                Duration.ofHours(4), 4, 10, 3, Duration.ofDays(90), new BigDecimal("0.05"), 2,
+                List.of("sgx.com"), List.of("earnings"));
     }
 }

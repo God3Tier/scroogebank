@@ -92,6 +92,7 @@ class SourceResultProcessorIntegrationTest {
         jdbc.update("""
                 INSERT INTO instrument (id, ticker, issuer_name, sector, currency)
                 VALUES ('SYN-SGX-001', 'SYN1', 'Synthetic Issuer One', 'Synthetic', 'SGD')
+                ON CONFLICT (id) DO NOTHING
                 """);
         jdbc.update("""
                 INSERT INTO synthetic_portfolio

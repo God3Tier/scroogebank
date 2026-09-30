@@ -6,12 +6,14 @@ import java.util.Objects;
 public record InstrumentSearchTerms(
         String ticker,
         String issuer,
+        String sector,
         List<String> aliases,
         List<String> eventTerms) {
 
     public InstrumentSearchTerms {
         ticker = requirePublicTerm(ticker, "ticker");
         issuer = requirePublicTerm(issuer, "issuer");
+        sector = requirePublicTerm(sector, "sector");
         aliases = copyTerms(aliases);
         eventTerms = copyTerms(eventTerms);
         if (eventTerms.isEmpty()) {

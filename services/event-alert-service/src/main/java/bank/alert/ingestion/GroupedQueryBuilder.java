@@ -30,6 +30,7 @@ public class GroupedQueryBuilder {
             for (InstrumentSearchTerms instrument : group) {
                 issuers.add(quote(instrument.ticker()));
                 issuers.add(quote(instrument.issuer()));
+                issuers.add(quote(instrument.sector()));
                 instrument.aliases().forEach(alias -> issuers.add(quote(alias)));
                 events.addAll(instrument.eventTerms());
             }

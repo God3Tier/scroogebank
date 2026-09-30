@@ -99,6 +99,7 @@ class AlertRepositoryTest {
                     (id, ticker, issuer_name, sector, currency)
                 VALUES
                     ('SYN-SGX-001', 'SYN1', 'Synthetic Issuer One', 'Synthetic', 'SGD')
+                ON CONFLICT (id) DO NOTHING
                 """);
         jdbcTemplate.update("""
                 INSERT INTO synthetic_portfolio
