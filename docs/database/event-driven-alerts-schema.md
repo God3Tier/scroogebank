@@ -22,7 +22,7 @@ alert/public_event mutations 1--* audit_outbox
 | `search_run` | Schedule window, status, lease, counts, and error code. Unique scheduled window; no raw query text. |
 | `source_result` | Minimal source metadata, canonical URL/hash, publication/retrieval time, source domain, retention expiry. Unique canonical URL hash. |
 | `public_event` | Validated structured public event, classifier outcome/confidence and rule/model/prompt versions. Unique accepted source-result/classifier version. |
-| `instrument` | Supported synthetic instrument ID, ticker, issuer, sector, currency, active flag. |
+| `instrument` | Supported synthetic instrument ID, ticker, issuer, sector, currency, active flag. It maps a holding's stable ID to public search/category terms inside Singapore. |
 | `public_event_instrument` | Explicit event/instrument match with match reason and confidence. Composite primary key. |
 | `synthetic_portfolio` | Opaque synthetic client/account and assigned-agent references; never real PII. |
 | `holding_snapshot` | Immutable quantity/price/FX/value/timestamp/source version and freshness for one portfolio/instrument. |
@@ -59,3 +59,8 @@ Backups follow the approved shared-cluster policy. Restore tests replay pending
 outbox rows and processing windows using unique constraints; they must not create
 duplicate alerts, decisions, or notifications. Migrations are forward-only and
 destructive changes require expand/migrate/contract releases.
+
+`V2__seed_synthetic_instrument_catalogue.sql` adds the synthetic-only reference
+instrument used by the fixture. It contains no client, account, holding, or agent
+data and must be replaced by an approved instrument-master integration before
+real holdings are introduced.

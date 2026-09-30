@@ -23,6 +23,8 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0014](ADR-0014-alert-observability-cost-and-kill-switches.md) — Add redacted metrics, hard quotas, budget alarms, and independent ingestion/model kill switches.
 - [ADR-0015](ADR-0015-deterministic-alert-materiality-scoring.md) — Use versioned fixed-decimal exposure and materiality rules that fail closed on unusable valuations.
 
+- [ADR-0016](ADR-0016-holdings-derived-search-universe.md) — Derive bounded public search terms from sufficiently common client holdings inside Singapore without exporting portfolio facts.
+
 ## Maintenance rule
 
 Add or update exactly one concise entry whenever an ADR is added, superseded, or has its status changed. Keep historical entries and identify the superseding ADR rather than deleting an old decision from this index.

@@ -49,12 +49,16 @@ The auditor contract is also enforced by CI in the repository's disposable Go
 PostgreSQL service must report healthy before generation and testing begin, and
 the stack is removed after every run.
 
-Results: the clean Maven reactor build passed all 103 Java tests and packaged the
+Results: the clean Maven reactor build passed all 105 Java tests and packaged the
 service. The frontend passed 9 tests across 2 files, ESLint, and the Vite
 production build. Focused Go Kafka validation and audit-repository deduplication
 tests passed against the disposable PostgreSQL stack. Recovery coverage verifies
 expired audit-lease reclamation, the retry cap, and isolation between records in
 a publisher batch.
+The ingestion tests also prove that the public search universe is selected from
+distinct synthetic client holdings using minimum-count/share controls, mapped to
+sector terms through stable instrument IDs, and contains no private portfolio
+facts.
 
 ## Browser evidence
 

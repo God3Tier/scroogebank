@@ -279,3 +279,20 @@
 - Verification: the clean Java reactor, disposable Go/PostgreSQL auditor tests,
   frontend tests/lint/build, Compose validation, and diff checks are recorded in
   the offline integration evidence.
+
+## 2026-09-30 — Holdings-derived public search universe
+
+- Human owner: Azeez; Hayyun review remains required for holdings/domain scope.
+- Tool: OpenAI Codex.
+- Use: replace the static active-instrument search universe with a Singapore-side
+  aggregate derived from synthetic client holdings; map stable instrument IDs to
+  public ticker, issuer, and sector terms; add minimum client-count/share privacy
+  controls, synthetic reference migration, tests, ADR, and documentation.
+- Human verification required: review ADR-0016, the 5%/two-client prototype
+  thresholds, selection-inference risk, and the real instrument-master boundary
+  before AWS enablement or promotion to `dev`.
+- Data: repository-owned synthetic holdings and public synthetic instrument
+  metadata only. No credentials, real clients, AWS endpoint, or external model
+  was used.
+- Verification: focused selection/query tests and the full local verification
+  suite are recorded in the offline integration evidence.

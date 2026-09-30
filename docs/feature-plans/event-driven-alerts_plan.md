@@ -133,6 +133,12 @@ AI-generated recommendation is auditable.
 EventBridge schedule in Singapore
           |
           v
+Holdings-derived public search universe in Singapore
+  - stable instrument ID -> ticker, issuer, sector
+  - minimum client count and share
+  - no private facts leave Singapore
+          |
+          v
 AgentCore Web Search 1.2.0 in Tokyo
   - approved domains only
   - since-last-run date window
@@ -264,6 +270,11 @@ AWS service choice in this plan.
 - Invoke AgentCore Web Search in Tokyo from a bounded Singapore scheduler. The
   initial operating target is four grouped searches every four hours, not a query
   per client or per instrument.
+- Derive the candidate instrument universe inside Singapore from distinct client
+  holdings. An instrument must meet the configured minimum client count and
+  client-share controls before its public terms become eligible for a query.
+- Never send the holdings-derived counts, shares, selection reason, client/account
+  identity, quantity, value, exposure, or agent assignment to Tokyo.
 - Pin the connector to version `1.2.0` or later.
 - Search only team-approved domains and public instrument/event terms. Configure a
   gateway-level domain allowlist that callers cannot relax.
@@ -285,6 +296,8 @@ AWS service choice in this plan.
 
 - Maintain a supported instrument catalogue with ticker, issuer, aliases, sector,
   industry, and approved keywords.
+- Join holdings to that catalogue by stable instrument ID. Category selection is
+  deterministic reference data; the MVP uses `instrument.sector`, not an LLM.
 - Direct matches produce candidate instrument links with an explanation.
 - The MVP must work without embeddings. Semantic retrieval is a later option and
   needs benchmark evidence, cost estimates, and an ADR.
@@ -686,13 +699,13 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 | EDA-D2-01 | Hayyun; Azeez collaborating under feature-owner authorization | Freeze event, holdings-read, alert, feedback, authorization, and OpenAPI contracts with synthetic fixtures | `docs/api/`, `docs/database/`, proposed service contracts/test fixtures | `task/event-driven-alerts/contracts` | EDA-00 | In Progress — ADRs/contracts/fixtures drafted and Azeez-approved; Hayyun review pending | 2026-09-27 |
 | EDA-D1-02 | Azeez | Terraform/IaC for Tokyo Gateway/tool, IAM, Singapore scheduler/ECS worker, quotas, alarms, and cleanup; validated plan with no unapproved resources | `infrastructure/` paths confirmed by infra owner, cost register | `task/event-driven-alerts/search-infra` | EDA-D1-01, accepted ADRs | Blocked | 2026-09-24 |
 | EDA-D2-02 | Hayyun; Azeez implementing under feature-owner authorization | Java 25 alert-service foundation, migrations, repositories, state machine, and deterministic fixture path; unit/migration tests pass | `services/event-alert-service/`, schema docs | `task/event-driven-alerts/service-foundation` | EDA-D2-01, DB ADR | In Progress — offline foundation and 7 local tests complete; Hayyun review and ADR acceptance pending | 2026-09-27 |
-| EDA-D1-03 | Azeez | Grouped-query builder, date watermark/overlap, URL deduplication, bounded retry, provider interface, and AgentCore adapter; contract/failure tests pass | Search/provider/ingestion/worker packages | `task/event-driven-alerts/ingestion` | EDA-D1-02, EDA-D2-01 | In Progress — all offline work is complete: provider contract, grouped queries, watermark/lease persistence, URL governance/deduplication, bounded retries and replay, durable accounting, and operational search reservations are integrated; the authenticated operator adapter requires an approved role contract and live AgentCore remains AWS-only | 2026-09-30 |
+| EDA-D1-03 | Azeez | Grouped-query builder, date watermark/overlap, URL deduplication, bounded retry, provider interface, and AgentCore adapter; contract/failure tests pass | Search/provider/ingestion/worker packages | `task/event-driven-alerts/ingestion` | EDA-D1-02, EDA-D2-01 | In Progress — all offline work is complete: the bounded public query universe is derived in Singapore from sufficiently common client holdings and deterministic instrument/sector reference data; provider contracts, watermark/lease persistence, URL governance/deduplication, bounded retries/replay, durable accounting, and operational reservations are integrated; the authenticated operator adapter requires an approved role contract and live AgentCore remains AWS-only | 2026-09-30 |
 | EDA-D2-03 | Hayyun; Azeez implementing under feature-owner authorization | Holdings adapter, deterministic exposure/scoring, reproducible rule versioning, and stale/missing valuation behavior; unit/contract tests pass | Domain/scoring/holdings packages, proposed ADR-0015 | `task/event-driven-alerts/scoring` | EDA-D2-01, EDA-D2-02 | In Progress — offline implementation and 21 service tests complete; Hayyun review and ADR acceptance pending | 2026-09-27 |
 | EDA-D1-04 | Azeez | Luna classifier/brief adapter with schema validation, prompt-injection defenses, public-data enforcement, token caps, rule fallback, and benchmark report | Classification/briefing packages, evaluation fixtures/report | `task/event-driven-alerts/ai` | EDA-D1-03, AI ADR | In Progress — offline safety/contracts, strict schemas/citations, deterministic fallback, default-off Bedrock adapter, provider telemetry, quality/safety reporting, and an 18-case machine-validated AI-draft fixture complete; human label review, live benchmark, and ADR acceptance pending | 2026-09-29 |
 | EDA-D2-04 | Hayyun; Azeez implementing under feature-owner authorization | Alert/decision APIs, own-client authorization, admin-policy implementation, audit events, OpenAPI updates, and authorization tests | API/security/audit packages, `docs/api/` | `task/event-driven-alerts/api` | EDA-D2-02, EDA-D2-03 | In Progress — offline scoped list/detail and decision/feedback APIs, JWT roles, cursor pagination, ownership checks, idempotency, audit outbox, and explicit audited previous/new decision states are implemented; the full 92-test Maven build passes against PostgreSQL 16; Hayyun review and ADR acceptance pending | 2026-09-30 |
 | EDA-D1-05 | Azeez | CloudWatch metrics/dashboard/alarms, cost counters, kill switches, provider-outage behavior, replay controls, and operations runbook | IaC observability, application metrics, `docs/runbooks/` | `task/event-driven-alerts/operations` | EDA-D1-02 through EDA-D1-04 | In Progress — all offline work is complete: default-off controls are wired into ingestion and AI, hard limits/metrics/replay/recovery are tested, and leased/idempotent publication to the existing auditor plus bounded retention are implemented; CloudWatch/IaC, billing and cloud drill evidence remain AWS-only, with ADR acceptance pending | 2026-09-30 |
 | EDA-D2-05 | Hayyun; Azeez implementing under feature-owner authorization | Dashboard alert list/detail, evidence/citations, explanation factors, feedback actions, loading/error/empty states, and UI tests | `frontend/` React/Vite application extended from `task/frontend-building` | EDA-D2-04, UI contract | In Progress — offline implementation is complete: agent/admin views, API/synthetic adapters, audited decision/feedback flows, terminal guards and responsive states; nine tests, lint, production build, and desktop/mobile browser visual inspection pass; Hayyun review remains pending | 2026-09-30 |
-| EDA-D2-06 | Hayyun; Azeez collaborates | Integrate both streams; E2E, security, migration, performance, failure/recovery, and staging tests; complete docs and demo evidence | Integration/E2E tests, CI, runbooks, feature plan | `task/event-driven-alerts/integration` | All D1/D2 tasks | In Progress — all currently actionable non-AWS integration is complete on the isolated task branch: source-to-alert E2E, authorization, idempotency, embedded-Kafka acknowledgement, audit lease/retry recovery and deduplication, retention, 103-test clean Java build, CI-enforced Go auditor contract tests, nine frontend tests/build/lint, browser evidence and docs pass; human review/ADR gates and AWS/staging evidence remain | 2026-09-30 |
+| EDA-D2-06 | Hayyun; Azeez collaborates | Integrate both streams; E2E, security, migration, performance, failure/recovery, and staging tests; complete docs and demo evidence | Integration/E2E tests, CI, runbooks, feature plan | `task/event-driven-alerts/integration` | All D1/D2 tasks | In Progress — all currently actionable non-AWS integration is complete on the isolated task branch: holdings-derived search universe, source-to-alert E2E, authorization, idempotency, embedded-Kafka acknowledgement, audit lease/retry recovery and deduplication, retention, 105-test clean Java build, CI-enforced Go auditor contract tests, nine frontend tests/build/lint, browser evidence and docs pass; human review/ADR gates and AWS/staging evidence remain | 2026-09-30 |
 
 ### 19.3 Execution Sequence for Two Developers
 

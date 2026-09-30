@@ -21,6 +21,8 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_AI_ENABLED` | `false` | Allows model invocation and model-token reservations |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
 | `ALERT_MAX_SEARCHES_PER_RUN` | `4` | Search reservations per worker run |
+| `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.05` | Minimum fraction of distinct snapshot clients before an instrument's public terms are searchable |
+| `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
 | `ALERT_MONTHLY_MODEL_TOKEN_QUOTA` | `200000` | Model-token reservations per UTC month |
 | `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `2000` | Tokens per model reservation |
 | `ALERT_MONTHLY_BUDGET_USD` | `25.00` | Estimated-cost stop threshold |
