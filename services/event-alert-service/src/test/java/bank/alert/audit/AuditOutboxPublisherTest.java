@@ -51,6 +51,27 @@ class AuditOutboxPublisherTest {
         verify(leases).failed(event.getEventId());
     }
 
+    @Test
+    void continuesPublishingTheBatchAfterOneDeliveryFails() {
+        AuditOutboxLeaseService leases = mock(AuditOutboxLeaseService.class);
+        AuditDeliveryGateway gateway = mock(AuditDeliveryGateway.class);
+        AuditOutbox failed = event();
+        AuditOutbox delivered = new AuditOutbox(
+                UUID.fromString("70000000-0000-4000-8000-000000000002"),
+                "alert.generated", 1, "{\"alertId\":\"second\"}", NOW);
+        when(leases.claim(NOW, 10, Duration.ofSeconds(30), 5))
+                .thenReturn(List.of(failed, delivered));
+        doThrow(new IllegalStateException("auditor unavailable"))
+                .when(gateway).publish(eq(failed.getEventId().toString()), any(AuditorEnvelope.class));
+        AuditOutboxPublisher publisher = publisher(leases, gateway);
+
+        publisher.publishAvailable();
+
+        verify(leases).failed(failed.getEventId());
+        verify(gateway).publish(eq(delivered.getEventId().toString()), any(AuditorEnvelope.class));
+        verify(leases).delivered(delivered.getEventId(), NOW);
+    }
+
     private static AuditOutbox event() {
         return new AuditOutbox(UUID.fromString("70000000-0000-4000-8000-000000000001"),
                 "alert.generated", 1, "{\"alertId\":\"synthetic\"}", NOW);

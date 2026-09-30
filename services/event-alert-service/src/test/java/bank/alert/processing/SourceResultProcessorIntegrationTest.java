@@ -9,7 +9,9 @@ import bank.alert.ai.ClassificationStatus;
 import bank.alert.ai.EventClassification;
 import bank.alert.ai.EventDirection;
 import bank.alert.ai.EventType;
+import bank.alert.audit.AuditOutboxLeaseService;
 import bank.alert.domain.AlertStatus;
+import bank.alert.domain.AuditOutbox;
 import bank.alert.domain.SourceResult;
 import bank.alert.fixture.SyntheticFixtureLoader;
 import bank.alert.holdings.SyntheticHoldingsProvider;
@@ -40,6 +42,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -171,6 +174,36 @@ class SourceResultProcessorIntegrationTest {
                 .isEqualTo("[expired]");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_outbox", Long.class))
                 .isEqualTo(auditEvidenceBeforeCleanup);
+    }
+
+    @Test
+    void auditLeasesRecoverAfterExpiryAndStopAtTheRetryCap() {
+        UUID eventId = UUID.fromString("70000000-0000-4000-8000-000000000099");
+        outbox.saveAndFlush(new AuditOutbox(eventId, "alert.generated", 1,
+                "{\"alertId\":\"synthetic\"}", NOW.minusSeconds(120)));
+        AuditOutboxLeaseService leases = new AuditOutboxLeaseService(outbox);
+
+        assertThat(leases.claim(NOW.minusSeconds(60), 10, Duration.ofSeconds(30), 2))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.getStatus()).isEqualTo("LEASED");
+                    assertThat(event.getAttemptCount()).isOne();
+                });
+        outbox.flush();
+
+        assertThat(leases.claim(NOW, 10, Duration.ofSeconds(30), 2))
+                .singleElement().satisfies(event -> {
+                    assertThat(event.getEventId()).isEqualTo(eventId);
+                    assertThat(event.getAttemptCount()).isEqualTo(2);
+                });
+        leases.failed(eventId);
+        outbox.flush();
+
+        assertThat(leases.claim(NOW.plusSeconds(60), 10, Duration.ofSeconds(30), 2))
+                .isEmpty();
+        assertThat(outbox.findById(eventId)).hasValueSatisfying(event -> {
+            assertThat(event.getStatus()).isEqualTo("FAILED");
+            assertThat(event.getAttemptCount()).isEqualTo(2);
+        });
     }
 
     private SourceResultProcessor processor(int auditCapacity) {
