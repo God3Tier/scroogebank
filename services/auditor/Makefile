@@ -3,22 +3,27 @@ DB_PASS      := postgres
 DB_NAME      := myapp
 DB_HOST      := localhost
 DB_PORT      := 5432
+HTTP_PORT    ?= 8080
+GRPC_PORT    ?= :9091
 
-SCHEMA_FILE  := data/audit_log_table.sql
+SCHEMA_FILE  := data/schema.sql
 ORM_DIR      := src/internal/repository/orm
 PROTO_SRC    := proto/audit_request.proto
 PROTO_OUT    := src
 
+COMPOSE := docker compose -f compose.yaml
 TEST_COMPOSE := docker compose -f docker-compose.test.yml -p auditor-test
 
 TOOLS_IMAGE  ?= auditor-tools
-TOOLS_MOUNT  := -v "$(PWD)":/workspace -w /workspace/services/auditor
-TOOLS_RUN    := docker run --rm $(TOOLS_MOUNT) $(TOOLS_IMAGE)
+TOOLS_MOUNT  := -v "$(CURDIR)":/workspace -w /workspace
+TOOLS_RUN    := docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) $(TOOLS_IMAGE)
+DOCKER_BUILD_PROGRESS ?= plain
 
 MOCKERY_ARGS ?=
 
 .PHONY: \
 	db-up db-down db-logs db-reset load-schema psql \
+	run down \
 	tools-image mockery proto \
 	test-db-up test-db-down generate-orm sqlboiler \
 	test test-clean all
@@ -26,26 +31,41 @@ MOCKERY_ARGS ?=
 
 # ============================================================
 # Local development PostgreSQL
-# docker-compose.yml
+# compose.yaml
 # ============================================================
 
+## Start PostgreSQL, Kafka, load the database schema if missing, and run Auditor
+run:
+	$(COMPOSE) up -d postgres kafka
+	@until $(COMPOSE) exec -T postgres pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done
+	@until $(COMPOSE) exec -T kafka kafka-topics --bootstrap-server localhost:29092 --list >/dev/null 2>&1; do sleep 2; done
+	@if ! $(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -tAc "SELECT to_regclass('public.audit_log') IS NOT NULL" | grep -qx t; then \
+		echo "Loading Auditor database schema..."; \
+		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
+	fi
+	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) KAFKABROKERS=localhost:9092 HANDLER_IP=localhost:9092 go run ./src/serverd
+
 db-up:
-	docker compose up -d postgres
+	$(COMPOSE) up -d postgres
 	@echo "Waiting for PostgreSQL..."
-	@until docker compose exec -T postgres \
+	@until $(COMPOSE) exec -T postgres \
 		pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
 		sleep 1; \
 	done
 	@echo "PostgreSQL is ready."
 
 db-down:
-	docker compose down
+	$(COMPOSE) down --remove-orphans
+	$(TEST_COMPOSE) down --remove-orphans
+
+## Stop all Auditor Compose containers and networks, keeping database volumes
+down: db-down
 
 db-reset:
-	docker compose down -v
+	$(COMPOSE) down -v
 
 db-logs:
-	docker compose logs -f postgres
+	$(COMPOSE) logs -f postgres
 
 load-schema:
 	PGPASSWORD=$(DB_PASS) psql \
@@ -68,10 +88,10 @@ psql:
 # ============================================================
 
 tools-image:
-	docker build \
+	docker build --progress=$(DOCKER_BUILD_PROGRESS) --platform linux/amd64 \
 		--target tools \
 		-t $(TOOLS_IMAGE) \
-		services/auditor
+		.
 
 mockery: tools-image
 	$(TOOLS_RUN) mockery $(MOCKERY_ARGS)
@@ -80,9 +100,9 @@ proto:
 	mkdir -p $(PROTO_OUT)
 	protoc \
 		--go_out=$(PROTO_OUT) \
-		--go_opt=paths=source_relative \
+		--go_opt=module=auditor/src \
 		--go-grpc_out=$(PROTO_OUT) \
-		--go-grpc_opt=paths=source_relative \
+		--go-grpc_opt=module=auditor/src \
 		$(PROTO_SRC)
 
 
@@ -111,7 +131,7 @@ test-db-up:
 		psql \
 		-U $(DB_USER) \
 		-d $(DB_NAME) \
-		< services/auditor/$(SCHEMA_FILE)
+		< $(SCHEMA_FILE)
 
 	@echo "Database schema loaded."
 
@@ -134,18 +154,6 @@ generate-orm: test-db-up
 		psql \
 		-o src/internal/repository/orm \
 		--wipe
-
-	@echo "Renaming generated ORM files..."
-
-	@for f in $(ORM_DIR)/*.go; do \
-		if [ -f "$$f" ]; then \
-			base=$$(basename "$$f"); \
-			case "$$base" in \
-				mocks_*) ;; \
-				*) mv "$$f" "$(ORM_DIR)/mocks_$$base" ;; \
-			esac \
-		fi \
-	done
 
 	@echo "ORM generation complete."
 

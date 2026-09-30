@@ -23,14 +23,22 @@ func (s ServiceType) IsValid() bool {
 func (s ServiceType) IsValidAction(action string) bool {
 	switch s {
 	case UserManagementServiceType:
-		return strings.EqualFold("CRUD", action)
+		return strings.EqualFold("CRUD", action) ||
+			strings.EqualFold("CREATE", action) ||
+			strings.EqualFold("READ", action) ||
+			strings.EqualFold("UPDATE", action) ||
+			strings.EqualFold("DISABLE", action) ||
+			strings.EqualFold("PASSWORD_RESET", action)
 
 	case CRMServiceType:
-		return strings.EqualFold("CRUD", action)
+		return strings.EqualFold("CREATE", action) ||
+			strings.EqualFold("GET", action) ||
+			strings.EqualFold("UPDATE", action) ||
+			strings.EqualFold("DELETE", action)
 
 	case TransactionServiceType:
 		return strings.EqualFold("TRANSACTION_INGESTION", action)
-		
+
 	case AuditService:
 		return strings.EqualFold("SECURITY_VIOLATION", action) || strings.EqualFold("VALIDATION_REJECTED", action)
 	}

@@ -6,10 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"time"
+	"uuid"
 )
 
 func (i impl) ReadOffset(ctx context.Context, checked *Checked) {
-	raw, err := i.svc.VerifyChainByOffset(ctx, checked.sequence, checked.offset)
+	invalid_chain, err := i.auditSvc.VerifyChainByOffset(ctx, checked.sequence, checked.offset)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -20,12 +22,30 @@ func (i impl) ReadOffset(ctx context.Context, checked *Checked) {
 		return
 	}
 
-	if len(raw) == 0 {
+	if len(invalid_chain) == 0 {
 		log.Printf("No issue with chain sequence between %d and %d\n", checked.sequence, checked.sequence+checked.offset)
 		return
 	}
 
-	payload, err := json.Marshal(raw)
+	for hash, _ := range invalid_chain {
+		tamperedLog, err := i.auditSvc.DeleteAuditLog(ctx, hash)
+		if err != nil {
+			log.Printf("Unable to get remove audit chain  %s\n", err.Error())
+			continue
+		}
+		err = i.corruptedSvc.InsertCorruptedAuditLog(ctx, models.CorruptedAuditLog{
+			ID:           uuid.New().String(),
+			Payload:      tamperedLog,
+			DateOfDetect: time.Now(),
+		})
+
+		if err != nil {
+			log.Printf("Unable to insert to corrupted audit chain  %s\n", err.Error())
+			continue
+		}
+	}
+
+	payload, err := json.Marshal(invalid_chain)
 
 	if err != nil {
 		log.Printf("Unable to marshal errors\n")

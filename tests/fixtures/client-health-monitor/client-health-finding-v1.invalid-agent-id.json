@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1",
+  "findingId": "finding-agent-id",
+  "clientId": "client-000001",
+  "agentId": "caller-controlled-agent",
+  "analysisRunId": "run-000003",
+  "rulesetVersion": "relationship-health-v1",
+  "analysisWindow": {
+    "start": "2026-05-31T00:00:00Z",
+    "end": "2026-09-28T00:00:00Z"
+  },
+  "signals": [
+    {
+      "signalId": "signal-recurring-000002",
+      "accountId": "account-000001",
+      "type": "RECURRING_CREDIT_INTERRUPTION",
+      "ruleVersion": "recurring-credit-v1",
+      "severity": "MEDIUM",
+      "window": {
+        "baselineStart": "2026-05-31T00:00:00Z",
+        "baselineEnd": "2026-08-29T00:00:00Z",
+        "comparisonStart": "2026-08-29T00:00:00Z",
+        "comparisonEnd": "2026-09-28T00:00:00Z"
+      },
+      "evidence": {
+        "expectedCadenceDays": 30,
+        "previousOccurrenceCount": 3,
+        "daysSinceLastOccurrence": 67
+      },
+      "fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "priorityInputs": {
+    "highestSeverity": "MEDIUM",
+    "signalCount": 1
+  },
+  "correlationId": "correlation-agent-id",
+  "detectedAt": "2026-09-29T04:05:00Z"
+}

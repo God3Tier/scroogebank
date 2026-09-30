@@ -2,17 +2,17 @@
 
 Design rationale that doesn't belong in any single service's README because it applies system-wide. See each service's own README for how it individually satisfies the mandatory NFRs (Scalability, Availability, Maintainability/Extensibility).
 
-## Deployment model: AWS only
+## Deployment model: AWS in production; local database profile with Cognito security
 
-This system has no local runtime. The services require a real RDS instance, a real Cognito user pool, and Cloud Map service discovery, and every configuration value is read from an environment variable **with no default**, so a missing one fails the container at startup rather than silently falling back to a local-shaped value.
+Production runs on AWS. The services use RDS, Cognito, and Cloud Map, and production configuration is supplied by task definitions and Secrets Manager rather than local defaults.
 
-This is a deliberate narrowing. An earlier revision ran the full stack locally via docker-compose (Postgres + a Keycloak container standing in for Cognito), which bought environment parity at the cost of a second IdP implementation, a second set of configuration defaults, and a standing risk of the two paths drifting. Removing it deleted `KeycloakIdentityProviderClient`, the `local`/`aws` Spring profile split, and the dual-claim role parsing in both the backend `JwtRoleConverter`s and the frontend's `roles.ts`.
+The user-service `local` profile uses local PostgreSQL and enables Swagger while retaining Cognito provisioning, JWT validation, and Admin-only method authorization. It is not an authentication bypass. Feature 2 independently validates Cognito access tokens and enforces agent ownership of client profiles and accounts; an API Gateway authorizer is an additional edge check, not a replacement for service-side validation.
 
-The cost is real and worth stating: there is no way to exercise the running system without deploying it, so the feedback loop for anything beyond unit and repository tests now runs through AWS. Testcontainers-backed tests still run on a developer machine (they need Docker, not the application stack), which keeps the data layer verifiable locally.
+Testcontainers-backed tests still run on a developer machine (they need Docker, not the application stack), which keeps the data layer verifiable locally.
 
 ## MFA
 
-Feature 1 requires MFA. The Cognito User Pool (`infra/terraform/modules/cognito`) sets `mfa_configuration = "ON"` with TOTP software tokens, so every user must enrol MFA on first sign-in — no custom code. The Spring Security resource-server config validates tokens identically regardless; MFA enforcement is entirely Cognito's responsibility and never touches application code.
+Feature 1 requires MFA. Cognito must enforce MFA in the user-pool configuration; the application does not implement MFA itself. The user-service validates access-token type, issuer, app-client ID, signature, and time claims, while MFA enrollment and challenge enforcement remain Cognito responsibilities. The infrastructure directory is absent in this checkout, so the deployed pool's MFA setting cannot be verified here.
 
 ## NFR 12 (Data Segregation): single-tenant assumption, not built
 
@@ -30,9 +30,11 @@ An earlier revision used a single shared instance to save cost. What killed it w
 
 The cost is one database instance per service instead of one shared instance, which is the honest price of removing a manual deployment step and getting real per-service isolation. Every instance holds actual CRM records, so all of them stay Multi-AZ for the mandatory Availability NFR.
 
-## No message broker
+## No message broker (superseded for the auditor service)
 
-Every service serves its own synchronous REST API, and no service consumes events from another, so there is no Kafka/RabbitMQ/SQS. A broker earns its cost when there are multiple consumers, ordering/backpressure requirements, or a need to decouple producer/consumer lifecycles — none of which apply today. Introducing one here would be infrastructure for its own sake.
+Every service serves its own synchronous REST API, and no service consumes events from another *except the auditor*, which reads audit events via a queue. A broker earns its cost when there are multiple consumers, ordering/backpressure requirements, or a need to decouple producer/consumer lifecycles — none of which apply to the rest of the system today, so this remains the default for every other service. Introducing one elsewhere would still be infrastructure for its own sake.
+
+The auditor's queue is Amazon SQS (previously Kafka before it) — see [ADR-0004](../adr/ADR-0004-auditor-kafka-to-sqs-migration.md) for the rationale and the earlier Kafka setup this replaced.
 
 ## Resiliency scope
 

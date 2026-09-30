@@ -1,0 +1,10 @@
+with-expecter: True
+dir: "{{.InterfaceDir}}"
+filename: mocks.go
+inpackage: True
+outpkg: "{{.PackageName}}"
+packages:
+  receiver/src/internal/repository:
+    interfaces:
+      Transaction:
+        config: {}
