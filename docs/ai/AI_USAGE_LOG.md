@@ -296,3 +296,23 @@
   was used.
 - Verification: focused selection/query tests and the full local verification
   suite are recorded in the offline integration evidence.
+
+## 2026-09-30 — Stakeholder and ASR report documentation
+
+- Human owner: Azeez; team review is required before proposal/final-report use.
+- Tool: OpenAI Codex.
+- Use: draft a Solution View that introduces referenced AWS services, distinguish
+  application users from IAM identities, document stakeholder permissions, and
+  write Admin, Agent, and Event-Driven Client Alert ASRs with main/alternative
+  flows, pre/post-conditions, architectural significance, and Mermaid sequences.
+- Human verification required: confirm the Admin/Agent core-feature behavior with
+  the relevant owners; confirm AWS service names and deployed evidence with the
+  platform owner; accept the proposed alert ADRs before presenting planned
+  controls as implemented.
+- Data: repository architecture decisions, plans, NFR notes, and synthetic-system
+  descriptions only. No credentials, real client data, AWS connection, external
+  model call, or production evidence was used.
+- Verification: cross-checked terminology against ADR-0004 and proposed
+  ADR-0006 through ADR-0016; checked Markdown structure, Mermaid participants,
+  regional privacy boundaries, and explicit separation of current MVP behavior
+  from future vector-similarity work.
