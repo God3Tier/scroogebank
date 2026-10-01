@@ -44,13 +44,6 @@ function ClientHealthMonitor() {
     }, 900)
   }
 
-  function resetDemo() {
-    clearTimeout(timer.current)
-    setTasks(freshTasks())
-    setSelectedId('RH-2048')
-    setAnalysisPhase('idle')
-  }
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -64,10 +57,6 @@ function ClientHealthMonitor() {
           <a href="#clients"><span>♙</span>My Clients</a>
           <a href="#activity"><span>↔</span>Transactions</a>
         </nav>
-        <div className="sidebar-note">
-          <span className="live-dot" /> Demo workspace
-          <small>Synthetic data only</small>
-        </div>
         <div className="agent-card">
           <div className="avatar small">MC</div>
           <div><strong>Maya Chen</strong><span>Relationship Agent</span></div>
@@ -82,7 +71,6 @@ function ClientHealthMonitor() {
             <p>Prioritize proactive human review using explainable activity signals.</p>
           </div>
           <div className="top-actions">
-            <button className="button secondary" onClick={resetDemo}>↻ Reset demo</button>
             <button className="button primary" onClick={runAnalysis} disabled={analysisPhase === 'running'}>
               {analysisPhase === 'running' ? <><span className="spinner" />Analyzing…</> : '▶ Run analysis'}
             </button>
@@ -160,7 +148,7 @@ function TaskDetail({ task, onAccept, onComplete, onDismiss }) {
       </div>
 
       {!hasDetails ? (
-        <div className="compact-empty"><span>◇</span><h3>Mock task summary</h3><p>Select the high-priority task to view the complete demo evidence and workflow.</p></div>
+        <div className="compact-empty"><span>◇</span><h3>Task summary unavailable</h3><p>Select another relationship task to continue.</p></div>
       ) : (
         <>
           <div className="health-overview">
