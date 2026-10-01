@@ -23,6 +23,10 @@ function NavBar() {
           <span className="material-symbols-outlined" aria-hidden="true">support_agent</span>
           Agent Dashboard
         </NavLink>
+        <NavLink to="/agent/client-health">
+          <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
+          Client Health
+        </NavLink>
         <NavLink to="/admin">
           <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
           Admin Dashboard
