@@ -11,16 +11,17 @@
 ## Context
 
 AI generation and human decisions require durable, tamper-resistant audit facts.
-The existing auditor consumes Kafka, but database commits and audit publication
-cannot be made atomic across services.
+The existing auditor consumes Amazon SQS under the accepted auditor migration
+decision, but database commits and audit publication cannot be made atomic across
+services.
 
 ## Decision
 
 Write a versioned audit outbox row in the same PostgreSQL transaction as every
 classification result, briefing generation result, alert creation, decision, and
 feedback mutation. A bounded publisher sends the existing auditor-compatible
-message and marks the row delivered only after acknowledgement. Event IDs make
-delivery idempotent.
+message to the auditor's SQS queue and marks the row delivered only after SQS
+acknowledgement. Event IDs make delivery idempotent.
 
 Audit payloads contain actor subject/role where applicable, action, resource ID,
 timestamp, correlation ID, before/after state codes, rule/prompt/model versions,

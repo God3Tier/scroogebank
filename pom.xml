@@ -23,6 +23,7 @@
     <modules>
         <module>services/user-service</module>
         <module>services/event-alert-service</module>
+        <module>services/client-health-monitor-service</module>
     </modules>
 
     <dependencyManagement>

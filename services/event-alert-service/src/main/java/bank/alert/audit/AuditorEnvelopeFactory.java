@@ -27,7 +27,7 @@ public class AuditorEnvelopeFactory {
             payload.put("occurred_at", event.getCreatedAt().toString());
             payload.set("data", originalPayload);
             String actor = originalPayload.path("actorSubject").asText("event-alert-service");
-            return new AuditorEnvelope("EVENT_ALERT", action(event.getEventType()),
+            return new AuditorEnvelope(event.getEventId().toString(), "EVENT_ALERT", action(event.getEventType()),
                     "EVENT_ALERT_SERVICE", actor, payload);
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("audit outbox payload is not valid JSON", exception);

@@ -26,7 +26,10 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_MONTHLY_MODEL_TOKEN_QUOTA` | `200000` | Model-token reservations per UTC month |
 | `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `2000` | Tokens per model reservation |
 | `ALERT_MONTHLY_BUDGET_USD` | `25.00` | Estimated-cost stop threshold |
-| `ALERT_AUDIT_PUBLISHER_ENABLED` | `false` | Enables leased delivery to the existing local auditor Kafka topic |
+| `ALERT_AUDIT_PUBLISHER_ENABLED` | `false` | Enables leased delivery to the auditor SQS queue |
+| `AUDIT_QUEUE_URL` | empty | Required SQS queue URL when audit publishing is enabled |
+| `AWS_REGION` | `ap-southeast-1` | Region of the auditor SQS queue |
+| `AWS_ENDPOINT_URL` | empty | LocalStack endpoint for local integration only; omit in AWS |
 | `ALERT_AUDIT_PUBLISH_MAX_ATTEMPTS` | `10` | Maximum delivery claims before an event remains failed for investigation |
 | `ALERT_RETENTION_ENABLED` | `true` | Enables bounded local content expiry |
 
@@ -87,7 +90,7 @@ boundary. It does not move the scheduler watermark. Before a production replay:
 
 For local auditor recovery, inspect `audit_outbox` by status and attempt count.
 `PENDING` and `FAILED` rows below the attempt cap are reclaimed in creation order;
-an expired `LEASED` row is also safe to reclaim. Confirm Kafka and the auditor are
+an expired `LEASED` row is also safe to reclaim. Confirm SQS and the auditor are
 healthy before enabling the publisher. Never edit payloads or mark rows delivered
 manually; delivery state changes only after broker acknowledgement.
 

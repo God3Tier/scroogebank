@@ -11,8 +11,6 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-  kafka:
-    bootstrap-servers: ${ALERT_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   security:
     oauth2:
       resourceserver:
@@ -24,9 +22,11 @@ alert:
   audit:
     max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
     publisher:
-      # Local auditor integration is opt-in. The default never opens a broker connection.
+      # Auditor delivery is opt-in. The default never opens an SQS connection.
       enabled: ${ALERT_AUDIT_PUBLISHER_ENABLED:false}
-      topic: ${ALERT_AUDIT_TOPIC:audit.insert}
+      queue-url: ${AUDIT_QUEUE_URL:}
+      region: ${AWS_REGION:ap-southeast-1}
+      endpoint: ${AWS_ENDPOINT_URL:}
       interval: ${ALERT_AUDIT_PUBLISH_INTERVAL:5s}
       batch-size: ${ALERT_AUDIT_PUBLISH_BATCH_SIZE:50}
       max-attempts: ${ALERT_AUDIT_PUBLISH_MAX_ATTEMPTS:10}

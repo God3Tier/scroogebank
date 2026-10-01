@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record AuditorEnvelope(
+        @JsonProperty("event_id") String eventId,
         @JsonProperty("event_type") String eventType,
         String action,
         @JsonProperty("source_service") String sourceService,

@@ -69,13 +69,14 @@ bounded audit backlog has insufficient capacity.
 
 The audit publisher is disabled by default with
 `ALERT_AUDIT_PUBLISHER_ENABLED=false`. When deliberately enabled for the local
-auditor, it leases at most 50 rows, publishes the existing `audit.insert` Kafka
-envelope, and marks delivery only after broker acknowledgement. The auditor uses
-the source event ID as its audit-chain primary key for deduplication; expired
+auditor, it leases at most 50 rows, publishes the auditor-compatible envelope to
+the `audit-insert` SQS queue, and marks delivery only after SQS acknowledges the
+send. The auditor stores the source event ID under a unique constraint for
+deduplication; expired
 leases are reclaimable and retries stop after the configured maximum. The auditor
-explicitly allowlists alert event actions. The test suite starts an in-process
-Kafka broker to verify the acknowledged envelope round trip without requiring a
-developer-managed broker or any cloud connection.
+explicitly allowlists alert event actions. Unit and consumer contract tests verify
+the SQS envelope, acknowledgement, retry, validation, and deduplication behavior
+without requiring a cloud connection.
 
 A bounded hourly retention job deletes expired briefing content and redacts
 expired source title/URL/domain/publication content while preserving stable IDs,
@@ -109,9 +110,10 @@ Successful decision responses include the audited `previousStatus` and
 The test profile uses a non-routable example issuer and mocked/local security;
 local verification does not contact Cognito or any AWS service.
 
-Local auditor delivery additionally requires Kafka on `localhost:9092` and the
-auditor consumer. Set `ALERT_AUDIT_PUBLISHER_ENABLED=true` only for that local
-integration; the default build and test path opens no broker connection.
+Local auditor delivery requires the auditor's LocalStack `audit-insert` queue.
+Set `AUDIT_QUEUE_URL`, `AWS_REGION`, and (for LocalStack only)
+`AWS_ENDPOINT_URL`, then set `ALERT_AUDIT_PUBLISHER_ENABLED=true`. The default
+build and test path opens no SQS connection.
 
 `GET /api/alerts` returns a stable, cursor-paginated list. Agent results are
 scoped in the database query to the authenticated subject; admins receive the

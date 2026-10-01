@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1",
+  "findingId": "finding-wrong-evidence",
+  "clientId": "client-000001",
+  "analysisRunId": "run-000004",
+  "rulesetVersion": "relationship-health-v1",
+  "analysisWindow": {
+    "start": "2026-05-31T00:00:00Z",
+    "end": "2026-09-28T00:00:00Z"
+  },
+  "signals": [
+    {
+      "signalId": "signal-wrong-evidence",
+      "accountId": "account-000001",
+      "type": "TRANSACTION_ACTIVITY_DECLINE",
+      "ruleVersion": "activity-decline-v1",
+      "severity": "MEDIUM",
+      "window": {
+        "baselineStart": "2026-05-31T00:00:00Z",
+        "baselineEnd": "2026-08-29T00:00:00Z",
+        "comparisonStart": "2026-08-29T00:00:00Z",
+        "comparisonEnd": "2026-09-28T00:00:00Z"
+      },
+      "evidence": {
+        "expectedCadenceDays": 30,
+        "previousOccurrenceCount": 3,
+        "daysSinceLastOccurrence": 67
+      },
+      "fingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "priorityInputs": {
+    "highestSeverity": "MEDIUM",
+    "signalCount": 1
+  },
+  "correlationId": "correlation-wrong-evidence",
+  "detectedAt": "2026-09-29T04:05:00Z"
+}

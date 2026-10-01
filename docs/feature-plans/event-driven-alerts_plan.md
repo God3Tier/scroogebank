@@ -40,10 +40,9 @@ available service documentation. The following facts constrain the design:
   are approved.
 - Agents must only access their own clients. Admin visibility must follow an
   agreed role policy.
-- The current NFR notes describe synchronous REST and “no message broker,” but the
-  auditor service and local Compose configuration already use Kafka. This
-  documentation/architecture inconsistency must be resolved before this feature
-  chooses Kafka, EventBridge, SQS, or a synchronous job flow.
+- The auditor now consumes a standard Amazon SQS queue under the accepted auditor
+  migration ADR. Alert processing still introduces no alert-specific broker; its
+  transactional outbox publishes only audit envelopes to that shared contract.
 - The expected ADR, OpenAPI, schema, testing, runbook, cost, and AI-usage documents
   are not all present on the current `dev` baseline.
 - `docs/architecture/nfr-notes.md` describes an AWS-only deployment using Cognito,
@@ -258,10 +257,10 @@ The prerequisite ADRs must confirm them before infrastructure is created.
 | AWS Budgets and Cost Anomaly Detection | Billing scope | Protect the USD 300 whole-project limit | Feature tags/metrics, search quota alarms, and model-spend alerts |
 
 The MVP does **not** require AgentCore Runtime/Harness, Bedrock Knowledge Bases,
-OpenSearch/vector storage, SageMaker, Step Functions, SQS, SNS, MSK, or ElastiCache.
-Adding any of them requires a demonstrated need, cost estimate, and ADR. The
-existing auditor integration remains an application dependency rather than a new
-AWS service choice in this plan.
+OpenSearch/vector storage, SageMaker, Step Functions, an alert-specific SQS/SNS
+queue, MSK, or ElastiCache. Adding any of them requires a demonstrated need, cost
+estimate, and ADR. Publishing audit envelopes to the auditor's existing SQS queue
+is an application dependency rather than an alert-processing service choice.
 
 ## 7. Functional Requirements
 
@@ -582,8 +581,9 @@ validation, and alternatives.
    ownership, MVP guardrails, retention, and budget defaults are confirmed.
 2. **Holdings and valuation source/ownership** — define data, freshness, currency,
    service boundary, and synthetic demo source.
-3. **Processing architecture** — scheduled jobs versus EventBridge, SQS/SNS,
-   Kafka, or another mechanism; reconcile the “no broker” note and auditor code.
+3. **Processing architecture** — scheduled jobs and PostgreSQL idempotency are
+   proposed in ADR-0006; audit-only delivery follows the auditor's accepted SQS
+   contract and does not introduce an alert-processing broker.
 4. **Service/runtime boundary** — extend an existing service or add a Java 25
    service; any non-Java deployed runtime needs explicit justification.
 5. **Database topology and schemas** — ownership, RDS impact, retention, backup,
@@ -705,7 +705,7 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 | EDA-D2-04 | Hayyun; Azeez implementing under feature-owner authorization | Alert/decision APIs, own-client authorization, admin-policy implementation, audit events, OpenAPI updates, and authorization tests | API/security/audit packages, `docs/api/` | `task/event-driven-alerts/api` | EDA-D2-02, EDA-D2-03 | In Progress — offline scoped list/detail and decision/feedback APIs, JWT roles, cursor pagination, ownership checks, idempotency, audit outbox, and explicit audited previous/new decision states are implemented; the full 92-test Maven build passes against PostgreSQL 16; Hayyun review and ADR acceptance pending | 2026-09-30 |
 | EDA-D1-05 | Azeez | CloudWatch metrics/dashboard/alarms, cost counters, kill switches, provider-outage behavior, replay controls, and operations runbook | IaC observability, application metrics, `docs/runbooks/` | `task/event-driven-alerts/operations` | EDA-D1-02 through EDA-D1-04 | In Progress — all offline work is complete: default-off controls are wired into ingestion and AI, hard limits/metrics/replay/recovery are tested, and leased/idempotent publication to the existing auditor plus bounded retention are implemented; CloudWatch/IaC, billing and cloud drill evidence remain AWS-only, with ADR acceptance pending | 2026-09-30 |
 | EDA-D2-05 | Hayyun; Azeez implementing under feature-owner authorization | Dashboard alert list/detail, evidence/citations, explanation factors, feedback actions, loading/error/empty states, and UI tests | `frontend/` React/Vite application extended from `task/frontend-building` | EDA-D2-04, UI contract | In Progress — offline implementation is complete: agent/admin views, API/synthetic adapters, audited decision/feedback flows, terminal guards and responsive states; nine tests, lint, production build, and desktop/mobile browser visual inspection pass; Hayyun review remains pending | 2026-09-30 |
-| EDA-D2-06 | Hayyun; Azeez collaborates | Integrate both streams; E2E, security, migration, performance, failure/recovery, and staging tests; complete docs and demo evidence | Integration/E2E tests, CI, runbooks, feature plan | `task/event-driven-alerts/integration` | All D1/D2 tasks | In Progress — all currently actionable non-AWS integration is complete on the isolated task branch: holdings-derived search universe, source-to-alert E2E, authorization, idempotency, embedded-Kafka acknowledgement, audit lease/retry recovery and deduplication, retention, 105-test clean Java build, CI-enforced Go auditor contract tests, nine frontend tests/build/lint, browser evidence and docs pass; human review/ADR gates and AWS/staging evidence remain | 2026-09-30 |
+| EDA-D2-06 | Hayyun; Azeez collaborates | Integrate both streams; E2E, security, migration, performance, failure/recovery, and staging tests; complete docs and demo evidence | Integration/E2E tests, CI, runbooks, feature plan | `task/event-driven-alerts/integration` | All D1/D2 tasks | In Progress — merged current `dev`; alert audit delivery now uses the auditor's SQS envelope and unique event ID contract with producer and consumer tests. Other actionable offline integration includes holdings-derived search, source-to-alert E2E, authorization, idempotency, audit lease/retry recovery, retention, frontend verification, and documentation; human review/ADR gates and AWS/staging evidence remain | 2026-10-01 |
 | EDA-D2-07 | Azeez | Document the proposal/report Solution View, stakeholder IAM/application permissions, and three presentation-ready ASRs with sequence diagrams | `docs/architecture/stakeholders-and-asrs.md`, feature plan, AI usage log | `task/event-driven-alerts/asr-documentation` | EDA-D2-06 and current platform NFR notes | Complete — draft distinguishes deployed/current controls from proposed AWS and post-MVP vector work; human review remains required before report submission | 2026-09-30 |
 
 ### 19.3 Execution Sequence for Two Developers
