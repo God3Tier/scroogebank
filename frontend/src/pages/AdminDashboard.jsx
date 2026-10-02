@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import admins from '../data/admins.js'
 import agents from '../data/agents.js'
@@ -8,6 +9,7 @@ import StatCard from '../components/StatCard.jsx'
 
 function AdminDashboard() {
   const [openSection, setOpenSection] = useState(null)
+  const navigate = useNavigate()
 
   function toggleSection(section) {
     setOpenSection(openSection === section ? null : section)
@@ -34,6 +36,9 @@ function AdminDashboard() {
       </div>
 
       <div className="action-bar">
+        <button onClick={() => navigate('/admin/alerts')}>
+          Review Event Alerts
+        </button>
         <button
           onClick={() => toggleSection('createUser')}
           aria-expanded={openSection === 'createUser'}

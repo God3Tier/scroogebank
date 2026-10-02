@@ -14,7 +14,7 @@ function Login() {
         event.preventDefault()
 
         const admin = admins.find(
-            (admin) => 
+            (admin) =>
                 admin.email === email &&
                 admin.password === password
         )

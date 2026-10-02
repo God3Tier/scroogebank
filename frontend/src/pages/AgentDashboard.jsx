@@ -42,6 +42,9 @@ function AgentDashboard() {
             </div>
 
             <div className="action-bar">
+                <button onClick={() => navigate('/agent/alerts')}>
+                    Review Event Alerts
+                </button>
                 <button
                     onClick={() => toggleSection('createClientProfile')}
                     aria-expanded={openSection === 'createClientProfile'}
