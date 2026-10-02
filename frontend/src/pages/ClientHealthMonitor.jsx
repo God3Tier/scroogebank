@@ -29,11 +29,6 @@ function ClientHealthMonitor() {
     } : task))
   }
 
-  const resetDemo = () => {
-    setTasks(freshClientHealthTasks())
-    setSelectedId('RH-2048')
-  }
-
   return (
     <div className="page health-page">
       <header className="health-page-header">
@@ -42,7 +37,6 @@ function ClientHealthMonitor() {
           <h1>Client Health Monitor</h1>
           <p className="page-subtitle">Prioritise meaningful changes in client activity and coordinate proactive follow-up.</p>
         </div>
-        <button onClick={resetDemo}><span className="material-symbols-outlined" aria-hidden="true">restart_alt</span> Reset demo</button>
       </header>
 
       <div className="health-context"><span className="material-symbols-outlined" aria-hidden="true">monitoring</span><div><strong>Relationship health review</strong><p>Signals support agent judgement and are not fraud, AML, credit, or hardship decisions.</p></div></div>
