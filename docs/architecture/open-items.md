@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-01.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-03.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
@@ -72,7 +72,7 @@ Transaction-service must provide matched activity (client and account IDs, stabl
 
 ## 17. Budget with the x-factors
 
-Re-run the AWS Pricing Calculator and pick the cost levers in [Environments and cost (target architecture)](../cost/budget.md) before deploying them.
+The line-item estimate for the planned lifecycle is about USD 205 ([Environments and cost (target architecture)](../cost/budget.md)). Track actual spend weekly in AWS Cost Explorer, and agree which cost levers to apply if it runs ahead of plan.
 
 ## 18. Audit sender verification
 
