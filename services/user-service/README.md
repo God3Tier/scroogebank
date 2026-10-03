@@ -36,6 +36,8 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 
 **Role changes.** `PATCH /api/users/{id}/role` moves the user between Cognito groups and then updates the local `role` column. It adds the new group before removing the old one, so a failure part-way leaves the user in both groups rather than in none; both calls are idempotent, so repeating the request completes the change. Tokens already issued still carry the old `cognito:groups` claim until they expire and are refreshed, so a demoted admin keeps admin access for up to one access-token lifetime.
 
+**`idpSub` in responses.** Every user response includes `idpSub`, the user's Cognito `sub`. Other services identify agents by it, not by `id`: the client profile service stores it as `created_by_agent_id`, and audit events carry it as `actor_id`. Without it, an admin view such as the business dashboard's per-agent table cannot match those records to a named user. It is safe to return because every endpoint here is admin-only, and the `sub` is already in every token the user presents. A future non-admin endpoint that returns a user should use a narrower response.
+
 ## NFR notes
 
 - **Maintainability/Extensibility**: adding a role means a new Cognito group plus an enum value; swapping the IdP entirely means one new `IdentityProviderClient` implementation — no changes to controllers or the security config.
