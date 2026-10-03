@@ -62,6 +62,9 @@ class UserListingControllerTest {
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].email").value("alice@scroogebank.com"))
+                // Other services key agents by Cognito sub, so the roster must
+                // carry it for an admin view to name them.
+                .andExpect(jsonPath("$.content[0].idpSub").value("sub-alice"))
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.size").value(5))
                 .andExpect(jsonPath("$.totalElements").value(6))
