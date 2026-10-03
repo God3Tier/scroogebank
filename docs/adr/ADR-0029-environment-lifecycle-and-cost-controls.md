@@ -11,7 +11,7 @@
 
 ## Context
 
-The project has a USD 300 hard spending limit and a USD 100 protected contingency (`project_plan.md` §1). The full target design has 8 Fargate services, 7 RDS instances with Multi-AZ standbys, two NAT gateways, WAF and AI usage. Left on 24/7 it costs roughly USD 338–402 a month normally and USD 523–607 with high availability ([environments and cost](../cost/budget.md)), so it would exceed the limit. The high-availability features still have to be demonstrated.
+The project has a USD 300 hard spending limit and a USD 100 protected contingency (`project_plan.md` §1). The full target design has 8 Fargate services, 7 RDS instances with Multi-AZ standbys, two NAT gateways, WAF and AI usage. Left on 24/7 it costs roughly USD 570–660 a month normally and USD 755–860 with high availability ([environments and cost](../cost/budget.md)), about twice the limit. The high-availability features still have to be demonstrated.
 
 ## Decision Drivers
 
@@ -24,7 +24,7 @@ The project has a USD 300 hard spending limit and a USD 100 protected contingenc
 ### Option A: run the full design 24/7
 
 - Pros: always ready.
-- Cons: about USD 340–400 a month, or 520–610 with high availability; over budget.
+- Cons: about USD 570–660 a month, or 755–860 with high availability; about twice the budget.
 
 ### Option B: cut the design (for example single-AZ only, no WAF, fewer services)
 
@@ -36,6 +36,11 @@ The project has a USD 300 hard spending limit and a USD 100 protected contingenc
 - Pros: the design stays complete; cost scales with use.
 - Cons: discipline and automation are needed; environments are not always on.
 
+### Option D: create and destroy the whole stack for every session
+
+- Pros: about USD 65 cheaper than Option C (about USD 140 in total), because the ALB, NAT gateways and database storage bill only during sessions.
+- Cons: needs a persistent stack (Cognito users and their TOTP enrolments, client-keys, KMS keys, the S3 anchor bucket, ECR, secrets) split from an ephemeral one; RDS must be restored from snapshots every session; a recreated NAT gateway gets a new Elastic IP, which breaks the SFTP server's allow-list; more Terraform runs and slower session starts.
+
 ## Decision
 
 | Environment | Where | Lifecycle |
@@ -44,7 +49,8 @@ The project has a USD 300 hard spending limit and a USD 100 protected contingenc
 | staging | AWS, reduced size: single-AZ `db.t4g.micro`, one NAT gateway, Fargate Spot, no WAF | Created with Terraform for promotion testing, destroyed afterwards |
 | prod / demo | AWS, the full target design | Runs for the final 2–3 weeks; ECS scales to 0 and RDS stops outside working and demo hours |
 
-- **Multi-AZ standbys and the second NAT gateway run only in the high-availability demo week** (roughly USD 35–40 extra). Outside that week, the databases run single-AZ with one NAT gateway.
+- **Between sessions ECS scales to 0 and RDS is stopped (stop model); the ALB and NAT gateways stay up**, so the NAT gateway keeps its Elastic IP on the SFTP server's allow-list. Stopped RDS instances still bill for storage.
+- **Multi-AZ standbys and the second NAT gateway run only in the high-availability demo week** (roughly USD 19 extra). Outside that week, the databases run single-AZ with one NAT gateway.
 - **AWS Budgets alerts** at 50, 70, 85, 95 and 100% of USD 300, plus a separate Bedrock alert.
 - **First levers if spend runs ahead:**
   - fewer prod days;
@@ -55,7 +61,7 @@ The project has a USD 300 hard spending limit and a USD 100 protected contingenc
   - keep alerts-db and health-db single-AZ even in the demo week;
   - fall back to one shared x-factor RDS instance (about USD 13–15/month less);
   - keep the search and model kill switches on outside demo runs.
-- Re-run the AWS Pricing Calculator before deploying the x-factors ([open item 17](../architecture/open-items.md#17-budget-with-the-x-factors)).
+- Track actual spend weekly in AWS Cost Explorer against the line-item estimate ([open item 17](../architecture/open-items.md#17-budget-with-the-x-factors)).
 
 ## Rationale
 
@@ -65,14 +71,15 @@ The architecture can be shown complete and highly available while paying for hig
 
 ### Positive
 
-- Fits the limit without the contingency (original target, before the x-factors: USD 240–290).
+- Fits the limit without the contingency: the line-item estimate for 3 weeks of prod (at most 2 sessions of 10 hours a week) and one 48-hour staging test is about USD 205, or USD 224 with GST.
 - Failover is still demonstrated in the demo week.
 
 ### Negative / Trade-offs
 
 - Outside the demo week the system is not highly available.
 - Stopping RDS and scaling ECS to 0 needs automation, or someone remembering to do it.
-- With 8 services and 7 databases the same lifecycle costs roughly a quarter more than the original target, so the levers above are likely to be needed.
+- Keeping the ALB and NAT gateways up between sessions costs about USD 65 more than tearing the stack down after each session, but keeps data, the NAT gateway's Elastic IP and the Cognito users in place.
+- Each extra 10-hour session day adds about USD 7, and each extra staging test about USD 18.
 
 ## Security & Privacy Impact
 
@@ -80,7 +87,7 @@ None beyond the base design. Staging uses synthetic data only and is destroyed a
 
 ## Cost Impact
 
-This ADR is the cost control. Every figure is rough and must be verified with the AWS Pricing Calculator.
+This ADR is the cost control. The team's line-item estimate (`AWS Cost Estimate.xlsx`, with Singapore prices checked in the AWS Pricing Calculator on 30 Sep 2026) is about USD 205 for the planned lifecycle, leaving about USD 95 under the limit. Network and edge is the largest share (about USD 87).
 
 ## Operational Impact
 

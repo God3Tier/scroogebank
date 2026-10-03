@@ -67,7 +67,7 @@ Each task has its own IAM task role (least privilege) and security group. Tasks 
 
 ## Cost Impact
 
-Roughly USD 95–115/month for 8 services × 2 small tasks plus scheduled jobs if left on 24/7; less with the lifecycle in [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md). Saves about USD 73/month against EKS.
+Roughly USD 325–365/month for 8 services × 2–2.25 tasks (0.25–0.5 vCPU, 1 GB each) plus scheduled jobs if left on 24/7. The planned lifecycle uses about 60 running hours in total (about USD 37 of compute) under [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md). Saves about USD 73/month against EKS.
 
 ## Operational Impact
 

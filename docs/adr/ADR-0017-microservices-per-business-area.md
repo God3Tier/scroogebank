@@ -96,7 +96,7 @@ Each service has its own IAM task role, security group and database credentials,
 
 ## Cost Impact
 
-Roughly USD 95–115/month for Fargate (8 services × 2 small tasks plus scheduled jobs) and USD 140–155/month for seven single-AZ RDS instances if left on 24/7. The lifecycle in [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) keeps this inside the USD 300 limit.
+If left on 24/7: roughly USD 325–365/month for Fargate (8 services × 2–2.25 tasks of 0.25–0.5 vCPU and 1 GB, plus scheduled jobs) and USD 140–155/month for seven single-AZ RDS instances. The lifecycle in [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) keeps this inside the USD 300 limit.
 
 ## Operational Impact
 
