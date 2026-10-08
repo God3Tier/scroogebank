@@ -24,4 +24,4 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /client-profile-management-service /client-profile-management-service
 
 EXPOSE 8080
-ENTRYPOINT ["/api"]
+ENTRYPOINT ["/client-profile-management-service"]
