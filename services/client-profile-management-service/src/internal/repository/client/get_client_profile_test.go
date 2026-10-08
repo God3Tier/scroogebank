@@ -18,6 +18,7 @@ func TestGetClientProfile(t *testing.T) {
 	}{
 		"returns persisted profile":         {id: "00000000-0000-0000-0000-000000000101", fixture: "client_lookup.sql"},
 		"maps missing profile to not found": {id: "00000000-0000-0000-0000-000000000199", fixture: "client_empty.sql", wantErr: clienterrors.ErrClientNotFound},
+		"maps deleted profile to not found": {id: "00000000-0000-0000-0000-000000000103", fixture: "client_deleted.sql", wantErr: clienterrors.ErrClientNotFound},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

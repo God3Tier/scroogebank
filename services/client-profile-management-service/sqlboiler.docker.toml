@@ -1,4 +1,7 @@
 output = "models"
+# Soft deletes (ADR-0036): generated queries skip rows whose deleted_at is set,
+# and Delete(ctx, exec, false) sets deleted_at instead of removing the row.
+add-soft-deletes = true
 
 [psql]
 dbname = "myapp"

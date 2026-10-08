@@ -19,7 +19,7 @@ func (c clientController) DeleteClientProfile(w http.ResponseWriter, r *http.Req
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		case errors.Is(err, client.ErrClientHasAccounts):
-			http.Error(w, "client still has accounts; close or delete them first", http.StatusConflict)
+			http.Error(w, "client still has accounts; delete them first", http.StatusConflict)
 			return
 		case errors.Is(err, client.ErrAccountServiceUnavailable):
 			http.Error(w, "account service unavailable", http.StatusServiceUnavailable)

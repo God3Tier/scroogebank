@@ -1,17 +1,34 @@
 package client
 
 import (
+	clienterrors "client-profile-management-service/src/internal/errors"
 	orm "client-profile-management-service/src/internal/repository/orm"
 	"context"
+	"database/sql"
+	"errors"
 
+	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/aarondl/sqlboiler/v4/queries/qm"
 )
 
+// keepDeletedAt stops an update from undoing a delete that happened after the read.
+var keepDeletedAt = boil.Blacklist(orm.ClientColumns.DeletedAt)
+
+// findClient treats a deleted client as not found (ADR-0036).
+func (r clientRepository) findClient(ctx context.Context, clientID string) (*orm.Client, error) {
+	client, err := orm.FindClient(ctx, r.db, clientID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, clienterrors.ErrClientNotFound
+	}
+	return client, err
+}
+
 func (r clientRepository) isClientDuplicate(ctx context.Context, clientEmail string, clientPhone string) bool {
+	// One clause: the generated "AND deleted_at IS NULL" would otherwise bind
+	// to the phone check only.
 	exists, err := orm.Clients(
 		qm.Select(orm.ClientColumns.ClientID),
-		qm.Where("email = ?", clientEmail),
-		qm.Or2(qm.Where("phone_number = ?", clientPhone)),
+		qm.Where("email = ? OR phone_number = ?", clientEmail, clientPhone),
 	).Exists(ctx, r.db)
 	if err != nil {
 		return false

@@ -16,10 +16,13 @@ CREATE TABLE clients (
     created_by_agent_id   VARCHAR(128) NOT NULL,
     created_at            TIMESTAMPTZ  NOT NULL,
     updated_at            TIMESTAMPTZ  NOT NULL,
-    CONSTRAINT uk_clients_email UNIQUE (email),
-    CONSTRAINT uk_clients_phone UNIQUE (phone_number)
+    -- Set on delete; the row is kept but every API treats it as missing (ADR-0036).
+    deleted_at            TIMESTAMPTZ
 );
 
+-- Unique among clients that are not deleted, so a deleted client's details can be reused.
+CREATE UNIQUE INDEX uk_clients_email ON clients (email) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uk_clients_phone ON clients (phone_number) WHERE deleted_at IS NULL;
 CREATE INDEX idx_clients_created_by_agent_id ON clients (created_by_agent_id);
 CREATE INDEX idx_clients_updated_at ON clients (updated_at DESC);
 

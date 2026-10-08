@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"regexp"
 
+	orm "client-profile-management-service/src/internal/repository/orm"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,8 +27,8 @@ func RequireCRMRole() gin.HandlerFunc {
 }
 
 // RequireClientOwner limits agent access to their own client profiles. Admins
-// can access every profile. Missing and out-of-scope profiles both return 404
-// so callers cannot enumerate another agent's client IDs.
+// can access every profile. Missing, deleted and out-of-scope profiles all
+// return 404 so callers cannot enumerate another agent's client IDs.
 //
 // account-service relies on this rule: it forwards the caller's token to
 // GET /api/clients/{id} before creating an account, and treats 404 as "no
@@ -47,17 +49,17 @@ func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 			c.Next() // Let the controller return its normal malformed-ID response.
 			return
 		}
-		if !ownsClient(c, db, "SELECT created_by_agent_id FROM clients WHERE client_id = $1", clientID, principal.Subject) {
+		if !ownsClient(c, db, clientID, principal.Subject) {
 			return
 		}
 		c.Next()
 	}
 }
 
-func ownsClient(c *gin.Context, db *sql.DB, query, id, subject string) bool {
-	var owner string
-	err := db.QueryRowContext(c.Request.Context(), query, id).Scan(&owner)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && owner != subject) {
+// The generated finder skips deleted clients (ADR-0036).
+func ownsClient(c *gin.Context, db *sql.DB, clientID, subject string) bool {
+	client, err := orm.FindClient(c.Request.Context(), db, clientID, orm.ClientColumns.CreatedByAgentID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && client.CreatedByAgentID != subject) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 		return false
 	}
