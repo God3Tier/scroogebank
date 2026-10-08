@@ -20,6 +20,7 @@ func (r accountRepository) ListAccountsByClientAndOwner(ctx context.Context, cli
 	)
 }
 
+// The generated query skips deleted accounts (ADR-0036).
 func listAccounts(ctx context.Context, db *sql.DB, mods ...qm.QueryMod) (orm.AccountSlice, error) {
 	mods = append(mods, qm.OrderBy(`"accounts"."opening_date", "accounts"."id"`))
 	accounts, err := orm.Accounts(mods...).All(ctx, db)

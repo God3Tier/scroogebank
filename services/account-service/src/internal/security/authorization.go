@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"regexp"
 
+	orm "account-service/src/internal/repository/orm"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,8 +29,8 @@ func RequireCRMRole() gin.HandlerFunc {
 // RequireAccountOwner limits agents to accounts they own. Admins can access
 // every account. The owner is stored on the account itself (copied from
 // client-profile-management-service when the account was created), so this
-// needs no call to another service. Missing and out-of-scope accounts both
-// return 404 so callers cannot enumerate another agent's account IDs.
+// needs no call to another service. Missing, deleted and out-of-scope accounts
+// all return 404 so callers cannot enumerate another agent's account IDs.
 func RequireAccountOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		principal, ok := PrincipalFromGin(c)
@@ -52,10 +54,10 @@ func RequireAccountOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 	}
 }
 
+// The generated finder skips deleted accounts (ADR-0036).
 func ownsAccount(c *gin.Context, db *sql.DB, accountID, subject string) bool {
-	var owner string
-	err := db.QueryRowContext(c.Request.Context(), "SELECT owner_agent_id FROM accounts WHERE id = $1", accountID).Scan(&owner)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && owner != subject) {
+	account, err := orm.FindAccount(c.Request.Context(), db, accountID, orm.AccountColumns.OwnerAgentID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && account.OwnerAgentID != subject) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 		return false
 	}

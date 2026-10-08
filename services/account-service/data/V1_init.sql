@@ -20,6 +20,9 @@ CREATE TABLE accounts (
     branch_id       VARCHAR(50)    NOT NULL,
     created_at      TIMESTAMPTZ    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Set on delete; the row and its status are kept, but every API treats it
+    -- as missing. Deleted is not the same as status 'closed' (ADR-0036).
+    deleted_at      TIMESTAMPTZ,
 
     CONSTRAINT ck_accounts_type
         CHECK (account_type IN ('savings', 'checking', 'business', 'credit', 'loan', 'investment')),
@@ -28,10 +31,11 @@ CREATE TABLE accounts (
     CONSTRAINT ck_accounts_initial_deposit
         CHECK (initial_deposit >= 0),
     CONSTRAINT ck_accounts_currency
-        CHECK (currency ~ '^[A-Z]{3}$'),
-    CONSTRAINT uk_accounts_client_type
-        UNIQUE (client_id, account_type)
+        CHECK (currency ~ '^[A-Z]{3}$')
 );
+
+-- One account per type per client, not counting deleted accounts.
+CREATE UNIQUE INDEX uk_accounts_client_type ON accounts (client_id, account_type) WHERE deleted_at IS NULL;
 
 CREATE INDEX idx_accounts_client_id ON accounts (client_id);
 CREATE INDEX idx_accounts_owner_agent_id ON accounts (owner_agent_id);

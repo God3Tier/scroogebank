@@ -21,7 +21,8 @@ func TestListAccountsByClient(t *testing.T) {
 	for _, account := range got {
 		ids = append(ids, account.ID)
 	}
-	// Every account of this client, oldest first, and none of another client's.
+	// Every undeleted account of this client, oldest first, and none of
+	// another client's. Deleted account 0234 is left out.
 	assert.Equal(t, []string{
 		"00000000-0000-0000-0000-000000000231",
 		"00000000-0000-0000-0000-000000000232",

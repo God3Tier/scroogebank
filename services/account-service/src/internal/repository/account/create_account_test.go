@@ -16,8 +16,9 @@ func TestCreateAccount(t *testing.T) {
 		initialDeposit float64
 		wantError      bool
 	}{
-		"persists a new account":             {fixture: "account_client.sql", initialDeposit: 250.75},
-		"rejects a negative initial deposit": {fixture: "account_client.sql", initialDeposit: -1, wantError: true},
+		"persists a new account":                   {fixture: "account_client.sql", initialDeposit: 250.75},
+		"rejects a negative initial deposit":       {fixture: "account_client.sql", initialDeposit: -1, wantError: true},
+		"reopens a type whose account was deleted": {fixture: "account_reopen.sql", initialDeposit: 10},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -39,7 +40,7 @@ func TestCreateAccount(t *testing.T) {
 			require.NoError(t, err)
 			var owner, accountType, status, currency, branchID string
 			var deposit float64
-			err = db.QueryRow(`SELECT owner_agent_id, account_type, status, initial_deposit, currency, branch_id FROM accounts WHERE client_id = $1`, clientID.String()).Scan(&owner, &accountType, &status, &deposit, &currency, &branchID)
+			err = db.QueryRow(`SELECT owner_agent_id, account_type, status, initial_deposit, currency, branch_id FROM accounts WHERE client_id = $1 AND deleted_at IS NULL`, clientID.String()).Scan(&owner, &accountType, &status, &deposit, &currency, &branchID)
 			require.NoError(t, err)
 			assert.Equal(t, "agent-sub-901", owner)
 			assert.Equal(t, "checking", accountType)

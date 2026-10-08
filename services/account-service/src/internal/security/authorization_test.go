@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	ownedAccountID = "00000000-0000-0000-0000-000000000251"
-	ownerSubject   = "agent-sub-owner"
+	ownedAccountID   = "00000000-0000-0000-0000-000000000251"
+	deletedAccountID = "00000000-0000-0000-0000-000000000252"
+	ownerSubject     = "agent-sub-owner"
 )
 
 // RequireAccountOwner reads owner_agent_id from this service's own table, so
@@ -37,9 +38,11 @@ func openAuthorizationTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	_, err = db.Exec(`
-		DELETE FROM accounts WHERE id = '` + ownedAccountID + `';
-		INSERT INTO accounts (id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id)
-		VALUES ('` + ownedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'savings', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001');`)
+		DELETE FROM accounts WHERE id IN ('` + ownedAccountID + `', '` + deletedAccountID + `');
+		INSERT INTO accounts (id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id, deleted_at)
+		VALUES
+			('` + ownedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'savings', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', NULL),
+			('` + deletedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'checking', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', CURRENT_TIMESTAMP);`)
 	if err != nil {
 		t.Fatalf("load account fixture: %v", err)
 	}
@@ -66,6 +69,7 @@ func TestRequireAccountOwner(t *testing.T) {
 		"an admin reaches the handler":              {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, accountID: ownedAccountID, wantStatus: http.StatusOK},
 		"another agent sees not found":              {principal: &Principal{Subject: "agent-sub-other", Role: "AGENT"}, accountID: ownedAccountID, wantStatus: http.StatusNotFound},
 		"a missing account looks the same":          {principal: &Principal{Subject: ownerSubject, Role: "AGENT"}, accountID: "00000000-0000-0000-0000-000000000299", wantStatus: http.StatusNotFound},
+		"so does a deleted account":                 {principal: &Principal{Subject: ownerSubject, Role: "AGENT"}, accountID: deletedAccountID, wantStatus: http.StatusNotFound},
 		"a malformed ID is left to the controller":  {principal: &Principal{Subject: ownerSubject, Role: "AGENT"}, accountID: "not-a-uuid", wantStatus: http.StatusOK},
 		"an unauthenticated request is turned away": {accountID: ownedAccountID, wantStatus: http.StatusUnauthorized},
 	}
