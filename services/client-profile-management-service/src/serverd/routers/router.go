@@ -1,7 +1,6 @@
 package routers
 
 import (
-	accountcontroller "client-profile-management-service/src/internal/controller/account"
 	clientcontroller "client-profile-management-service/src/internal/controller/client"
 	"client-profile-management-service/src/internal/security"
 	"database/sql"
@@ -26,7 +25,9 @@ import (
 	http.StatusServiceUnavailable = 503
 */
 
-func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientController, accounts accountcontroller.AccountController, db *sql.DB, authenticate, auditLogger gin.HandlerFunc) {
+// RegisterRoutes serves client profiles only. Accounts moved to account-service
+// (ADR-0017, ADR-0035).
+func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientController, db *sql.DB, authenticate, auditLogger gin.HandlerFunc) {
 	api := router.Group("/api")
 	api.Use(authenticate)
 	api.Use(security.RequireCRMRole())
@@ -39,14 +40,6 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 		client.PUT("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
 		client.GET("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientProfile, "clientId"))
 		client.DELETE("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.DeleteClientProfile, "clientId"))
-	}
-
-	account := api.Group("/accounts")
-	account.Use(auditLogger)
-	{
-		account.POST("", security.RequireClientBodyOwner(db), adaptHandler(accounts.CreateAccount, ""))
-		account.GET("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.GetAccount, "accountId"))
-		account.DELETE("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))
 	}
 }
 

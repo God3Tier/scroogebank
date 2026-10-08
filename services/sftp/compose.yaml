@@ -11,8 +11,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ../client-profile-management-service/data/V1_init.sql:/docker-entrypoint-initdb.d/001-crm-schema.sql:ro
       - ../client-profile-management-service/data/V2_agent_subject.sql:/docker-entrypoint-initdb.d/002-agent-subject.sql:ro
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/003-transactions.sql:ro
-      - ./receiver/data/V2_account_link.sql:/docker-entrypoint-initdb.d/004-account-link.sql:ro
+      - ../account-service/data/V1_init.sql:/docker-entrypoint-initdb.d/003-accounts.sql:ro
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/004-transactions.sql:ro
+      - ./receiver/data/V2_account_link.sql:/docker-entrypoint-initdb.d/005-account-link.sql:ro
     networks:
       - backend
     healthcheck:
@@ -33,8 +34,9 @@ services:
     volumes:
       - ../client-profile-management-service/data/V1_init.sql:/docker-entrypoint-initdb.d/001-crm-schema.sql:ro
       - ../client-profile-management-service/data/V2_agent_subject.sql:/docker-entrypoint-initdb.d/002-agent-subject.sql:ro
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/003-transactions.sql:ro
-      - ./receiver/data/V2_account_link.sql:/docker-entrypoint-initdb.d/004-account-link.sql:ro
+      - ../account-service/data/V1_init.sql:/docker-entrypoint-initdb.d/003-accounts.sql:ro
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/004-transactions.sql:ro
+      - ./receiver/data/V2_account_link.sql:/docker-entrypoint-initdb.d/005-account-link.sql:ro
     networks:
       - backend
     healthcheck:

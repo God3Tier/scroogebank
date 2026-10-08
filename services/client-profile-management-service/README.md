@@ -1,5 +1,7 @@
 # Client Profile Management Service (Feature 2)
 
+Owns client profiles. Accounts moved to [`account-service`](../account-service/README.md), which has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)).
+
 ## Start locally
 
 The local service still verifies Cognito access tokens and sends a CRM audit event to the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
@@ -10,24 +12,40 @@ make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-poo
 
 The command starts PostgreSQL, initializes or migrates its schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
 
-For the SFTP transaction integration, start the shared database and internal receiver with `make -C ../sftp up`, then run `make run-shared-db` with the same Cognito and AWS settings. This connects the profile service to the CRM schema initialized by the SFTP Compose stack rather than starting this service's separate local PostgreSQL database.
+Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (default `http://localhost:8083`). Run account-service alongside this service, or client deletion returns 503.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`.
+For the SFTP transaction integration, start the shared database and internal receiver with `make -C ../sftp up`, then run `make run-shared-db` here and in `../account-service` with the same Cognito and AWS settings. This connects both services to the CRM schema initialized by the SFTP Compose stack rather than starting their separate local PostgreSQL databases.
+
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it.
 
 ## Cognito authorization
 
 Feature 1 provisions users in the shared Cognito user pool and assigns the `ADMIN` or `AGENT` group. This service validates the token's RS256 signature against the pool's JWKS, plus its issuer, app-client ID, expiration, and `token_use=access` claim. It rejects ID tokens and tokens without a supported group.
 
-The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles and create/delete accounts belonging to those profiles. Admins can access every client. The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
+The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles. Admins can access every client. The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
+
+account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `created_by_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
+
+## Deleting a client
+
+Accounts used to reference clients through a foreign key with `ON DELETE RESTRICT`. That key cannot cross databases, so `DELETE /api/clients/{id}` keeps the rule by calling `GET /api/accounts?clientId={id}` on account-service with the caller's token:
+
+| account-service answers | Response |
+|---|---|
+| An empty list | The client is deleted (200) |
+| One or more accounts | 409, and nothing is deleted |
+| Anything else, or no answer within 2 seconds | 503, and nothing is deleted |
+
+The check and the delete are not atomic, so an account created between them is orphaned. ADR-0035 records this.
 
 ## Auditor SQS events
 
-The service sends one SQS message per completed client/account endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint.
+The service sends one SQS message per completed client endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint.
 
 Configure API Gateway with a JWT authorizer for the same Cognito issuer and app-client ID as an additional edge check. This service also validates every token itself, so direct service access does not bypass authentication.
 
 ## Production transport security
 
-Set `APP_ENV=production`, `APP_TLS_CERT_FILE`, and `APP_TLS_KEY_FILE` to serve HTTPS. Set `DB_SSLMODE=verify-full` and `DB_SSLROOTCERT` to verify PostgreSQL TLS. The service defaults to production security and refuses to start in production mode if these settings are missing; `make run` explicitly sets `APP_ENV=local`. If Cognito access tokens use resource-bound `aud` claims, also set `COGNITO_API_AUDIENCE` to the expected value. Local HTTP and `sslmode=disable` are intended only for local development.
+Set `APP_ENV=production`, `APP_TLS_CERT_FILE`, and `APP_TLS_KEY_FILE` to serve HTTPS. Set `DB_SSLMODE=verify-full` and `DB_SSLROOTCERT` to verify PostgreSQL TLS. `ACCOUNT_SERVICE_BASE_URL` must be `https://`, because client deletion forwards the caller's access token to it. The service defaults to production security and refuses to start in production mode if these settings are missing; `make run` explicitly sets `APP_ENV=local`. If Cognito access tokens use resource-bound `aud` claims, also set `COGNITO_API_AUDIENCE` to the expected value. Local HTTP and `sslmode=disable` are intended only for local development.
 
 RDS encryption-at-rest settings still require deployment infrastructure configuration. If an SQS send fails after an endpoint completes, the service reports the failure in its application log; the completed endpoint response is not changed retroactively.
