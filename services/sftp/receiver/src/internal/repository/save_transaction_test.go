@@ -162,13 +162,47 @@ func TestSaveTransactionDoesNotOverwriteDuplicateID(t *testing.T) {
 	}
 }
 
+func TestSaveTransactionStoresTheAccountLink(t *testing.T) {
+	db := openTestDB(t)
+	transaction := models.Transaction{
+		TransactionID:   "00000000-0000-0000-0000-000000000104",
+		AccountID:       "A0000000-0000-0000-0000-000000000231",
+		TransactionType: "Deposit",
+		Amount:          10,
+		Currency:        "SGD",
+		TransferDate:    time.Date(2026, 9, 24, 8, 30, 0, 0, time.UTC),
+		Status:          "Completed",
+		LinkedAccountID: "a0000000-0000-0000-0000-000000000231",
+		ClientID:        "00000000-0000-0000-0000-000000000203",
+		ImportStatus:    "Matched",
+	}
+	clearTransaction(t, db, transaction.TransactionID)
+	t.Cleanup(func() { clearTransaction(t, db, transaction.TransactionID) })
+
+	if err := New(db).SaveTransaction(context.Background(), transaction); err != nil {
+		t.Fatalf("SaveTransaction() error = %v", err)
+	}
+
+	var accountID, clientID, importStatus string
+	err := db.QueryRowContext(context.Background(),
+		"SELECT account_id::text, client_id::text, import_status FROM transactions WHERE transaction_id = $1",
+		transaction.TransactionID,
+	).Scan(&accountID, &clientID, &importStatus)
+	if err != nil {
+		t.Fatalf("read saved transaction: %v", err)
+	}
+	if accountID != transaction.LinkedAccountID || clientID != transaction.ClientID || importStatus != "Matched" {
+		t.Errorf("link = (%s, %s, %s), want (%s, %s, Matched)", accountID, clientID, importStatus, transaction.LinkedAccountID, transaction.ClientID)
+	}
+}
+
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	host := envOrDefault("DB_HOST", "localhost")
 	port := envOrDefault("DB_PORT", "5432")
 	user := envOrDefault("DB_USER", "crm")
 	password := envOrDefault("DB_PASSWORD", "crm")
-	database := envOrDefault("DB_NAME", "crm")
+	database := envOrDefault("DB_NAME", "transactions")
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, database)
 
 	db, err := sql.Open("postgres", dsn)

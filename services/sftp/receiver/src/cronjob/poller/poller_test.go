@@ -104,7 +104,7 @@ func TestPoll(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			remote := newFakeRemote()
 			store := &fakeStore{}
-			p := New(Config{RemoteDir: "/reports"}, store)
+			p := New(Config{RemoteDir: "/reports"}, store, &fakeDirectory{})
 			p.connector = func(context.Context) (remoteSFTP, func(), error) { return remote, func() {}, nil }
 			tt.setup(remote, store, p)
 			err := p.Poll(context.Background())

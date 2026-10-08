@@ -82,6 +82,28 @@ func (s *fakeStore) SaveTransaction(_ context.Context, tx models.Transaction) er
 	return nil
 }
 
+// fakeDirectory stands in for account-service: accounts maps account ID to
+// client ID.
+type fakeDirectory struct {
+	accounts map[string]string
+	err      error
+	asked    [][]string
+}
+
+func (d *fakeDirectory) Lookup(_ context.Context, ids []string) (map[string]string, error) {
+	d.asked = append(d.asked, ids)
+	if d.err != nil {
+		return nil, d.err
+	}
+	found := make(map[string]string)
+	for _, id := range ids {
+		if clientID, ok := d.accounts[id]; ok {
+			found[id] = clientID
+		}
+	}
+	return found, nil
+}
+
 type fakeRemote struct {
 	files                                                       map[string]string
 	readDirErr, openErr, readErr, closeErr, mkdirErr, renameErr error

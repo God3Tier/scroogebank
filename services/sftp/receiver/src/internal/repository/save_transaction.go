@@ -13,6 +13,10 @@ import (
 )
 
 func (i impl) SaveTransaction(ctx context.Context, transaction models.Transaction) error {
+	importStatus := transaction.ImportStatus
+	if importStatus == "" {
+		importStatus = "Unmatched"
+	}
 	record := &orm.Transaction{
 		TransactionID:    transaction.TransactionID,
 		SourceAccountRef: transaction.AccountID,
@@ -22,6 +26,9 @@ func (i impl) SaveTransaction(ctx context.Context, transaction models.Transactio
 		TransactionDate:  transaction.TransferDate,
 		Status:           transaction.Status,
 		Description:      null.StringFrom(transaction.Description),
+		AccountID:        null.NewString(transaction.LinkedAccountID, transaction.LinkedAccountID != ""),
+		ClientID:         null.NewString(transaction.ClientID, transaction.ClientID != ""),
+		ImportStatus:     importStatus,
 	}
 
 	err := record.Upsert(
@@ -39,6 +46,9 @@ func (i impl) SaveTransaction(ctx context.Context, transaction models.Transactio
 			orm.TransactionColumns.TransactionDate,
 			orm.TransactionColumns.Status,
 			orm.TransactionColumns.Description,
+			orm.TransactionColumns.AccountID,
+			orm.TransactionColumns.ClientID,
+			orm.TransactionColumns.ImportStatus,
 		),
 	)
 	if err != nil {

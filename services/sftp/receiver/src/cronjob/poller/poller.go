@@ -18,6 +18,12 @@ type transactionStore interface {
 	SaveTransaction(context.Context, models.Transaction) error
 }
 
+// accountDirectory reports which account references are CRM accounts, with
+// each one's client ID (ADR-0037).
+type accountDirectory interface {
+	Lookup(ctx context.Context, accountIDs []string) (map[string]string, error)
+}
+
 type remoteFile interface {
 	Read([]byte) (int, error)
 	Close() error
@@ -36,12 +42,13 @@ type remoteConnector func(context.Context) (remoteSFTP, func(), error)
 type Poller struct {
 	config    Config
 	store     transactionStore
+	accounts  accountDirectory
 	audit     AuditWriter
 	connector remoteConnector
 }
 
-func New(cfg Config, store transactionStore, auditWriters ...AuditWriter) *Poller {
-	p := &Poller{config: cfg, store: store}
+func New(cfg Config, store transactionStore, accounts accountDirectory, auditWriters ...AuditWriter) *Poller {
+	p := &Poller{config: cfg, store: store, accounts: accounts}
 	if len(auditWriters) > 0 {
 		p.audit = auditWriters[0]
 	}

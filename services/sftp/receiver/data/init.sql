@@ -12,8 +12,15 @@ CREATE TABLE transactions (
     description       TEXT,
     imported_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     import_status     TEXT NOT NULL DEFAULT 'Unmatched'
-        CHECK (import_status IN ('Unmatched', 'Matched', 'Rejected'))
+        CHECK (import_status IN ('Unmatched', 'Matched', 'Rejected')),
+    -- The CRM account the row belongs to, set at import when account-service
+    -- confirms source_account_ref is one of its accounts (ADR-0037). Accounts
+    -- live in account-service's database, so there is no foreign key.
+    account_id        UUID NULL
     );
+
+CREATE INDEX idx_transactions_account_date
+    ON transactions (account_id, transaction_date DESC);
 
 ALTER TABLE transactions
     ALTER COLUMN transaction_id TYPE TEXT USING transaction_id::text;

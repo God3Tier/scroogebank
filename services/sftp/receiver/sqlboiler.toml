@@ -2,7 +2,7 @@ output = "src/internal/repository/orm"
 pkgname = "orm"
 
 [psql]
-dbname = "crm"
+dbname = "transactions"
 host = "db"
 port = 5432
 user = "crm"
