@@ -36,3 +36,13 @@ func TestGetAccount(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAccountHidesDeletedAccount(t *testing.T) {
+	db := openTestDB(t)
+	loadTestFixture(t, db, "account_deleted.sql")
+
+	got, err := NewAccountRepository(db).GetAccount(context.Background(), "00000000-0000-0000-0000-000000000206")
+
+	require.ErrorIs(t, err, clienterrors.ErrNotFound)
+	assert.Nil(t, got)
+}

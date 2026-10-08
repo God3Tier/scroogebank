@@ -16,7 +16,7 @@ Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (def
 
 For the SFTP transaction integration, start the shared database and internal receiver with `make -C ../sftp up`, then run `make run-shared-db` here and in `../account-service` with the same Cognito and AWS settings. This connects both services to the CRM schema initialized by the SFTP Compose stack rather than starting their separate local PostgreSQL databases.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it.
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset` (and, for `run-shared-db`, remove the SFTP stack's volume with `docker compose -f ../sftp/compose.yaml down -v`).
 
 ## Cognito authorization
 
@@ -28,7 +28,9 @@ account-service depends on this rule. Before creating an account it calls `GET /
 
 ## Deleting a client
 
-Accounts used to reference clients through a foreign key with `ON DELETE RESTRICT`. That key cannot cross databases, so `DELETE /api/clients/{id}` keeps the rule by calling `GET /api/accounts?clientId={id}` on account-service with the caller's token:
+`DELETE /api/clients/{id}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at` and keeps the row. From then on every endpoint treats the client as missing, for admins and agents alike: reads, updates, verification and a second delete all return 404. A deleted client's email and phone number can be used to onboard a new client. Nothing restores a deleted client, and deleting is not erasure of the client's personal data ([open item 21](../../docs/architecture/open-items.md#21-erasing-soft-deleted-client-data)).
+
+Accounts used to reference clients through a foreign key with `ON DELETE RESTRICT`. That key cannot cross databases, so the delete keeps the rule by calling `GET /api/accounts?clientId={id}` on account-service with the caller's token. account-service never lists deleted accounts, so only accounts that are not deleted block the delete, including accounts whose status is `closed`:
 
 | account-service answers | Response |
 |---|---|
@@ -36,7 +38,9 @@ Accounts used to reference clients through a foreign key with `ON DELETE RESTRIC
 | One or more accounts | 409, and nothing is deleted |
 | Anything else, or no answer within 2 seconds | 503, and nothing is deleted |
 
-The check and the delete are not atomic, so an account created between them is orphaned. ADR-0035 records this.
+The check and the delete are not atomic, so an account created between them is left on a deleted client. ADR-0035 records this.
+
+Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboiler.toml` and `sqlboiler.docker.toml`, which makes every generated query skip them. All client queries, including the ownership check, go through the generated code; any hand-written SQL added later must add `deleted_at IS NULL` itself.
 
 ## Auditor SQS events
 

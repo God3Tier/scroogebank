@@ -25,11 +25,12 @@ func TestUpdateClientInformation(t *testing.T) {
 		wantStatus int
 		callSvc    bool
 	}{
-		"updates client":                {id: id, body: body, wantStatus: http.StatusOK, callSvc: true},
-		"rejects malformed JSON":        {id: id, body: `{`, wantStatus: http.StatusBadRequest},
-		"rejects malformed ID":          {id: "bad-id", body: body, wantStatus: http.StatusBadRequest},
-		"maps invalid client":           {id: id, body: body, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
-		"maps unexpected service error": {id: id, body: body, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
+		"updates client":                 {id: id, body: body, wantStatus: http.StatusOK, callSvc: true},
+		"rejects malformed JSON":         {id: id, body: `{`, wantStatus: http.StatusBadRequest},
+		"rejects malformed ID":           {id: "bad-id", body: body, wantStatus: http.StatusBadRequest},
+		"maps invalid client":            {id: id, body: body, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
+		"maps missing or deleted client": {id: id, body: body, serviceErr: clienterrors.ErrClientNotFound, wantStatus: http.StatusNotFound, callSvc: true},
+		"maps unexpected service error":  {id: id, body: body, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -7,11 +7,21 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 | Method | Path | Who | Purpose |
 |---|---|---|---|
 | POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access |
-| GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts. Admins see all; agents see only accounts they own |
+| GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
-| DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Delete an account. Agents: their own only |
+| DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
 
 `GET /health` is public; all `/api` routes require a Cognito **access token**.
+
+## Deleting an account
+
+`DELETE /api/accounts/{accountId}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at`, keeps the row, and leaves `status` as it was.
+
+**Deleted is not the same as closed.** `status = 'closed'` is a business state of an account that still exists: it is still listed and readable. A deleted account is treated as missing by every endpoint, for admins and agents alike: reads and a second delete return 404, and lists leave it out. Its transactions also return 404 through user-service, whose ownership check reads the account. Nothing restores a deleted account. A deleted account's type can be opened again for the same client.
+
+Because the row is kept, imported transactions that refer to it are never orphaned.
+
+Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboiler.toml` and `sqlboiler.docker.toml`, which makes every generated query skip them. All account queries, including `RequireAccountOwner`, go through the generated code; any hand-written SQL added later must add `deleted_at IS NULL` itself. Account responses include `deleted_at`, which is always `null` for an account the API returns.
 
 ## Ownership across services
 
@@ -30,7 +40,7 @@ The `accounts` table has no foreign key to `clients`, because clients live in an
 
 Copying the owner is correct because a client's owner never changes: nothing updates `created_by_agent_id`, and there is no reassignment feature. If one is added, the copies must be updated with it (ADR-0035).
 
-client-profile-management-service calls the list endpoint before deleting a client, and refuses the delete while accounts remain.
+client-profile-management-service calls the list endpoint before deleting a client, and refuses the delete while accounts remain. Deleted accounts are not listed, so they do not block it; closed accounts that are not deleted do.
 
 ## Start locally
 
@@ -38,7 +48,7 @@ client-profile-management-service calls the list endpoint before deleting a clie
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-This starts this service's own PostgreSQL on port 5434, loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
+This starts this service's own PostgreSQL on port 5434, loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column; run `make db-reset` (and, for `run-shared-db`, `docker compose -f ../sftp/compose.yaml down -v`) to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
 
 For the SFTP transaction integration, start the shared database with `make -C ../sftp up`, then run `make run-shared-db` here and in `../client-profile-management-service`. Locally, clients, accounts and transactions then share the SFTP stack's `crm` database, because the receiver's `transactions.account_id` foreign key needs `accounts` in the same database. Deployed, each service has its own database; replacing that foreign key is Feature 3 follow-up work.
 

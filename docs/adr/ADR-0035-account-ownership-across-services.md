@@ -7,7 +7,7 @@
 - Feature/branch: `task/client-profile-management/account-service-split`
 - Related issue/PR: TBD (pull request from `task/client-profile-management/account-service-split` to `dev`)
 - Supersedes: ADR-0006, decision 4 only (user-service's account-ownership check moves from client-profile-management-service to account-service; ADR-0006's other decisions are unchanged)
-- Superseded by: N/A
+- Superseded by: ADR-0036 (decision 4 in part: deleting accounts and clients became soft deletes, so "has accounts" means accounts that are not deleted, not accounts that are not `closed`; decisions 1–3, 5 and 6 and the rest of decision 4 remain in force)
 
 ## Context
 

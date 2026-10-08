@@ -13,6 +13,8 @@ import (
 // accounts are in account-service's database, so it is asked first. If it
 // cannot answer, the delete is refused rather than risk orphaning accounts.
 //
+// Deleted accounts are not listed, so they do not block; closed ones do (ADR-0036).
+//
 // The check and the delete are not atomic: an account created between them is
 // orphaned. ADR-0035 records this.
 func (s clientService) DeleteClientProfile(ctx context.Context, clientID, authorization string) error {

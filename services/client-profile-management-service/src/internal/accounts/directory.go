@@ -25,10 +25,11 @@ import (
 const maxAccountsResponseBytes = 1 << 20
 
 type Directory interface {
-	// HasAccounts reports whether the client has any account. It forwards the
-	// caller's Authorization header, so account-service scopes the answer to
-	// what the caller may see: an admin sees every account, and an agent sees
-	// the accounts of their own clients, which are all of that client's.
+	// HasAccounts reports whether the client has any account that is not
+	// deleted. It forwards the caller's Authorization header, so account-service
+	// scopes the answer to what the caller may see: an admin sees every account,
+	// and an agent sees the accounts of their own clients, which are all of that
+	// client's.
 	HasAccounts(ctx context.Context, clientID, authorization string) (bool, error)
 }
 

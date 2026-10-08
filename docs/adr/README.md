@@ -11,7 +11,8 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md) — Features 1 and 2 share Cognito identity, with service-side JWT validation and Agent-owned client/account authorization.
 - [ADR-0006](ADR-0006-transaction-account-linkage-and-access.md) — Feature 3 links imports to CRM account UUIDs and serves authenticated transaction reads through User-service, with account ownership checked by client-profile (decision 4 superseded by ADR-0035: ownership is now checked by account-service).
 - [ADR-0017](ADR-0017-microservices-per-business-area.md) — One microservice and database per business area (accounts split from clients), with Go allowed for the auditor, client-service and account-service.
-- [ADR-0035](ADR-0035-account-ownership-across-services.md) — account-service copies each account's owning agent from client-service at creation using the caller's token, checks ownership locally, and client-service refuses to delete a client with accounts; both checks fail closed; supersedes ADR-0006 decision 4.
+- [ADR-0035](ADR-0035-account-ownership-across-services.md) — account-service copies each account's owning agent from client-service at creation using the caller's token, checks ownership locally, and client-service refuses to delete a client with accounts; both checks fail closed; supersedes ADR-0006 decision 4 (decision 4 partly superseded by ADR-0036: only undeleted accounts block a client's deletion).
+- [ADR-0036](ADR-0036-soft-deletion-of-clients-and-accounts.md) — Deleting a client or account sets `deleted_at` and keeps the row; deleted records are hidden from everyone and are not the same as `closed` accounts; uniqueness ignores deleted rows; deleting is not erasure; supersedes ADR-0035 decision 4 in part.
 
 ## Superseded decisions
 
