@@ -14,9 +14,9 @@ The command starts PostgreSQL, initializes or migrates its schema, and runs the 
 
 Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (default `http://localhost:8083`). Run account-service alongside this service, or client deletion returns 503.
 
-For the SFTP transaction integration, start the shared database and internal receiver with `make -C ../sftp up`, then run `make run-shared-db` here and in `../account-service` with the same Cognito and AWS settings. This connects both services to the CRM schema initialized by the SFTP Compose stack rather than starting their separate local PostgreSQL databases.
+Each service has its own database, including locally: this one on port 5432, account-service's on 5436 and the SFTP stack's transactions database on 5437 ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). For the SFTP transaction integration, run `make run` here and in `../account-service`, then start the receiver with `make -C ../sftp up`.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset` (and, for `run-shared-db`, remove the SFTP stack's volume with `docker compose -f ../sftp/compose.yaml down -v`).
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`.
 
 ## Cognito authorization
 

@@ -25,7 +25,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 
 Full request/response shapes: Swagger UI at `http://localhost:8081/swagger-ui.html` when run locally with the `local` profile. See [API docs (Swagger UI)](../../README.md#api-docs-swagger-ui) in the root README.
 
-`GET /api/accounts/{accountId}/transactions` authenticates the caller here, checks `ADMIN`/`AGENT` access, and forwards the access token to account-service to verify that the requested account belongs to the agent. After that check succeeds, it fetches transactions from the internal SFTP receiver. The receiver must not be exposed as a public API. Configure `ACCOUNT_SERVICE_BASE_URL` and `SFTP_RECEIVER_BASE_URL` for the deployment. Locally, start the shared DB and receiver with `make -C services/sftp up`, start client-profile-management-service and account-service each with `make run-shared-db`, then call the user-service at `http://localhost:8081`.
+`GET /api/accounts/{accountId}/transactions` authenticates the caller here, checks `ADMIN`/`AGENT` access, and forwards the access token to account-service to verify that the requested account belongs to the agent. After that check succeeds, it fetches transactions from the internal SFTP receiver. The receiver must not be exposed as a public API. Configure `ACCOUNT_SERVICE_BASE_URL` and `SFTP_RECEIVER_BASE_URL` for the deployment. Locally, start client-profile-management-service and account-service each with `make run`, start the receiver with `make -C services/sftp up`, then call the user-service at `http://localhost:8081`.
 
 ## Design choices
 
