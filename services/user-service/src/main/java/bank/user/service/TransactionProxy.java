@@ -20,15 +20,15 @@ public class TransactionProxy {
     private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper;
 
-    @Value("${client-profile.base-url}")
-    private String clientProfileBaseUrl;
+    @Value("${account-service.base-url}")
+    private String accountServiceBaseUrl;
 
     @Value("${sftp-receiver.base-url}")
     private String receiverBaseUrl;
 
     public ResponseEntity<JsonNode> getTransactions(UUID accountId, String authorization) {
         ResponseEntity<JsonNode> account = request(
-                clientProfileBaseUrl,
+                accountServiceBaseUrl,
                 "/api/accounts/" + accountId,
                 authorization
         );

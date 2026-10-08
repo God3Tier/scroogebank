@@ -1,0 +1,10 @@
+output = "models"
+
+[psql]
+dbname = "accounts"
+host = "localhost"
+port = 5434
+user = "postgres"
+pass = "postgres"
+schema = "public"
+sslmode = "disable"

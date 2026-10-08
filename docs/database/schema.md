@@ -12,7 +12,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 |---|---|---|
 | `users-db` | user-service | CRM users (Admin/Agent), linked to Cognito |
 | `clients-db` | client-service | Client profiles, verification status |
-| `accounts-db` | account-service | Bank accounts |
+| `accounts-db` | account-service | Bank accounts, each with `owner_agent_id`: the owning agent's Cognito `sub`, copied from client-service when the account is opened ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)) |
 | `transactions-db` | transaction-service and transaction-ingest | Imported transactions, `ingestion_file` records, rejected rows; transaction-service's `outbox` and the ingest Lambda's `ingest_outbox` |
 | `audit-db` | auditor and chain-verify | The hash-chained `audit_log`, and the tamper-findings table (`corrupted_audit_log` on `dev`) |
 | `client-keys` (DynamoDB) | client-service | Per-client data keys, KMS-wrapped, one-to-one with client UUIDs |
@@ -22,7 +22,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 - **One RDS for PostgreSQL instance per service**, physically separate. Each service also keeps its **outbox table** in its own database. dashboard-service has no database ([X-factor 2: business dashboard](../architecture/x-factors.md#x-factor-2-business-dashboard)).
 - **Instance size:** `db.t4g.micro` (2 vCPU burstable, 1 GiB memory), gp3 storage with storage auto-scaling. Each instance serves only one service's tasks (about 2–6 tasks × a pool of 10 connections).
 - **Multi-AZ standby for every database (NFR 2, 9).** A synchronously replicated standby in the other AZ's isolated subnet; automatic failover, typically within one to two minutes. Services reconnect to the same endpoint.
-- **No cross-service data access.** A service's security group and credentials reach only its own instance. Cross-service data is fetched through the owning service's API. The accounts-to-clients foreign key in today's `V1_init.sql` cannot cross databases; it is replaced by an API check when accounts are created, and by client-service refusing to delete a client who still has open accounts.
+- **No cross-service data access.** A service's security group and credentials reach only its own instance. Cross-service data is fetched through the owning service's API. The accounts-to-clients foreign key in today's `V1_init.sql` cannot cross databases; it is replaced by an API check when accounts are created, and by client-service refusing to delete a client who still has open accounts. Both checks forward the caller's token and fail closed ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)).
 - **Encryption:** KMS at rest; TLS required on every database connection (`rds.force_ssl`).
 - **Backups:** RDS automated backups with point-in-time recovery (RPO of minutes), plus a daily AWS Backup plan with a copy to ap-southeast-2 ([Why AWS Backup is included when RDS already has backups](#why-aws-backup-is-included-when-rds-already-has-backups)). The client-keys table has DynamoDB point-in-time recovery and is in the same AWS Backup plan: losing it would make all client data unreadable.
 - **Consistency model (NFR 4):** strong (ACID) inside one service's database; eventual for the audit log (seconds behind) and for data that crosses services, such as imported transactions (per ingestion run).

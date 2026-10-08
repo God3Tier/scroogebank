@@ -1,6 +1,6 @@
 # ADR-0017: One microservice per business area, with a Go runtime exception
 
-- Status: Proposed
+- Status: Accepted
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
@@ -57,23 +57,23 @@ Use **one microservice per business area** (Option B), each with its own databas
 |---|---|---|
 | user-service | F1 | Java 25 |
 | client-service | F2 (clients) | Go (today's `client-profile-management-service`) |
-| account-service | F2 (accounts) | To be decided in the Feature 2 plan |
+| account-service | F2 (accounts) | Go (extracted from `client-profile-management-service`'s account code; decided 2026-10-08) |
 | transaction-service and transaction-ingest | F3 | Java 25 (ingest on Lambda, [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md)) |
 | event-alert-service | x-factor 1 | Java 25 |
 | dashboard-service | x-factor 2 | Java 25 |
 | client-health-monitor-service | x-factor 3 | Java 25 |
 | auditor (and chain-verify) | Audit | Go |
 
-Accounts are split out of `client-profile-management-service` into account-service. The accounts-to-clients foreign key is replaced by an API check when an account is created, and by client-service refusing to delete a client who still has open accounts.
+Accounts are split out of `client-profile-management-service` into account-service. The accounts-to-clients foreign key is replaced by an API check when an account is created, and by client-service refusing to delete a client who still has open accounts. How those checks work, and how account-service knows an account's owning agent, is decided in [ADR-0035](ADR-0035-account-ownership-across-services.md).
 
-**Go runtime exception:** the auditor and client-service may stay in Go. Every other new service uses Java 25.
+**Go runtime exception:** the auditor, client-service and account-service may stay in Go. Every other new service uses Java 25. account-service was added to the exception on 2026-10-08: it is extracted from the existing, tested Go account code rather than rewritten, so it shares client-service's toolchain, JWT verification and audit middleware.
 
 ## Rationale
 
 - Each feature has separate owners; separate services let them build, test and deploy without blocking each other.
 - One database per service makes "no service reads another's tables" a property of credentials and security groups, not of convention.
 - Services scale and fail independently: a slow import or a dashboard burst does not take down user management.
-- The Go exception avoids rewriting two working services (the auditor's hash-chain and SQS consumer, and the Feature 2 service) late in the project. Rewriting them would cost delivery time with no functional gain.
+- The Go exception avoids rewriting two working services (the auditor's hash-chain and SQS consumer, and the Feature 2 service) late in the project. Rewriting them would cost delivery time with no functional gain. The same reasoning covers account-service, which is the Feature 2 service's existing account code moved into its own deployable.
 
 ## Consequences
 
@@ -102,7 +102,7 @@ If left on 24/7: roughly USD 325–365/month for Fargate (8 services × 2–2.25
 
 - One ECS service, task definition, log group, alarm set and database per service, built from a reusable Terraform module.
 - CI builds and scans both Java and Go images; Go versions are pinned in the build files, CI configuration and runbooks (§2.2).
-- The auditor and client-service owners own the Go toolchain and its patching.
+- The auditor, client-service and account-service owners own the Go toolchain and its patching. account-service and client-service each carry a copy of the Cognito JWT verification and SQS audit middleware, which must be kept in step.
 
 ## Validation
 

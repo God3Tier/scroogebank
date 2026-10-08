@@ -6,16 +6,13 @@ include-auto-generated: false
 filename: mocks.go
 
 packages:
+  client-profile-management-service/src/internal/accounts:
+    config:
+      all: true
   client-profile-management-service/src/internal/repository:
     config:
       all: true
-  client-profile-management-service/src/internal/repository/account:
-    config:
-      all: true
   client-profile-management-service/src/internal/repository/client:
-    config:
-      all: true
-  client-profile-management-service/src/internal/service/account:
     config:
       all: true
   client-profile-management-service/src/internal/service/client:

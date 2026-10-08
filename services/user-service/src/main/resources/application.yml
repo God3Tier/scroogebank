@@ -49,8 +49,8 @@ audit:
 auditor:
   base-url: ${AUDITOR_BASE_URL:http://localhost:8080}
 
-client-profile:
-  base-url: ${CLIENT_PROFILE_BASE_URL:http://localhost:8080}
+account-service:
+  base-url: ${ACCOUNT_SERVICE_BASE_URL:http://localhost:8083}
 
 sftp-receiver:
   base-url: ${SFTP_RECEIVER_BASE_URL:http://localhost:8082}

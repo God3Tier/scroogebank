@@ -25,7 +25,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 
 Full request/response shapes: Swagger UI at `http://localhost:8081/swagger-ui.html` when run locally with the `local` profile. See [API docs (Swagger UI)](../../README.md#api-docs-swagger-ui) in the root README.
 
-`GET /api/accounts/{accountId}/transactions` authenticates the caller here, checks `ADMIN`/`AGENT` access, and forwards the access token to the client-profile service to verify that the requested account belongs to the agent. After that check succeeds, it fetches transactions from the internal SFTP receiver. The receiver must not be exposed as a public API. Configure `CLIENT_PROFILE_BASE_URL` and `SFTP_RECEIVER_BASE_URL` for the deployment. Locally, start the shared DB and receiver with `make -C services/sftp up`, start client-profile with `make run-shared-db`, then call the user-service at `http://localhost:8081`.
+`GET /api/accounts/{accountId}/transactions` authenticates the caller here, checks `ADMIN`/`AGENT` access, and forwards the access token to account-service to verify that the requested account belongs to the agent. After that check succeeds, it fetches transactions from the internal SFTP receiver. The receiver must not be exposed as a public API. Configure `ACCOUNT_SERVICE_BASE_URL` and `SFTP_RECEIVER_BASE_URL` for the deployment. Locally, start the shared DB and receiver with `make -C services/sftp up`, start client-profile-management-service and account-service each with `make run-shared-db`, then call the user-service at `http://localhost:8081`.
 
 ## Design choices
 
@@ -58,7 +58,7 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 | `COGNITO_USER_POOL_ID`, `AWS_REGION` | Terraform | Cognito admin API access |
 | `AUDIT_QUEUE_URL` | ECS task definition / local environment | Auditor's `audit-insert` SQS queue; when empty, user audit publishing is disabled |
 | `AUDITOR_BASE_URL` | ECS task definition / local environment | Base URL of the Auditor HTTP service (defaults to `http://localhost:8080`) |
-| `CLIENT_PROFILE_BASE_URL` | ECS task definition / local environment | Base URL used to verify that the caller may access the requested CRM account (defaults to `http://localhost:8080`) |
+| `ACCOUNT_SERVICE_BASE_URL` | ECS task definition / local environment | Base URL of account-service, used to verify that the caller may access the requested CRM account (defaults to `http://localhost:8083`). Replaces `CLIENT_PROFILE_BASE_URL`, since accounts moved out of client-profile-management-service |
 | `SFTP_RECEIVER_BASE_URL` | ECS task definition / local environment | Internal SFTP receiver URL (defaults to `http://localhost:8082`) |
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |
 

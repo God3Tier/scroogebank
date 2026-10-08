@@ -35,13 +35,22 @@ tools-build:
 db-up:
 	$(COMPOSE) -f $(COMPOSE_FILE) up -d --wait db
 
-# Apply the CRM schema to an existing SFTP database volume. A new volume gets
+# Apply the client and account schemas to an existing SFTP database volume.
+# Locally the clients, accounts and transactions tables share this database so
+# the receiver account link keeps working; deployed, each service has its own
+# database (ADR-0017). A new volume gets
 # these scripts from the ordered PostgreSQL initialization mounts in compose.yaml.
 db-attach-crm: db-up
 	@if ! $(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT to_regclass('"'"'public.clients'"'"') IS NOT NULL"' | grep -qx t; then \
 		$(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < ../client-profile-management-service/data/V1_init.sql; \
 	fi
 	$(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < ../client-profile-management-service/data/V2_agent_subject.sql
+	@if $(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT to_regclass('"'"'public.accounts'"'"') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '"'"'accounts'"'"' AND column_name = '"'"'owner_agent_id'"'"')"' | grep -qx t; then \
+		echo "The accounts table predates the account-service split (it has no owner_agent_id). Remove this database volume and run make up again."; exit 1; \
+	fi
+	@if ! $(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT to_regclass('"'"'public.accounts'"'"') IS NOT NULL"' | grep -qx t; then \
+		$(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < ../account-service/data/V1_init.sql; \
+	fi
 	$(COMPOSE) -f $(COMPOSE_FILE) exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < receiver/data/V2_account_link.sql
 
 sqlboiler: db-up tools-build

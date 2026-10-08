@@ -1,15 +1,11 @@
 package security
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"regexp"
 
-	orm "client-profile-management-service/src/internal/repository/orm"
 	"github.com/gin-gonic/gin"
 )
 
@@ -31,6 +27,10 @@ func RequireCRMRole() gin.HandlerFunc {
 // RequireClientOwner limits agent access to their own client profiles. Admins
 // can access every profile. Missing and out-of-scope profiles both return 404
 // so callers cannot enumerate another agent's client IDs.
+//
+// account-service relies on this rule: it forwards the caller's token to
+// GET /api/clients/{id} before creating an account, and treats 404 as "no
+// such client for this caller".
 func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		principal, ok := principalFromGin(c)
@@ -48,88 +48,6 @@ func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 			return
 		}
 		if !ownsClient(c, db, "SELECT created_by_agent_id FROM clients WHERE client_id = $1", clientID, principal.Subject) {
-			return
-		}
-		c.Next()
-	}
-}
-
-// RequireClientBodyOwner applies the same rule to account creation, where the
-// target client ID is in the JSON body rather than the URL.
-func RequireClientBodyOwner(db *sql.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-			return
-		}
-		if principal.Role == "ADMIN" {
-			c.Next()
-			return
-		}
-
-		body, err := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
-			return
-		}
-		if len(body) > 1<<20 {
-			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
-			return
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(body))
-		var input struct {
-			ClientID string `json:"client_id"`
-		}
-		if json.Unmarshal(body, &input) != nil || !uuidPathPattern.MatchString(input.ClientID) {
-			c.Next() // The controller validates malformed or incomplete JSON.
-			return
-		}
-		if !ownsClient(c, db, "SELECT created_by_agent_id FROM clients WHERE client_id = $1", input.ClientID, principal.Subject) {
-			return
-		}
-		c.Next()
-	}
-}
-
-// RequireAccountOwner checks the owning client's agent before permitting an
-// account deletion.
-func RequireAccountOwner(db *sql.DB, parameter string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-			return
-		}
-		if principal.Role == "ADMIN" {
-			c.Next()
-			return
-		}
-		accountID := c.Param(parameter)
-		if !uuidPathPattern.MatchString(accountID) {
-			c.Next()
-			return
-		}
-		account, err := orm.FindAccount(c.Request.Context(), db, accountID)
-		if errors.Is(err, sql.ErrNoRows) {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
-			return
-		}
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "unable to authorize resource access"})
-			return
-		}
-		client, err := orm.FindClient(c.Request.Context(), db, account.ClientID)
-		if errors.Is(err, sql.ErrNoRows) {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
-			return
-		}
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "unable to authorize resource access"})
-			return
-		}
-		if client.CreatedByAgentID != principal.Subject {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 			return
 		}
 		c.Next()

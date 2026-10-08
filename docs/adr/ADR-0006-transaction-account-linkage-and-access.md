@@ -7,7 +7,7 @@
 - Feature/branch: Feature 3 / `transaction-integration`
 - Related issue/PR: Not yet assigned
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0035 (decision 4 only: the account-ownership check moved from client-profile to account-service; decisions 1–3 and 5–6 remain in force)
 
 ## Context
 
