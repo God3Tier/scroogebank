@@ -20,6 +20,17 @@ func (r accountRepository) ListAccountsByClientAndOwner(ctx context.Context, cli
 	)
 }
 
+func (r accountRepository) FindAccountsByIDs(ctx context.Context, ids []string) (orm.AccountSlice, error) {
+	if len(ids) == 0 {
+		return orm.AccountSlice{}, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	return listAccounts(ctx, r.db, qm.WhereIn(`"accounts"."id" IN ?`, args...))
+}
+
 // The generated query skips deleted accounts (ADR-0036).
 func listAccounts(ctx context.Context, db *sql.DB, mods ...qm.QueryMod) (orm.AccountSlice, error) {
 	mods = append(mods, qm.OrderBy(`"accounts"."opening_date", "accounts"."id"`))

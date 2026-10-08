@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +54,7 @@ type cognitoClaims struct {
 	Audience  string   `json:"aud"`
 	TokenUse  string   `json:"token_use"`
 	Groups    []string `json:"cognito:groups"`
+	Scope     string   `json:"scope"`
 	IssuedAt  int64    `json:"iat"`
 	NotBefore int64    `json:"nbf"`
 	Expires   int64    `json:"exp"`
@@ -97,44 +99,16 @@ func NewCognitoVerifier(issuer, clientID string) (*CognitoVerifier, error) {
 	return v, nil
 }
 
-func (v *CognitoVerifier) Verify(token string) (Principal, error) {
-	if len(token) > 16*1024 {
-		return Principal{}, errors.New("JWT is too large")
-	}
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return Principal{}, errors.New("malformed JWT")
-	}
+var errInvalidClaims = errors.New("JWT claims are invalid for this Cognito user pool or app client")
 
-	var header jwtHeader
-	if err := decodeSegment(parts[0], &header); err != nil || header.Algorithm != "RS256" || header.KeyID == "" || (header.Type != "" && header.Type != "JWT") {
-		return Principal{}, errors.New("unsupported JWT header")
-	}
-	key, err := v.signingKey(header.KeyID)
+// Verify accepts user access tokens issued to the CRM app client.
+func (v *CognitoVerifier) Verify(token string) (Principal, error) {
+	claims, err := v.verifyToken(token)
 	if err != nil {
 		return Principal{}, err
 	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return Principal{}, errors.New("malformed JWT signature")
-	}
-	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if err := rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature); err != nil {
-		return Principal{}, errors.New("invalid JWT signature")
-	}
-
-	var claims cognitoClaims
-	if err := decodeSegment(parts[1], &claims); err != nil {
-		return Principal{}, errors.New("malformed JWT claims")
-	}
-	now := time.Now().Unix()
-	const clockSkew int64 = 30
-	if claims.Issuer != v.issuer || claims.ClientID != v.clientID ||
-		(claims.Audience != "" && (v.audience == "" || claims.Audience != v.audience)) || claims.TokenUse != "access" ||
-		claims.Subject == "" || len(claims.Subject) > 128 ||
-		claims.Expires <= now-clockSkew || claims.IssuedAt == 0 || claims.IssuedAt > now+clockSkew ||
-		(claims.NotBefore != 0 && claims.NotBefore > now+clockSkew) {
-		return Principal{}, errors.New("JWT claims are invalid for this Cognito user pool or app client")
+	if claims.ClientID != v.clientID {
+		return Principal{}, errInvalidClaims
 	}
 
 	role := ""
@@ -151,14 +125,97 @@ func (v *CognitoVerifier) Verify(token string) (Principal, error) {
 	return Principal{Subject: claims.Subject, Role: role}, nil
 }
 
-func (v *CognitoVerifier) Middleware() gin.HandlerFunc {
+// verifyToken checks the signature and the claims every access token from
+// this user pool must have, whichever app client it was issued to.
+func (v *CognitoVerifier) verifyToken(token string) (cognitoClaims, error) {
+	if len(token) > 16*1024 {
+		return cognitoClaims{}, errors.New("JWT is too large")
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return cognitoClaims{}, errors.New("malformed JWT")
+	}
+
+	var header jwtHeader
+	if err := decodeSegment(parts[0], &header); err != nil || header.Algorithm != "RS256" || header.KeyID == "" || (header.Type != "" && header.Type != "JWT") {
+		return cognitoClaims{}, errors.New("unsupported JWT header")
+	}
+	key, err := v.signingKey(header.KeyID)
+	if err != nil {
+		return cognitoClaims{}, err
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return cognitoClaims{}, errors.New("malformed JWT signature")
+	}
+	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+	if err := rsa.VerifyPKCS1v15(key, crypto.SHA256, digest[:], signature); err != nil {
+		return cognitoClaims{}, errors.New("invalid JWT signature")
+	}
+
+	var claims cognitoClaims
+	if err := decodeSegment(parts[1], &claims); err != nil {
+		return cognitoClaims{}, errors.New("malformed JWT claims")
+	}
+	now := time.Now().Unix()
+	const clockSkew int64 = 30
+	if claims.Issuer != v.issuer ||
+		(claims.Audience != "" && (v.audience == "" || claims.Audience != v.audience)) || claims.TokenUse != "access" ||
+		claims.Subject == "" || len(claims.Subject) > 128 ||
+		claims.Expires <= now-clockSkew || claims.IssuedAt == 0 || claims.IssuedAt > now+clockSkew ||
+		(claims.NotBefore != 0 && claims.NotBefore > now+clockSkew) {
+		return cognitoClaims{}, errInvalidClaims
+	}
+	return claims, nil
+}
+
+// ServiceMiddleware admits Cognito client-credentials tokens: another service
+// calling with no user, such as the transaction import (ADR-0025, ADR-0037).
+// The token must come from one of serviceClientIDs and carry requiredScope.
+func (v *CognitoVerifier) ServiceMiddleware(serviceClientIDs []string, requiredScope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := strings.Fields(c.GetHeader("Authorization"))
-		if len(authorization) != 2 || !strings.EqualFold(authorization[0], "Bearer") {
+		token, ok := bearerToken(c)
+		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Bearer access token required"})
 			return
 		}
-		principal, err := v.Verify(authorization[1])
+		claims, err := v.verifyToken(token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
+			return
+		}
+		if !serviceTokenAllowed(claims, serviceClientIDs, requiredScope) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "service scope required"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// serviceTokenAllowed rejects user tokens (they carry groups) and any app
+// client or scope that was not granted.
+func serviceTokenAllowed(claims cognitoClaims, serviceClientIDs []string, requiredScope string) bool {
+	return requiredScope != "" && len(claims.Groups) == 0 &&
+		slices.Contains(serviceClientIDs, claims.ClientID) &&
+		slices.Contains(strings.Fields(claims.Scope), requiredScope)
+}
+
+func bearerToken(c *gin.Context) (string, bool) {
+	authorization := strings.Fields(c.GetHeader("Authorization"))
+	if len(authorization) != 2 || !strings.EqualFold(authorization[0], "Bearer") {
+		return "", false
+	}
+	return authorization[1], true
+}
+
+func (v *CognitoVerifier) Middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token, ok := bearerToken(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Bearer access token required"})
+			return
+		}
+		principal, err := v.Verify(token)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
 			return

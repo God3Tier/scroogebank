@@ -10,8 +10,13 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
+| POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
 
-`GET /health` is public; all `/api` routes require a Cognito **access token**.
+`GET /health` is public; all `/api` routes require a Cognito user **access token**.
+
+`/internal` routes take only Cognito **client-credentials** tokens: the token's app client must be listed in `COGNITO_SERVICE_CLIENT_IDS`, and it must carry the scope `crm-accounts/lookup`. User tokens are refused there, and service tokens are refused on `/api`. The routes sit outside `/api`, so API Gateway never routes them ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). Lookups are not audited: they change nothing, and the import audits each file.
+
+Request `{"ids": ["<uuid>", ...]}`; response `{"accounts": [{"id": "<uuid>", "client_id": "<uuid>"}]}`. IDs that are not UUIDs are ignored.
 
 ## Deleting an account
 
@@ -48,9 +53,9 @@ client-profile-management-service calls the list endpoint before deleting a clie
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-This starts this service's own PostgreSQL on port 5434, loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column; run `make db-reset` (and, for `run-shared-db`, `docker compose -f ../sftp/compose.yaml down -v`) to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
+This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column; run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
 
-For the SFTP transaction integration, start the shared database with `make -C ../sftp up`, then run `make run-shared-db` here and in `../client-profile-management-service`. Locally, clients, accounts and transactions then share the SFTP stack's `crm` database, because the receiver's `transactions.account_id` foreign key needs `accounts` in the same database. Deployed, each service has its own database; replacing that foreign key is Feature 3 follow-up work.
+For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transaction-ingest app client ID>` to the command above, run client-profile-management-service with its own `make run`, then start the receiver with `make -C ../sftp up`. Each service keeps its own database; the import links transactions to accounts through `/internal/accounts/lookup`.
 
 | Command | Purpose |
 |---|---|
@@ -65,8 +70,9 @@ For the SFTP transaction integration, start the shared database with `make -C ..
 |---|---|
 | `CLIENT_SERVICE_BASE_URL` | client-profile-management-service URL. Required; must be `https://` in production, because the caller's token is forwarded to it |
 | `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID`, `COGNITO_API_AUDIENCE` | Token validation, as in client-profile-management-service |
+| `COGNITO_SERVICE_CLIENT_IDS` | Comma-separated Cognito app clients allowed to call `/internal` with a client-credentials token (the transaction import's). Empty: every `/internal` call is refused |
 | `AWS_REGION`, `AUDIT_QUEUE_URL`, `AWS_ENDPOINT_URL` | Auditor SQS queue |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5434`, `accounts`) |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`) |
 | `APP_ENV`, `APP_ADDR`, `APP_TLS_CERT_FILE`, `APP_TLS_KEY_FILE` | `local` or `production`; listen address (default `:8083`); TLS in production |
 
 ## Auditor SQS events

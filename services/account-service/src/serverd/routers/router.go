@@ -26,7 +26,14 @@ import (
 	http.StatusServiceUnavailable = 503
 */
 
-func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, db *sql.DB, authenticate, auditLogger gin.HandlerFunc) {
+func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, db *sql.DB, authenticate, authenticateService, auditLogger gin.HandlerFunc) {
+	// Service-to-service routes take client-credentials tokens, never user
+	// tokens, and sit outside /api so API Gateway never routes them (ADR-0037).
+	// Not audited: a lookup changes nothing, and the import audits each file.
+	internal := router.Group("/internal")
+	internal.Use(authenticateService)
+	internal.POST("/accounts/lookup", adaptHandler(accounts.LookupAccounts, ""))
+
 	api := router.Group("/api")
 	api.Use(authenticate)
 	api.Use(security.RequireCRMRole())

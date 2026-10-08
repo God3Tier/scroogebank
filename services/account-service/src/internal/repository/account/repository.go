@@ -16,6 +16,9 @@ type Repository interface {
 	// ListAccountsByClientAndOwner returns a client's accounts owned by one
 	// agent. Agent scope.
 	ListAccountsByClientAndOwner(ctx context.Context, clientID, ownerAgentID string) (orm.AccountSlice, error)
+	// FindAccountsByIDs returns the accounts among ids that exist. Service
+	// scope: the transaction import links rows with it (ADR-0037).
+	FindAccountsByIDs(ctx context.Context, ids []string) (orm.AccountSlice, error)
 }
 
 type accountRepository struct {

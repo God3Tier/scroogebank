@@ -17,6 +17,9 @@ type AccountService interface {
 	DeleteAccount(ctx context.Context, accountID string) error
 	// ListAccounts returns a client's accounts that the caller may see.
 	ListAccounts(ctx context.Context, clientID string, caller models.Caller) (orm.AccountSlice, error)
+	// LookupAccounts returns the accounts among ids that exist and are not
+	// deleted, for the transaction import (ADR-0037).
+	LookupAccounts(ctx context.Context, ids []string) (orm.AccountSlice, error)
 }
 
 type accountService struct {
