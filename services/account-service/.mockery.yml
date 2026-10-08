@@ -1,0 +1,17 @@
+all: true
+recursive: true
+
+dir: "{{.InterfaceDir}}"
+include-auto-generated: false
+filename: mocks.go
+
+packages:
+  account-service/src/internal/clients:
+    config:
+      all: true
+  account-service/src/internal/repository/account:
+    config:
+      all: true
+  account-service/src/internal/service/account:
+    config:
+      all: true
