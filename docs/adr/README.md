@@ -9,7 +9,9 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0003](ADR-0003-maintain-one-line-adr-index.md) — Every ADR must have a one-line entry in the ADR index, which agents scan for relevance before reading applicable decisions in full.
 - [ADR-0004](ADR-0004-auditor-kafka-to-sqs-migration.md) — Auditor service messaging migrates from Kafka to Amazon SQS (standard queue plus DLQ), superseding the "no message broker" note in `docs/architecture/nfr-notes.md`.
 - [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md) — Features 1 and 2 share Cognito identity, with service-side JWT validation and Agent-owned client/account authorization.
-- [ADR-0006](ADR-0006-transaction-account-linkage-and-access.md) — Feature 3 links imports to CRM account UUIDs and serves authenticated transaction reads through User-service, with account ownership checked by client-profile.
+- [ADR-0006](ADR-0006-transaction-account-linkage-and-access.md) — Feature 3 links imports to CRM account UUIDs and serves authenticated transaction reads through User-service, with account ownership checked by client-profile (decision 4 superseded by ADR-0035: ownership is now checked by account-service).
+- [ADR-0017](ADR-0017-microservices-per-business-area.md) — One microservice and database per business area (accounts split from clients), with Go allowed for the auditor, client-service and account-service.
+- [ADR-0035](ADR-0035-account-ownership-across-services.md) — account-service copies each account's owning agent from client-service at creation using the caller's token, checks ownership locally, and client-service refuses to delete a client with accounts; both checks fail closed; supersedes ADR-0006 decision 4.
 
 ## Superseded decisions
 
@@ -19,7 +21,6 @@ Use this index to identify which ADRs are relevant before loading their full tex
 
 Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](../architecture/system-overview.md). Numbering starts at 0017 because feature branches already use 0001–0016.
 
-- [ADR-0017](ADR-0017-microservices-per-business-area.md) — One microservice and database per business area (accounts split from clients), with Go allowed for the auditor and client-service.
 - [ADR-0018](ADR-0018-ecs-fargate-compute.md) — Run all services and scheduled tasks on ECS Fargate across two AZs with 2–6 tasks per service, rejecting EKS on cost and effort.
 - [ADR-0019](ADR-0019-edge-entry-chain.md) — Enter through CloudFront with WAF, then API Gateway HTTP API (JWT check, throttling), a VPC Link and a private internal ALB.
 - [ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md) — Extends ADR-0004: producers write audit events through a transactional outbox to the shared `audit-insert` queue; the ingest Lambda uses `ingest_outbox`; Cognito triggers fail open.

@@ -21,7 +21,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
 | [Environments and cost](../cost/budget.md) | dev, staging and prod; rough monthly cost; budget levers |
 | [Decision log](decision-log.md) | Every major decision: chosen, not chosen and why, with its ADR |
 | [Open items](open-items.md) | Decisions still needed from the team, with owners |
-| [ADR index](../adr/README.md) | ADR-0017 to ADR-0034 record these decisions (Proposed) |
+| [ADR index](../adr/README.md) | ADR-0017 to ADR-0034 record these decisions (ADR-0017 Accepted; the rest Proposed) |
 
 ## Summary
 
@@ -91,7 +91,7 @@ The split into two boxes is only for layout: services used by the browser and th
 
 ## Components
 
-Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Proposed).
+Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted).
 
 | Component | Responsibility | Runtime |
 |---|---|---|
