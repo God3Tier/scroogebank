@@ -28,11 +28,11 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 ## 6. Splitting accounts out of client-profile-management-service
 
-The current Go service holds both clients and accounts, linked by a database foreign key. It must be split into client-service and account-service, with the foreign key replaced by an API check. The owner and account-service language are assigned in the Feature 2 plan.
+**In progress (2026-10-08).** `services/account-service` (Go) now owns accounts, extracted from `client-profile-management-service`, on branch `task/client-profile-management/account-service-split`. The foreign key is replaced by API checks in both directions, and each account stores its owning agent ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). Still open: locally, clients, accounts and transactions keep sharing the SFTP stack's `crm` database, because the receiver's `transactions.account_id` foreign key and trigger ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md)) need `accounts` in the same database. Separating them is Feature 3 work. `client-profile-management-service` keeps its name for now.
 
 ## 7. Go runtime exception
 
-The auditor and client-service are written in Go, not the Java 25 baseline. This needs an ADR (project_plan §2.2).
+The auditor, client-service and account-service are written in Go, not the Java 25 baseline. [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted 2026-10-08) records the exception (project_plan §2.2).
 
 ## 8. Migrations on startup or as a task
 
