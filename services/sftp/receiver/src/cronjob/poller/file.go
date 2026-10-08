@@ -61,8 +61,14 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 	// for the next poll: Unmatched must mean "no such account", never "could
 	// not check".
 	if err := p.linkAccounts(ctx, transactions); err != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("look up accounts: %w", err))
+		err = fmt.Errorf("look up accounts: %w", err)
+		if p.lookupFailureAudited[fileName] {
+			return err
+		}
+		p.lookupFailureAudited[fileName] = true
+		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", err)
 	}
+	delete(p.lookupFailureAudited, fileName)
 	accepted := 0
 	for _, transaction := range transactions {
 		if err := p.store.SaveTransaction(ctx, transaction); err != nil {

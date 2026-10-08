@@ -70,6 +70,54 @@ func TestPollWithoutAccountServiceSavesNothingAndKeepsTheFile(t *testing.T) {
 	assert.Contains(t, remote.files, "/reports/link.json")
 }
 
+type fakeAudit struct {
+	completed []FileCompleted
+	failures  []ProcessingError
+}
+
+func (a *fakeAudit) WriteFileCompleted(_ context.Context, item FileCompleted) error {
+	a.completed = append(a.completed, item)
+	return nil
+}
+
+func (a *fakeAudit) WriteProcessingError(_ context.Context, item ProcessingError) error {
+	a.failures = append(a.failures, item)
+	return nil
+}
+
+func TestPollAuditsOnlyTheFirstLookupFailureOfAnOutage(t *testing.T) {
+	ctx := context.Background()
+	remote := newFakeRemote()
+	remote.add("link.json", linkJSON)
+	directory := &fakeDirectory{err: errors.New("account-service unavailable")}
+	audit := &fakeAudit{}
+	p := New(Config{RemoteDir: "/reports"}, &fakeStore{}, directory, audit)
+	p.connector = func(context.Context) (remoteSFTP, func(), error) { return remote, func() {}, nil }
+
+	// The file is retried on every poll, but the outage is audited once.
+	for range 3 {
+		require.Error(t, p.Poll(ctx))
+	}
+	require.Len(t, audit.failures, 1)
+	assert.Equal(t, "link.json", audit.failures[0].FileName)
+	assert.Equal(t, "SYSTEM_EXCEPTION", audit.failures[0].Action)
+
+	// account-service is back: the file is imported.
+	directory.err = nil
+	directory.accounts = map[string]string{knownAccount: knownClient}
+	require.NoError(t, p.Poll(ctx))
+	require.Len(t, audit.completed, 1)
+
+	// A later outage is audited again, once per waiting file.
+	directory.err = errors.New("account-service unavailable again")
+	remote.add("next.json", linkJSON)
+	for range 2 {
+		require.Error(t, p.Poll(ctx))
+	}
+	require.Len(t, audit.failures, 2)
+	assert.Equal(t, "next.json", audit.failures[1].FileName)
+}
+
 func TestPollSkipsTheLookupWhenNoReferenceIsAUUID(t *testing.T) {
 	directory := &fakeDirectory{err: errors.New("must not be called")}
 

@@ -45,10 +45,15 @@ type Poller struct {
 	accounts  accountDirectory
 	audit     AuditWriter
 	connector remoteConnector
+
+	// lookupFailureAudited holds files whose account lookup failure has been
+	// audited. Such a file is retried on every poll, so only the first failure
+	// of each outage is audited. Polls run one at a time, so no lock is needed.
+	lookupFailureAudited map[string]bool
 }
 
 func New(cfg Config, store transactionStore, accounts accountDirectory, auditWriters ...AuditWriter) *Poller {
-	p := &Poller{config: cfg, store: store, accounts: accounts}
+	p := &Poller{config: cfg, store: store, accounts: accounts, lookupFailureAudited: make(map[string]bool)}
 	if len(auditWriters) > 0 {
 		p.audit = auditWriters[0]
 	}

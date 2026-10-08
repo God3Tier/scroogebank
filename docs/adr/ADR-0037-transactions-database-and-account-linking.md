@@ -59,7 +59,9 @@ For the import's credential, a private unauthenticated endpoint was also conside
 4. **Linking happens once per file.** After validating every row, the poller sends the file's distinct UUID references, case-insensitively, in batches of 500.
    - Rows whose account is returned get `account_id`, `client_id` and `Matched`.
    - All others are `Unmatched`: unknown accounts, deleted accounts and external references.
-5. **Fail closed.** If account-service gives no answer, nothing from the file is saved, a `SYSTEM_EXCEPTION` audit event is sent, and the file stays for the next poll.
+5. **Fail closed.** If account-service gives no answer, nothing from the file is saved, and the file stays for the next poll.
+   - A `SYSTEM_EXCEPTION` audit event is sent for the first failed attempt on each file.
+   - Retries of that file are not audited again until a lookup succeeds, so an outage does not add an event to the chain on every poll. A poller restart audits the next failure again.
 6. **No later re-linking.** A row imported before its account existed stays `Unmatched`, as it did with the trigger. A reconciliation job can be added if needed.
 7. **The read path is unchanged.** user-service checks the account with account-service, then reads the receiver by `account_id` (ADR-0006 decisions 3, 5 and 6; ADR-0035 decision 6).
 8. **Locally, each service has its own database:**
@@ -117,7 +119,7 @@ Cognito charges per successful machine-to-machine token request, about USD 0.002
   - a repository test that the lookup skips deleted and unknown accounts;
   - service and controller tests for the 500-ID limit, non-UUID IDs and errors.
 - **Receiver:**
-  - poller tests: one lookup per file, case-insensitive matching, unmatched and external references, and a lookup failure that saves nothing and keeps the file;
+  - poller tests: one lookup per file, case-insensitive matching, unmatched and external references, a lookup failure that saves nothing and keeps the file, and an outage audited once per file rather than on every retry;
   - `httptest` tests for the token and lookup client (token reuse, batching, every failure mode);
   - a repository test that the link columns are stored.
 - **End to end (not yet run):**
