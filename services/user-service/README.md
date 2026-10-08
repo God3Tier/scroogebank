@@ -21,8 +21,11 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 | GET | `/api/corrupted-logs` | ADMIN | List corrupted audit logs from the Auditor service |
 | POST | `/api/corrupted-logs` | ADMIN | Create a corrupted audit log in the Auditor service |
 | DELETE | `/api/corrupted-logs/{id}` | ADMIN | Delete a corrupted audit log from the Auditor service |
+| GET | `/api/accounts/{accountId}/transactions` | ADMIN/AGENT | Read transactions for an account the caller may access |
 
 Full request/response shapes: Swagger UI at `http://localhost:8081/swagger-ui.html` when run locally with the `local` profile. See [API docs (Swagger UI)](../../README.md#api-docs-swagger-ui) in the root README.
+
+`GET /api/accounts/{accountId}/transactions` authenticates the caller here, checks `ADMIN`/`AGENT` access, and forwards the access token to the client-profile service to verify that the requested account belongs to the agent. After that check succeeds, it fetches transactions from the internal SFTP receiver. The receiver must not be exposed as a public API. Configure `CLIENT_PROFILE_BASE_URL` and `SFTP_RECEIVER_BASE_URL` for the deployment. Locally, start the shared DB and receiver with `make -C services/sftp up`, start client-profile with `make run-shared-db`, then call the user-service at `http://localhost:8081`.
 
 ## Design choices
 
@@ -55,6 +58,8 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 | `COGNITO_USER_POOL_ID`, `AWS_REGION` | Terraform | Cognito admin API access |
 | `AUDIT_QUEUE_URL` | ECS task definition / local environment | Auditor's `audit-insert` SQS queue; when empty, user audit publishing is disabled |
 | `AUDITOR_BASE_URL` | ECS task definition / local environment | Base URL of the Auditor HTTP service (defaults to `http://localhost:8080`) |
+| `CLIENT_PROFILE_BASE_URL` | ECS task definition / local environment | Base URL used to verify that the caller may access the requested CRM account (defaults to `http://localhost:8080`) |
+| `SFTP_RECEIVER_BASE_URL` | ECS task definition / local environment | Internal SFTP receiver URL (defaults to `http://localhost:8082`) |
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |
 
 None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. All are set by the ECS task definition in `infra/terraform/envs/prod/main.tf`.
@@ -63,7 +68,7 @@ This service's task role is the only one granted Cognito admin permissions (`cog
 
 ## Audit events
 
-After each user API request completes, the service publishes an SQS event for user creation, retrieval, update, disable, and password-reset operations. Corrupted-log proxy operations are also recorded as read/create/delete events, without copying their request bodies. The successful root-admin bootstrap also publishes a system-attributed create event. Events use `event_type=CRUD` and `source_service=USER_MANAGEMENT`. `actor_id` is the verified Cognito `sub` (or `system:root-admin-initializer` for bootstrap); the payload records the resource ID, endpoint, HTTP method, response status, timestamp, and role where available. It does not copy user names, email addresses, passwords, or request bodies into the queue. This service has no login endpoint because sign-in is handled by Cognito Hosted UI, so login/logout events are outside its request audit scope.
+After each user API request completes, the service publishes an SQS event for user creation, retrieval, update, disable, and password-reset operations. Corrupted-log proxy operations and transaction reads are also recorded, without copying response bodies. The successful root-admin bootstrap also publishes a system-attributed create event. Events use `event_type=CRUD` and `source_service=USER_MANAGEMENT`. `actor_id` is the verified Cognito `sub` (or `system:root-admin-initializer` for bootstrap); the payload records the resource ID, endpoint, HTTP method, response status, timestamp, and role where available. It does not copy user names, email addresses, passwords, or response bodies into the queue. This service has no login endpoint because sign-in is handled by Cognito Hosted UI, so login/logout events are outside its request audit scope.
 
 SQS publishing is best-effort: a send failure is logged with its event ID and does not change the API response. Set `AUDIT_QUEUE_URL` to the standard `audit-insert` queue to enable publishing. The Auditor accepts the user-service payload while continuing to accept its existing generic CRUD payload during rollout.
 

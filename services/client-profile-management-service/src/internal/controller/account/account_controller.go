@@ -7,6 +7,7 @@ import (
 
 type AccountController interface {
 	CreateAccount(w http.ResponseWriter, r *http.Request)
+	GetAccount(w http.ResponseWriter, r *http.Request)
 	DeleteAccount(w http.ResponseWriter, r *http.Request)
 }
 

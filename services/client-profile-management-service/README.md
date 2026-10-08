@@ -10,6 +10,8 @@ make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-poo
 
 The command starts PostgreSQL, initializes or migrates its schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
 
+For the SFTP transaction integration, start the shared database and internal receiver with `make -C ../sftp up`, then run `make run-shared-db` with the same Cognito and AWS settings. This connects the profile service to the CRM schema initialized by the SFTP Compose stack rather than starting this service's separate local PostgreSQL database.
+
 To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`.
 
 ## Cognito authorization

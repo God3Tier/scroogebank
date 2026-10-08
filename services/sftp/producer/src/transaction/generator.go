@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 	"uuid"
 )
@@ -16,10 +17,14 @@ var (
 	status     = []string{"COMPLETED", "PENDING", "FAILED"}
 )
 
-func generateTransaction() Transaction {
+func generateTransaction(accountIDs []string) Transaction {
+	accountID := fmt.Sprintf("ACC-%06d", rand.Intn(999999))
+	if len(accountIDs) > 0 {
+		accountID = strings.TrimSpace(accountIDs[rand.Intn(len(accountIDs))])
+	}
 	return Transaction{
 		TransactionID:   uuid.New().String(),
-		AccountID:       fmt.Sprintf("ACC-%06d", rand.Intn(999999)),
+		AccountID:       accountID,
 		TransferDate:    generateRandomRecent(),
 		TransactionType: txnTypes[rand.Intn(100)%2],
 		Amount:          generateRandomAmount(),

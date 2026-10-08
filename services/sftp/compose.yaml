@@ -9,7 +9,10 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ../client-profile-management-service/data/V1_init.sql:/docker-entrypoint-initdb.d/001-crm-schema.sql:ro
+      - ../client-profile-management-service/data/V2_agent_subject.sql:/docker-entrypoint-initdb.d/002-agent-subject.sql:ro
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/003-transactions.sql:ro
+      - ./receiver/data/V2_account_link.sql:/docker-entrypoint-initdb.d/004-account-link.sql:ro
     networks:
       - backend
     healthcheck:
@@ -28,7 +31,10 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
     volumes:
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ../client-profile-management-service/data/V1_init.sql:/docker-entrypoint-initdb.d/001-crm-schema.sql:ro
+      - ../client-profile-management-service/data/V2_agent_subject.sql:/docker-entrypoint-initdb.d/002-agent-subject.sql:ro
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/003-transactions.sql:ro
+      - ./receiver/data/V2_account_link.sql:/docker-entrypoint-initdb.d/004-account-link.sql:ro
     networks:
       - backend
     healthcheck:
@@ -93,6 +99,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  receiver-api:
+    build: ./receiver
+    working_dir: /workspace
+    volumes:
+      - ./receiver:/workspace
+    command: ["go", "run", "./src/serverd"]
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-crm}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      DB_NAME: ${POSTGRES_DB:-crm}
+      APP_ADDR: ":8080"
+    ports:
+      - "127.0.0.1:${TRANSACTION_API_PORT:-8082}:8080"
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   producer:
     build: ./producer
     volumes:
@@ -102,6 +135,7 @@ services:
       - OUTPUT_DIR=/output
       - SOURCE_FILE=/app/data/report.json
       - INTERVAL_SECONDS=${PUBLISH_INTERVAL_SECONDS:-300}
+      - CRM_ACCOUNT_IDS=${CRM_ACCOUNT_IDS:-}
     networks:
       - backend
     restart: unless-stopped

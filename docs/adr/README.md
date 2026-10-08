@@ -9,6 +9,7 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0003](ADR-0003-maintain-one-line-adr-index.md) — Every ADR must have a one-line entry in the ADR index, which agents scan for relevance before reading applicable decisions in full.
 - [ADR-0004](ADR-0004-auditor-kafka-to-sqs-migration.md) — Auditor service messaging migrates from Kafka to Amazon SQS (standard queue plus DLQ), superseding the "no message broker" note in `docs/architecture/nfr-notes.md`.
 - [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md) — Features 1 and 2 share Cognito identity, with service-side JWT validation and Agent-owned client/account authorization.
+- [ADR-0006](ADR-0006-transaction-account-linkage-and-access.md) — Feature 3 links imports to CRM account UUIDs and serves authenticated transaction reads through User-service, with account ownership checked by client-profile.
 
 ## Superseded decisions
 
