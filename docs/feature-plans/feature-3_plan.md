@@ -5,7 +5,7 @@
 - Status: In progress
 - Primary developer: Joseph Yau
 - Current working branch: `transaction-integration`
-- Last updated: 2026-09-30
+- Last updated: 2026-10-08
 - Related decision: [ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md)
 
 ## Goal
@@ -36,3 +36,4 @@ Import external SFTP transactions, link matched records to CRM account UUIDs, an
 |---|---|---|---|---|---|---|
 | F3-READ-01 | Link transaction rows to CRM account UUIDs and retrieve through SQLBoiler | Joseph Yau | `services/sftp/receiver/data`, repository, `serverd`, Compose | Shared CRM schema | `transaction-integration` | In progress |
 | F3-READ-02 | Add authenticated User-service route; verify account ownership through client-profile before proxying to receiver | Joseph Yau | `services/user-service`, client-profile account repository/controller/router | Cognito app client and internal service URLs | `transaction-integration` | In progress |
+| F3-DB-01 | Give transactions their own database: replace the receiver's account foreign key and trigger with a lookup through account-service at import (client-credentials token), and drop the shared local `crm` database ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)) | Neo Jia Wen (agreed with Joseph Yau) | `services/sftp/receiver` (data, poller, `cronjob/accounts`), `services/sftp` Compose and Makefile, account-service `/internal/accounts/lookup` and service-token middleware | Cognito resource server `crm-accounts` and app client `transaction-ingest` | `task/transaction-integration/separate-transactions-db` | Implemented; unit and database tests pass; end-to-end checks not run |

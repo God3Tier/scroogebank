@@ -28,7 +28,7 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 ## 6. Splitting accounts out of client-profile-management-service
 
-**In progress (2026-10-08).** `services/account-service` (Go) now owns accounts, extracted from `client-profile-management-service`, on branch `task/client-profile-management/account-service-split`. The foreign key is replaced by API checks in both directions, and each account stores its owning agent ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). Still open: locally, clients, accounts and transactions keep sharing the SFTP stack's `crm` database, because the receiver's `transactions.account_id` foreign key and trigger ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md)) need `accounts` in the same database. Separating them is Feature 3 work. `client-profile-management-service` keeps its name for now.
+**Resolved (2026-10-08).** `services/account-service` (Go) now owns accounts, extracted from `client-profile-management-service`, on branch `task/client-profile-management/account-service-split`. The foreign key is replaced by API checks in both directions, and each account stores its owning agent ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). Transactions now have their own database too: the import links each row to its account by asking account-service, instead of the foreign key and trigger of ADR-0006 ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)). `client-profile-management-service` keeps its name for now.
 
 ## 7. Go runtime exception
 
@@ -40,7 +40,7 @@ Confirm whether each service runs db-migrate as a separate task in staging and p
 
 ## 9. Client ID validation at import
 
-For now, transaction-ingest does not check Client IDs against client-service; ownership is checked when transactions are read ([Ingestion decisions](data-flow.md#ingestion-decisions)). The Feature 3 owner must confirm this, or choose another way to validate, in the Feature 3 plan and [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (project_plan §13 requires the ingestion design to be decided explicitly).
+For now, transaction-ingest does not check Client IDs against client-service; ownership is checked when transactions are read ([Ingestion decisions](data-flow.md#ingestion-decisions)). Account IDs, by contrast, are checked at import: the poller asks account-service which account references exist and stores their client IDs ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)). The Feature 3 owner must confirm this, or choose another way to validate, in the Feature 3 plan and [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (project_plan §13 requires the ingestion design to be decided explicitly).
 
 ## 10. How transaction reads enforce agent ownership
 
