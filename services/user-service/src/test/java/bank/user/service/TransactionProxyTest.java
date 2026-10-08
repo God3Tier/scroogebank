@@ -34,13 +34,13 @@ class TransactionProxyTest {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         proxy = new TransactionProxy(builder, new ObjectMapper());
-        ReflectionTestUtils.setField(proxy, "clientProfileBaseUrl", "http://client-profile");
+        ReflectionTestUtils.setField(proxy, "accountServiceBaseUrl", "http://account-service");
         ReflectionTestUtils.setField(proxy, "receiverBaseUrl", "http://receiver");
     }
 
     @Test
     void checksAccountOwnershipThenFetchesTransactionsWithoutForwardingTokenToReceiver() {
-        server.expect(requestTo("http://client-profile/api/accounts/" + ACCOUNT_ID))
+        server.expect(requestTo("http://account-service/api/accounts/" + ACCOUNT_ID))
                 .andExpect(method(GET))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, TOKEN))
                 .andRespond(withSuccess("{\"id\":\"" + ACCOUNT_ID + "\"}", MediaType.APPLICATION_JSON));
@@ -58,7 +58,7 @@ class TransactionProxyTest {
 
     @Test
     void returnsOwnershipFailureWithoutCallingReceiver() {
-        server.expect(requestTo("http://client-profile/api/accounts/" + ACCOUNT_ID))
+        server.expect(requestTo("http://account-service/api/accounts/" + ACCOUNT_ID))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, TOKEN))
                 .andRespond(withStatus(FORBIDDEN).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"error\":\"forbidden\"}"));
