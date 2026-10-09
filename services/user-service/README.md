@@ -15,7 +15,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 | POST | `/api/users` | ADMIN | Create a user (agent or admin) |
 | GET | `/api/users` | ADMIN | List users, paged; optional `role` (`ADMIN`/`AGENT`) and `enabled` filters, `page` (default 0) and `size` (default 20, max 100). Sorted by last name, first name |
 | GET | `/api/users/{id}` | ADMIN | Fetch a user |
-| GET | `/api/activities` | ADMIN | Audit log across all services, newest first; optional `agentId`, `from`/`to` (ISO-8601, `from` inclusive, `to` exclusive), `size` (default 20, max 100) and `cursor` (the previous page's `nextCursor`) |
+| GET | `/api/activities` | ADMIN/AGENT | The activity feed, newest first: changes CRM users made, never reads. An admin sees every agent and may narrow it with `agentId` (a Cognito `sub`); an agent sees only their own (another `agentId` is 403). Optional `from`/`to` (ISO-8601, `from` inclusive, `to` exclusive), `size` (default 20, max 100) and `cursor` (the previous page's `nextCursor`). Each entry carries `actorName` when the actor is a CRM user here |
 | PUT | `/api/users/{id}` | ADMIN | Update first/last name |
 | PATCH | `/api/users/{id}/role` | ADMIN | Change role (`{"role":"ADMIN"}` or `AGENT`); root admin: rejected with 403 |
 | PATCH | `/api/users/{id}/disable` | ADMIN | Disable a user (root admin: rejected with 403) |
@@ -63,7 +63,7 @@ The endpoint records what the frontend reports; it does not check that a revocat
 - **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through an outbox and SQS; audit payloads omit names, email addresses, passwords, and request bodies.
 - **Resiliency**: audit events wait in the outbox while SQS or the Auditor is unavailable, and are sent when it recovers; user requests never wait on either.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
-- **Activity feed**: `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). Pages are keyed by sequence number, not offset, so new entries do not shift pages the admin has not read yet. The caller's own access token is forwarded in the gRPC metadata, and the Auditor checks it itself (ADR-0021). The auditor call has a 3-second deadline, and an auditor failure returns `503`. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
+- **Activity feed** ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)): `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). The caller's own access token is forwarded in the gRPC metadata, and the auditor checks it and applies the agent rule itself. The auditor lists only changes: creating, updating, deleting or disabling a record, changing a role and resetting a password, not reads, sign-outs, failed attempts or system events. Pages are keyed by sequence number, not offset, so new entries do not shift pages not read yet. Each call has a 2-second deadline and is retried once on `UNAVAILABLE`; a circuit breaker (Resilience4j) opens after half of the last 10 calls failed and fails fast for 30 seconds. An auditor failure returns `503`. Actor names are looked up here in one query per page. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
 
 ## Configuration
 
@@ -72,7 +72,8 @@ The endpoint records what the frontend reports; it does not check that a revocat
 | `DB_HOST` / `DB_PORT` | This service's own RDS instance | Postgres connection |
 | `USER_DB_NAME` | `users_db` | Database name |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials |
-| `AUDITOR_GRPC_TARGET` | The auditor's Service Connect endpoint, e.g. `auditor:9090` | Activity feed reads |
+| `AUDITOR_GRPC_TARGET` | The auditor's Service Connect endpoint, e.g. `auditor:50051` | Activity feed reads |
+| `AUDITOR_GRPC_TLS_CA` | ECS task definition / local environment | PEM file of the CA that signed the auditor's certificate, from the project CA (ADR-0021). Unset means plaintext, for local development only |
 | `OIDC_ISSUER_URI` | `https://cognito-idp.<region>.amazonaws.com/<pool-id>` | Resource-server JWT validation |
 | `COGNITO_USER_POOL_ID`, `AWS_REGION` | Terraform | Cognito admin API access |
 | `AUDIT_QUEUE_URL` | ECS task definition / local environment | Auditor's `audit-insert` SQS queue; when empty, no audit events are saved or sent |
