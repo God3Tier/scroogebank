@@ -33,7 +33,7 @@ class AuditEventPublisherTest {
 
     @Test
     void savesTheEventToTheOutboxInItsOwnTransaction() throws Exception {
-        publisher(QUEUE_URL).publish("DISABLE", "sub-admin", "user-1", "/api/users/{id}/disable", "PATCH", 204, "AGENT");
+        publisher(QUEUE_URL).publish("DISABLE", "sub-admin", "USER", "user-1", "/api/users/{id}/disable", "PATCH", 204, "AGENT");
 
         ArgumentCaptor<AuditOutboxEntry> saved = ArgumentCaptor.forClass(AuditOutboxEntry.class);
         verify(outbox).save(saved.capture());
@@ -55,14 +55,14 @@ class AuditEventPublisherTest {
 
     @Test
     void skipsWhenNoQueueIsConfigured() {
-        publisher("").publish("READ", "sub-admin", "user-1", "/api/users/{id}", "GET", 200, "AGENT");
+        publisher("").publish("READ", "sub-admin", "USER", "user-1", "/api/users/{id}", "GET", 200, "AGENT");
 
         verifyNoInteractions(outbox, transactionManager);
     }
 
     @Test
     void skipsWhenTheActorIsMissing() {
-        publisher(QUEUE_URL).publish("READ", null, "user-1", "/api/users/{id}", "GET", 200, "AGENT");
+        publisher(QUEUE_URL).publish("READ", null, "USER", "user-1", "/api/users/{id}", "GET", 200, "AGENT");
 
         verifyNoInteractions(outbox, transactionManager);
     }
@@ -72,7 +72,7 @@ class AuditEventPublisherTest {
         when(outbox.save(any())).thenThrow(new DataAccessResourceFailureException("database unavailable"));
 
         assertThatCode(() -> publisher(QUEUE_URL)
-                .publish("DISABLE", "sub-admin", "user-1", "/api/users/{id}/disable", "PATCH", 204, "AGENT"))
+                .publish("DISABLE", "sub-admin", "USER", "user-1", "/api/users/{id}/disable", "PATCH", 204, "AGENT"))
                 .doesNotThrowAnyException();
     }
 

@@ -59,7 +59,7 @@ class RoleChangeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ADMIN"));
 
-        verify(auditEventPublisher).publish("ROLE_CHANGE", "sub-admin", id.toString(),
+        verify(auditEventPublisher).publish("ROLE_CHANGE", "sub-admin", "USER", id.toString(),
                 "/api/users/{id}/role", "PATCH", 200, "ADMIN");
     }
 
@@ -70,6 +70,9 @@ class RoleChangeControllerTest {
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_AGENT"))))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(userService);
+        // jwt() names its subject "user". The denial must not be recorded as a success.
+        verify(auditEventPublisher).publish("ROLE_CHANGE", "user", "USER", id.toString(),
+                "/api/users/{id}/role", "PATCH", 403, null);
     }
 
     @Test

@@ -13,6 +13,7 @@ public class AuditWebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(userAuditInterceptor).addPathPatterns("/api/users/**", "/api/accounts/**");
+        registry.addInterceptor(userAuditInterceptor)
+                .addPathPatterns("/api/users/**", "/api/accounts/**", "/api/corrupted-logs", "/api/corrupted-logs/**");
     }
 }

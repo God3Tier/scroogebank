@@ -55,7 +55,7 @@ class SessionControllerTest {
                                 .authorities(new SimpleGrantedAuthority("ROLE_AGENT"))))
                 .andExpect(status().isNoContent());
 
-        verify(auditEventPublisher).publish("LOGOUT", "sub-alice", id.toString(),
+        verify(auditEventPublisher).publish("LOGOUT", "sub-alice", "USER", id.toString(),
                 "/api/users/me/logout", "POST", 204, "AGENT");
     }
 
@@ -68,7 +68,7 @@ class SessionControllerTest {
                                 .authorities(new SimpleGrantedAuthority("ROLE_AGENT"))))
                 .andExpect(status().isNotFound());
 
-        verify(auditEventPublisher).publish("LOGOUT", "sub-unknown", null,
+        verify(auditEventPublisher).publish("LOGOUT", "sub-unknown", "USER", null,
                 "/api/users/me/logout", "POST", 404, null);
     }
 
