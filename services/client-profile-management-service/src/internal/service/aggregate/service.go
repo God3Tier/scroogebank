@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"client-profile-management-service/src/internal/encryption"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	"client-profile-management-service/src/internal/repository/aggregate"
@@ -53,12 +54,15 @@ type Service interface {
 }
 
 type service struct {
-	repo aggregate.Repository
-	now  func() time.Time
+	repo      aggregate.Repository
+	protector encryption.Protector
+	now       func() time.Time
 }
 
-func New(repo aggregate.Repository) Service {
-	return service{repo: repo, now: time.Now}
+// New serves the figures from repo. protector decrypts the client names that
+// the action items list (ADR-0030).
+func New(repo aggregate.Repository, protector encryption.Protector) Service {
+	return service{repo: repo, protector: protector, now: time.Now}
 }
 
 func (s service) ClientStats(ctx context.Context, caller models.Caller, from, to, groupBy string) (models.ClientStats, error) {
@@ -88,7 +92,29 @@ func (s service) ActionItems(ctx context.Context, caller models.Caller, staleDay
 		}
 		days = parsed
 	}
-	return s.repo.StaleUnverifiedClients(ctx, caller, s.now().AddDate(0, 0, -days), ActionItemLimit)
+	items, err := s.repo.StaleUnverifiedClients(ctx, caller, s.now().AddDate(0, 0, -days), ActionItemLimit)
+	if err != nil {
+		return models.ClientActionItems{}, err
+	}
+	// Names are stored encrypted with each client's own data key.
+	for i := range items.StaleUnverified {
+		if err := s.decryptName(ctx, &items.StaleUnverified[i]); err != nil {
+			return models.ClientActionItems{}, err
+		}
+	}
+	return items, nil
+}
+
+func (s service) decryptName(ctx context.Context, client *models.ClientRef) error {
+	key, err := s.protector.Key(ctx, client.ClientID)
+	if err != nil {
+		return fmt.Errorf("data key for client %s: %w", client.ClientID, err)
+	}
+	if client.FirstName, err = key.Decrypt(models.FieldFirstName, client.FirstName); err != nil {
+		return err
+	}
+	client.LastName, err = key.Decrypt(models.FieldLastName, client.LastName)
+	return err
 }
 
 func (s service) TeamComparison(ctx context.Context, caller models.Caller, days string) (models.TeamComparison, error) {

@@ -40,14 +40,14 @@ func openAuthorizationTestDB(t *testing.T) *sql.DB {
 	_, err = db.Exec(`
 		DELETE FROM clients WHERE client_id IN ('` + ownedClientID + `', '` + deletedClientID + `');
 		INSERT INTO clients (
-			client_id, first_name, last_name, date_of_birth, gender, email, phone_number,
-			address, city, state, country, postal_code, verification_status,
+			client_id, first_name, last_name, date_of_birth, gender, email, email_hash, phone_number,
+			phone_number_hash, address, city, state, country, postal_code, verification_status,
 			created_by_agent_id, created_at, updated_at, deleted_at
 		) VALUES
-			('` + ownedClientID + `', 'Owned', 'Client', '1990-05-10', 'female', 'owned-151@example.test', '+6560000151',
+			('` + ownedClientID + `', 'Owned', 'Client', '1990-05-10', 'female', 'owned-151@example.test', 'email-hash-151', '+6560000151', 'phone-hash-151',
 			 '1 Example Street', 'Singapore', 'Singapore', 'Singapore', '123456', 'UNVERIFIED',
 			 '` + ownerSubject + `', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL),
-			('` + deletedClientID + `', 'Deleted', 'Client', '1990-05-10', 'female', 'deleted-152@example.test', '+6560000152',
+			('` + deletedClientID + `', 'Deleted', 'Client', '1990-05-10', 'female', 'deleted-152@example.test', 'email-hash-152', '+6560000152', 'phone-hash-152',
 			 '2 Example Street', 'Singapore', 'Singapore', 'Singapore', '123456', 'UNVERIFIED',
 			 '` + ownerSubject + `', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`)
 	if err != nil {

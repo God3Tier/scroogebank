@@ -23,12 +23,14 @@ func (r clientRepository) findClient(ctx context.Context, clientID string) (*orm
 	return client, err
 }
 
-func (r clientRepository) isClientDuplicate(ctx context.Context, clientEmail string, clientPhone string) bool {
+// isClientDuplicate reports whether a client that is not deleted already has
+// this email or phone, compared by blind index (ADR-0030).
+func (r clientRepository) isClientDuplicate(ctx context.Context, indexes contactIndexes) bool {
 	// One clause: the generated "AND deleted_at IS NULL" would otherwise bind
 	// to the phone check only.
 	exists, err := orm.Clients(
 		qm.Select(orm.ClientColumns.ClientID),
-		qm.Where("email = ? OR phone_number = ?", clientEmail, clientPhone),
+		qm.Where("email_hash = ? OR phone_number_hash = ?", indexes.email, indexes.phone),
 	).Exists(ctx, r.db)
 	if err != nil {
 		return false

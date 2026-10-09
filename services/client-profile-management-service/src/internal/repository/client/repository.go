@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"client-profile-management-service/src/internal/encryption"
 	"client-profile-management-service/src/internal/models"
 )
 
@@ -16,9 +17,12 @@ type Repository interface {
 }
 
 type clientRepository struct {
-	db *sql.DB
+	db        *sql.DB
+	protector encryption.Protector
 }
 
-func NewClientRepository(db *sql.DB) Repository {
-	return clientRepository{db}
+// NewClientRepository stores clients' personal fields encrypted with each
+// client's data key, and email and phone as blind indexes (ADR-0030).
+func NewClientRepository(db *sql.DB, protector encryption.Protector) Repository {
+	return clientRepository{db: db, protector: protector}
 }
