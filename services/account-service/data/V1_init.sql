@@ -41,3 +41,5 @@ CREATE INDEX idx_accounts_client_id ON accounts (client_id);
 CREATE INDEX idx_accounts_owner_agent_id ON accounts (owner_agent_id);
 CREATE INDEX idx_accounts_branch_id ON accounts (branch_id);
 CREATE INDEX idx_accounts_updated_at ON accounts (updated_at DESC);
+-- The business dashboard counts accounts by opening date (ADR-0038).
+CREATE INDEX idx_accounts_opening_date ON accounts (opening_date DESC);

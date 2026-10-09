@@ -11,12 +11,16 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
+| GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
+| GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |
 
 `GET /health` is public; all `/api` routes require a Cognito user **access token**.
 
 `/internal` routes take only Cognito **client-credentials** tokens: the token's app client must be listed in `COGNITO_SERVICE_CLIENT_IDS`, and it must carry the scope `crm-accounts/lookup`. User tokens are refused there, and service tokens are refused on `/api`. The routes sit outside `/api`, so API Gateway never routes them ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). Lookups are not audited: they change nothing, and the import audits each file.
 
 Request `{"ids": ["<uuid>", ...]}`; response `{"accounts": [{"id": "<uuid>", "client_id": "<uuid>"}]}`. IDs that are not UUIDs are ignored.
+
+`/aggregates` routes take the caller's user access token, forwarded by the dashboard or user-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed only when the window's accounts share one currency, otherwise 409 ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
 
 ## Deleting an account
 

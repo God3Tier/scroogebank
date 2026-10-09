@@ -3,9 +3,12 @@ package main
 import (
 	"account-service/src/internal/clients"
 	"account-service/src/internal/controller/account"
+	aggregatecontroller "account-service/src/internal/controller/aggregate"
 	accountrepository "account-service/src/internal/repository/account"
+	aggregaterepository "account-service/src/internal/repository/aggregate"
 	"account-service/src/internal/security"
 	accountService "account-service/src/internal/service/account"
+	aggregateservice "account-service/src/internal/service/aggregate"
 	"account-service/src/serverd/routers"
 	auditqueue "account-service/src/serverd/sqs"
 	"context"
@@ -98,7 +101,8 @@ func run() error {
 	// App clients allowed to call /internal with a client-credentials token,
 	// such as the transaction import. Empty means no service may call.
 	serviceClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_SERVICE_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })
-	routers.RegisterRoutes(router, account.NewAccountController(accountSvc), db,
+	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db)))
+	routers.RegisterRoutes(router, account.NewAccountController(accountSvc), aggregates, db,
 		verifier.Middleware(), verifier.ServiceMiddleware(serviceClientIDs, lookupScope), auditLogger)
 
 	server := &http.Server{
