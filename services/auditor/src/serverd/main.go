@@ -18,11 +18,12 @@ import (
 	"syscall"
 	"time"
 
-	"auditor/src/gen"
+	auditv1 "auditor/src/gen/audit/v1"
 	"auditor/src/internal/bootstrap"
 	"auditor/src/internal/controller/audit"
 	corruptedLogController "auditor/src/internal/controller/corrupted_log"
 	"auditor/src/internal/repository"
+	"auditor/src/internal/security"
 	audtiSvc "auditor/src/internal/service/audit"
 	corruptedLogService "auditor/src/internal/service/corrupted_logs"
 	"auditor/src/serverd/queue"
@@ -31,6 +32,8 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 )
 
 const defaultPort = 8080
@@ -45,6 +48,17 @@ func main() {
 func run(ctx context.Context) error {
 	// Setup db and dependencies
 	db, err := bootstrap.InitialiseDB()
+	if err != nil {
+		return err
+	}
+
+	// Every call must carry a CRM user's Cognito access token, forwarded by the
+	// calling service (ADR-0021).
+	verifier, err := security.NewCognitoVerifier(os.Getenv("COGNITO_ISSUER_URI"), os.Getenv("COGNITO_APP_CLIENT_ID"))
+	if err != nil {
+		return fmt.Errorf("configure Cognito authentication: %w", err)
+	}
+	tlsCert, tlsKey, err := tlsFiles()
 	if err != nil {
 		return err
 	}
@@ -67,8 +81,21 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
-	gen.RegisterAuditServiceServer(grpcServer, controller)
+	grpcOptions := []grpc.ServerOption{
+		grpc.UnaryInterceptor(security.UnaryInterceptor(verifier)),
+		// Callers keep one long-lived connection. Ending it every few minutes
+		// makes them reconnect, spreading calls over the auditor's tasks.
+		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 5 * time.Minute}),
+	}
+	if tlsCert != "" {
+		creds, err := credentials.NewServerTLSFromFile(tlsCert, tlsKey)
+		if err != nil {
+			return fmt.Errorf("load TLS certificate: %w", err)
+		}
+		grpcOptions = append(grpcOptions, grpc.Creds(creds))
+	}
+	grpcServer := grpc.NewServer(grpcOptions...)
+	auditv1.RegisterAuditServiceServer(grpcServer, controller)
 
 	go func() {
 		defer wg.Done()
@@ -97,7 +124,7 @@ func run(ctx context.Context) error {
 	port := getHTTPPort()
 	server := &http.Server{
 		Addr:              ":" + strconv.Itoa(port),
-		Handler:           newHandler(corruptedLogsController),
+		Handler:           newHandler(corruptedLogsController, verifier),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -116,9 +143,16 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	log.Printf("auditor listening on http://localhost:%d", port)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("server failed: %v", err)
+	var serveErr error
+	if tlsCert != "" {
+		log.Printf("auditor listening on https://localhost:%d", port)
+		serveErr = server.ListenAndServeTLS(tlsCert, tlsKey)
+	} else {
+		log.Printf("auditor listening on http://localhost:%d", port)
+		serveErr = server.ListenAndServe()
+	}
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return fmt.Errorf("server failed: %v", serveErr)
 	}
 
 	wg.Wait()
@@ -141,6 +175,18 @@ func newSQSClient(ctx context.Context) (*sqs.Client, error) {
 			o.BaseEndpoint = aws.String(endpoint)
 		}
 	}), nil
+}
+
+// tlsFiles returns the certificate and key both ports serve TLS with
+// (AUDITOR_TLS_CERT_FILE, AUDITOR_TLS_KEY_FILE), from the project CA in the
+// target design (ADR-0021). Both unset means plaintext, for local
+// development only; setting just one is a mistake.
+func tlsFiles() (string, string, error) {
+	cert, key := os.Getenv("AUDITOR_TLS_CERT_FILE"), os.Getenv("AUDITOR_TLS_KEY_FILE")
+	if (cert == "") != (key == "") {
+		return "", "", errors.New("set both AUDITOR_TLS_CERT_FILE and AUDITOR_TLS_KEY_FILE, or neither")
+	}
+	return cert, key, nil
 }
 
 /*

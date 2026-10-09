@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -22,22 +23,26 @@ public class CorruptedAuditLogProxy {
     @Value("${auditor.base-url}")
     private String auditorBaseUrl;
 
-    public ResponseEntity<JsonNode> getCorruptedLogs() {
-        return request(HttpMethod.GET, "", null);
+    // Each call forwards the admin's own access token, which the Auditor
+    // checks itself (ADR-0021).
+
+    public ResponseEntity<JsonNode> getCorruptedLogs(String accessToken) {
+        return request(HttpMethod.GET, "", null, accessToken);
     }
 
-    public ResponseEntity<JsonNode> createCorruptedLog(JsonNode request) {
-        return request(HttpMethod.POST, "", request);
+    public ResponseEntity<JsonNode> createCorruptedLog(JsonNode request, String accessToken) {
+        return request(HttpMethod.POST, "", request, accessToken);
     }
 
-    public ResponseEntity<JsonNode> deleteCorruptedLog(UUID id) {
-        return request(HttpMethod.DELETE, "/" + id, null);
+    public ResponseEntity<JsonNode> deleteCorruptedLog(UUID id, String accessToken) {
+        return request(HttpMethod.DELETE, "/" + id, null, accessToken);
     }
 
-    private ResponseEntity<JsonNode> request(HttpMethod method, String path, JsonNode body) {
+    private ResponseEntity<JsonNode> request(HttpMethod method, String path, JsonNode body, String accessToken) {
         RestClient.RequestBodySpec request = restClientBuilder.build()
                 .method(method)
-                .uri(auditorBaseUrl + "/api/corrupted-logs" + path);
+                .uri(auditorBaseUrl + "/api/corrupted-logs" + path)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
         if (body != null) {
             request.body(body);
         }

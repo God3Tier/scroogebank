@@ -16,6 +16,9 @@ CREATE TABLE audit_log (
     CONSTRAINT audit_log_event_id_unique UNIQUE (event_id)
 );
 
+-- The activity feed lists one actor's entries, newest first (ADR-0021).
+CREATE INDEX idx_audit_log_actor_sequence ON audit_log (actor_id, sequence_no DESC);
+
 CREATE TABLE corrupted_audit_log (
     id UUID PRIMARY KEY,
     log_type JSON,

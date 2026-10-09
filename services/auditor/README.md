@@ -26,10 +26,13 @@ the auditor moved off Kafka. It creates the `audit-insert` and
 `audit-insert-dlq` queues automatically on startup:
 
 ```sh
+cd services/auditor
 docker compose up -d postgres localstack
 ```
 
-Run the auditor server from the `services/auditor` directory. Since
+`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, loads the schema if it is missing, generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
+
+To run it by hand instead, start the server from the `services/auditor` directory. Since
 LocalStack doesn't check AWS credentials, any non-empty values work:
 
 ```sh
@@ -40,13 +43,18 @@ export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 export AUDIT_QUEUE_URL=http://localhost:4566/000000000000/audit-insert
 export AUDIT_DLQ_URL=http://localhost:4566/000000000000/audit-insert-dlq
+export COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+export COGNITO_APP_CLIENT_ID=<app-client-id>
+make proto   # once, and after the contract changes
 go run ./src/serverd
 ```
+
+The auditor loads the user pool's signing keys at startup and refuses to start without the two Cognito settings. Every call to `/api` and to the gRPC port must carry a CRM user's Cognito access token (see [Access](#access)).
 
 The server listens on port `8080` by default. To use another port:
 
 ```sh
-PORT=9090 go run ./src/serverd
+HTTP_PORT=9090 go run ./src/serverd
 ```
 
 Check the health endpoint:
@@ -61,10 +69,24 @@ Expected response:
 {"status":"ok"}
 ```
 
+### Access
+
+Only other CRM services call the auditor, and each forwards the token of the user it is acting for ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). The auditor checks the token itself: its signature against the user pool's keys, issuer, app client, expiry and `token_use=access`.
+
+| Port | Who is admitted |
+|---|---|
+| HTTP `/health` | Anyone |
+| HTTP `/api/corrupted-logs` | An `ADMIN`'s token in `Authorization: Bearer`; otherwise `401` (no or an invalid token) or `403` (not an admin). user-service forwards it. |
+| gRPC `AuditService` | An `ADMIN`'s or `AGENT`'s token in the `authorization` metadata; otherwise `UNAUTHENTICATED` or `PERMISSION_DENIED`. An agent can list only their own activities. |
+
+Only user tokens are accepted so far. ADR-0021 also lets a background job with no user call with a Cognito client-credentials token carrying an `audit/read` scope; that is not built yet, because no such caller exists. Such a token has no CRM group, so it is refused with `PERMISSION_DENIED`.
+
+Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over TLS, as the target design requires; leave both unset only for local development.
+
 ### Corrupted audit log endpoints
 
-The auditor exposes these HTTP endpoints for reviewing and removing corrupted
-audit entries:
+The auditor exposes these HTTP endpoints, for admins only, for reviewing and removing corrupted
+audit entries. Which of them should exist is still open ([ADR-0022](../../docs/adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [open item 13](../../docs/architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)):
 
 | Method | Path | Behavior |
 |---|---|---|
@@ -76,11 +98,12 @@ Malformed JSON or UUIDs return `400`, a missing entry returns `404`, and
 unexpected storage failures return `500`.
 
 ```sh
-curl http://localhost:8080/api/corrupted-logs
+TOKEN=<an admin's Cognito access token>
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs
 curl -X POST http://localhost:8080/api/corrupted-logs \
-  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"Id":"audit-1","EventType":"CRUD","Action":"UPDATE"}}'
-curl -X DELETE http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
 ```
 
 Send a test event to the local queue (requires the `awslocal` CLI, or use
@@ -125,10 +148,14 @@ docker compose -f compose.yaml down
 | `AUDIT_DLQ_URL` | URL of the `audit-insert-dlq` queue |
 | `AWS_ENDPOINT_URL` | Set only for LocalStack; omit in AWS so the SDK talks to real SQS |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Local/LocalStack only. In AWS, credentials come from the task's IAM role — never hardcode these |
+| `COGNITO_ISSUER_URI` | Required. The Cognito user pool's issuer URL, whose signing keys verify callers' tokens |
+| `COGNITO_APP_CLIENT_ID` | Required. The CRM app client that callers' tokens must be issued to |
+| `COGNITO_API_AUDIENCE` | Optional. The expected `aud`, if access tokens carry one |
+| `AUDITOR_TLS_CERT_FILE` / `AUDITOR_TLS_KEY_FILE` | Certificate and key for TLS on both ports. Set both in deployed environments; unset only locally |
 
 ## Run tests
 
-The recommended test command creates a disposable PostgreSQL container, loads `data/audit_log_table.sql`, generates SQLBoiler models, prefixes generated files with `mocks_`, and runs all Go tests in a Go container:
+The recommended test command creates a disposable PostgreSQL container loaded with `data/test_init.sql`, generates the gRPC code, the SQLBoiler models and the mocks (all git-ignored), and runs all Go tests in a Go container. It works from a clean checkout:
 
 ```sh
 make test
@@ -136,7 +163,7 @@ make test
 
 The test database is removed automatically when the command finishes, including after a test failure.
 
-To run only the Go tests without database setup:
+To run the Go tests directly, generate the code first (`make proto`, `make sqlboiler`, `make mockery`). The repository tests also need PostgreSQL, reached through `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`:
 
 ```sh
 cd services/auditor
@@ -147,7 +174,7 @@ To run the repository tests with coverage:
 
 ```sh
 cd services/auditor
-go test ./src/internal/repository -cover
+go test ./src/internal/repository/... -cover
 ```
 
 ## Generate SQLBoiler models
@@ -158,7 +185,7 @@ SQLBoiler runs inside Docker against a disposable PostgreSQL database:
 make sqlboiler
 ```
 
-Generated Go files are written under `services/auditor/src/internal/repository/orm` and renamed with the `mocks_` prefix. Existing files already beginning with `mocks_` are not renamed again.
+Generated Go files are written under `services/auditor/src/internal/repository/orm`, which is git-ignored.
 
 ## Generate mockery mocks
 
@@ -174,22 +201,36 @@ To pass additional mockery arguments:
 make mockery MOCKERY_ARGS="--log-level debug"
 ```
 
-The mockery configuration is in `.mockery.yml` and targets the service's interface packages.
+The mockery configuration is in `.mockery.yml` and targets the service's interface packages. Mockery loads the packages first, so it needs the gRPC code and the ORM (`make proto`, `make sqlboiler`). `make mockery` deletes the old `mocks.go` files before regenerating: a mock left over from a removed method would not compile, and mockery could not load its package.
 
 ## Generate protobuf code
 
-The protobuf compiler and Go protobuf plugins must be installed locally. Run this from `services/auditor`; it generates Go files under `src/gen`, matching the imports used by the server and controller:
+The gRPC contract is `proto/audit/v1/audit.proto` at the repository root, shared with its callers ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). The generated Go code goes to `src/gen` and is git-ignored. Generate it before building or testing the server and controller packages; this runs `protoc` in the tools image, so nothing needs to be installed locally:
 
 ```sh
 make proto
 ```
 
+## gRPC API
+
+`AuditService` (package `audit.v1`) is served on `GRPC_PORT`. Other services call it over the internal network only; it is not exposed through API Gateway.
+
+| RPC | Purpose |
+|---|---|
+| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
+
+user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
+
+### `actor_id` convention
+
+Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**, taken from the verified token. The client service stores the same value as a client's `created_by_agent_id`. Work that no user started uses a `system:` prefix, for example `system:root-admin-initializer`. `ListActivities` compares `actor_id` by exact text, so an event carrying any other id, such as user-service's `users.id`, will not appear in that user's activity feed.
+
 ## Build and run the production image
 
-Build the image:
+Build the image from the repository root, because the gRPC code is generated from the shared `proto/` directory. The ORM must have been generated first (`make sqlboiler`), as before.
 
 ```sh
-docker build -t auditor services/auditor
+docker build -f services/auditor/Dockerfile -t auditor .
 ```
 
 Run it:
@@ -197,6 +238,8 @@ Run it:
 ```sh
 docker run --rm -p 8080:8080 auditor
 ```
+
+**Release order with user-service.** user-service forwards the caller's access token, which this service now requires (ADR-0021), so release user-service first when both change together. The opposite holds for new audit event types: release the Auditor first, or user-service's new events go to the dead-letter queue.
 
 ## Useful Docker commands
 

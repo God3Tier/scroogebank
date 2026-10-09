@@ -20,6 +20,16 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<Object> handleBadRequest(BadRequestException ex) {
+        return body(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(AuditorUnavailableException.class)
+    public ResponseEntity<Object> handleAuditorUnavailable(AuditorUnavailableException ex) {
+        return body(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<Object> handleConflict(ConflictException ex) {
         return body(HttpStatus.CONFLICT, ex.getMessage());

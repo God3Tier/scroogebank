@@ -9,6 +9,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,6 +22,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     Optional<User> findByEmail(String email);
 
     Optional<User> findByIdpSub(String idpSub);
+
+    /** The users with these Cognito subs, in one query; unknown subs are skipped. */
+    List<User> findByIdpSubIn(Collection<String> idpSubs);
 
     boolean existsByEmail(String email);
 

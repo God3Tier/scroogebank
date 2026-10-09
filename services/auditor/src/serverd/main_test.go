@@ -26,6 +26,32 @@ func TestGetHTTPPort(t *testing.T) {
 	}
 }
 
+func TestTLSFiles(t *testing.T) {
+	tests := map[string]struct {
+		cert, key string
+		wantErr   bool
+	}{
+		"neither: plaintext": {},
+		"both: TLS":          {cert: "/certs/auditor.crt", key: "/certs/auditor.key"},
+		"only a certificate": {cert: "/certs/auditor.crt", wantErr: true},
+		"only a key":         {key: "/certs/auditor.key", wantErr: true},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("AUDITOR_TLS_CERT_FILE", tt.cert)
+			t.Setenv("AUDITOR_TLS_KEY_FILE", tt.key)
+			cert, key, err := tlsFiles()
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.cert, cert)
+			assert.Equal(t, tt.key, key)
+		})
+	}
+}
+
 func buildDSN() string {
 	return fmt.Sprintf("dbname=%s host=%s user=%s password=%s sslmode=%s",
 		os.Getenv("DB_NAME"), os.Getenv("DB_HOST"), os.Getenv("DB_USER"),

@@ -30,7 +30,7 @@ services:
       SERVICES: sqs
       DEFAULT_REGION: us-east-1
     volumes:
-      - ./services/auditor/localstack/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
+      - ./localstack/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 2s
