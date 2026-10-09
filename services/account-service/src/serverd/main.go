@@ -97,7 +97,10 @@ func run() error {
 			options.BaseEndpoint = aws.String(endpoint)
 		}
 	})
-	auditLogger := auditqueue.AuditLogger(sqsClient, queueURL)
+	// Audit events are saved to the outbox after each request and sent to the
+	// Auditor's queue by the relay (ADR-0020).
+	auditLogger := auditqueue.AuditLogger(auditqueue.NewPostgresOutbox(db))
+	go auditqueue.NewRelay(db, sqsClient, queueURL).Run(context.Background())
 	// App clients allowed to call /internal with a client-credentials token,
 	// such as the transaction import. Empty means no service may call.
 	serviceClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_SERVICE_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })

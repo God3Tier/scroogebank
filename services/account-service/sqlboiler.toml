@@ -11,3 +11,5 @@ user = "postgres"
 pass = "postgres"
 schema = "public"
 sslmode = "disable"
+# The audit outbox is written with plain SQL (src/serverd/sqs/outbox.go), not the ORM.
+blacklist = ["audit_outbox"]

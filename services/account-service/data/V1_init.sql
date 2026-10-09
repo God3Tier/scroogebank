@@ -43,3 +43,15 @@ CREATE INDEX idx_accounts_branch_id ON accounts (branch_id);
 CREATE INDEX idx_accounts_updated_at ON accounts (updated_at DESC);
 -- The business dashboard counts accounts by opening date (ADR-0038).
 CREATE INDEX idx_accounts_opening_date ON accounts (opening_date DESC);
+
+-- Audit events waiting to be sent to the Auditor's SQS queue (ADR-0020). The
+-- audit middleware writes a row in its own transaction right after each
+-- request, and the relay deletes it once SQS has accepted it. event_id is the
+-- Auditor's de-duplication key, so a row sent twice is stored only once.
+CREATE TABLE audit_outbox (
+    event_id    UUID        PRIMARY KEY,
+    body        TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_audit_outbox_created_at ON audit_outbox (created_at);
