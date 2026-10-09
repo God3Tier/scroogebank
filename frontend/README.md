@@ -4,6 +4,10 @@ React 19 and Vite frontend for the CRM application. API modules live in
 `src/api`, shared components in `src/components`, route pages in `src/pages`,
 and frontend-only synthetic fixtures in `src/data`.
 
+This branch (`feat/midterm-demo`) combines two features for presentation
+purposes: the event-alerts review workspace (`feat/event-driven-alerts`) and
+the business dashboard mockup (`task/business-dashboard/frontend-mockup`).
+
 ## Local development
 
 ```powershell
@@ -27,6 +31,23 @@ npm run dev
 Then open `/agent/alerts` for the decision workflow or `/admin/alerts` for the
 read-only oversight view. Synthetic mode uses only local example data and must
 remain disabled in deployed environments.
+
+## Business dashboard mockup (demo only)
+
+Mocks the business dashboard proposed on `feat/business-dashboard`.
+
+- `/insights/admin`: bank-wide dashboard with KPI tiles, daily activity,
+  transaction health, ingestion freshness, portfolio composition, agent
+  performance and action items.
+- `/insights/agent`: one agent's own book with KPI tiles, action queue, team
+  comparison, portfolio and client transactions.
+- Data: synthetic, from `src/data/dashboard.js`. The window selector (7, 30,
+  90 days) changes the figures.
+- Styling: Stitch project "Scrooge Global Bank CRM" (design system:
+  Institutional Precision) — the same tokens the rest of the app uses.
+  Dashboard-specific styles are in `src/styles/dashboard.css`, chart colours
+  in `src/styles/chartTheme.js`.
+- Charts: Recharts.
 
 ## Verification
 
