@@ -44,6 +44,31 @@ func TestListAccountsByClientAndOwner(t *testing.T) {
 	}
 }
 
+func TestFindAccountsByIDs(t *testing.T) {
+	db := openTestDB(t)
+	loadTestFixture(t, db, "account_list.sql")
+	repo := NewAccountRepository(db)
+
+	got, err := repo.FindAccountsByIDs(context.Background(), []string{
+		"00000000-0000-0000-0000-000000000231",
+		"00000000-0000-0000-0000-000000000234", // deleted
+		"00000000-0000-0000-0000-000000000299", // unknown
+		"00000000-0000-0000-0000-000000000241",
+	})
+
+	require.NoError(t, err)
+	ids := make([]string, 0, len(got))
+	for _, account := range got {
+		ids = append(ids, account.ID)
+	}
+	assert.Equal(t, []string{"00000000-0000-0000-0000-000000000231", "00000000-0000-0000-0000-000000000241"}, ids)
+
+	none, err := repo.FindAccountsByIDs(context.Background(), nil)
+	require.NoError(t, err)
+	assert.NotNil(t, none)
+	assert.Empty(t, none)
+}
+
 func TestListAccountsReturnsAnEmptySliceNotNil(t *testing.T) {
 	db := openTestDB(t)
 	loadTestFixture(t, db, "account_list.sql")

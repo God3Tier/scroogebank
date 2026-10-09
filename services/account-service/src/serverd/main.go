@@ -29,6 +29,10 @@ import (
 // must stay well under the API Gateway timeout.
 const clientLookupTimeout = 2 * time.Second
 
+// lookupScope is the Cognito scope a service token needs for
+// POST /internal/accounts/lookup: resource server crm-accounts, scope lookup.
+const lookupScope = "crm-accounts/lookup"
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -91,7 +95,11 @@ func run() error {
 		}
 	})
 	auditLogger := auditqueue.AuditLogger(sqsClient, queueURL)
-	routers.RegisterRoutes(router, account.NewAccountController(accountSvc), db, verifier.Middleware(), auditLogger)
+	// App clients allowed to call /internal with a client-credentials token,
+	// such as the transaction import. Empty means no service may call.
+	serviceClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_SERVICE_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })
+	routers.RegisterRoutes(router, account.NewAccountController(accountSvc), db,
+		verifier.Middleware(), verifier.ServiceMiddleware(serviceClientIDs, lookupScope), auditLogger)
 
 	server := &http.Server{
 		Addr:              envOrDefault("APP_ADDR", ":8083"),
@@ -108,7 +116,7 @@ func databaseURL() string {
 	sslmode := envOrDefault("DB_SSLMODE", "disable")
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		envOrDefault("DB_HOST", "localhost"),
-		envOrDefault("DB_PORT", "5434"),
+		envOrDefault("DB_PORT", "5436"),
 		envOrDefault("DB_USER", "postgres"),
 		envOrDefault("DB_PASSWORD", "postgres"),
 		envOrDefault("DB_NAME", "accounts"),

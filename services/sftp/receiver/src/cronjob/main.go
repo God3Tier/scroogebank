@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"receiver/src/cronjob/accounts"
 	"receiver/src/cronjob/poller"
 	auditsqs "receiver/src/cronjob/sqs"
 	"receiver/src/internal/repository"
@@ -66,7 +67,11 @@ func run(once bool) error {
 	} else {
 		log.Printf("transaction audit events disabled: AUDIT_QUEUE_URL is empty")
 	}
-	consumer := poller.New(config, repository.New(db), auditWriter)
+	accountConfig, err := accounts.LoadConfig()
+	if err != nil {
+		return err
+	}
+	consumer := poller.New(config, repository.New(db), accounts.New(accountConfig), auditWriter)
 	if once {
 		return consumer.Poll(ctx)
 	}

@@ -13,6 +13,7 @@ type AccountController interface {
 	// ListAccounts takes the caller explicitly rather than from a header, so
 	// scope can only come from the verified token the router passes in.
 	ListAccounts(w http.ResponseWriter, r *http.Request, caller models.Caller)
+	LookupAccounts(w http.ResponseWriter, r *http.Request)
 }
 
 type accountController struct {

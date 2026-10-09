@@ -90,7 +90,7 @@ The feature plan [`client-health-monitor_plan.md`](../feature-plans/client-healt
 ### Negative / Trade-offs
 
 - Rules only find what they are written for; thresholds need tuning on synthetic data.
-- Depends on a transaction activity contract that is still open: the SFTP import does not populate `client_id` yet ([open item 16](../architecture/open-items.md#16-health-monitor-activity-contract)).
+- Depends on a transaction activity contract that is still open. The SFTP import now stores `client_id` on matched rows ([ADR-0037](ADR-0037-transactions-database-and-account-linking.md)), but there is no read API for the analysis task yet ([open item 16](../architecture/open-items.md#16-health-monitor-activity-contract)).
 - One more RDS instance (about USD 13–15/month single-AZ).
 - The feature plan still lists these choices as open, so they need the owners' agreement.
 
