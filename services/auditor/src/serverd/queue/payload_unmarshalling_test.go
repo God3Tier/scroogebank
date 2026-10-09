@@ -108,6 +108,84 @@ func TestValidatePayload_UserManagementLogout(t *testing.T) {
 	}
 }
 
+func userOperation(resourceType, resourceID, endpoint, method string, status int) ValidUserAuditPayload {
+	return ValidUserAuditPayload{
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Endpoint:     endpoint,
+		HTTPMethod:   method,
+		StatusCode:   status,
+		DateTime:     time.Now().Format(time.RFC3339Nano),
+	}
+}
+
+func TestValidatePayload_UserManagementOtherResources(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		action  string
+		payload ValidUserAuditPayload
+	}{
+		{"corrupted-log list read has no resource id", "READ",
+			userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "GET", 200)},
+		{"corrupted-log create", "CREATE",
+			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs", "POST", 201)},
+		{"corrupted-log delete", "DELETE",
+			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs/{id}", "DELETE", 200)},
+		{"account transactions read", "READ",
+			userOperation("ACCOUNT", id, "/api/accounts/{accountId}/transactions", "GET", 200)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", tt.action, string(models.UserManagementServiceType), tt.payload)
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected %s on %s to pass, got error: %v", tt.action, tt.payload.ResourceType, err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_UserManagementRejectsInvalidOperations(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		action  string
+		payload ValidUserAuditPayload
+	}{
+		{"unknown resource type", "READ",
+			userOperation("CLIENT", id, "/api/clients/{id}", "GET", 200)},
+		{"users cannot be deleted", "DELETE",
+			userOperation("USER", id, "/api/users/{id}", "DELETE", 204)},
+		{"corrupted logs have no role change", "ROLE_CHANGE",
+			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs/{id}", "PATCH", 200)},
+		{"successful corrupted-log create needs a resource id", "CREATE",
+			userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "POST", 201)},
+		{"successful user read needs a resource id", "READ",
+			userOperation("USER", "", "/api/users/{id}", "GET", 200)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", tt.action, string(models.UserManagementServiceType), tt.payload)
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s on %s to be rejected, got nil", tt.action, tt.payload.ResourceType)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_UserManagementFailedCreateNeedsNoResourceID(t *testing.T) {
+	event := buildEvent(t, "CRUD", "CREATE", string(models.UserManagementServiceType),
+		userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "POST", 400))
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected a failed create without a resource id to pass, got error: %v", err)
+	}
+}
+
 func TestValidatePayload_ValidTransaction_FileCompleted(t *testing.T) {
 	now := time.Now()
 	event := buildEvent(t, "TRANSACTION_INGESTION", "FILE_PROCESSING_COMPLETED", string(models.TransactionServiceType), ValidFileCompletedPayload{

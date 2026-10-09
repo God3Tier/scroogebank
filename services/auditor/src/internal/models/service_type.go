@@ -32,7 +32,8 @@ func (s ServiceType) IsValidAction(action string) bool {
 			strings.EqualFold("DISABLE", action) ||
 			strings.EqualFold("PASSWORD_RESET", action) ||
 			strings.EqualFold("ROLE_CHANGE", action) ||
-			strings.EqualFold("LOGOUT", action)
+			strings.EqualFold("LOGOUT", action) ||
+			strings.EqualFold("DELETE", action)
 
 	case CRMServiceType:
 		return strings.EqualFold("CREATE", action) ||

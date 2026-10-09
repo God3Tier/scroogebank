@@ -93,10 +93,19 @@ awslocal sqs send-message \
 ```
 
 User-management producers use the same `CRUD` event type with
-`source_service=USER_MANAGEMENT`. Supported actions are `CREATE`, `READ`,
-`UPDATE`, `DISABLE`, `PASSWORD_RESET`, `ROLE_CHANGE`, and `LOGOUT`. Their payload records the target
-user ID, endpoint, HTTP method, response status, timestamp, and optional role;
-it must not contain passwords, names, email addresses, or request bodies.
+`source_service=USER_MANAGEMENT`. Their payload records the resource type and
+ID, endpoint, HTTP method, response status, timestamp, and optional role; it
+must not contain passwords, names, email addresses, or request bodies. Each
+resource type allows these actions:
+
+| `resource_type` | Actions |
+|---|---|
+| `USER` | `CREATE`, `READ`, `UPDATE`, `DISABLE`, `PASSWORD_RESET`, `ROLE_CHANGE`, `LOGOUT` |
+| `ACCOUNT` (an account's transactions) | `READ` |
+| `CORRUPTED_AUDIT_LOG` | `CREATE`, `READ`, `DELETE` |
+
+A successful event must carry `resource_id`, except a `READ` of
+`CORRUPTED_AUDIT_LOG`, which reads the whole list.
 
 The auditor long-polls the queue (up to 20s), so it should pick the message
 up, store it, and delete it shortly after.
