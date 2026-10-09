@@ -37,6 +37,9 @@ jobs:
   event-alert-auditor-contract:
     name: Test event-alert auditor contract
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auditor
     steps:
       - uses: actions/checkout@v4
 
@@ -48,10 +51,15 @@ jobs:
           docker compose -f docker-compose.test.yml -p auditor-ci run --rm -T tools
           sqlboiler -c sqlboiler.toml psql -o src/internal/repository/orm --wipe
 
-      - name: Test Kafka validation and audit deduplication
+      - name: Generate ignored audit repository mock
+        run: >-
+          docker compose -f docker-compose.test.yml -p auditor-ci run --rm -T tools
+          mockery --config .mockery-ci.yml
+
+      - name: Test SQS queue validation and audit deduplication
         run: >-
           docker compose -f docker-compose.test.yml -p auditor-ci run --rm -T test-runner
-          go test ./src/serverd/kafka ./src/internal/repository/audit
+          go test ./src/serverd/queue ./src/internal/repository/audit
 
       - name: Stop disposable auditor database
         if: always()
