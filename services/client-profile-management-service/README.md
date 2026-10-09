@@ -26,6 +26,12 @@ The verified Cognito `sub` is the creator identity. Agents may read, update, ver
 
 account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `created_by_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
 
+## Business dashboard figures
+
+`GET /aggregates/clients/stats?from&to[&groupBy=agent]` and `GET /aggregates/clients/action-items[?staleDays]` serve the business dashboard's client figures and work queue. They take the caller's access token, forwarded by the dashboard, and scope by it: agents see their own clients, and per-agent rows are for admins only (403 otherwise). They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted clients are never counted; statuses are grouped upper-cased because both `UNVERIFIED` and `verified` are stored ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
+
+`GET /aggregates/clients/team-comparison?days=7|30|90` compares the caller's clients onboarded over the last 7, 30 or 90 days (ending today in Singapore) with the team median. The median is computed here so no other agent's figure leaves the service. The group is every agent with a client, not deleted, created in the last 12 months, and the median is withheld when fewer than 5 agents are in it. Other windows are refused, so medians over chosen windows cannot be compared to narrow down one agent's figure (ADR-0038).
+
 ## Deleting a client
 
 `DELETE /api/clients/{id}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at` and keeps the row. From then on every endpoint treats the client as missing, for admins and agents alike: reads, updates, verification and a second delete all return 404. A deleted client's email and phone number can be used to onboard a new client. Nothing restores a deleted client, and deleting is not erasure of the client's personal data ([open item 21](../../docs/architecture/open-items.md#21-erasing-soft-deleted-client-data)).
