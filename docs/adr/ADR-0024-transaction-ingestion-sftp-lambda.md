@@ -75,7 +75,7 @@ The current `dev` implementation, `services/sftp/receiver`, differs from this de
    - verify the checksum, format and each row;
    - `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` the status;
    - record rejected rows with reasons;
-   - in the same transaction, write the `FILE_PROCESSED` event to `ingest_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md));
+   - in the same transaction, write the `FILE_PROCESSED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md));
    - move the file to `processed/` or `rejected/`.
 5. **On failure:**
    - on a connection or authentication failure, write a `Failed` `FILE_PROCESSED` event and stop;

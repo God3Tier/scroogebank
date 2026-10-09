@@ -15,7 +15,7 @@ The numbers match the arrows on the diagram.
 | 3 | `/api/*` requests go from CloudFront to API Gateway, which validates the Cognito JWT and applies throttling. |
 | 4 | API Gateway forwards the request through the VPC Link (private integration) to the internal ALB over HTTPS. |
 | 5 | The ALB routes by path to the ECS Fargate services (auto scaling across two AZs). Every service validates the JWT again and talks only to its own database (SQL over TLS). The auditor has no ALB route. |
-| 6 | A service writes the business change and an outbox row in one database transaction. A relay then sends the audit event to the shared SQS standard queue (`audit-insert`). Every service with a database does this; one path is drawn. The ingest Lambda relays its own `ingest_outbox` rows at the end of each run ([Transaction ingestion (Feature 3)](#transaction-ingestion-feature-3)). The Cognito triggers have no database, so they send straight to the queue ([Authentication events](../security/security-model.md#authentication-events)). |
+| 6 | A service writes the business change and an outbox row in one database transaction; a service that builds its audit events in request middleware saves the row in a short transaction of its own right after the commit instead ([ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) exception). A relay then sends the audit event to the shared SQS standard queue (`audit-insert`). Every service with a database does this; one path is drawn. The ingest job relays its `audit_outbox` rows at the end of each run ([Transaction ingestion (Feature 3)](#transaction-ingestion-feature-3)). The Cognito triggers have no database, so they send straight to the queue ([Authentication events](../security/security-model.md#authentication-events)). |
 | 7 | The auditor consumes the events and appends them to the hash chain in audit-db. A message that fails 5 receives moves to the dead-letter queue and raises an alarm. |
 | 8 | Activity views, and the admin view of tamper findings, read audit data from the auditor over gRPC through ECS Service Connect (TLS, user JWT in metadata). Only other services call the auditor. |
 | 9 | EventBridge Scheduler invokes the transaction-ingest Lambda about every 5 minutes ("9 invoke"), and starts the chain-verify task daily. The same scheduler bus ("9 · 11 · 13 scheduled starts") also starts the alert worker (11, every 6 hours) and the health analysis task (13, daily at 08:00 SGT). |
@@ -32,19 +32,21 @@ The numbers match the arrows on the diagram.
 
 ## Audit write path: SQS, not gRPC
 
-Recorded in [ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) (Proposed).
+Recorded in [ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) (Accepted).
 
-How an audit event travels, using a client update as the example:
+How an audit event travels by default, using a client update as the example:
 
 | Step | Who | What happens |
 |---|---|---|
 | 1 | Browser → client-service | `PUT /api/clients/{id}` |
 | 2 | client-service → clients-db | In one transaction: `UPDATE clients ...` and `INSERT` an outbox row (event_id, before, after, actor); then `COMMIT`. |
 | 3 | client-service → browser | `200 OK`. The user gets a response without waiting for the auditor. |
-| 4 | Outbox relay (inside the service) | Every few seconds: reads unsent outbox rows, sends each to the shared audit queue with its `event_id` and `source_service`, and marks the rows sent. |
+| 4 | Outbox relay (inside the service) | Every 2 seconds: locks the oldest unsent outbox rows, sends each to the shared audit queue with its `event_id` and `source_service`, and deletes each row once SQS accepts it. |
 | 5 | auditor → SQS | `ReceiveMessage`. |
 | 6 | auditor → audit-db | Locks the chain head and inserts the `audit_log` row (sequence_no, parent_hash, hash). |
 | 7 | auditor → SQS | `DeleteMessage`, only after the insert commits. A message that fails 5 times moves to the dead-letter queue and raises an alarm. |
+
+**Exception ([ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) decision 1).** A producer that already builds its audit events in request middleware, after the commit, saves the outbox row in a short transaction of its own right after the request, instead of in step 2. user-service, client-profile-management-service and account-service work this way on `dev`; the exception exists because of the cost of changing them. For these producers, a crash between the commit and the outbox write loses that event.
 
 ### Why audit writes go through SQS and not a synchronous gRPC call
 
@@ -53,7 +55,7 @@ Every business action in Features 1–6 must produce an audit record. How that r
 | NFR | With synchronous gRPC writes | With outbox + SQS (chosen) |
 |---|---|---|
 | **2. Availability** | An auditor outage or deployment blocks every business write. Each service would be down whenever the auditor is. | Business services keep working while the auditor is down. Events wait in SQS (up to 14 days' retention) and are processed when it recovers. |
-| **4. Consistency** | The business commit and the audit call are two separate operations. Either can fail after the other succeeds: an action without an audit record, or an audit record for an action that rolled back. | The business row and the outbox row commit in **one database transaction**, so an audit event exists exactly when the business change exists. The audit log itself is eventually consistent, typically seconds behind. |
+| **4. Consistency** | The business commit and the audit call are two separate operations. Either can fail after the other succeeds: an action without an audit record, or an audit record for an action that rolled back. | The business row and the outbox row commit in **one database transaction**, so an audit event exists exactly when the business change exists. Producers under the exception save the row just after the commit, so for them an event is lost only if the service crashes in the few milliseconds between the two. The audit log itself is eventually consistent, typically seconds behind. |
 | **5. Resiliency** | Retries sit inside the user's request and add latency. When retries run out, the event is lost. | SQS retries automatically. Failed messages go to a dead-letter queue for inspection and replay. The auditor processes each event once even if SQS delivers it twice (de-duplicated by `event_id`). |
 | **1. Scalability / performance** | The hash chain must be appended in strict order, so inserts are serialised. Under load, every business request would wait behind that lock. | The queue absorbs bursts. Business requests never wait on chain insertion. The auditor auto-scales on queue backlog. |
 | **8. Security (Zero Trust)** | The auditor must trust a caller-supplied "source service" value. | Only producer roles may send to the audit queue (IAM and the queue policy). The queue is shared, so it does not by itself show which service sent an event; the auditor is to check each message's SQS `SenderId` (the sending IAM role) against its `source_service` field ([open item 18](open-items.md#18-audit-sender-verification)). |
@@ -63,6 +65,7 @@ Every business action in Features 1–6 must produce an audit record. How that r
 **Trade-offs accepted:**
 
 - The audit log lags the business change by a few seconds.
+- For producers under the exception, a crash between the business commit and the outbox write loses that event.
 - Each service needs an outbox table and a relay loop.
 - SQS delivers "at least once", so the auditor must be idempotent.
 
@@ -148,14 +151,14 @@ The core banking system is **external** to the CRM. For the project it is simula
 |---|---|---|
 | 1 | File generator → SFTP server | Uploads `inbox/txn_20261023_01.csv.tmp`, writes a `.sha256` checksum, then renames the upload to `.csv`. The file is now ready. |
 | 2 | EventBridge Scheduler → transaction-ingest | Invokes the Lambda (for example every 5 minutes, or on demand). |
-| 3 | transaction-ingest → SFTP server | SSH connect: key authentication, pinned host key, retry and circuit breaker. On connection or authentication failure it writes a `FILE_PROCESSED` event with status Failed to `ingest_outbox`, relays it (step 8), and stops. |
+| 3 | transaction-ingest → SFTP server | SSH connect: key authentication, pinned host key, retry and circuit breaker. On connection or authentication failure it writes a `FILE_PROCESSED` event with status Failed to `audit_outbox`, relays it (step 8), and stops. |
 | 4 | transaction-ingest → SFTP server | Lists `inbox/`, ignoring `.tmp` files. |
 | 5 | For each ready file | Looks up `ingestion_file` (name, sha256) and skips it if already processed; reads the file and checksum; verifies the checksum, format and each row (no Client ID lookup; [Ingestion decisions](#ingestion-decisions)). |
-| 6 | transaction-ingest → transactions-db | `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` status; records rejected rows with reasons. In the same transaction, records the file in `ingestion_file` and writes its `FILE_PROCESSED` audit event to `ingest_outbox`. |
+| 6 | transaction-ingest → transactions-db | `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` status; records rejected rows with reasons. In the same transaction, records the file in `ingestion_file` and writes its `FILE_PROCESSED` audit event to `audit_outbox`. |
 | 7 | transaction-ingest → SFTP server | Moves the file to `processed/` or `rejected/`. |
-| 8 | transaction-ingest → SQS | At the end of the run, sends every unsent `ingest_outbox` row (including any left from earlier runs) to the audit queue and marks it sent. Each `FILE_PROCESSED` event holds start, end, status, processed/accepted/rejected counts and reasons. If SQS cannot be reached, the rows wait for the next run. |
+| 8 | transaction-ingest → SQS | At the end of the run, sends every unsent `audit_outbox` row (including any left from earlier runs) to the audit queue and marks it sent. Each `FILE_PROCESSED` event holds start, end, status, processed/accepted/rejected counts and reasons. If SQS cannot be reached, the rows wait for the next run. |
 
-**Audit delivery.** The Lambda has its own `ingest_outbox` table in transactions-db, separate from transaction-service's `outbox` table. Each component's database user can use only its own table, so neither relays the other's events, and each event reaches SQS under the IAM role that produced it ([open item 18](open-items.md#18-audit-sender-verification)). A Lambda has no long-running relay loop, so it relays its own rows at the end of every run; a failed send is retried on the next run, about 5 minutes later.
+**Audit delivery.** transaction-ingest keeps its events in the `audit_outbox` table in transactions-db. On `dev` the SFTP receiver is both transaction-service and transaction-ingest, so this is the database's only outbox. If the ingest job becomes a separate Lambda, it needs its own outbox table, separate from transaction-service's: each component's database user can then use only its own table, so neither relays the other's events, and each event reaches SQS under the IAM role that produced it ([open item 18](open-items.md#18-audit-sender-verification)). The ingest job has no long-running relay loop, so it relays its own rows at the end of every run; a failed send is retried on the next run, about 5 minutes later.
 
 ### How a file is marked ready
 
