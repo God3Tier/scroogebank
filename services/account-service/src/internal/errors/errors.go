@@ -8,6 +8,7 @@ var (
 	ErrMissingRequiredField = errors.New("missing required field")
 	ErrMethodNotImplemented = errors.New("method not implemented")
 	ErrNotFound             = errors.New("not found")
+	ErrForbidden            = errors.New("forbidden")
 
 	// Client errors. Clients live in client-profile-management-service; these
 	// describe what that service reported when asked about one.
@@ -22,4 +23,8 @@ var (
 	ErrInvalidAccountStatus = errors.New("invalid account status")
 	ErrInvalidCurrency      = errors.New("invalid currency")
 	ErrDuplicateAccount     = errors.New("duplicate account")
+
+	// ErrMultipleCurrencies refuses a deposit total that would add amounts in
+	// different currencies (ADR-0038).
+	ErrMultipleCurrencies = errors.New("accounts opened in the window use more than one currency")
 )
