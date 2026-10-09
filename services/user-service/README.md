@@ -6,6 +6,7 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 
 - The `User` table (`users_db`): `id`, `firstName`, `lastName`, `email`, `role` (ADMIN/AGENT), `enabled`, `deletable`, `idp_sub`, timestamps — matches Appendix 2's User attributes plus the bookkeeping fields needed to enforce "root admin cannot be deleted" and to link a local user row to its identity-provider account.
 - Provisioning users in the Cognito user pool — this service never stores or hashes a password itself.
+- The `audit_outbox` table (`users_db`): audit events saved but not yet sent to the Auditor's queue (see [Audit events](#audit-events)).
 
 ## Endpoints
 
@@ -56,7 +57,8 @@ The endpoint records what the frontend reports; it does not check that a revocat
 ## NFR notes
 
 - **Maintainability/Extensibility**: adding a role means a new Cognito group plus an enum value; swapping the IdP entirely means one new `IdentityProviderClient` implementation — no changes to controllers or the security config.
-- **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through SQS; audit payloads omit names, email addresses, passwords, and request bodies.
+- **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through an outbox and SQS; audit payloads omit names, email addresses, passwords, and request bodies.
+- **Resiliency**: audit events wait in the outbox while SQS or the Auditor is unavailable, and are sent when it recovers; user requests never wait on either.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
 
 ## Configuration
@@ -68,7 +70,7 @@ The endpoint records what the frontend reports; it does not check that a revocat
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials |
 | `OIDC_ISSUER_URI` | `https://cognito-idp.<region>.amazonaws.com/<pool-id>` | Resource-server JWT validation |
 | `COGNITO_USER_POOL_ID`, `AWS_REGION` | Terraform | Cognito admin API access |
-| `AUDIT_QUEUE_URL` | ECS task definition / local environment | Auditor's `audit-insert` SQS queue; when empty, user audit publishing is disabled |
+| `AUDIT_QUEUE_URL` | ECS task definition / local environment | Auditor's `audit-insert` SQS queue; when empty, no audit events are saved or sent |
 | `AUDITOR_BASE_URL` | ECS task definition / local environment | Base URL of the Auditor HTTP service (defaults to `http://localhost:8080`) |
 | `ACCOUNT_SERVICE_BASE_URL` | ECS task definition / local environment | Base URL of account-service, used to verify that the caller may access the requested CRM account (defaults to `http://localhost:8083`). Replaces `CLIENT_PROFILE_BASE_URL`, since accounts moved out of client-profile-management-service |
 | `SFTP_RECEIVER_BASE_URL` | ECS task definition / local environment | Internal SFTP receiver URL (defaults to `http://localhost:8082`) |
@@ -80,9 +82,9 @@ This service's task role is the only one granted Cognito admin permissions (`cog
 
 ## Audit events
 
-After each user API request completes, the service publishes an SQS event for user creation, retrieval, update, role change, disable, password-reset, and logout operations. A role change is recorded as `ROLE_CHANGE` with the new role in the payload's role field; the previous role is not recorded. A logout is recorded as `LOGOUT`, with the caller's own user as the resource. Corrupted-log proxy operations and transaction reads are also recorded, without copying response bodies. The successful root-admin bootstrap also publishes a system-attributed create event. Events use `event_type=CRUD` and `source_service=USER_MANAGEMENT`. `actor_id` is the verified Cognito `sub` (or `system:root-admin-initializer` for bootstrap); the payload records the resource ID, endpoint, HTTP method, response status, timestamp, and role where available. It does not copy user names, email addresses, passwords, or response bodies into the queue. This service has no login endpoint because sign-in is handled by Cognito Hosted UI, so login events are outside its request audit scope; they are to come from Cognito's `PostAuthentication` trigger ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). Logouts are recorded only when the frontend reports them (see [Logout](#logout)).
+After each user API request completes, the service records an audit event for user creation, retrieval, update, role change, disable, password-reset, and logout operations. A role change is recorded as `ROLE_CHANGE` with the new role in the payload's role field; the previous role is not recorded. A logout is recorded as `LOGOUT`, with the caller's own user as the resource. Corrupted-log proxy operations and transaction reads are also recorded, without copying response bodies. The successful root-admin bootstrap also publishes a system-attributed create event. Events use `event_type=CRUD` and `source_service=USER_MANAGEMENT`. `actor_id` is the verified Cognito `sub` (or `system:root-admin-initializer` for bootstrap); the payload records the resource ID, endpoint, HTTP method, response status, timestamp, and role where available. It does not copy user names, email addresses, passwords, or response bodies into the queue. This service has no login endpoint because sign-in is handled by Cognito Hosted UI, so login events are outside its request audit scope; they are to come from Cognito's `PostAuthentication` trigger ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). Logouts are recorded only when the frontend reports them (see [Logout](#logout)).
 
-SQS publishing is best-effort: a send failure is logged with its event ID and does not change the API response. Set `AUDIT_QUEUE_URL` to the standard `audit-insert` queue to enable publishing. The Auditor accepts the user-service payload while continuing to accept its existing generic CRUD payload during rollout.
+**Delivery** ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). `AuditEventPublisher` saves each event to the `audit_outbox` table in a transaction of its own, after the request's change has committed. This is ADR-0020's exception for producers that build their events in request middleware, used because of the cost of moving event creation into the service layer; the ADR's default writes the row in the business transaction. Every 2 seconds `AuditOutboxRelay` takes the oldest unsent rows (up to 50, locked with `FOR UPDATE SKIP LOCKED` so replicas take different rows), sends each to SQS, and deletes it once SQS accepts it. An SQS or Auditor outage therefore delays events instead of losing them. Delivery is at least once: a task that dies between the send and the delete sends the event again, and the Auditor drops the repeat by `event_id`. Two gaps remain, and neither changes the API response: a crash between the request's commit and the outbox write loses that event, and an outbox write that fails is logged with its event ID and dropped. Set `AUDIT_QUEUE_URL` to the standard `audit-insert` queue to enable auditing; without it, no rows are written. The Auditor accepts the user-service payload while continuing to accept its existing generic CRUD payload during rollout.
 
 ## Deploying
 
