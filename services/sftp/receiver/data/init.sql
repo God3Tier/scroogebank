@@ -22,5 +22,9 @@ CREATE TABLE transactions (
 CREATE INDEX idx_transactions_account_date
     ON transactions (account_id, transaction_date DESC);
 
+-- The business dashboard's bank-wide totals filter on the date alone (ADR-0038).
+CREATE INDEX idx_transactions_date
+    ON transactions (transaction_date DESC);
+
 ALTER TABLE transactions
     ALTER COLUMN transaction_id TYPE TEXT USING transaction_id::text;
