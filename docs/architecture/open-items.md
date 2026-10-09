@@ -20,7 +20,7 @@ Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: 
 
 ## 4. Reconcile the x-factor branch ADRs with the target architecture
 
-Alerts ADR-0006 (every 4 hours, not every 6 hours; the branch's `initial-lookback: 4h` setting should become 6h to match), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
+Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) changed to match, so ADR-0006 and the `initial-lookback: 4h` setting stay as they are), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
 
 ## 5. SFTP file format and schedule
 

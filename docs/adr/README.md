@@ -61,7 +61,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0028](ADR-0028-cicd-migrations-terraform.md) — GitHub Actions deploying through OIDC, one schema-migration task per service, and all infrastructure in Terraform.
 - [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) — Local dev, disposable staging, prod only for the final weeks, and Multi-AZ only in the demo week, to stay under USD 300.
 - [ADR-0030](ADR-0030-client-data-envelope-encryption.md) — Encrypt client fields with per-client data keys kept in DynamoDB and wrapped by KMS, so deleting a key erases the client.
-- [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) — X-factor 1: a worker every 6 hours sends only public terms to AgentCore web search in Tokyo; summaries use Bedrock in Singapore; own alerts-db.
+- [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) — X-factor 1: a worker every 4 hours sends only public terms to AgentCore web search in Tokyo; summaries use Bedrock in Singapore; own alerts-db.
 - [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) — X-factor 1: deterministic instrument master and matching with no vector similarity; search only instruments held by ≥ 2 clients and ≥ 5% of clients.
 - [ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) — X-factor 3: deterministic rules in a daily 08:00 SGT task, with Bedrock in Singapore used only for wording and a template fallback.
 - [ADR-0039](ADR-0039-dashboard-aggregate-endpoints.md) — X-factor 2: owning services serve dashboard figures on private `/aggregates` routes scoped by the caller's token and not audited there; agents' transaction totals go through user-service.

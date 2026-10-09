@@ -24,7 +24,7 @@ Agents receive alerts when public market news may matter to instruments their cl
 
 - A client buys or sells an instrument; the holding stores client and account ID, instrument ID, quantity, current value and assigned agent.
 - The instrument's sector and industry come from the **instrument master** (a deterministic lookup). Account sector exposures are recalculated as holdings change; an account has no single permanent sector.
-- A worker started every 6 hours selects instruments held by **at least 2 clients and at least 5% of clients** (both configurable), so a rare holding can never be revealed through an outbound query.
+- A worker started every 4 hours selects instruments held by **at least 2 clients and at least 5% of clients** (both configurable), so a rare holding can never be revealed through an outbound query.
 - It builds public queries (for example DBS, D05, Financials, Banks, earnings, regulatory action) and sends them to Tokyo.
 - Back in Singapore, affected holdings are found by **exact ticker or instrument match, sector match and named-company match**. Relevance weighs direct versus sector-level impact, exposure amount and share, event confidence, data freshness and alert thresholds.
 - One shared summary is written per event; private context (for example a client's 45% financial-sector exposure) is added only in Singapore. Only agents assigned to affected clients (`assignedAgentSubject`) receive the alert. Their decisions (`INFORM_CLIENT`, `MONITOR`, `DISMISS`) and feedback are audited.
@@ -52,7 +52,7 @@ Agents receive alerts when public market news may matter to instruments their cl
 | Categorisation | Deterministic instrument master | LLM classification: not reproducible and can invent sectors. Vector similarity: not deterministic, needs a vector store, harder to explain and audit. |
 | Matching news to holdings | Deterministic: ticker, sector, named company | Vector relevance scoring: dropped for the same reasons; no vector infrastructure is needed. |
 | Topic selection | At least 2 clients and at least 5% of clients hold the instrument | Searching every holding: would expose rare holdings through outbound queries and multiply search cost. |
-| Schedule | Every 6 hours: a worker started by EventBridge (4 runs a day). At the branch cap of 4 grouped searches per run, that is about 480 searches (USD 3.36) a month. | Daily: news could be almost a day old when agents see it. Every 4 hours (branch ADR-0006): 50% more searches and model calls for a small gain in freshness. Per-trade triggering: many more searches, and the privacy thresholds need a whole-population view. |
+| Schedule | Every 4 hours: a worker started by EventBridge (6 runs a day), as in branch ADR-0006. At the branch cap of 4 grouped searches per run, that is about 720 searches (USD 5.04) a month, within the 1,000-query monthly quota. | Every 6 hours: a third fewer searches and model calls, but news up to about 6 hours old. Daily: news could be almost a day old when agents see it. Per-trade triggering: many more searches, and the privacy thresholds need a whole-population view. |
 | Summaries | Bedrock in Singapore | Global cross-region inference or another provider (branch ADR-0010): private client context must stay in Singapore. |
 | Storage | Own RDS instance, alerts-db | A shared database cluster (branch ADR-0008): weaker isolation; inconsistent with one database per service. |
 | Holdings source | Synthetic catalogue in the alert service (alerts branch ADR-0005) | A production holdings feed: future integration work. |
