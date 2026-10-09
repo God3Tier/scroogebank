@@ -94,7 +94,7 @@ awslocal sqs send-message \
 
 User-management producers use the same `CRUD` event type with
 `source_service=USER_MANAGEMENT`. Supported actions are `CREATE`, `READ`,
-`UPDATE`, `DISABLE`, `PASSWORD_RESET`, and `ROLE_CHANGE`. Their payload records the target
+`UPDATE`, `DISABLE`, `PASSWORD_RESET`, `ROLE_CHANGE`, and `LOGOUT`. Their payload records the target
 user ID, endpoint, HTTP method, response status, timestamp, and optional role;
 it must not contain passwords, names, email addresses, or request bodies.
 

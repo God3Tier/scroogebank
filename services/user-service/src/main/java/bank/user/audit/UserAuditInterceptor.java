@@ -43,6 +43,7 @@ public class UserAuditInterceptor implements HandlerInterceptor {
         if (uri.matches("/api/users/[^/]+/role") && "PATCH".equals(method)) return "ROLE_CHANGE";
         if (uri.matches("/api/users/[^/]+/disable") && "PATCH".equals(method)) return "DISABLE";
         if (uri.matches("/api/users/[^/]+/reset-password") && "POST".equals(method)) return "PASSWORD_RESET";
+        if ("/api/users/me/logout".equals(uri) && "POST".equals(method)) return "LOGOUT";
         if ("/api/corrupted-logs".equals(uri) && "GET".equals(method)) return "READ";
         if ("/api/corrupted-logs".equals(uri) && "POST".equals(method)) return "CREATE";
         if (uri.matches("/api/corrupted-logs/[^/]+") && "DELETE".equals(method)) return "DELETE";
