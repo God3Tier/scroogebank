@@ -12,7 +12,13 @@ packages:
   client-profile-management-service/src/internal/repository:
     config:
       all: true
+  client-profile-management-service/src/internal/repository/aggregate:
+    config:
+      all: true
   client-profile-management-service/src/internal/repository/client:
+    config:
+      all: true
+  client-profile-management-service/src/internal/service/aggregate:
     config:
       all: true
   client-profile-management-service/src/internal/service/client:

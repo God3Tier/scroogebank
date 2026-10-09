@@ -25,6 +25,8 @@ CREATE UNIQUE INDEX uk_clients_email ON clients (email) WHERE deleted_at IS NULL
 CREATE UNIQUE INDEX uk_clients_phone ON clients (phone_number) WHERE deleted_at IS NULL;
 CREATE INDEX idx_clients_created_by_agent_id ON clients (created_by_agent_id);
 CREATE INDEX idx_clients_updated_at ON clients (updated_at DESC);
+-- The business dashboard counts clients by creation date (ADR-0038).
+CREATE INDEX idx_clients_created_at ON clients (created_at DESC);
 
 -- Accounts moved to account-service, which owns them in its own database
 -- (services/account-service/data/V1_init.sql, ADR-0017, ADR-0035). The old

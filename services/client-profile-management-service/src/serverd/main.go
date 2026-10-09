@@ -2,9 +2,12 @@ package main
 
 import (
 	"client-profile-management-service/src/internal/accounts"
+	aggregatecontroller "client-profile-management-service/src/internal/controller/aggregate"
 	"client-profile-management-service/src/internal/controller/client"
 	"client-profile-management-service/src/internal/repository"
+	aggregaterepository "client-profile-management-service/src/internal/repository/aggregate"
 	"client-profile-management-service/src/internal/security"
+	aggregateservice "client-profile-management-service/src/internal/service/aggregate"
 	clientservice "client-profile-management-service/src/internal/service/client"
 	"client-profile-management-service/src/serverd/routers"
 	auditqueue "client-profile-management-service/src/serverd/sqs"
@@ -91,7 +94,8 @@ func run() error {
 		}
 	})
 	auditLogger := auditqueue.AuditLogger(sqsClient, queueURL)
-	routers.RegisterRoutes(router, client.New(clientSvc), db, verifier.Middleware(), auditLogger)
+	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db)))
+	routers.RegisterRoutes(router, client.New(clientSvc), aggregates, db, verifier.Middleware(), auditLogger)
 
 	server := &http.Server{
 		Addr:              envOrDefault("APP_ADDR", ":8080"),

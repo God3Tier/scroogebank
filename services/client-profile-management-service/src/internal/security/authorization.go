@@ -17,7 +17,7 @@ var uuidPathPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 // from entering Feature 2 routes.
 func RequireCRMRole() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
+		principal, ok := PrincipalFromGin(c)
 		if !ok || (principal.Role != "ADMIN" && principal.Role != "AGENT") {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "ADMIN or AGENT role required"})
 			return
@@ -35,7 +35,7 @@ func RequireCRMRole() gin.HandlerFunc {
 // such client for this caller".
 func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
+		principal, ok := PrincipalFromGin(c)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
@@ -70,7 +70,7 @@ func ownsClient(c *gin.Context, db *sql.DB, clientID, subject string) bool {
 	return true
 }
 
-func principalFromGin(c *gin.Context) (Principal, bool) {
+func PrincipalFromGin(c *gin.Context) (Principal, bool) {
 	value, exists := c.Get("principal")
 	if !exists {
 		return Principal{}, false

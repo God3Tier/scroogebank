@@ -8,6 +8,7 @@ var (
 	ErrMissingRequiredField = errors.New("missing required field")
 	ErrMethodNotImplemented = errors.New("method not implemented")
 	ErrNotFound             = errors.New("not found")
+	ErrForbidden            = errors.New("forbidden")
 
 	// Client errors
 	ErrInvalidClientID = errors.New("invalid client id")
