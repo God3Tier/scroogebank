@@ -4,7 +4,7 @@ Owns client profiles. Accounts moved to [`account-service`](../account-service/R
 
 ## Start locally
 
-The local service still verifies Cognito access tokens and sends a CRM audit event to the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
+The local service still verifies Cognito access tokens and records a CRM audit event for the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
 
 ```sh
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
@@ -16,7 +16,7 @@ Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (def
 
 Each service has its own database, including locally: this one on port 5432, account-service's on 5436 and the SFTP stack's transactions database on 5437 ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). For the SFTP transaction integration, run `make run` here and in `../account-service`, then start the receiver with `make -C ../sftp up`.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`.
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`.
 
 ## Cognito authorization
 
@@ -50,7 +50,9 @@ Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboile
 
 ## Auditor SQS events
 
-The service sends one SQS message per completed client endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint.
+The service records one audit event per completed client endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint.
+
+**Delivery** ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). The audit middleware saves each event to the `audit_outbox` table in a transaction of its own, after the endpoint's change has committed. This is ADR-0020's exception for producers that build their events in request middleware, used because of the cost of moving event creation into the service layer. Every 2 seconds a relay goroutine (`src/serverd/sqs/outbox.go`) takes the oldest waiting events (up to 50, locked with `FOR UPDATE SKIP LOCKED` so replicas take different rows), sends each to SQS, and deletes it once SQS accepts it. An SQS or Auditor outage therefore delays events instead of losing them. Delivery is at least once: a task that dies between the send and the delete sends the event again, and the Auditor drops the repeat by `event_id`. Two gaps remain: a crash between the endpoint's commit and the outbox write loses that event, and an outbox write that fails is logged with its event ID and dropped. The outbox table is written with plain SQL, so `sqlboiler.toml` and `sqlboiler.docker.toml` leave it out of the generated ORM.
 
 Configure API Gateway with a JWT authorizer for the same Cognito issuer and app-client ID as an additional edge check. This service also validates every token itself, so direct service access does not bypass authentication.
 
@@ -58,4 +60,4 @@ Configure API Gateway with a JWT authorizer for the same Cognito issuer and app-
 
 Set `APP_ENV=production`, `APP_TLS_CERT_FILE`, and `APP_TLS_KEY_FILE` to serve HTTPS. Set `DB_SSLMODE=verify-full` and `DB_SSLROOTCERT` to verify PostgreSQL TLS. `ACCOUNT_SERVICE_BASE_URL` must be `https://`, because client deletion forwards the caller's access token to it. The service defaults to production security and refuses to start in production mode if these settings are missing; `make run` explicitly sets `APP_ENV=local`. If Cognito access tokens use resource-bound `aud` claims, also set `COGNITO_API_AUDIENCE` to the expected value. Local HTTP and `sslmode=disable` are intended only for local development.
 
-RDS encryption-at-rest settings still require deployment infrastructure configuration. If an SQS send fails after an endpoint completes, the service reports the failure in its application log; the completed endpoint response is not changed retroactively.
+RDS encryption-at-rest settings still require deployment infrastructure configuration. If saving an audit event fails after an endpoint completes, the service reports the failure in its application log; the completed endpoint response is not changed retroactively.

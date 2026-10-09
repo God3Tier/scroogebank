@@ -31,3 +31,15 @@ CREATE INDEX idx_clients_created_at ON clients (created_at DESC);
 -- Accounts moved to account-service, which owns them in its own database
 -- (services/account-service/data/V1_init.sql, ADR-0017, ADR-0035). The old
 -- accounts-to-clients foreign key is replaced by API checks in both services.
+
+-- Audit events waiting to be sent to the Auditor's SQS queue (ADR-0020). The
+-- audit middleware writes a row in its own transaction right after each
+-- request, and the relay deletes it once SQS has accepted it. event_id is the
+-- Auditor's de-duplication key, so a row sent twice is stored only once.
+CREATE TABLE audit_outbox (
+    event_id    UUID        PRIMARY KEY,
+    body        TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_audit_outbox_created_at ON audit_outbox (created_at);

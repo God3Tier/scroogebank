@@ -93,7 +93,10 @@ func run() error {
 			options.BaseEndpoint = aws.String(endpoint)
 		}
 	})
-	auditLogger := auditqueue.AuditLogger(sqsClient, queueURL)
+	// Audit events are saved to the outbox after each request and sent to the
+	// Auditor's queue by the relay (ADR-0020).
+	auditLogger := auditqueue.AuditLogger(auditqueue.NewPostgresOutbox(db))
+	go auditqueue.NewRelay(db, sqsClient, queueURL).Run(context.Background())
 	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db)))
 	routers.RegisterRoutes(router, client.New(clientSvc), aggregates, db, verifier.Middleware(), auditLogger)
 
