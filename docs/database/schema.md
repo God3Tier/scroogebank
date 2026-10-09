@@ -10,7 +10,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 
 | Database | Owned by | Holds |
 |---|---|---|
-| `users-db` | user-service | CRM users (Admin/Agent), linked to Cognito |
+| `users-db` | user-service | CRM users (Admin/Agent), linked to Cognito; `audit_outbox` |
 | `clients-db` | client-service | Client profiles, verification status, and `deleted_at` for soft-deleted clients ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) |
 | `accounts-db` | account-service | Bank accounts, each with `owner_agent_id`: the owning agent's Cognito `sub`, copied from client-service when the account is opened ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)), and `deleted_at` for soft-deleted accounts ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) |
 | `transactions-db` | transaction-service and transaction-ingest | Imported transactions, `ingestion_file` records, rejected rows; transaction-service's `outbox` and the ingest Lambda's `ingest_outbox`. Each transaction stores the `account_id` and `client_id` that account-service confirmed at import, with no foreign keys ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)) |
