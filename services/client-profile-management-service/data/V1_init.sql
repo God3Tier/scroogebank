@@ -1,17 +1,24 @@
 -- Clients
+-- The 11 personal fields hold AES-256-GCM ciphertext, encrypted with the
+-- client's own data key (ADR-0030); their lengths are checked by the service,
+-- not here. email_hash and phone_number_hash are blind indexes: keyed hashes
+-- of the normalised email and phone, so they can stay unique without being
+-- readable.
 CREATE TABLE clients (
     client_id             UUID PRIMARY KEY,
-    first_name            VARCHAR(50)  NOT NULL,
-    last_name             VARCHAR(50)  NOT NULL,
-    date_of_birth         DATE         NOT NULL,
-    gender                VARCHAR(20)  NOT NULL,
-    email                 VARCHAR(255) NOT NULL,
-    phone_number          VARCHAR(20)  NOT NULL,
-    address               VARCHAR(100) NOT NULL,
-    city                  VARCHAR(50)  NOT NULL,
-    state                 VARCHAR(50)  NOT NULL,
-    country               VARCHAR(50)  NOT NULL,
-    postal_code           VARCHAR(10)  NOT NULL,
+    first_name            TEXT         NOT NULL,
+    last_name             TEXT         NOT NULL,
+    date_of_birth         TEXT         NOT NULL,
+    gender                TEXT         NOT NULL,
+    email                 TEXT         NOT NULL,
+    email_hash            TEXT         NOT NULL,
+    phone_number          TEXT         NOT NULL,
+    phone_number_hash     TEXT         NOT NULL,
+    address               TEXT         NOT NULL,
+    city                  TEXT         NOT NULL,
+    state                 TEXT         NOT NULL,
+    country               TEXT         NOT NULL,
+    postal_code           TEXT         NOT NULL,
     verification_status   VARCHAR(20)  NOT NULL DEFAULT 'UNVERIFIED',
     created_by_agent_id   VARCHAR(128) NOT NULL,
     created_at            TIMESTAMPTZ  NOT NULL,
@@ -21,8 +28,8 @@ CREATE TABLE clients (
 );
 
 -- Unique among clients that are not deleted, so a deleted client's details can be reused.
-CREATE UNIQUE INDEX uk_clients_email ON clients (email) WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX uk_clients_phone ON clients (phone_number) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uk_clients_email ON clients (email_hash) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uk_clients_phone ON clients (phone_number_hash) WHERE deleted_at IS NULL;
 CREATE INDEX idx_clients_created_by_agent_id ON clients (created_by_agent_id);
 CREATE INDEX idx_clients_updated_at ON clients (updated_at DESC);
 -- The business dashboard counts clients by creation date (ADR-0038).

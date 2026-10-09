@@ -12,29 +12,36 @@ import (
 )
 
 func TestDeleteClient(t *testing.T) {
+	const id = "00000000-0000-0000-0000-000000000101"
 	tests := map[string]struct {
 		id      string
-		fixture string
+		deleted bool
 		wantErr error
 	}{
-		"soft-deletes existing client":           {id: "00000000-0000-0000-0000-000000000101", fixture: "client_lookup.sql"},
-		"returns not found for unknown client":   {id: "00000000-0000-0000-0000-000000000199", fixture: "client_empty.sql", wantErr: clienterrors.ErrClientNotFound},
-		"returns not found for a deleted client": {id: "00000000-0000-0000-0000-000000000103", fixture: "client_deleted.sql", wantErr: clienterrors.ErrClientNotFound},
+		"soft-deletes existing client":           {id: id},
+		"returns not found for unknown client":   {id: "00000000-0000-0000-0000-000000000199", wantErr: clienterrors.ErrClientNotFound},
+		"returns not found for a deleted client": {id: id, deleted: true, wantErr: clienterrors.ErrClientNotFound},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			db := openTestDB(t)
-			loadTestFixture(t, db, test.fixture)
-			err := NewClientRepository(db).DeleteClient(context.Background(), test.id)
+			db, repo, protector := newTestRepository(t)
+			loadTestFixture(t, db, "client_empty.sql")
+			seedClient(t, db, repo, id, "alice-101@example.test", "+6560000101")
+			if test.deleted {
+				markDeleted(t, db, id)
+			}
+			err := repo.DeleteClient(context.Background(), test.id)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return
 			}
 			require.NoError(t, err)
-			// The row is kept, marked deleted.
+			// The row is kept, marked deleted. Deleting is not erasure, so the
+			// client's data key stays too (ADR-0036).
 			var deletedAt sql.NullTime
 			require.NoError(t, db.QueryRow(`SELECT deleted_at FROM clients WHERE client_id = $1`, test.id).Scan(&deletedAt))
 			assert.True(t, deletedAt.Valid)
+			assert.True(t, protector.HasKey(test.id))
 		})
 	}
 }

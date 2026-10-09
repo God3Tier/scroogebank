@@ -5,12 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"client-profile-management-service/src/internal/encryption"
+	"client-profile-management-service/src/internal/encryption/encryptiontest"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	repomock "client-profile-management-service/src/internal/repository/aggregate"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -49,7 +52,7 @@ func TestClientStats(t *testing.T) {
 				repo.On("ClientStats", ctx, test.caller, want, test.byAgent).Return(models.ClientStats{Total: 1}, nil).Once()
 			}
 
-			got, err := New(repo).ClientStats(ctx, test.caller, test.from, test.to, test.groupBy)
+			got, err := New(repo, encryptiontest.New()).ClientStats(ctx, test.caller, test.from, test.to, test.groupBy)
 
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
@@ -95,6 +98,48 @@ func TestActionItems(t *testing.T) {
 			assert.Equal(t, int64(2), got.StaleUnverifiedTotal)
 		})
 	}
+}
+
+func TestActionItemsDecryptsNames(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	protector := encryptiontest.New()
+	key, err := protector.NewKey(ctx, "client-1")
+	require.NoError(t, err)
+	firstName, err := key.Encrypt(models.FieldFirstName, "Cai")
+	require.NoError(t, err)
+	lastName, err := key.Encrypt(models.FieldLastName, "Ng")
+	require.NoError(t, err)
+	repo := repomock.NewMockRepository(t)
+	repo.On("StaleUnverifiedClients", ctx, agent, now.AddDate(0, 0, -DefaultStaleDays), ActionItemLimit).
+		Return(models.ClientActionItems{
+			StaleUnverified:      []models.ClientRef{{ClientID: "client-1", FirstName: firstName, LastName: lastName}},
+			StaleUnverifiedTotal: 1,
+		}, nil).Once()
+	svc := service{repo: repo, protector: protector, now: func() time.Time { return now }}
+
+	got, err := svc.ActionItems(ctx, agent, "")
+
+	require.NoError(t, err)
+	require.Len(t, got.StaleUnverified, 1)
+	assert.Equal(t, "Cai", got.StaleUnverified[0].FirstName)
+	assert.Equal(t, "Ng", got.StaleUnverified[0].LastName)
+}
+
+func TestActionItemsFailsWhenANameCannotBeDecrypted(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	repo := repomock.NewMockRepository(t)
+	repo.On("StaleUnverifiedClients", ctx, agent, now.AddDate(0, 0, -DefaultStaleDays), ActionItemLimit).
+		Return(models.ClientActionItems{
+			StaleUnverified:      []models.ClientRef{{ClientID: "client-without-key", FirstName: "x", LastName: "y"}},
+			StaleUnverifiedTotal: 1,
+		}, nil).Once()
+	svc := service{repo: repo, protector: encryptiontest.New(), now: func() time.Time { return now }}
+
+	_, err := svc.ActionItems(ctx, agent, "")
+
+	assert.ErrorIs(t, err, encryption.ErrKeyNotFound)
 }
 
 func TestTeamComparison(t *testing.T) {

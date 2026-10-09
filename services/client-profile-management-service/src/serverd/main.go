@@ -4,6 +4,7 @@ import (
 	"client-profile-management-service/src/internal/accounts"
 	aggregatecontroller "client-profile-management-service/src/internal/controller/aggregate"
 	"client-profile-management-service/src/internal/controller/client"
+	"client-profile-management-service/src/internal/encryption"
 	"client-profile-management-service/src/internal/repository"
 	aggregaterepository "client-profile-management-service/src/internal/repository/aggregate"
 	"client-profile-management-service/src/internal/security"
@@ -22,6 +23,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -58,7 +61,20 @@ func run() error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 
-	registry := repository.New(db)
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		return fmt.Errorf("AWS_REGION is required")
+	}
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(region))
+	if err != nil {
+		return fmt.Errorf("load AWS configuration: %w", err)
+	}
+	protector, err := newProtector(awsCfg)
+	if err != nil {
+		return err
+	}
+
+	registry := repository.New(db, protector)
 	clientSvc := clientservice.NewClientService(
 		registry.GetClientRepository(),
 		accounts.NewHTTPDirectory(accountServiceURL, accountLookupTimeout),
@@ -80,14 +96,6 @@ func run() error {
 	if queueURL == "" {
 		return fmt.Errorf("AUDIT_QUEUE_URL is required")
 	}
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		return fmt.Errorf("AWS_REGION is required")
-	}
-	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(region))
-	if err != nil {
-		return fmt.Errorf("load AWS configuration for Auditor SQS: %w", err)
-	}
 	sqsClient := awssqs.NewFromConfig(awsCfg, func(options *awssqs.Options) {
 		if endpoint := os.Getenv("AWS_ENDPOINT_URL"); endpoint != "" {
 			options.BaseEndpoint = aws.String(endpoint)
@@ -97,7 +105,7 @@ func run() error {
 	// Auditor's queue by the relay (ADR-0020).
 	auditLogger := auditqueue.AuditLogger(auditqueue.NewPostgresOutbox(db))
 	go auditqueue.NewRelay(db, sqsClient, queueURL).Run(context.Background())
-	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db)))
+	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db), protector))
 	routers.RegisterRoutes(router, client.New(clientSvc), aggregates, db, verifier.Middleware(), auditLogger)
 
 	server := &http.Server{
@@ -109,6 +117,24 @@ func run() error {
 		return server.ListenAndServeTLS(os.Getenv("APP_TLS_CERT_FILE"), os.Getenv("APP_TLS_KEY_FILE"))
 	}
 	return server.ListenAndServe()
+}
+
+// newProtector encrypts client personal data with per-client data keys from
+// KMS, stored wrapped in DynamoDB, and computes email and phone blind indexes
+// with the shared KMS HMAC key (ADR-0030). It is required in every mode, so
+// no client is ever stored unencrypted. Locally, AWS_ENDPOINT_URL_KMS and
+// AWS_ENDPOINT_URL_DYNAMODB point the SDK at LocalStack.
+func newProtector(awsCfg aws.Config) (encryption.Protector, error) {
+	settings := map[string]string{}
+	for _, name := range []string{"CLIENT_KEYS_TABLE", "CLIENT_DATA_KEY_ID", "CLIENT_INDEX_KEY_ID"} {
+		value := strings.TrimSpace(os.Getenv(name))
+		if value == "" {
+			return nil, fmt.Errorf("%s is required for client data encryption", name)
+		}
+		settings[name] = value
+	}
+	return encryption.NewAWS(kms.NewFromConfig(awsCfg), dynamodb.NewFromConfig(awsCfg),
+		settings["CLIENT_KEYS_TABLE"], settings["CLIENT_DATA_KEY_ID"], settings["CLIENT_INDEX_KEY_ID"]), nil
 }
 
 func databaseURL() string {

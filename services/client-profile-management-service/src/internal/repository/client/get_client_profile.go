@@ -19,20 +19,16 @@ func (r clientRepository) GetClientProfile(ctx context.Context, clientID string)
 	if err != nil {
 		return models.Client{}, err
 	}
-	return models.Client{
-		ClientID:           c,
-		FirstName:          client.FirstName,
-		LastName:           client.LastName,
-		DateOfBirth:        client.DateOfBirth,
-		Gender:             client.Gender,
-		Email:              client.Email,
-		PhoneNumber:        client.PhoneNumber,
-		Address:            client.Address,
-		City:               client.City,
-		State:              client.State,
-		Country:            client.Country,
-		PostalCode:         client.PostalCode,
-		VerificationStatus: client.VerificationStatus,
-		CreatedByAgentID:   client.CreatedByAgentID,
-	}, nil
+	key, err := r.protector.Key(ctx, client.ClientID)
+	if err != nil {
+		return models.Client{}, err
+	}
+	profile, err := decryptFrom(client, key)
+	if err != nil {
+		return models.Client{}, err
+	}
+	profile.ClientID = c
+	profile.VerificationStatus = client.VerificationStatus
+	profile.CreatedByAgentID = client.CreatedByAgentID
+	return profile, nil
 }

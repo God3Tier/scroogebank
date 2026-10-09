@@ -10,13 +10,13 @@ The local service still verifies Cognito access tokens and records a CRM audit e
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-The command starts PostgreSQL, initializes or migrates its schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
+The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)), initializes or migrates the schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
 
 Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (default `http://localhost:8083`). Run account-service alongside this service, or client deletion returns 503.
 
 Each service has its own database, including locally: this one on port 5432, account-service's on 5436 and the SFTP stack's transactions database on 5437 ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). For the SFTP transaction integration, run `make run` here and in `../account-service`, then start the receiver with `make -C ../sftp up`.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`.
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`. A volume created before client data encryption holds plaintext clients and has no blind-index columns, so client endpoints fail until you run `make db-reset`. The same applies after the LocalStack container is recreated: its keys are gone, so clients created before cannot be read.
 
 ## Cognito authorization
 
@@ -48,9 +48,27 @@ The check and the delete are not atomic, so an account created between them is l
 
 Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboiler.toml` and `sqlboiler.docker.toml`, which makes every generated query skip them. All client queries, including the ownership check, go through the generated code; any hand-written SQL added later must add `deleted_at IS NULL` itself.
 
+## Client data encryption
+
+Client personal data is encrypted in the application before it reaches the database ([ADR-0030](../../docs/adr/ADR-0030-client-data-envelope-encryption.md)), so a leaked dump or snapshot of the database is unreadable on its own.
+
+- **Encrypted:** the 11 personal fields: first and last name, date of birth, gender, email, phone number, address, city, state, country and postal code. Each is AES-256-GCM ciphertext, bound to its client and column, so it cannot be copied to another client or field. The client ID, owning agent, verification status and timestamps stay plaintext for lookups, ownership checks and the dashboard figures.
+- **One data key per client.** Creating a client calls KMS `GenerateDataKey` on the data key (`CLIENT_DATA_KEY_ID`) with the client ID as encryption context, and stores only the wrapped key in the DynamoDB table `CLIENT_KEYS_TABLE`, before the row is inserted. A stored key is never overwritten; if the insert fails, the new key is deleted. Reads unwrap the key with KMS `Decrypt` and keep it in memory for 5 minutes. Deleting a client is a soft delete and keeps its key.
+- **Uniqueness without plaintext.** `email_hash` and `phone_number_hash` are blind indexes: HMAC-SHA-256 from KMS `GenerateMac` with the shared HMAC key (`CLIENT_INDEX_KEY_ID`), which never leaves KMS. They are computed over the email trimmed and lowercased, and the phone number with spaces, hyphens, dots and brackets removed, so `Alice@Example.test` and `alice@example.test`, or `+65 6000-0101` and `+6560000101`, count as the same. No country code is assumed. Uniqueness counts only clients that are not deleted, so a deleted client's email and phone can be reused. The stored values are the ones entered.
+- **The database no longer checks field lengths**, because it stores ciphertext; the service's validation does.
+- The dashboard's action items include client names, so the service decrypts them for each row it returns.
+
+The three settings are required in every mode, and the service refuses to start without them. `make run` sets them for LocalStack: `client-keys`, `alias/client-data` and `alias/client-blind-index`, created by `localstack/init-client-keys.sh` in the container on port 4567. It also sets `AWS_ENDPOINT_URL_KMS` and `AWS_ENDPOINT_URL_DYNAMODB` to it; they take precedence over `AWS_ENDPOINT_URL`, so SQS can use the auditor's LocalStack on port 4566. `make test` runs the encryption package's LocalStack test.
+
+Infrastructure requirements, for when the infrastructure is built:
+- a symmetric customer-managed KMS key for data keys, with automatic rotation, and an `HMAC_256` KMS key with key usage `GENERATE_VERIFY_MAC` for the blind indexes;
+- a DynamoDB table with partition key `client_id` (string), point-in-time recovery, and the AWS Backup plan;
+- this service's task role, and only it: `kms:GenerateDataKey` and `kms:Decrypt` on the data key, conditioned on the `client_id` encryption context; `kms:GenerateMac` on the HMAC key; `dynamodb:PutItem`, `GetItem` and `DeleteItem` on the table, reached through the DynamoDB gateway endpoint;
+- alarms on KMS and DynamoDB errors from this service.
+
 ## Auditor SQS events
 
-The service records one audit event per completed client endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint.
+The service records one audit event per completed client endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint. The audit events carry IDs only, never the client's personal data.
 
 **Delivery** ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). The audit middleware saves each event to the `audit_outbox` table in a transaction of its own, after the endpoint's change has committed. This is ADR-0020's exception for producers that build their events in request middleware, used because of the cost of moving event creation into the service layer. Every 2 seconds a relay goroutine (`src/serverd/sqs/outbox.go`) takes the oldest waiting events (up to 50, locked with `FOR UPDATE SKIP LOCKED` so replicas take different rows), sends each to SQS, and deletes it once SQS accepts it. An SQS or Auditor outage therefore delays events instead of losing them. Delivery is at least once: a task that dies between the send and the delete sends the event again, and the Auditor drops the repeat by `event_id`. Two gaps remain: a crash between the endpoint's commit and the outbox write loses that event, and an outbox write that fails is logged with its event ID and dropped. The outbox table is written with plain SQL, so `sqlboiler.toml` and `sqlboiler.docker.toml` leave it out of the generated ORM.
 

@@ -18,6 +18,12 @@ COGNITO_API_AUDIENCE ?=
 AWS_REGION ?=
 AWS_ENDPOINT_URL ?=
 AUDIT_QUEUE_URL ?=
+# Client data encryption (ADR-0030). The defaults match localstack/init-client-keys.sh.
+CLIENT_KEYS_TABLE ?= client-keys
+CLIENT_DATA_KEY_ID ?= alias/client-data
+CLIENT_INDEX_KEY_ID ?= alias/client-blind-index
+AWS_ENDPOINT_URL_KMS ?= http://localhost:4567
+AWS_ENDPOINT_URL_DYNAMODB ?= http://localhost:4567
 ACCOUNT_SERVICE_BASE_URL ?= http://localhost:8083
 DB_SSLMODE ?= disable
 DB_SSLROOTCERT ?=
@@ -33,6 +39,9 @@ db-up:
 	@echo "Waiting for postgres to be healthy..."
 	@until docker compose exec -T postgres pg_isready -U $(DB_USER) >/dev/null 2>&1; do sleep 1; done
 	@echo "Postgres is up."
+	@echo "Waiting for the LocalStack encryption keys..."
+	@until $(COMPOSE) exec -T localstack awslocal kms describe-key --key-id alias/client-blind-index >/dev/null 2>&1; do sleep 1; done
+	@echo "LocalStack keys are ready."
 
 ## Stop and remove the container (keeps the volume)
 db-down:
@@ -61,6 +70,7 @@ check-security-config:
 	@test -n "$(AWS_REGION)" || (echo "Set AWS_REGION for the Auditor SQS queue"; exit 1)
 	@test -n "$(AUDIT_QUEUE_URL)" || (echo "Set AUDIT_QUEUE_URL to the Auditor audit-insert queue URL"; exit 1)
 	@test -n "$(ACCOUNT_SERVICE_BASE_URL)" || (echo "Set ACCOUNT_SERVICE_BASE_URL to the account-service URL, which is asked before a client is deleted"; exit 1)
+	@test -n "$(CLIENT_KEYS_TABLE)" -a -n "$(CLIENT_DATA_KEY_ID)" -a -n "$(CLIENT_INDEX_KEY_ID)" || (echo "Set CLIENT_KEYS_TABLE, CLIENT_DATA_KEY_ID and CLIENT_INDEX_KEY_ID for client data encryption"; exit 1)
 	@if [ "$(APP_ENV)" = production ]; then \
 		test "$(DB_SSLMODE)" = verify-full -a -n "$(DB_SSLROOTCERT)" || (echo "Production requires DB_SSLMODE=verify-full and DB_SSLROOTCERT"; exit 1); \
 		test -n "$(APP_TLS_CERT_FILE)" -a -n "$(APP_TLS_KEY_FILE)" || (echo "Production requires APP_TLS_CERT_FILE and APP_TLS_KEY_FILE"; exit 1); \
@@ -73,7 +83,7 @@ run: check-security-config db-up
 		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
 	fi
 	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < data/V2_agent_subject.sql
-	DB_HOST=$(DB_HOST) DB_PORT=$(DB_PORT) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) DB_SSLMODE=$(DB_SSLMODE) DB_SSLROOTCERT="$(DB_SSLROOTCERT)" APP_ENV=$(APP_ENV) APP_TLS_CERT_FILE="$(APP_TLS_CERT_FILE)" APP_TLS_KEY_FILE="$(APP_TLS_KEY_FILE)" COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" ACCOUNT_SERVICE_BASE_URL="$(ACCOUNT_SERVICE_BASE_URL)" go run ./src/serverd
+	DB_HOST=$(DB_HOST) DB_PORT=$(DB_PORT) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) DB_SSLMODE=$(DB_SSLMODE) DB_SSLROOTCERT="$(DB_SSLROOTCERT)" APP_ENV=$(APP_ENV) APP_TLS_CERT_FILE="$(APP_TLS_CERT_FILE)" APP_TLS_KEY_FILE="$(APP_TLS_KEY_FILE)" COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" ACCOUNT_SERVICE_BASE_URL="$(ACCOUNT_SERVICE_BASE_URL)" CLIENT_KEYS_TABLE="$(CLIENT_KEYS_TABLE)" CLIENT_DATA_KEY_ID="$(CLIENT_DATA_KEY_ID)" CLIENT_INDEX_KEY_ID="$(CLIENT_INDEX_KEY_ID)" AWS_ENDPOINT_URL_KMS="$(AWS_ENDPOINT_URL_KMS)" AWS_ENDPOINT_URL_DYNAMODB="$(AWS_ENDPOINT_URL_DYNAMODB)" go run ./src/serverd
 
 ## Open a psql shell into the running database
 psql:
