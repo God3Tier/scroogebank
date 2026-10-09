@@ -1,4 +1,4 @@
-# ADR-0031: X-factor 1 alert processing: 6-hourly worker, Tokyo web search with public terms only, Singapore data boundary, own alerts-db
+# ADR-0031: X-factor 1 alert processing: 4-hourly worker, Tokyo web search with public terms only, Singapore data boundary, own alerts-db
 
 - Status: Proposed
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
@@ -15,7 +15,7 @@ X-factor 1 (event-driven market-news alerts) tells agents when public market new
 
 The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Azeez). This ADR records the target-architecture position and where it differs, for reconciliation ([open item 4](../architecture/open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture)):
 - **branch ADR-0009** (AgentCore search region and fallback): agrees on Tokyo, public terms only, approved domains, and no automatic fallback provider;
-- **branch ADR-0006** (alert processing architecture): runs every 4 hours, against every 6 hours here;
+- **branch ADR-0006** (alert processing architecture): runs every 4 hours; this ADR first proposed every 6 hours and was changed to match on 2026-10-09;
 - **branch ADR-0008** (database topology): a shared database cluster, against its own RDS instance here;
 - **branch ADR-0010** (AI provider): a global cross-region inference model, against Bedrock in Singapore here.
 
@@ -38,9 +38,9 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 ### Schedule
 
-- **A worker every 6 hours, started by EventBridge (chosen):** 4 runs a day.
+- **A worker every 4 hours, started by EventBridge (chosen, as in branch ADR-0006):** 6 runs a day.
+- **Every 6 hours:** a third fewer searches and model calls, but news up to about 6 hours old.
 - **Daily:** news could be almost a day old.
-- **Every 4 hours (branch ADR-0006):** 50% more searches and model calls for a small gain in freshness.
 - **Per trade:** many more searches, and the privacy thresholds need a whole-population view ([ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md)).
 
 ### Summaries
@@ -57,7 +57,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 1. **event-alert-service** runs as one image with two modes:
    - an `api` ECS service serving `/api/alerts`: list and detail; decisions `INFORM_CLIENT`, `MONITOR`, `DISMISS`; feedback;
-   - a `worker` ECS task started **every 6 hours** by EventBridge Scheduler.
+   - a `worker` ECS task started **every 4 hours** by EventBridge Scheduler.
 
    Admins can read alerts but not decide.
 2. **Data boundary:**
@@ -77,7 +77,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
    - account sector exposures and public events;
    - alerts, decisions and the outbox.
 5. **Controls:**
-   - a search cap (the branch cap of 4 grouped searches per run, about 480 searches a month);
+   - a search cap (the branch cap of 4 grouped searches per run, about 720 searches a month, within the 1,000-query monthly quota);
    - kill switches for search and model calls;
    - a separate Bedrock budget alert;
    - a failed Tokyo search ends that run without inventing results.
@@ -87,7 +87,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 ## Rationale
 
 - Only public, non-client data crosses regions, which keeps the privacy argument simple.
-- Every 6 hours balances freshness against search and model cost.
+- Every 4 hours matches the feature owner's ADR-0006 and plan, and keeps news fresher; the extra searches still fit the 1,000-query monthly quota.
 - Bedrock in Singapore keeps client context in-region.
 - Its own database follows database-per-service.
 
@@ -101,10 +101,11 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 ### Negative / Trade-offs
 
-- News can be up to about 6 hours old.
+- News can be up to about 4 hours old.
+- 50% more searches and model calls than running every 6 hours.
 - Depends on AgentCore availability in Tokyo.
 - One more RDS instance (about USD 13–15/month single-AZ).
-- Conflicts with three of the feature owners' Proposed ADRs until reconciled.
+- Conflicts with two of the feature owners' Proposed ADRs (ADR-0008, ADR-0010) until reconciled.
 
 ## Security & Privacy Impact
 
@@ -115,7 +116,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 ## Cost Impact
 
-Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switches. Searches cost about USD 3.36/month at 480 searches. alerts-db adds about USD 13–15/month single-AZ.
+Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switches. Searches cost about USD 5.04/month at 720 searches. alerts-db adds about USD 13–15/month single-AZ.
 
 ## Operational Impact
 
@@ -136,3 +137,8 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 - [Numbered flows 11–11b](../architecture/data-flow.md#numbered-flows)
 - [Open items 4](../architecture/open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture) and [14](../architecture/open-items.md#14-tokyo-web-search-availability)
 - `feat/event-driven-alerts`: ADR-0006, ADR-0008, ADR-0009, ADR-0010 (Proposed, owner Azeez). Those files use numbers already taken on `dev` and will need renumbering when merged.
+
+## Revision history
+
+- 2026-10-01 21:50 +08:00: proposed, with the worker every 6 hours.
+- 2026-10-09: before acceptance, the schedule changed to every 4 hours to match branch ADR-0006, as decided by the decision owner. Searches rise from about 480 to about 720 a month (USD 3.36 to 5.04). The rest of the decision is unchanged.

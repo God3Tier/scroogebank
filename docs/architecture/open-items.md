@@ -10,6 +10,8 @@ Each item needs a decision from the owner it names. When an item is decided, rec
 
 The spec says audit logs are accessible only to administrators, while the UI mock-up says agents see their own clients' activities. Proposal: raw audit log for Admins only; a filtered, PII-masked activity view for Agents.
 
+**Resolved (2026-10-09)** by [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decisions 2 and 3. Clients never use the CRM, so "client activities" are agents' actions on their clients, as the mock-up's "My Recent Activities" shows. Agents see their own activities; admins see all agents'. The feed shows changes only, and the raw audit log is shown to no one through it.
+
 ## 2. Domain name
 
 Needed for the ACM certificate on the internal ALB, at about USD 13/year plus USD 0.50/month for the hosted zone.
@@ -18,9 +20,11 @@ Needed for the ACM certificate on the internal ALB, at about USD 13/year plus US
 
 Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: business dashboard](x-factors.md#x-factor-2-business-dashboard)) could host this view later.
 
+**Resolved (2026-10-09)** by [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decision 2: user-service owns it, as `GET /api/activities`. It is a Feature 1 requirement in the base spec, so it does not move to the business dashboard, which is an x-factor. The same feed serves agents their own activities.
+
 ## 4. Reconcile the x-factor branch ADRs with the target architecture
 
-Alerts ADR-0006 (every 4 hours, not every 6 hours; the branch's `initial-lookback: 4h` setting should become 6h to match), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
+Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) changed to match, so ADR-0006 and the `initial-lookback: 4h` setting stay as they are), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
 
 ## 5. SFTP file format and schedule
 
@@ -52,13 +56,17 @@ This covers one account at a time. For the business dashboard's transaction tota
 
 Decide whether they are encrypted with the client's key from client-keys (only client-service can use it, so other services would send IDs only), or with a separate per-client key owned by the auditor.
 
+**Not needed yet (2026-10-09).** client-service's audit events carry IDs and endpoint details only, never personal data ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)). Decide this before any event carries personal data, for example before/after values.
+
 ## 12. Searching encrypted client fields
 
 Confirm which fields the UI must search or sort by; each needs a blind index or must stay plaintext.
 
+**Resolved (2026-10-09)** by [ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md) decision 6. client-service has no search endpoint, so only email and phone number get blind indexes, for their uniqueness. They use one shared KMS HMAC key over normalised values. A future search on another field needs its own blind index and an ADR.
+
 ## 13. Tamper findings and chain-verify on dev
 
-The auditor code on `dev` differs from [Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr): (a) chain-verify runs as a long-lived process with internal timers (every 24 hours and every hour), not a task started by EventBridge; (b) on a mismatch it deletes the row from `audit_log`, re-links the chain and moves the row to `corrupted_audit_log`, which needs DELETE and UPDATE on `audit_log` ([Tamper resistance](../security/security-model.md#tamper-resistance) allows only INSERT and SELECT) and leaves no break in the chain to show where tampering happened; (c) it also writes an "Error logging" event into the chain itself; (d) no chain head is anchored in S3 Object Lock yet; (e) the findings are served over REST on the auditor (`GET`, `POST` and `DELETE /api/corrupted-logs`), including a delete, rather than read-only through user-service. The auditor owner must bring the code and the target architecture into line, and settle the findings table's columns.
+The auditor code on `dev` differs from [Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr): (a) chain-verify runs as a long-lived process with internal timers (every 24 hours and every hour), not a task started by EventBridge; (b) on a mismatch it deletes the row from `audit_log`, re-links the chain and moves the row to `corrupted_audit_log`, which needs DELETE and UPDATE on `audit_log` ([Tamper resistance](../security/security-model.md#tamper-resistance) allows only INSERT and SELECT) and leaves no break in the chain to show where tampering happened; (c) it also writes an "Error logging" event into the chain itself; (d) no chain head is anchored in S3 Object Lock yet; (e) the findings are served over REST on the auditor (`GET`, `POST` and `DELETE /api/corrupted-logs`), including a delete, rather than read-only through user-service. The auditor owner must bring the code and the target architecture into line, and settle the findings table's columns. [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decision 4 leaves to this item and [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) which operations admins have on findings (read only, or also create and delete) and how they are served; it fixes only that admins reach them through user-service.
 
 ## 14. Tokyo web search availability
 
@@ -90,4 +98,4 @@ The target architecture proposes Cognito managed login with the authorization-co
 
 ## 21. Erasing soft-deleted client data
 
-Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)): the rows stay in clients-db and accounts-db, as the requirements Q&A asks (CPM08, CPM21, UM05). Nothing yet removes them. The Feature 2 owner, with the security owner, must decide: (a) how long deleted records are kept; (b) who can request erasure of one client's personal data, and how; (c) whether erasure deletes the rows in every owning service, deletes the client's data key ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)), or both, as [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 5 describes.
+Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)): the rows stay in clients-db and accounts-db, as the requirements Q&A asks (CPM08, CPM21, UM05). Nothing yet removes them. The Feature 2 owner, with the security owner, must decide: (a) how long deleted records are kept; (b) who can request erasure of one client's personal data, and how; (c) whether erasure deletes the rows in every owning service, deletes the client's data key ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)), or both, as [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 5 describes. Whichever is chosen, erasure must also clear the client's email and phone blind indexes, which the shared index key would otherwise still match ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md) decision 5).

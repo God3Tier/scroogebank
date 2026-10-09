@@ -21,6 +21,8 @@ a decision it governs.
 - [ADR-0037](ADR-0037-transactions-database-and-account-linking.md) — Transactions get their own database; the import links rows to accounts through account-service's `/internal/accounts/lookup`, authenticating with a Cognito client-credentials token, and fails closed; supersedes ADR-0006 decisions 1–2.
 - [ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md) — X-factor 2: stateless dashboard-service fanning out with the caller's JWT, a 3-minute per-caller cache, and best-effort audit events.
 - [ADR-0038](ADR-0038-dashboard-metric-definitions.md) — X-factor 2: what each dashboard figure means; only figures the data supports exactly, no sums across currencies, deleted records never counted, no composite agent score.
+- [ADR-0030](ADR-0030-client-data-envelope-encryption.md) — client-service encrypts the 11 personal client fields with per-client data keys kept in DynamoDB and wrapped by KMS, so deleting a key erases the client; email and phone stay unique through blind indexes keyed by one shared KMS HMAC key over normalised values.
+- [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) — The auditor is internal-only and checks every caller's token; one changes-only activity feed in user-service (`GET /api/activities`) shows admins all agents' activities and agents their own, read over gRPC through ECS Service Connect; tamper findings are left to ADR-0022.
 
 ## Superseded decisions
 
@@ -51,7 +53,6 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0016](ADR-0016-holdings-derived-search-universe.md) - Derive bounded public search terms from sufficiently common client holdings inside Singapore without exporting portfolio facts.
 - [ADR-0018](ADR-0018-ecs-fargate-compute.md) — Run all services and scheduled tasks on ECS Fargate across two AZs with 2–6 tasks per service, rejecting EKS on cost and effort.
 - [ADR-0019](ADR-0019-edge-entry-chain.md) — Enter through CloudFront with WAF, then API Gateway HTTP API (JWT check, throttling), a VPC Link and a private internal ALB.
-- [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) — The auditor is internal-only; owning services serve activity views and read audit data over gRPC through ECS Service Connect.
 - [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) — Hash chain covering `parent_hash`, a daily chain-verify task anchoring the head in S3 Object Lock, a findings table, and crypto-shredding for erasure.
 - [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md) — One RDS PostgreSQL instance per service with a Multi-AZ standby, AWS Backup with a cross-region copy, and no cache tier.
 - [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) — Import transactions from a self-hosted external SFTP server with a scheduled VPC-attached Lambda, a ready-file protocol and idempotent inserts.
@@ -60,8 +61,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0027](ADR-0027-observability-baseline.md) — Structured PII-masked logs, CloudWatch metrics and dashboard, alarms to SNS with named owners, GuardDuty and CloudTrail.
 - [ADR-0028](ADR-0028-cicd-migrations-terraform.md) — GitHub Actions deploying through OIDC, one schema-migration task per service, and all infrastructure in Terraform.
 - [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) — Local dev, disposable staging, prod only for the final weeks, and Multi-AZ only in the demo week, to stay under USD 300.
-- [ADR-0030](ADR-0030-client-data-envelope-encryption.md) — Encrypt client fields with per-client data keys kept in DynamoDB and wrapped by KMS, so deleting a key erases the client.
-- [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) — X-factor 1: a worker every 6 hours sends only public terms to AgentCore web search in Tokyo; summaries use Bedrock in Singapore; own alerts-db.
+- [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) — X-factor 1: a worker every 4 hours sends only public terms to AgentCore web search in Tokyo; summaries use Bedrock in Singapore; own alerts-db.
 - [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) — X-factor 1: deterministic instrument master and matching with no vector similarity; search only instruments held by ≥ 2 clients and ≥ 5% of clients.
 - [ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) — X-factor 3: deterministic rules in a daily 08:00 SGT task, with Bedrock in Singapore used only for wording and a template fallback.
 - [ADR-0039](ADR-0039-dashboard-aggregate-endpoints.md) — X-factor 2: owning services serve dashboard figures on private `/aggregates` routes scoped by the caller's token and not audited there; agents' transaction totals go through user-service.
