@@ -58,6 +58,12 @@ public class UserService {
                 .orElseThrow(() -> new NotFoundException("User not found: " + id));
     }
 
+    /** The CRM user behind a verified token's {@code sub}. */
+    public User getUserByIdpSub(String idpSub) {
+        return userRepository.findByIdpSub(idpSub)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+    }
+
     // A null filter means "any". See UserRepository.search.
     public Page<User> listUsers(Role role, Boolean enabled, int page, int size) {
         return userRepository.search(role, enabled, page, size);

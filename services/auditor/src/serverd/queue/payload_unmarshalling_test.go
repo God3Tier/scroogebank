@@ -92,6 +92,22 @@ func TestValidatePayload_UserManagementRoleChange(t *testing.T) {
 	}
 }
 
+func TestValidatePayload_UserManagementLogout(t *testing.T) {
+	event := buildEvent(t, "CRUD", "LOGOUT", string(models.UserManagementServiceType), ValidUserAuditPayload{
+		ResourceType: "USER",
+		ResourceID:   "8f0c6f1e-2b9a-4c11-9d3e-5a7b1c2d3e4f",
+		Endpoint:     "/api/users/me/logout",
+		HTTPMethod:   "POST",
+		StatusCode:   204,
+		DateTime:     time.Now().Format(time.RFC3339Nano),
+		UserRole:     "AGENT",
+	})
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected logout event from UserManagement service to pass, got error: %v", err)
+	}
+}
+
 func TestValidatePayload_ValidTransaction_FileCompleted(t *testing.T) {
 	now := time.Now()
 	event := buildEvent(t, "TRANSACTION_INGESTION", "FILE_PROCESSING_COMPLETED", string(models.TransactionServiceType), ValidFileCompletedPayload{
