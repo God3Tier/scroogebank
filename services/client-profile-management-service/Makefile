@@ -18,6 +18,7 @@ COGNITO_API_AUDIENCE ?=
 AWS_REGION ?=
 AWS_ENDPOINT_URL ?=
 AUDIT_QUEUE_URL ?=
+ACCOUNT_SERVICE_BASE_URL ?= http://localhost:8083
 DB_SSLMODE ?= disable
 DB_SSLROOTCERT ?=
 APP_ENV ?= local
@@ -59,6 +60,7 @@ check-security-config:
 	@test -n "$(COGNITO_APP_CLIENT_ID)" || (echo "Set COGNITO_APP_CLIENT_ID to the Cognito app-client ID"; exit 1)
 	@test -n "$(AWS_REGION)" || (echo "Set AWS_REGION for the Auditor SQS queue"; exit 1)
 	@test -n "$(AUDIT_QUEUE_URL)" || (echo "Set AUDIT_QUEUE_URL to the Auditor audit-insert queue URL"; exit 1)
+	@test -n "$(ACCOUNT_SERVICE_BASE_URL)" || (echo "Set ACCOUNT_SERVICE_BASE_URL to the account-service URL, which is asked before a client is deleted"; exit 1)
 	@if [ "$(APP_ENV)" = production ]; then \
 		test "$(DB_SSLMODE)" = verify-full -a -n "$(DB_SSLROOTCERT)" || (echo "Production requires DB_SSLMODE=verify-full and DB_SSLROOTCERT"; exit 1); \
 		test -n "$(APP_TLS_CERT_FILE)" -a -n "$(APP_TLS_KEY_FILE)" || (echo "Production requires APP_TLS_CERT_FILE and APP_TLS_KEY_FILE"; exit 1); \
@@ -67,11 +69,11 @@ check-security-config:
 ## Start PostgreSQL, apply schema changes, and run the Cognito-protected Gin API
 run: check-security-config db-up
 	@if ! $(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -tAc "SELECT to_regclass('public.clients') IS NOT NULL" | grep -qx t; then \
-		echo "Loading client and account schema..."; \
+		echo "Loading client schema..."; \
 		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
 	fi
 	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < data/V2_agent_subject.sql
-	DB_HOST=$(DB_HOST) DB_PORT=$(DB_PORT) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) DB_SSLMODE=$(DB_SSLMODE) DB_SSLROOTCERT="$(DB_SSLROOTCERT)" APP_ENV=$(APP_ENV) APP_TLS_CERT_FILE="$(APP_TLS_CERT_FILE)" APP_TLS_KEY_FILE="$(APP_TLS_KEY_FILE)" COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" go run ./src/serverd
+	DB_HOST=$(DB_HOST) DB_PORT=$(DB_PORT) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) DB_SSLMODE=$(DB_SSLMODE) DB_SSLROOTCERT="$(DB_SSLROOTCERT)" APP_ENV=$(APP_ENV) APP_TLS_CERT_FILE="$(APP_TLS_CERT_FILE)" APP_TLS_KEY_FILE="$(APP_TLS_KEY_FILE)" COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" ACCOUNT_SERVICE_BASE_URL="$(ACCOUNT_SERVICE_BASE_URL)" go run ./src/serverd
 
 ## Open a psql shell into the running database
 psql:

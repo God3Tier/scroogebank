@@ -40,11 +40,14 @@ public class UserAuditInterceptor implements HandlerInterceptor {
         if ("/api/users".equals(uri) && "POST".equals(method)) return "CREATE";
         if (uri.matches("/api/users/[^/]+") && "GET".equals(method)) return "READ";
         if (uri.matches("/api/users/[^/]+") && "PUT".equals(method)) return "UPDATE";
+        if (uri.matches("/api/users/[^/]+/role") && "PATCH".equals(method)) return "ROLE_CHANGE";
         if (uri.matches("/api/users/[^/]+/disable") && "PATCH".equals(method)) return "DISABLE";
         if (uri.matches("/api/users/[^/]+/reset-password") && "POST".equals(method)) return "PASSWORD_RESET";
+        if ("/api/users/me/logout".equals(uri) && "POST".equals(method)) return "LOGOUT";
         if ("/api/corrupted-logs".equals(uri) && "GET".equals(method)) return "READ";
         if ("/api/corrupted-logs".equals(uri) && "POST".equals(method)) return "CREATE";
         if (uri.matches("/api/corrupted-logs/[^/]+") && "DELETE".equals(method)) return "DELETE";
+        if (uri.matches("/api/accounts/[^/]+/transactions") && "GET".equals(method)) return "READ";
         return null;
     }
 
@@ -56,6 +59,7 @@ public class UserAuditInterceptor implements HandlerInterceptor {
         Object attributes = request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
         if (attributes instanceof Map<?, ?> variables) {
             Object id = variables.get("id");
+            if (id == null) id = variables.get("accountId");
             return id == null ? null : id.toString();
         }
         return null;

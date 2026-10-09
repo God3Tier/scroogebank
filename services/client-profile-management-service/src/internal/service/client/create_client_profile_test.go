@@ -49,7 +49,7 @@ func TestCreateClientProfile(t *testing.T) {
 				})).Return(test.repoErr).Once()
 			}
 
-			err := NewClientService(repo).CreateClientProfile(ctx, test.client)
+			err := NewClientService(repo, nil).CreateClientProfile(ctx, test.client)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return

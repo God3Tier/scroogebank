@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -53,9 +54,13 @@ class RoleChangeControllerTest {
 
         mvc.perform(patch("/api/users/{id}/role", id)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                        .with(jwt().jwt(token -> token.subject("sub-admin"))
+                                .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ADMIN"));
+
+        verify(auditEventPublisher).publish("ROLE_CHANGE", "sub-admin", id.toString(),
+                "/api/users/{id}/role", "PATCH", 200, "ADMIN");
     }
 
     @Test

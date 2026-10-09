@@ -1,44 +1,50 @@
-# Event-Driven Alerts Budget Baseline
+# Environments and cost (target architecture)
 
-Status: planning baseline. No AWS resource or measured charge is claimed by this
-document.
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-03.  
+> Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
+> Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
-## Boundaries
+Recorded in [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md) (Proposed).
 
-| Boundary | Amount | Purpose |
-|---|---:|---|
-| Project allocation | USD 300 | Total approved project budget |
-| Project contingency | USD 100 | Reserved; event alerts must not consume it without human approval |
-| Event-alert monthly warning | USD 25 | Application kill-switch threshold and investigation trigger |
-| Event-alert development hard cap | USD 50 | Maximum monthly feature envelope before explicit owner approval |
+| Environment | Where it runs | Lifecycle |
+|---|---|---|
+| **dev** | Developer machines: Docker Compose with one Postgres container per service database, LocalStack SQS, and an OpenSSH SFTP container. | Local only |
+| **staging** | AWS, reduced size: single-AZ `db.t4g.micro` databases, one NAT gateway, Fargate Spot, no WAF. | Created with Terraform for promotion testing, destroyed afterwards |
+| **prod / demo** | AWS, the full target design. | Runs for the final 2–3 weeks. ECS scales to 0 and RDS instances are stopped outside working and demo hours; the ALB and NAT gateways stay up. **Multi-AZ standbys and the second NAT gateway are switched on only for the high-availability demo week**; outside that week the databases run single-AZ with one NAT gateway. |
 
-The application threshold is deliberately below the development hard cap so a
-human can investigate before the feature consumes its full allocation.
+The diagram shows the full design; the demo-week-only parts are not marked on it.
 
-## Planning envelope
+**Rough prod cost if left on 24/7** (ap-southeast-1, USD/month; verify with the AWS Pricing Calculator). This is not the plan; it shows why the lifecycle above is needed:
 
-| Cost source | Planning quantity | Planning estimate | Evidence still required |
-|---|---:|---:|---|
-| AgentCore search | 720 searches/month | USD 5.04/month | Provider bill and current regional price |
-| Bedrock model inference | Bounded by 200,000 tokens/month | Unknown | Selected model, measured input/output tokens, current price |
-| Scheduled ECS worker and EventBridge | Bounded scheduled runs | Unknown | Deployed task size, duration, schedule, and bill |
-| PostgreSQL, logs, metrics, alarms, data transfer | Shared/incremental usage | Unknown | Tagged resource inventory and billing evidence |
+| Item | Normal running | High-availability demo week (pro rata) |
+|---|---|---|
+| Fargate, 8 services × 2–2.25 tasks (0.25–0.5 vCPU, 1 GB each) + scheduled jobs | 325–365 | same |
+| RDS, 7 × `db.t4g.micro` | 140–155 (single-AZ) | 280–310 (Multi-AZ) |
+| ALB | ~20–25 | same |
+| NAT gateway(s) + public IPv4 | ~45–50 (one) | ~90–100 (two) |
+| WAF | ~10 | same |
+| CloudWatch, SQS, API Gateway, CloudFront, Cognito, Lambda, KMS, Secrets, S3, DynamoDB, Backup, GuardDuty (core detection only, after the 30-day trial) and one CloudTrail trail | 23–37 | same |
+| Bedrock and AgentCore web search (usage-based, capped searches, kill switches) | 5–15 | same |
+| **Total** | **~570–660** | **~755–860** |
 
-The search estimate follows the approved feature plan's prototype rate. It is a
-planning assumption, not a billing claim.
+**Budget reality:** running this design 24/7 would cost about twice the USD 300 limit in a single month. Staying inside the limit depends on the lifecycle above.
 
-## Enforced application controls
+**Planned lifecycle cost.** The team's line-item estimate (`AWS Cost Estimate.xlsx`, with Singapore prices checked in the AWS Pricing Calculator on 30 Sep 2026) puts the whole project at about **USD 205** (about USD 224 with 9% GST). That is about USD 95 under the **USD 300 hard limit**, with the USD 100 contingency untouched. It assumes:
 
-- Ingestion and model access default to disabled.
-- Search use is limited to 4 reservations per run and 1,000 per UTC month.
-- Model use is limited to 2,000 tokens per invocation and 200,000 per UTC month.
-- Reaching the USD 25 estimated monthly threshold disables ingestion and model
-  access together.
-- Re-enabling a configured capability requires an identified human actor, a
-  correlation identifier, and a successful durable audit write.
-- The USD 100 project contingency is excluded from automatic operation.
+- prod runs for 3 weeks: 2 normal weeks and the high-availability demo week;
+- between sessions ECS scales to 0 and the RDS instances are stopped, with at most 2 sessions of 10 hours a week;
+- the ALB, the NAT gateway(s) and database storage stay up for the whole period, so the NAT gateway keeps its Elastic IP on the SFTP server's allow-list;
+- the Multi-AZ standbys and the second NAT gateway run only in the demo week (roughly USD 19 extra);
+- one 48-hour staging test, destroyed afterwards.
 
-Before cloud enablement, the human owner must approve the provider prices,
-replace planning figures with measured evidence, confirm the AWS Budget/alarms,
-and record the decision. Update this file when pricing, quotas, or architecture
-changes.
+Network and edge is the largest share (about USD 87, mostly the NAT gateways and the ALB staying up), followed by the databases (about USD 42) and compute (about USD 37). Each extra 10-hour session day adds about USD 7, and each extra 48-hour staging test about USD 18.
+
+The original target, set before the x-factors, was roughly USD 240–290. AWS Budgets alerts are the guardrail, and Bedrock has its own alert. If spend runs ahead of plan, the first levers are fewer prod days or sessions, a shorter demo week, and dropping WAF from prod until the final week (about USD 4). Further levers:
+
+- run Fargate on Graviton (ARM), about 20% less on compute (about USD 7);
+- run the x-factor services only for their test and demo slots;
+- keep alerts-db and health-db single-AZ even in the high-availability demo week;
+- fall back to one shared x-factor RDS instance with a database each (about USD 13–15/month less, weaker isolation);
+- keep the search and model kill switches on outside demo runs.
+
+The external SFTP server used for the simulation is a `t4g.micro` EC2 instance (roughly USD 6–8/month, stopped when idle).

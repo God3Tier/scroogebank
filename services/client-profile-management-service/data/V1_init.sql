@@ -16,41 +16,30 @@ CREATE TABLE clients (
     created_by_agent_id   VARCHAR(128) NOT NULL,
     created_at            TIMESTAMPTZ  NOT NULL,
     updated_at            TIMESTAMPTZ  NOT NULL,
-    CONSTRAINT uk_clients_email UNIQUE (email),
-    CONSTRAINT uk_clients_phone UNIQUE (phone_number)
+    -- Set on delete; the row is kept but every API treats it as missing (ADR-0036).
+    deleted_at            TIMESTAMPTZ
 );
 
+-- Unique among clients that are not deleted, so a deleted client's details can be reused.
+CREATE UNIQUE INDEX uk_clients_email ON clients (email) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX uk_clients_phone ON clients (phone_number) WHERE deleted_at IS NULL;
 CREATE INDEX idx_clients_created_by_agent_id ON clients (created_by_agent_id);
 CREATE INDEX idx_clients_updated_at ON clients (updated_at DESC);
+-- The business dashboard counts clients by creation date (ADR-0038).
+CREATE INDEX idx_clients_created_at ON clients (created_at DESC);
 
--- Accounts
-CREATE TABLE accounts (
-    id              UUID PRIMARY KEY,
-    client_id       UUID           NOT NULL,
-    account_type    VARCHAR(20)    NOT NULL,
-    status          VARCHAR(20)    NOT NULL DEFAULT 'active',
-    opening_date    DATE           NOT NULL DEFAULT CURRENT_DATE,
-    initial_deposit NUMERIC(19, 2) NOT NULL DEFAULT 0,
-    currency        CHAR(3)        NOT NULL DEFAULT 'SGD',
-    branch_id       VARCHAR(50)    NOT NULL,
-    created_at      TIMESTAMPTZ    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMPTZ    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- Accounts moved to account-service, which owns them in its own database
+-- (services/account-service/data/V1_init.sql, ADR-0017, ADR-0035). The old
+-- accounts-to-clients foreign key is replaced by API checks in both services.
 
-    CONSTRAINT fk_accounts_client
-        FOREIGN KEY (client_id) REFERENCES clients (client_id)
-        ON DELETE RESTRICT,
-    CONSTRAINT ck_accounts_type
-        CHECK (account_type IN ('savings', 'checking', 'business', 'credit', 'loan', 'investment')),
-    CONSTRAINT ck_accounts_status
-        CHECK (status IN ('active', 'inactive', 'pending', 'closed')),
-    CONSTRAINT ck_accounts_initial_deposit
-        CHECK (initial_deposit >= 0),
-    CONSTRAINT ck_accounts_currency
-        CHECK (currency ~ '^[A-Z]{3}$'),
-    CONSTRAINT uk_accounts_client_type
-        UNIQUE (client_id, account_type)
+-- Audit events waiting to be sent to the Auditor's SQS queue (ADR-0020). The
+-- audit middleware writes a row in its own transaction right after each
+-- request, and the relay deletes it once SQS has accepted it. event_id is the
+-- Auditor's de-duplication key, so a row sent twice is stored only once.
+CREATE TABLE audit_outbox (
+    event_id    UUID        PRIMARY KEY,
+    body        TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_accounts_client_id ON accounts (client_id);
-CREATE INDEX idx_accounts_branch_id ON accounts (branch_id);
-CREATE INDEX idx_accounts_updated_at ON accounts (updated_at DESC);
+CREATE INDEX idx_audit_outbox_created_at ON audit_outbox (created_at);

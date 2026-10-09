@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"producer/src/transaction"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -43,7 +44,13 @@ func main() {
 }
 
 func run(destDir string) {
-	transacitons := transaction.GenerateRandomSet()
+	accountIDs := make([]string, 0)
+	for _, accountID := range strings.Split(os.Getenv("CRM_ACCOUNT_IDS"), ",") {
+		if accountID = strings.TrimSpace(accountID); accountID != "" {
+			accountIDs = append(accountIDs, accountID)
+		}
+	}
+	transacitons := transaction.GenerateRandomSet(accountIDs...)
 	if err := stageContent(transacitons, destDir); err != nil {
 		log.Printf("stage failed: %v\n", err)
 		return

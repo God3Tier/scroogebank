@@ -64,6 +64,29 @@ type ProcessingErrorPayload struct {
 	Error    string `json:"error"`
 }
 
+// ValidDashboardViewPayload records one business dashboard view: who looked
+// is the actor, and the payload holds what they looked at. It carries the
+// scope, window and panel statuses only, never figures or client data
+// (ADR-0033).
+type ValidDashboardViewPayload struct {
+	Scope       string            `json:"scope"` // "ADMIN" | "AGENT"
+	WindowFrom  string            `json:"window_from"`
+	WindowTo    string            `json:"window_to"`
+	Panels      map[string]string `json:"panels"` // panel name to "OK" | "UNAVAILABLE"
+	ResultCount int               `json:"result_count"`
+	CacheHit    bool              `json:"cache_hit"`
+	DateTime    string            `json:"datetime"`
+}
+
+// dashboardViewActions are the dashboard's endpoints, one action each.
+var dashboardViewActions = map[string]bool{
+	"VIEW_OVERVIEW":          true,
+	"VIEW_PORTFOLIO":         true,
+	"VIEW_TRANSACTIONS":      true,
+	"VIEW_ACTION_ITEMS":      true,
+	"VIEW_AGENT_PERFORMANCE": true,
+}
+
 type ValidEventAlertPayload struct {
 	EventID      string          `json:"event_id"`
 	EventVersion int             `json:"event_version"`
@@ -96,6 +119,9 @@ func validatePayload(envelope ValidEvent) error {
 
 	case models.UserManagementServiceType:
 		return validateUserManagementPayload(envelope)
+
+	case models.DashboardServiceType:
+		return validateDashboardPayload(envelope)
 
 	case models.CRMServiceType:
 		var p ValidCRUDPayload
@@ -161,6 +187,39 @@ func validateUserManagementPayload(envelope ValidEvent) error {
 	}
 	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
 		return fmt.Errorf("invalid UserAuditPayload datetime: %w", err)
+	}
+	return nil
+}
+
+func validateDashboardPayload(envelope ValidEvent) error {
+	if !dashboardViewActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for DASHBOARD: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorId) == "" {
+		return fmt.Errorf("DASHBOARD event requires actor_id")
+	}
+	var payload ValidDashboardViewPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid DashboardViewPayload: %w", err)
+	}
+	if payload.Scope != "ADMIN" && payload.Scope != "AGENT" {
+		return fmt.Errorf("invalid DashboardViewPayload scope: %q", payload.Scope)
+	}
+	// The per-agent table is admin-only, so an agent-scoped view of it means
+	// the dashboard's own check failed.
+	if envelope.Action == "VIEW_AGENT_PERFORMANCE" && payload.Scope != "ADMIN" {
+		return fmt.Errorf("VIEW_AGENT_PERFORMANCE requires scope ADMIN")
+	}
+	from, fromErr := time.Parse(time.DateOnly, payload.WindowFrom)
+	to, toErr := time.Parse(time.DateOnly, payload.WindowTo)
+	if fromErr != nil || toErr != nil || to.Before(from) {
+		return fmt.Errorf("invalid DashboardViewPayload window: %q to %q", payload.WindowFrom, payload.WindowTo)
+	}
+	if len(payload.Panels) == 0 || payload.ResultCount < 0 || payload.ResultCount > len(payload.Panels) {
+		return fmt.Errorf("invalid DashboardViewPayload panels")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
+		return fmt.Errorf("invalid DashboardViewPayload datetime: %w", err)
 	}
 	return nil
 }

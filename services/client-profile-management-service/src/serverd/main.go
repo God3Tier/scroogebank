@@ -1,11 +1,13 @@
 package main
 
 import (
-	"client-profile-management-service/src/internal/controller/account"
+	"client-profile-management-service/src/internal/accounts"
+	aggregatecontroller "client-profile-management-service/src/internal/controller/aggregate"
 	"client-profile-management-service/src/internal/controller/client"
 	"client-profile-management-service/src/internal/repository"
+	aggregaterepository "client-profile-management-service/src/internal/repository/aggregate"
 	"client-profile-management-service/src/internal/security"
-	accountService "client-profile-management-service/src/internal/service/account"
+	aggregateservice "client-profile-management-service/src/internal/service/aggregate"
 	clientservice "client-profile-management-service/src/internal/service/client"
 	"client-profile-management-service/src/serverd/routers"
 	auditqueue "client-profile-management-service/src/serverd/sqs"
@@ -25,6 +27,11 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// accountLookupTimeout bounds the call to account-service made before a client
+// is deleted. It runs inside the caller's request, so it must stay well under
+// the API Gateway timeout.
+const accountLookupTimeout = 2 * time.Second
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -34,6 +41,10 @@ func main() {
 func run() error {
 	if err := validateProductionSecurityConfig(); err != nil {
 		return err
+	}
+	accountServiceURL := strings.TrimSpace(os.Getenv("ACCOUNT_SERVICE_BASE_URL"))
+	if accountServiceURL == "" {
+		return fmt.Errorf("ACCOUNT_SERVICE_BASE_URL is required")
 	}
 	db, err := sql.Open("postgres", databaseURL())
 	if err != nil {
@@ -48,8 +59,10 @@ func run() error {
 	}
 
 	registry := repository.New(db)
-	clientSvc := clientservice.NewClientService(registry.GetClientRepository())
-	accountSvc := accountService.NewAccountService(registry.GetAccountRepository())
+	clientSvc := clientservice.NewClientService(
+		registry.GetClientRepository(),
+		accounts.NewHTTPDirectory(accountServiceURL, accountLookupTimeout),
+	)
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
@@ -80,8 +93,12 @@ func run() error {
 			options.BaseEndpoint = aws.String(endpoint)
 		}
 	})
-	auditLogger := auditqueue.AuditLogger(sqsClient, queueURL)
-	routers.RegisterRoutes(router, client.New(clientSvc), account.NewAccountController(accountSvc), db, verifier.Middleware(), auditLogger)
+	// Audit events are saved to the outbox after each request and sent to the
+	// Auditor's queue by the relay (ADR-0020).
+	auditLogger := auditqueue.AuditLogger(auditqueue.NewPostgresOutbox(db))
+	go auditqueue.NewRelay(db, sqsClient, queueURL).Run(context.Background())
+	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db)))
+	routers.RegisterRoutes(router, client.New(clientSvc), aggregates, db, verifier.Middleware(), auditLogger)
 
 	server := &http.Server{
 		Addr:              envOrDefault("APP_ADDR", ":8080"),
@@ -123,6 +140,11 @@ func validateProductionSecurityConfig() error {
 	}
 	if os.Getenv("APP_TLS_CERT_FILE") == "" || os.Getenv("APP_TLS_KEY_FILE") == "" {
 		return fmt.Errorf("production requires APP_TLS_CERT_FILE and APP_TLS_KEY_FILE")
+	}
+	// Client deletion forwards the caller's access token to account-service,
+	// so that hop must be encrypted too.
+	if !strings.HasPrefix(strings.TrimSpace(os.Getenv("ACCOUNT_SERVICE_BASE_URL")), "https://") {
+		return fmt.Errorf("production requires an https ACCOUNT_SERVICE_BASE_URL")
 	}
 	return nil
 }

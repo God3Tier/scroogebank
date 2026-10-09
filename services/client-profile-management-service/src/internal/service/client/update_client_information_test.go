@@ -33,7 +33,7 @@ func TestUpdateClientInformation(t *testing.T) {
 			if test.expectWrite {
 				repo.On("UpdateClientInformation", ctx, test.client.ClientID.String(), mock.Anything).Return(test.repoErr).Once()
 			}
-			err := NewClientService(repo).UpdateClientInformation(ctx, test.client)
+			err := NewClientService(repo, nil).UpdateClientInformation(ctx, test.client)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return

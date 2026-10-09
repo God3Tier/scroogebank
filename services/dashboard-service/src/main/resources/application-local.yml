@@ -1,0 +1,12 @@
+# Local development only. Activate with SPRING_PROFILES_ACTIVE=local.
+# Never set this profile in a deployed task definition.
+#
+# dashboard-service is the one service in this system that runs usefully on a
+# developer machine: it has no database, so OIDC_ISSUER_URI is the only value
+# it needs. With no upstreams reachable, every panel reports UNAVAILABLE --
+# which is the degradation path working, not a broken environment.
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

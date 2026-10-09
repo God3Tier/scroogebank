@@ -2,14 +2,11 @@ package client
 
 import (
 	"client-profile-management-service/src/internal/models"
-	orm "client-profile-management-service/src/internal/repository/orm"
 	"context"
-
-	"github.com/aarondl/sqlboiler/v4/boil"
 )
 
 func (r clientRepository) UpdateClientInformation(ctx context.Context, clientID string, client models.Client) error {
-	existingClient, err := orm.FindClient(ctx, r.db, clientID)
+	existingClient, err := r.findClient(ctx, clientID)
 	if err != nil {
 		return err
 	}
@@ -26,6 +23,6 @@ func (r clientRepository) UpdateClientInformation(ctx context.Context, clientID 
 	existingClient.Country = client.Country
 	existingClient.PostalCode = client.PostalCode
 
-	_, err = existingClient.Update(ctx, r.db, boil.Infer())
+	_, err = existingClient.Update(ctx, r.db, keepDeletedAt)
 	return err
 }

@@ -545,7 +545,7 @@ This feature has a USD 25 monthly operating alert and a USD 50 development hard
 cap. Both remain subordinate to the USD 300 whole-project hard limit and do not
 grant access to the protected USD 100 contingency. Record expected idle,
 evaluation, load-test, and demo costs in
-`docs/cost/budget.md` and `docs/cost/resource-register.md`.
+`docs/cost/event-driven-alerts-budget.md` and `docs/cost/resource-register.md`.
 
 The complete project must remain within the USD 300 hard operating limit. The
 separate USD 100 contingency needs explicit team approval and a human-owned

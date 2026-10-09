@@ -11,4 +11,10 @@ type Transaction struct {
 	TransferDate    time.Time `json:"transfer_date"`
 	Status          string    `json:"status"`
 	Description     string    `json:"description"`
+
+	// Set at import from account-service's answer, never from the file
+	// (ADR-0037). Empty when the reference is not a CRM account.
+	LinkedAccountID string `json:"-"`
+	ClientID        string `json:"-"`
+	ImportStatus    string `json:"-"`
 }

@@ -17,8 +17,8 @@ test: deps
 	$(COMPOSE) -f $(COMPOSE_FILE) --profile test up -d --wait test-db; \
 	trap '$(COMPOSE) -f $(COMPOSE_FILE) --profile test rm -sf test-db >/dev/null 2>&1 || true' EXIT; \
 	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools --profile test run --rm \
-		-e DB_HOST=test-db -e DB_PORT=5432 -e DB_USER=crm -e DB_PASSWORD=crm -e DB_NAME=crm \
-		go-tools go test -v ./src/internal/repository ./src/internal/models ./src/cronjob ./src/cronjob/poller
+		-e DB_HOST=test-db -e DB_PORT=5432 -e DB_USER=crm -e DB_PASSWORD=crm -e DB_NAME=transactions \
+		go-tools go test -v ./src/internal/repository ./src/internal/models ./src/cronjob ./src/cronjob/poller ./src/cronjob/accounts ./src/cronjob/sqs
 
 build:
 	$(COMPOSE) --progress plain -f $(COMPOSE_FILE) build

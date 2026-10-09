@@ -65,6 +65,9 @@ func (c clientController) UpdateClientInformation(w http.ResponseWriter, r *http
 		case errors.Is(err, clientErr.ErrBadInput):
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		case errors.Is(err, clientErr.ErrClientNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

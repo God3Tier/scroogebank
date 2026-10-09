@@ -32,7 +32,7 @@ func TestVerifyClientIdentity(t *testing.T) {
 			if test.callRepo {
 				repo.On("VerifyClientIdentity", ctx, test.clientID).Return(test.repoErr).Once()
 			}
-			err := NewClientService(repo).VerifyClientIdentity(ctx, test.clientID)
+			err := NewClientService(repo, nil).VerifyClientIdentity(ctx, test.clientID)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return
