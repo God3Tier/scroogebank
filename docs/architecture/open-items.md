@@ -52,9 +52,13 @@ This covers one account at a time. For the business dashboard's transaction tota
 
 Decide whether they are encrypted with the client's key from client-keys (only client-service can use it, so other services would send IDs only), or with a separate per-client key owned by the auditor.
 
+**Not needed yet (2026-10-09).** client-service's audit events carry IDs and endpoint details only, never personal data ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)). Decide this before any event carries personal data, for example before/after values.
+
 ## 12. Searching encrypted client fields
 
 Confirm which fields the UI must search or sort by; each needs a blind index or must stay plaintext.
+
+**Resolved (2026-10-09)** by [ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md) decision 6. client-service has no search endpoint, so only email and phone number get blind indexes, for their uniqueness. They use one shared KMS HMAC key over normalised values. A future search on another field needs its own blind index and an ADR.
 
 ## 13. Tamper findings and chain-verify on dev
 
@@ -90,4 +94,4 @@ The target architecture proposes Cognito managed login with the authorization-co
 
 ## 21. Erasing soft-deleted client data
 
-Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)): the rows stay in clients-db and accounts-db, as the requirements Q&A asks (CPM08, CPM21, UM05). Nothing yet removes them. The Feature 2 owner, with the security owner, must decide: (a) how long deleted records are kept; (b) who can request erasure of one client's personal data, and how; (c) whether erasure deletes the rows in every owning service, deletes the client's data key ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)), or both, as [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 5 describes.
+Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)): the rows stay in clients-db and accounts-db, as the requirements Q&A asks (CPM08, CPM21, UM05). Nothing yet removes them. The Feature 2 owner, with the security owner, must decide: (a) how long deleted records are kept; (b) who can request erasure of one client's personal data, and how; (c) whether erasure deletes the rows in every owning service, deletes the client's data key ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)), or both, as [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 5 describes. Whichever is chosen, erasure must also clear the client's email and phone blind indexes, which the shared index key would otherwise still match ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md) decision 5).

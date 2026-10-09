@@ -1,6 +1,6 @@
 # Security model (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-01.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
@@ -64,14 +64,15 @@ chain-verify reads audit-db directly rather than through the auditor's gRPC API:
 
 ## Client data encryption (envelope encryption)
 
-Recorded in [ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md) (Proposed).
+Recorded in [ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md) (Accepted).
 
 Every client field in clients-db is encrypted by client-service before it is written, except the fields needed to find and authorize records.
 
 - **Plaintext fields:** client UUID, owning agent ID, status and timestamps. These are what lookups, agent filtering and pagination need.
-- **Encrypted fields:** all personal details (names, contact details, identification numbers, addresses and so on), encrypted in the application with AES-256-GCM.
+- **Encrypted fields:** the 11 personal fields (first and last name, date of birth, gender, email, phone number, address, city, state, country and postal code), encrypted in the application with AES-256-GCM. Each value is bound to its client and field, so it cannot be copied to another client or field.
 - **One data key per client.** When a client is created, client-service calls KMS `GenerateDataKey` on a symmetric customer-managed key. It uses the plaintext key to encrypt, and stores only the **wrapped** (KMS-encrypted) key in the DynamoDB `client-keys` table, keyed by client UUID. The client ID is passed as KMS encryption context, so a wrapped key only unwraps for its own client.
 - **Reading a client:** client-service fetches the wrapped key from DynamoDB, calls KMS `Decrypt`, and caches the plaintext key in memory for a short time to limit KMS calls.
 - **Separation:** the keys are not in clients-db. A leaked clients-db snapshot or SQL dump is unreadable without both the client-keys table and permission to use the KMS key. Only client-service's IAM role can read the table and use the key.
-- **Erasure:** deleting a client's item from client-keys crypto-shreds all of that client's encrypted data ([Right to erasure (NFR 8, GDPR)](#right-to-erasure-nfr-8-gdpr)).
-- **Trade-off:** encrypted fields cannot be searched or sorted in SQL. Search by name or e-mail needs a blind index (a keyed hash stored next to the ciphertext) if the UI requires it ([open item 12](../architecture/open-items.md#12-searching-encrypted-client-fields)).
+- **Uniqueness:** email and phone number must stay unique among clients that are not deleted, so each has a **blind index** next to its ciphertext: an HMAC-SHA-256 computed by KMS `GenerateMac` with one shared HMAC key, over the value trimmed and lowercased (email) or stripped of spaces, hyphens, dots and brackets (phone). The key never leaves KMS, so a database copy alone cannot be used to test or recover emails and phone numbers. It covers every client, so it is the most sensitive key in this design.
+- **Erasure:** deleting a client's item from client-keys crypto-shreds all of that client's encrypted data; erasure must also clear the client's two blind indexes ([Right to erasure (NFR 8, GDPR)](#right-to-erasure-nfr-8-gdpr)).
+- **Trade-off:** encrypted fields cannot be searched or sorted in SQL. client-service has no search endpoint; a future search on another field needs its own blind index ([open item 12](../architecture/open-items.md#12-searching-encrypted-client-fields), resolved).
