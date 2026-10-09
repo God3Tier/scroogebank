@@ -30,7 +30,7 @@ type ValidCRUDPayload struct {
 }
 
 // ValidUserAuditPayload describes user-service endpoint activity. It records
-// the target user and operation metadata without copying names, email
+// the target resource and operation metadata without copying names, email
 // addresses, passwords, or request bodies into the audit chain.
 type ValidUserAuditPayload struct {
 	ResourceType string `json:"resource_type"`
@@ -76,6 +76,25 @@ type ValidDashboardViewPayload struct {
 	ResultCount int               `json:"result_count"`
 	CacheHit    bool              `json:"cache_hit"`
 	DateTime    string            `json:"datetime"`
+}
+
+// userAuditActions lists, for each resource type user-service reports, the
+// actions it may send about it.
+var userAuditActions = map[string]map[string]bool{
+	"USER": {
+		"CREATE": true, "READ": true, "UPDATE": true, "DISABLE": true,
+		"PASSWORD_RESET": true, "ROLE_CHANGE": true, "LOGOUT": true,
+	},
+	// An account's transactions, read through user-service.
+	"ACCOUNT": {"READ": true},
+	// The auditor's corrupted-log table, managed through user-service.
+	"CORRUPTED_AUDIT_LOG": {"CREATE": true, "READ": true, "DELETE": true},
+}
+
+// userAuditNeedsResourceID reports whether a successful event must name the
+// resource it acted on. Reading the corrupted-log list names none.
+func userAuditNeedsResourceID(resourceType, action string) bool {
+	return !(resourceType == "CORRUPTED_AUDIT_LOG" && action == "READ")
 }
 
 // dashboardViewActions are the dashboard's endpoints, one action each.
@@ -181,7 +200,16 @@ func validateUserManagementPayload(envelope ValidEvent) error {
 		}
 		return nil
 	}
-	if payload.ResourceType != "USER" || (payload.ResourceID == "" && payload.StatusCode < 400) || payload.Endpoint == "" ||
+	action := strings.ToUpper(envelope.Action)
+	actions, known := userAuditActions[payload.ResourceType]
+	if !known {
+		return fmt.Errorf("invalid UserAuditPayload resource_type: %q", payload.ResourceType)
+	}
+	if !actions[action] {
+		return fmt.Errorf("USER_MANAGEMENT is not permitted to send action %s for %s", envelope.Action, payload.ResourceType)
+	}
+	missingID := payload.ResourceID == "" && payload.StatusCode < 400 && userAuditNeedsResourceID(payload.ResourceType, action)
+	if missingID || payload.Endpoint == "" ||
 		payload.HTTPMethod == "" || payload.StatusCode < 100 || payload.StatusCode > 599 {
 		return fmt.Errorf("invalid UserAuditPayload: missing or invalid user operation fields")
 	}

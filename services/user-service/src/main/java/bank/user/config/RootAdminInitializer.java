@@ -53,8 +53,8 @@ public class RootAdminInitializer implements CommandLineRunner {
         rootAdmin.setDeletable(false);
         try {
             userRepository.save(rootAdmin);
-            auditEventPublisher.publish("CREATE", "system:root-admin-initializer", rootAdmin.getId().toString(),
-                    "/internal/root-admin", "SYSTEM", 201, Role.ADMIN.name());
+            auditEventPublisher.publish("CREATE", "system:root-admin-initializer", "USER",
+                    rootAdmin.getId().toString(), "/internal/root-admin", "SYSTEM", 201, Role.ADMIN.name());
         } catch (DataIntegrityViolationException e) {
             // The other replica committed the same root admin first. The
             // desired end state is reached either way, so this is not a

@@ -48,7 +48,7 @@ public class AuditEventPublisher {
         this.queueUrl = queueUrl;
     }
 
-    public void publish(String action, String actorId, String resourceId, String endpoint,
+    public void publish(String action, String actorId, String resourceType, String resourceId, String endpoint,
                         String httpMethod, int statusCode, String userRole) {
         if (queueUrl.isBlank()) {
             // Nothing would ever send the row, so don't write one.
@@ -68,7 +68,7 @@ public class AuditEventPublisher {
                 action,
                 SOURCE_SERVICE,
                 actorId,
-                new UserAuditPayload("USER", resourceId, endpoint, httpMethod, statusCode,
+                new UserAuditPayload(resourceType, resourceId, endpoint, httpMethod, statusCode,
                         now.toString(), userRole)
         );
         try {
