@@ -57,7 +57,7 @@ client-profile-management-service calls the list endpoint before deleting a clie
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column; run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
+This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column, and one created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged); run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
 
 For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transaction-ingest app client ID>` to the command above, run client-profile-management-service with its own `make run`, then start the receiver with `make -C ../sftp up`. Each service keeps its own database; the import links transactions to accounts through `/internal/accounts/lookup`.
 
@@ -81,7 +81,9 @@ For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transacti
 
 ## Auditor SQS events
 
-The service sends one SQS message per completed account endpoint call, with `source_service: CRM`, the same as client events, so the Auditor needs no change. Each event records the event type (`CRUD`), normalized action, authenticated actor, route, HTTP method, status code, timestamp, and the client or account ID. It does not copy request or response bodies.
+The service records one audit event per completed account endpoint call, with `source_service: CRM`, the same as client events, so the Auditor needs no change. Each event records the event type (`CRUD`), normalized action, authenticated actor, route, HTTP method, status code, timestamp, and the client or account ID. It does not copy request or response bodies.
+
+**Delivery** ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). The audit middleware saves each event to the `audit_outbox` table in a transaction of its own, after the endpoint's change has committed. This is ADR-0020's exception for producers that build their events in request middleware, used because of the cost of moving event creation into the service layer. Every 2 seconds a relay goroutine (`src/serverd/sqs/outbox.go`) takes the oldest waiting events (up to 50, locked with `FOR UPDATE SKIP LOCKED` so replicas take different rows), sends each to SQS, and deletes it once SQS accepts it. An SQS or Auditor outage therefore delays events instead of losing them. Delivery is at least once: a task that dies between the send and the delete sends the event again, and the Auditor drops the repeat by `event_id`. Two gaps remain: a crash between the endpoint's commit and the outbox write loses that event, and an outbox write that fails is logged with its event ID and dropped. The outbox table is written with plain SQL, so `sqlboiler.toml` and `sqlboiler.docker.toml` leave it out of the generated ORM.
 
 ## Production transport security
 

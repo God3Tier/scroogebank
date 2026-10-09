@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,10 +21,6 @@ const (
 	sourceService      = "CRM"
 	maxRequestBodySize = 1 << 20
 )
-
-type SQSAPI interface {
-	SendMessage(context.Context, *sqs.SendMessageInput, ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
-}
 
 type Event struct {
 	EventID       string          `json:"event_id"`
@@ -49,10 +43,11 @@ type EndpointPayload struct {
 	DateTime      string `json:"datetime"`
 }
 
-// AuditLogger sends one event to the Auditor queue after each protected CRM
-// endpoint finishes. Authentication middleware must run before this middleware
-// and place the verified Cognito subject in Gin's "agent_id" context value.
-func AuditLogger(client SQSAPI, queueURL string) gin.HandlerFunc {
+// AuditLogger saves one event to the outbox after each protected CRM endpoint
+// finishes; Relay sends it to the Auditor queue (ADR-0020). Authentication
+// middleware must run before this middleware and place the verified Cognito
+// subject in Gin's "agent_id" context value.
+func AuditLogger(outbox Outbox) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Preserve only the client ID from a JSON body before the controller reads
 		// it. The body is restored and never included in the audit event.
@@ -127,11 +122,12 @@ func AuditLogger(client SQSAPI, queueURL string) gin.HandlerFunc {
 			log.Printf("audit event not sent: marshal event: %v", err)
 			return
 		}
-		if _, err := client.SendMessage(c.Request.Context(), &sqs.SendMessageInput{
-			QueueUrl:    aws.String(queueURL),
-			MessageBody: aws.String(string(message)),
-		}); err != nil {
-			log.Printf("audit event send failed event_id=%s route=%s: %v", eventID, c.FullPath(), err)
+		// The endpoint's change has committed even if the caller has since gone
+		// away, so the save must not be cancelled with the request.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), saveTimeout)
+		defer cancel()
+		if err := outbox.Save(ctx, eventID, message); err != nil {
+			log.Printf("audit event not saved event_id=%s route=%s: %v", eventID, c.FullPath(), err)
 		}
 	}
 }
