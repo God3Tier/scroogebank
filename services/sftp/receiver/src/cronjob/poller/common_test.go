@@ -71,14 +71,29 @@ const validJSON = `[{"transaction_id":"t1","account_id":"a1","transfer_date":"20
 
 type fakeStore struct {
 	saved []models.Transaction
-	err   error
+	// importEvents were saved with an import; soloEvents on their own.
+	importEvents []models.AuditEvent
+	soloEvents   []models.AuditEvent
+	err          error // returned by SaveImport
+	auditErr     error // returned by SaveAuditEvent
 }
 
-func (s *fakeStore) SaveTransaction(_ context.Context, tx models.Transaction) error {
+func (s *fakeStore) SaveImport(_ context.Context, transactions []models.Transaction, event *models.AuditEvent) error {
 	if s.err != nil {
 		return s.err
 	}
-	s.saved = append(s.saved, tx)
+	s.saved = append(s.saved, transactions...)
+	if event != nil {
+		s.importEvents = append(s.importEvents, *event)
+	}
+	return nil
+}
+
+func (s *fakeStore) SaveAuditEvent(_ context.Context, event models.AuditEvent) error {
+	if s.auditErr != nil {
+		return s.auditErr
+	}
+	s.soloEvents = append(s.soloEvents, event)
 	return nil
 }
 

@@ -79,6 +79,16 @@ Someone with admin rights on the team's shared user pool does this once. It is t
 
    Imported rows for accounts listed in `CRM_ACCOUNT_IDS` should be `Matched`.
 
+## Audit events
+
+When `AUDIT_QUEUE_URL` is set (with `AWS_REGION`), the poller records a `TRANSACTION_INGESTION` audit event for each processed file (`FILE_PROCESSING_COMPLETED`) and for each failure (`CONNECTION_FAILURE`, `FILE_FORMAT_INVALID` or `SYSTEM_EXCEPTION`). This receiver acts as transaction-service and transaction-ingest, so it implements [ADR-0020](../../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) decision 3 through the `audit_outbox` table:
+
+- A file's transactions and its `FILE_PROCESSING_COMPLETED` event are saved in one database transaction: an imported file always has its event, and a failed import saves neither and leaves the file for the next poll.
+- A failure event has no import to join, so it is saved on its own. If it cannot be saved, typically because the database is down, it is sent straight to SQS so the failure is still recorded.
+- At the end of every poll, including one whose connection failed, the poller sends every waiting event to SQS, oldest first, and deletes each once SQS accepts it. If SQS cannot be reached, the events wait for the next poll. Delivery is at least once; event IDs are derived from the event's content, so the Auditor drops repeats.
+
+The outbox is written with plain SQL, so `sqlboiler.toml` leaves `audit_outbox` out of the generated ORM. A database volume created before the outbox has no `audit_outbox` table, so with auditing on every import fails until you recreate the volume with `docker compose -f services/sftp/compose.yaml down -v`.
+
 ## Endpoint
 
 Internal endpoint: `GET /api/accounts/{accountId}/transactions`. It has no authentication middleware and must stay private. The repository uses SQLBoiler to filter by the transaction's linked `account_id`. Results are ordered newest first. An account with no matching transactions returns `200` and an empty array.

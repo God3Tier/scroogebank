@@ -47,7 +47,9 @@ func run(once bool) error {
 	if err != nil {
 		return err
 	}
-	var auditWriter poller.AuditWriter
+	// Audit events are saved to audit_outbox with each import and sent to the
+	// Auditor's queue at the end of every poll (ADR-0020 decision 3).
+	var audit []poller.Audit
 	if queueURL := os.Getenv("AUDIT_QUEUE_URL"); queueURL != "" {
 		region := os.Getenv("AWS_REGION")
 		if region == "" {
@@ -62,7 +64,7 @@ func run(once bool) error {
 				options.BaseEndpoint = aws.String(endpoint)
 			}
 		})
-		auditWriter = auditsqs.NewWriter(client, queueURL)
+		audit = append(audit, poller.Audit{Events: auditsqs.Events{}, Relay: auditsqs.NewRelay(db, client, queueURL)})
 		log.Printf("transaction audit events enabled for queue %s", queueURL)
 	} else {
 		log.Printf("transaction audit events disabled: AUDIT_QUEUE_URL is empty")
@@ -71,7 +73,7 @@ func run(once bool) error {
 	if err != nil {
 		return err
 	}
-	consumer := poller.New(config, repository.New(db), accounts.New(accountConfig), auditWriter)
+	consumer := poller.New(config, repository.NewImport(db), accounts.New(accountConfig), audit...)
 	if once {
 		return consumer.Poll(ctx)
 	}

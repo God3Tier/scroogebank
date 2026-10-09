@@ -69,13 +69,8 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", err)
 	}
 	delete(p.lookupFailureAudited, fileName)
-	accepted := 0
-	for _, transaction := range transactions {
-		if err := p.store.SaveTransaction(ctx, transaction); err != nil {
-			return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("save transaction: %w", err))
-		}
-		accepted++
-	}
+	// The import saves every valid transaction or none of them.
+	accepted := len(transactions)
 
 	archiveStatus := "processed"
 	if rejected > 0 {
@@ -87,14 +82,22 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 	} else if rejected > 0 {
 		status = "Failed"
 	}
+	// The file's audit event commits with its transactions, so a saved import
+	// always has its event (ADR-0020 decision 3).
+	var completed *models.AuditEvent
 	if p.audit != nil {
 		result := FileCompleted{
 			FileName: fileName, ProcessingStart: processingStart, ProcessingEnd: time.Now().UTC(), Status: status,
 			RecordsProcessed: len(records), RecordsAccepted: accepted, RecordsRejected: rejected, ParseFailures: parseFailures,
 		}
-		if err := p.audit.WriteFileCompleted(ctx, result); err != nil {
-			return fmt.Errorf("write file completion audit event: %w", err)
+		event, err := p.audit.Events.FileCompleted(result)
+		if err != nil {
+			return fmt.Errorf("build file completion audit event: %w", err)
 		}
+		completed = &event
+	}
+	if err := p.store.SaveImport(ctx, transactions, completed); err != nil {
+		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("save transactions: %w", err))
 	}
 	archiveDir := path.Join(p.config.RemoteDir, archiveStatus)
 	if err := client.MkdirAll(archiveDir); err != nil {
