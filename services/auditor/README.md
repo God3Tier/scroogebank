@@ -26,10 +26,13 @@ the auditor moved off Kafka. It creates the `audit-insert` and
 `audit-insert-dlq` queues automatically on startup:
 
 ```sh
+cd services/auditor
 docker compose up -d postgres localstack
 ```
 
-Run the auditor server from the `services/auditor` directory. Since
+`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, loads the schema if it is missing, generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
+
+To run it by hand instead, start the server from the `services/auditor` directory. Since
 LocalStack doesn't check AWS credentials, any non-empty values work:
 
 ```sh
@@ -51,7 +54,7 @@ The auditor loads the user pool's signing keys at startup and refuses to start w
 The server listens on port `8080` by default. To use another port:
 
 ```sh
-PORT=9090 go run ./src/serverd
+HTTP_PORT=9090 go run ./src/serverd
 ```
 
 Check the health endpoint:
@@ -75,6 +78,8 @@ Only other CRM services call the auditor, and each forwards the token of the use
 | HTTP `/health` | Anyone |
 | HTTP `/api/corrupted-logs` | An `ADMIN`'s token in `Authorization: Bearer`; otherwise `401` (no or an invalid token) or `403` (not an admin). user-service forwards it. |
 | gRPC `AuditService` | An `ADMIN`'s or `AGENT`'s token in the `authorization` metadata; otherwise `UNAUTHENTICATED` or `PERMISSION_DENIED`. An agent can list only their own activities. |
+
+Only user tokens are accepted so far. ADR-0021 also lets a background job with no user call with a Cognito client-credentials token carrying an `audit/read` scope; that is not built yet, because no such caller exists. Such a token has no CRM group, so it is refused with `PERMISSION_DENIED`.
 
 Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over TLS, as the target design requires; leave both unset only for local development.
 
@@ -150,7 +155,7 @@ docker compose -f compose.yaml down
 
 ## Run tests
 
-The recommended test command creates a disposable PostgreSQL container, loads `data/audit_log_table.sql`, generates SQLBoiler models, prefixes generated files with `mocks_`, and runs all Go tests in a Go container:
+The recommended test command creates a disposable PostgreSQL container loaded with `data/test_init.sql`, generates the gRPC code, the SQLBoiler models and the mocks (all git-ignored), and runs all Go tests in a Go container. It works from a clean checkout:
 
 ```sh
 make test
@@ -158,7 +163,7 @@ make test
 
 The test database is removed automatically when the command finishes, including after a test failure.
 
-To run only the Go tests without database setup:
+To run the Go tests directly, generate the code first (`make proto`, `make sqlboiler`, `make mockery`). The repository tests also need PostgreSQL, reached through `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`:
 
 ```sh
 cd services/auditor
@@ -169,7 +174,7 @@ To run the repository tests with coverage:
 
 ```sh
 cd services/auditor
-go test ./src/internal/repository -cover
+go test ./src/internal/repository/... -cover
 ```
 
 ## Generate SQLBoiler models
@@ -180,7 +185,7 @@ SQLBoiler runs inside Docker against a disposable PostgreSQL database:
 make sqlboiler
 ```
 
-Generated Go files are written under `services/auditor/src/internal/repository/orm` and renamed with the `mocks_` prefix. Existing files already beginning with `mocks_` are not renamed again.
+Generated Go files are written under `services/auditor/src/internal/repository/orm`, which is git-ignored.
 
 ## Generate mockery mocks
 
@@ -196,7 +201,7 @@ To pass additional mockery arguments:
 make mockery MOCKERY_ARGS="--log-level debug"
 ```
 
-The mockery configuration is in `.mockery.yml` and targets the service's interface packages.
+The mockery configuration is in `.mockery.yml` and targets the service's interface packages. Mockery loads the packages first, so it needs the gRPC code and the ORM (`make proto`, `make sqlboiler`). `make mockery` deletes the old `mocks.go` files before regenerating: a mock left over from a removed method would not compile, and mockery could not load its package.
 
 ## Generate protobuf code
 
@@ -222,9 +227,7 @@ Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**
 
 ## Build and run the production image
 
-Build the image:
-
-Build it from the repository root, because the gRPC code is generated from the shared `proto/` directory. The ORM must have been generated first (`make sqlboiler`), as before.
+Build the image from the repository root, because the gRPC code is generated from the shared `proto/` directory. The ORM must have been generated first (`make sqlboiler`), as before.
 
 ```sh
 docker build -f services/auditor/Dockerfile -t auditor .
@@ -235,6 +238,8 @@ Run it:
 ```sh
 docker run --rm -p 8080:8080 auditor
 ```
+
+**Release order with user-service.** user-service forwards the caller's access token, which this service now requires (ADR-0021), so release user-service first when both change together. The opposite holds for new audit event types: release the Auditor first, or user-service's new events go to the dead-letter queue.
 
 ## Useful Docker commands
 

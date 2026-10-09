@@ -99,7 +99,9 @@ Built and pushed as part of the repo-wide deploy — see the root README. To rol
 aws ecs update-service --cluster scrooge-crm-cluster --service user-service --force-new-deployment
 ```
 
-Release the Auditor no later than this service. The Auditor rejects actions and resource types it does not know, so events this service sends before the Auditor knows them go to the dead-letter queue.
+Release order with the Auditor depends on what changed:
+- **This service sends a new action or resource type:** release the Auditor first. It rejects actions and resource types it does not know, so events this service sends before the Auditor knows them go to the dead-letter queue.
+- **The Auditor starts requiring something from this service,** such as the forwarded access token the activity feed added ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)): release this service first. An Auditor that does not check the token yet ignores it.
 
 **Tests**:
 ```bash
