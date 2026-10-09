@@ -13,6 +13,12 @@ import (
 )
 
 func (i impl) SaveTransaction(ctx context.Context, transaction models.Transaction) error {
+	return saveTransaction(ctx, i.db, transaction)
+}
+
+// saveTransaction upserts one transaction through exec, which is the database
+// or an import's transaction.
+func saveTransaction(ctx context.Context, exec boil.ContextExecutor, transaction models.Transaction) error {
 	importStatus := transaction.ImportStatus
 	if importStatus == "" {
 		importStatus = "Unmatched"
@@ -33,7 +39,7 @@ func (i impl) SaveTransaction(ctx context.Context, transaction models.Transactio
 
 	err := record.Upsert(
 		ctx,
-		i.db,
+		exec,
 		false,
 		[]string{orm.TransactionColumns.TransactionID},
 		boil.None(),
