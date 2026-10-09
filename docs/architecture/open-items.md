@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-08.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
@@ -44,7 +44,9 @@ For now, transaction-ingest does not check Client IDs against client-service; ow
 
 ## 10. How transaction reads enforce agent ownership
 
-The spec says agents "have access only to their own clients", but which agent owns which client is stored only in clients-db, which transaction-service cannot read. The Feature 3 owner, with the Feature 2 owner, must choose one of: **(a)** transaction-service asks client-service on each request whether the calling agent owns the client (through Service Connect); simple and always current, but transaction reads fail while client-service is down. **(b)** client-service serves the transaction view (`GET /api/clients/{id}/transactions`), checks ownership itself, then calls transaction-service internally; ownership logic stays in one service, and transaction-service needs no ALB route for this view. **(c)** transaction-service keeps a local copy of client-to-agent ownership, updated from client-service events; no runtime dependency, but it needs another event pipeline and the copy is eventually consistent. Trusting a client ID sent by the frontend without a check is not an option (NFR 8, Zero Trust).
+**Resolved** by [ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md) decisions 3 and 5 (Accepted, Joseph Yau) and [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md) decision 6. user-service serves `GET /api/accounts/{accountId}/transactions`. It forwards the caller's token to account-service's `GET /api/accounts/{id}`, which returns 404 unless the caller is an admin or owns the account, and only then reads the transactions from the receiver's private endpoint. Each account stores its owning agent, so the check needs neither clients-db nor a copy of ownership beside the transactions.
+
+This covers one account at a time. How the business dashboard scopes an agent's transaction totals is still to be decided ([X-factor 2](x-factors.md#x-factor-2-business-dashboard)).
 
 ## 11. Audit payloads with client personal data
 
@@ -68,7 +70,7 @@ Choose the approved security-master or market-data provider, and how reclassific
 
 ## 16. Health-monitor activity contract
 
-Transaction-service must provide matched activity (client and account IDs, stable IDs, type, amount, time, status, source fingerprint) with six months of replay; today the SFTP import does not populate `client_id`.
+Transaction-service must provide matched activity (client and account IDs, stable IDs, type, amount, time, status, source fingerprint) with six months of replay. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), the SFTP import stores `account_id` and `client_id` on every matched row; unmatched rows have neither. Still missing: a read API the analysis task can call with a service token, and the six months of replay.
 
 ## 17. Budget with the x-factors
 

@@ -1,6 +1,6 @@
 # Target architecture: request, audit and ingestion flows
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-01.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
@@ -197,7 +197,7 @@ The file generator uploads each file with a `.tmp` suffix, writes a `.sha256` ch
 
 - Ingest validates the file and each row on its own: checksum, format, required fields, type (Deposit/Withdrawal), amount, date and status. It does **not** check each row's Client ID against client-service.
 - The spec does not require that check. It would also make imports depend on client-service being available, and a Lambda function cannot use ECS Service Connect (its Envoy sidecar runs only inside ECS tasks), so the call would need another route.
-- Client ownership must instead be enforced when transactions are **read**: an agent may only see transactions of clients they own (spec: agents "have access only to their own clients"). How that is done is an open decision ([open item 10](open-items.md#10-how-transaction-reads-enforce-agent-ownership)).
+- Client ownership must instead be enforced when transactions are **read**: an agent may only see transactions of clients they own (spec: agents "have access only to their own clients"). user-service enforces it: before reading an account's transactions, it checks with account-service that the caller is an admin or the account's owner ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)).
 - Trade-off: a row whose Client ID matches no CRM client is stored rather than rejected. No agent owns that client, so no agent can see it. An optional reconciliation job can list such rows for an admin.
 - **Account IDs are checked at import** ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)): the worker asks account-service once per file which account references exist, and marks rows `Matched` or `Unmatched`. It authenticates with a Cognito client-credentials token. If account-service cannot answer, the file is left for the next run. So imports do depend on account-service, and a Lambda worker needs a route to it other than Service Connect.
 

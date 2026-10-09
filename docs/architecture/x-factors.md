@@ -1,6 +1,6 @@
 # Target architecture: x-factor features (Features 4–6)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-01.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
@@ -81,7 +81,7 @@ Detects explainable changes in client banking activity and turns them into prior
 - Bedrock only turns verified facts into readable wording. It receives signal type, percentage or banded changes, transaction counts, time-window lengths, expected cadence and days since an expected credit.
 - Bedrock **never** receives names, client IDs, account numbers, raw transactions, descriptions, exact balances, agent IDs or contact information.
 - If Bedrock fails or returns unsupported content, a deterministic template is used, so AI failure never stops task creation.
-- The analysis task reads matched activity from transaction-service and assignments from client-service through the internal ALB with a service token, because a standalone scheduled task cannot use Service Connect. The activity contract is still open: the SFTP import does not yet populate `client_id` ([open item 16](open-items.md#16-health-monitor-activity-contract)).
+- The analysis task reads matched activity from transaction-service and assignments from client-service through the internal ALB with a service token, because a standalone scheduled task cannot use Service Connect. The SFTP import now stores `account_id` and `client_id` on matched rows ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)), but the rest of the activity contract is still open ([open item 16](open-items.md#16-health-monitor-activity-contract)).
 
 | Decision | Chosen | Not chosen, and why |
 |---|---|---|
