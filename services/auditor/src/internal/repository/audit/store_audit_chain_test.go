@@ -90,3 +90,23 @@ func TestStoreAuditChain(t *testing.T) {
 		})
 	}
 }
+
+func TestStoreAuditChain_DeduplicatesSourceEventId(t *testing.T) {
+	db := openTestDB(t)
+	loadTestFixture(t, db, "store_audit_chain_empty.sql")
+	request := models.AuditLogInput{
+		EventID:   "70000000-0000-4000-8000-000000000001",
+		EventType: "EVENT_ALERT", Action: "GENERATED",
+		SourceService: models.EventAlertServiceType,
+		ActorId:       "event-alert-service", Payload: `{}`,
+	}
+
+	repository := New(db)
+	require.NoError(t, repository.StoreAuditChain(context.Background(), request))
+	require.ErrorIs(t, repository.StoreAuditChain(context.Background(), request), DuplicateEventError)
+
+	var count int
+	require.NoError(t, db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM audit_log WHERE event_id = $1`, request.EventID).Scan(&count))
+	assert.Equal(t, 1, count)
+}

@@ -1,0 +1,27 @@
+{
+  "eventId": "10000000-0000-4000-8000-000000000001",
+  "eventType": "public-market-event.detected",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-27T00:00:00Z",
+  "correlationId": "20000000-0000-4000-8000-000000000001",
+  "producer": "event-alert-service",
+  "payload": {
+    "headline": "Synthetic issuer publishes a regulatory announcement",
+    "classification": "REGULATORY",
+    "direction": "UNCERTAIN",
+    "confidence": 0.82,
+    "instrumentIds": ["SYN-SGX-001"],
+    "evidence": [
+      {
+        "title": "Synthetic regulatory announcement",
+        "url": "https://www.sgx.com/synthetic-fixture-only",
+        "sourceDomain": "sgx.com",
+        "publishedAt": "2026-09-26T23:30:00Z",
+        "retrievedAt": "2026-09-27T00:00:00Z"
+      }
+    ],
+    "classifierVersion": "rules-1+luna-candidate",
+    "modelVersion": "gpt-5.6-luna-candidate",
+    "promptVersion": "classification-v1"
+  }
+}

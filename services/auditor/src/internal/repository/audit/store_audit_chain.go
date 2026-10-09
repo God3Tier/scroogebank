@@ -6,14 +6,13 @@ import (
 	"errors"
 	"strconv"
 	"time"
-	"uuid"
-
 	"auditor/src/internal/models"
 	"auditor/src/internal/pkg"
 	orm "auditor/src/internal/repository/orm"
 
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	pkgerrors "github.com/pkg/errors"
 )
@@ -53,12 +52,12 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 
 	now := time.Now()
 
-	uuid := uuid.New().String()
+	auditID := uuid.New().String()
 
-	rawString := uuid + strconv.FormatInt(previousSequence+1, 10) + auditLog.EventType + auditLog.Action + string(auditLog.SourceService) + auditLog.ActorId + now.Format(time.RFC3339) + auditLog.Payload
+	rawString := auditID + strconv.FormatInt(previousSequence+1, 10) + auditLog.EventType + auditLog.Action + string(auditLog.SourceService) + auditLog.ActorId + now.Format(time.RFC3339) + auditLog.Payload
 
 	newLog := &orm.AuditLog{
-		ID:            uuid,
+		ID:            auditID,
 		SequenceNo:    null.Int64From(previousSequence + 1),
 		EventID:       null.NewString(auditLog.EventID, auditLog.EventID != ""),
 		EventType:     null.StringFrom(auditLog.EventType),
