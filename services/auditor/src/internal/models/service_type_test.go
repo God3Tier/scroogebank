@@ -17,6 +17,7 @@ func TestServiceTypeIsValidAction(t *testing.T) {
 		{name: "CRM rejects CRUD as action", service: CRMServiceType, action: "CRUD", want: false},
 		{name: "CRM rejects unsupported action", service: CRMServiceType, action: "UPSERT", want: false},
 		{name: "user management CRUD event type", service: UserManagementServiceType, action: "CRUD", want: true},
+		{name: "user management role change", service: UserManagementServiceType, action: "ROLE_CHANGE", want: true},
 		{name: "transaction ingestion event type", service: TransactionServiceType, action: "TRANSACTION_INGESTION", want: true},
 		{name: "audit security violation", service: AuditService, action: "SECURITY_VIOLATION", want: true},
 		{name: "dashboard view event type", service: DashboardServiceType, action: "DASHBOARD_VIEW", want: true},
