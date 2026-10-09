@@ -121,6 +121,79 @@ func TestValidatePayload_ValidTransaction_ProcessingErrors(t *testing.T) {
 	}
 }
 
+func dashboardView() ValidDashboardViewPayload {
+	return ValidDashboardViewPayload{
+		Scope:       "AGENT",
+		WindowFrom:  "2026-09-01",
+		WindowTo:    "2026-09-30",
+		Panels:      map[string]string{"clients": "OK", "transactions": "UNAVAILABLE"},
+		ResultCount: 1,
+		CacheHit:    true,
+		DateTime:    time.Now().UTC().Format(time.RFC3339Nano),
+	}
+}
+
+func TestValidatePayload_ValidDashboardView(t *testing.T) {
+	for _, action := range []string{"VIEW_OVERVIEW", "VIEW_PORTFOLIO", "VIEW_TRANSACTIONS", "VIEW_ACTION_ITEMS"} {
+		t.Run(action, func(t *testing.T) {
+			event := buildEvent(t, "DASHBOARD_VIEW", action, string(models.DashboardServiceType), dashboardView())
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected dashboard %s to pass, got error: %v", action, err)
+			}
+		})
+	}
+
+	adminView := dashboardView()
+	adminView.Scope = "ADMIN"
+	event := buildEvent(t, "DASHBOARD_VIEW", "VIEW_AGENT_PERFORMANCE", string(models.DashboardServiceType), adminView)
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected an admin's per-agent view to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_DashboardRejectsInvalidEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		action    string
+		actor     string
+		change    func(*ValidDashboardViewPayload)
+	}{
+		{name: "wrong event type", eventType: "CRUD", action: "VIEW_OVERVIEW", actor: "a1"},
+		{name: "unknown action", eventType: "DASHBOARD_VIEW", action: "EXPORT", actor: "a1"},
+		{name: "missing actor", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: " "},
+		{name: "unknown scope", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.Scope = "SERVICE" }},
+		{name: "agent viewing the per-agent table", eventType: "DASHBOARD_VIEW", action: "VIEW_AGENT_PERFORMANCE", actor: "a1"},
+		{name: "window not a date", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.WindowFrom = "last month" }},
+		{name: "window ends before it starts", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.WindowFrom, p.WindowTo = p.WindowTo, p.WindowFrom }},
+		{name: "no panels", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.Panels, p.ResultCount = nil, 0 }},
+		{name: "more results than panels", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.ResultCount = 3 }},
+		{name: "missing datetime", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.DateTime = "" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := dashboardView()
+			if tt.change != nil {
+				tt.change(&payload)
+			}
+			event := buildEvent(t, tt.eventType, tt.action, string(models.DashboardServiceType), payload)
+			event.ActorId = tt.actor
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s to be rejected, got nil", tt.name)
+			}
+		})
+	}
+}
+
 func TestValidatePayload_UnknownSourceService(t *testing.T) {
 	event := buildEvent(t, "CRUD", "UPDATE", "NOT_A_REAL_SERVICE", ValidCRUDPayload{})
 
