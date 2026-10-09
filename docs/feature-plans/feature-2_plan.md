@@ -3,7 +3,7 @@
 - Status: In progress
 - Feature branch: `feat/refactor-feat-2`
 - Primary developer: Joseph Yau
-- Last updated: 2026-10-08
+- Last updated: 2026-10-09
 
 ## Goal
 
@@ -19,6 +19,7 @@ Use the Feature 1 Cognito user pool as the identity source for Feature 2. Every 
 | F2-SEC-03 | Complete hash-chain audit records for Feature 2 business actions | Joseph Yau | Feature 2 data/service and Auditor integration | Audit write contract is not present in the current Auditor API | `feat/refactor-feat-2` | Planned |
 | F2-SPLIT-01 | Split accounts out into `services/account-service` (Go); replace the accounts-to-clients foreign key with API checks and store each account's owning agent ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)) | Neo Jia Wen (coordinate with Joseph Yau, Feature 2 primary developer) | `services/account-service`, `services/client-profile-management-service`, `services/user-service` `TransactionProxy`, `services/sftp` schema mounts | ADR-0017 and ADR-0035 accepted | `task/client-profile-management/account-service-split` | Implemented; builds, vets and passes unit and database tests (2 failing tests also fail on `dev`); end-to-end checks not run |
 | F2-SOFTDEL-01 | Make client and account deletion soft deletes (`deleted_at`), hide deleted records from every endpoint, and make uniqueness ignore deleted rows, per the requirements Q&A (CPM08, CPM21, CPM33) ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) | Neo Jia Wen (coordinate with Joseph Yau, Feature 2 primary developer) | Both services' repositories, `security/authorization.go`, `data/V1_init.sql` and `sqlboiler*.toml` | ADR-0036 accepted | `task/client-profile-management/soft-delete` | Implemented; builds, vets and passes unit and database tests (the same pre-existing failures as F2-SPLIT-01); end-to-end checks not run |
+| F2-DASH-01 | Serve the business dashboard's client and account figures on private `/aggregates` routes scoped by the caller's token, with indexes on `clients(created_at)` and `accounts(opening_date)` ([ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md), [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)) | Dashboard developer (review: Joseph Yau, Feature 2 primary developer) | `services/client-profile-management-service/src/internal/*/aggregate`, `services/account-service/src/internal/*/aggregate`, both routers and `data/V1_init.sql` | ADR-0039 agreed with Joseph Yau | `task/business-dashboard/client-stats`, `task/business-dashboard/account-stats` | Implemented; unit, router and database tests pass; review and end-to-end checks pending |
 
 ## Security behavior
 

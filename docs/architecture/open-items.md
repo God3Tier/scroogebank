@@ -46,7 +46,7 @@ For now, transaction-ingest does not check Client IDs against client-service; ow
 
 **Resolved** by [ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md) decisions 3 and 5 (Accepted, Joseph Yau) and [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md) decision 6. user-service serves `GET /api/accounts/{accountId}/transactions`. It forwards the caller's token to account-service's `GET /api/accounts/{id}`, which returns 404 unless the caller is an admin or owns the account, and only then reads the transactions from the receiver's private endpoint. Each account stores its owning agent, so the check needs neither clients-db nor a copy of ownership beside the transactions.
 
-This covers one account at a time. How the business dashboard scopes an agent's transaction totals is still to be decided ([X-factor 2](x-factors.md#x-factor-2-business-dashboard)).
+This covers one account at a time. For the business dashboard's transaction totals, [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (Proposed) uses the same pattern: user-service asks account-service for the agent's account IDs, then asks the receiver for totals over those accounts only.
 
 ## 11. Audit payloads with client personal data
 

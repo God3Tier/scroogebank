@@ -1,6 +1,6 @@
 # ADR-0033: X-factor 2 business dashboard: stateless fan-out, 3-minute in-process cache, best-effort audit
 
-- Status: Proposed
+- Status: Accepted
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
@@ -102,7 +102,7 @@ One small ECS service. No database or cache cluster.
 ## Operational Impact
 
 - Fan-out latency and error metrics.
-- Circuit breakers, so a down service shows a partial dashboard rather than an error.
+- Per-call (2 s) and overall (3 s) timeouts, with each panel resolved on its own and no retries, so a down service shows a partial dashboard rather than an error.
 - The cache TTL is in configuration.
 
 ## Validation

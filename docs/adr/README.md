@@ -14,6 +14,8 @@ Use this index to identify which ADRs are relevant before loading their full tex
 - [ADR-0035](ADR-0035-account-ownership-across-services.md) — account-service copies each account's owning agent from client-service at creation using the caller's token, checks ownership locally, and client-service refuses to delete a client with accounts; both checks fail closed; supersedes ADR-0006 decision 4 (decision 4 partly superseded by ADR-0036: only undeleted accounts block a client's deletion).
 - [ADR-0036](ADR-0036-soft-deletion-of-clients-and-accounts.md) — Deleting a client or account sets `deleted_at` and keeps the row; deleted records are hidden from everyone and are not the same as `closed` accounts; uniqueness ignores deleted rows; deleting is not erasure; supersedes ADR-0035 decision 4 in part.
 - [ADR-0037](ADR-0037-transactions-database-and-account-linking.md) — Transactions get their own database; the import links rows to accounts through account-service's `/internal/accounts/lookup`, authenticating with a Cognito client-credentials token, and fails closed; supersedes ADR-0006 decisions 1–2.
+- [ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md) — X-factor 2: stateless dashboard-service fanning out with the caller's JWT, a 3-minute per-caller cache, and best-effort audit events.
+- [ADR-0038](ADR-0038-dashboard-metric-definitions.md) — X-factor 2: what each dashboard figure means; only figures the data supports exactly, no sums across currencies, deleted records never counted, no composite agent score.
 
 ## Superseded decisions
 
@@ -38,8 +40,8 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0030](ADR-0030-client-data-envelope-encryption.md) — Encrypt client fields with per-client data keys kept in DynamoDB and wrapped by KMS, so deleting a key erases the client.
 - [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) — X-factor 1: a worker every 6 hours sends only public terms to AgentCore web search in Tokyo; summaries use Bedrock in Singapore; own alerts-db.
 - [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) — X-factor 1: deterministic instrument master and matching with no vector similarity; search only instruments held by ≥ 2 clients and ≥ 5% of clients.
-- [ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md) — X-factor 2: stateless dashboard-service fanning out with the caller's JWT, a 3-minute per-caller cache, and best-effort audit events.
 - [ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) — X-factor 3: deterministic rules in a daily 08:00 SGT task, with Bedrock in Singapore used only for wording and a template fallback.
+- [ADR-0039](ADR-0039-dashboard-aggregate-endpoints.md) — X-factor 2: owning services serve dashboard figures on private `/aggregates` routes scoped by the caller's token and not audited there; agents' transaction totals go through user-service.
 
 ## Maintenance rule
 
