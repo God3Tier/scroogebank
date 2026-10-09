@@ -63,7 +63,7 @@ The `dev` hash input also leaves out `parent_hash` and `event_id` and joins fiel
    - raises an alarm on any mismatch.
 
    Only chain-verify's role can write to the anchor bucket.
-4. **Tamper findings** go to a separate table in audit-db, with the affected row and the detection time. The chain itself is never rewritten. Admins read the findings through user-service, which calls the auditor over gRPC ([ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md)).
+4. **Tamper findings** go to a separate table in audit-db, with the affected row and the detection time. The chain itself is never rewritten. Admins reach the findings through user-service, never from the auditor directly ([ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 4). Which operations they have on findings (read only, or also create and delete, as on `dev`) and how they are served are still open here ([open item 13](../architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)).
 5. **Crypto-shredding for erasure:**
    - a client's erasure hard-deletes their data in every owning service and deletes their data key from client-keys ([ADR-0030](ADR-0030-client-data-envelope-encryption.md));
    - audit payloads with personal data are encrypted with a per-client key, and the chain hashes the ciphertext, so verification still passes after erasure ([open item 11](../architecture/open-items.md#11-audit-payloads-with-client-personal-data));

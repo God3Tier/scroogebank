@@ -10,6 +10,8 @@ Each item needs a decision from the owner it names. When an item is decided, rec
 
 The spec says audit logs are accessible only to administrators, while the UI mock-up says agents see their own clients' activities. Proposal: raw audit log for Admins only; a filtered, PII-masked activity view for Agents.
 
+**Resolved (2026-10-09)** by [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decisions 2 and 3. Clients never use the CRM, so "client activities" are agents' actions on their clients, as the mock-up's "My Recent Activities" shows. Agents see their own activities; admins see all agents'. The feed shows changes only, and the raw audit log is shown to no one through it.
+
 ## 2. Domain name
 
 Needed for the ACM certificate on the internal ALB, at about USD 13/year plus USD 0.50/month for the hosted zone.
@@ -17,6 +19,8 @@ Needed for the ACM certificate on the internal ALB, at about USD 13/year plus US
 ## 3. Admin-wide activity view in user-service
 
 Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: business dashboard](x-factors.md#x-factor-2-business-dashboard)) could host this view later.
+
+**Resolved (2026-10-09)** by [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decision 2: user-service owns it, as `GET /api/activities`. It is a Feature 1 requirement in the base spec, so it does not move to the business dashboard, which is an x-factor. The same feed serves agents their own activities.
 
 ## 4. Reconcile the x-factor branch ADRs with the target architecture
 
@@ -62,7 +66,7 @@ Confirm which fields the UI must search or sort by; each needs a blind index or 
 
 ## 13. Tamper findings and chain-verify on dev
 
-The auditor code on `dev` differs from [Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr): (a) chain-verify runs as a long-lived process with internal timers (every 24 hours and every hour), not a task started by EventBridge; (b) on a mismatch it deletes the row from `audit_log`, re-links the chain and moves the row to `corrupted_audit_log`, which needs DELETE and UPDATE on `audit_log` ([Tamper resistance](../security/security-model.md#tamper-resistance) allows only INSERT and SELECT) and leaves no break in the chain to show where tampering happened; (c) it also writes an "Error logging" event into the chain itself; (d) no chain head is anchored in S3 Object Lock yet; (e) the findings are served over REST on the auditor (`GET`, `POST` and `DELETE /api/corrupted-logs`), including a delete, rather than read-only through user-service. The auditor owner must bring the code and the target architecture into line, and settle the findings table's columns.
+The auditor code on `dev` differs from [Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr): (a) chain-verify runs as a long-lived process with internal timers (every 24 hours and every hour), not a task started by EventBridge; (b) on a mismatch it deletes the row from `audit_log`, re-links the chain and moves the row to `corrupted_audit_log`, which needs DELETE and UPDATE on `audit_log` ([Tamper resistance](../security/security-model.md#tamper-resistance) allows only INSERT and SELECT) and leaves no break in the chain to show where tampering happened; (c) it also writes an "Error logging" event into the chain itself; (d) no chain head is anchored in S3 Object Lock yet; (e) the findings are served over REST on the auditor (`GET`, `POST` and `DELETE /api/corrupted-logs`), including a delete, rather than read-only through user-service. The auditor owner must bring the code and the target architecture into line, and settle the findings table's columns. [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decision 4 leaves to this item and [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) which operations admins have on findings (read only, or also create and delete) and how they are served; it fixes only that admins reach them through user-service.
 
 ## 14. Tokyo web search availability
 

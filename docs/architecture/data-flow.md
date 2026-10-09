@@ -17,7 +17,7 @@ The numbers match the arrows on the diagram.
 | 5 | The ALB routes by path to the ECS Fargate services (auto scaling across two AZs). Every service validates the JWT again and talks only to its own database (SQL over TLS). The auditor has no ALB route. |
 | 6 | A service writes the business change and an outbox row in one database transaction; a service that builds its audit events in request middleware saves the row in a short transaction of its own right after the commit instead ([ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) exception). A relay then sends the audit event to the shared SQS standard queue (`audit-insert`). Every service with a database does this; one path is drawn. The ingest job relays its `audit_outbox` rows at the end of each run ([Transaction ingestion (Feature 3)](#transaction-ingestion-feature-3)). The Cognito triggers have no database, so they send straight to the queue ([Authentication events](../security/security-model.md#authentication-events)). |
 | 7 | The auditor consumes the events and appends them to the hash chain in audit-db. A message that fails 5 receives moves to the dead-letter queue and raises an alarm. |
-| 8 | Activity views, and the admin view of tamper findings, read audit data from the auditor over gRPC through ECS Service Connect (TLS, user JWT in metadata). Only other services call the auditor. |
+| 8 | user-service's activity feed reads audit data from the auditor over gRPC through ECS Service Connect (TLS, user JWT in metadata); admins also reach tamper findings through user-service. Only other services call the auditor. |
 | 9 | EventBridge Scheduler invokes the transaction-ingest Lambda about every 5 minutes ("9 invoke"), and starts the chain-verify task daily. The same scheduler bus ("9 · 11 · 13 scheduled starts") also starts the alert worker (11, every 6 hours) and the health analysis task (13, daily at 08:00 SGT). |
 | 9a | The ingest Lambda (VPC-attached) connects out through the NAT gateway and internet gateway to the SFTP server on EC2 (SSH key authentication, pinned host key). It imports the transactions into transactions-db and audits a FILE_PROCESSED event. |
 | 9b | chain-verify reads and verifies the chain in audit-db ("verify chain"), then writes the daily chain head to the S3 Object Lock bucket, and records any mismatch in the tamper-findings table in audit-db. |
@@ -98,28 +98,29 @@ Standard queues deliver **at least once** and occasionally out of order, so the 
 
 ## Audit read path: internal gRPC
 
-Recorded in [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) (Proposed).
+Recorded in [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) (Accepted).
 
-How an agent's client activity view is served:
+How the activity feed is served. It is the dashboards' "Recent Activities" in the spec's mock-up: an agent sees their own activities, an admin those of all agents.
 
 | Step | Who | What happens |
 |---|---|---|
-| 1 | Browser → API Gateway + ALB | `GET /api/clients/{id}/activity` with the user's JWT. |
-| 2 | API Gateway + ALB → client-service | Forwards the request (JWT already validated once). |
-| 3 | client-service | Validates the JWT again and checks the agent owns the client. |
-| 4 | client-service → Envoy (Service Connect) | gRPC `GetAuditLog(client_id, page)` with the JWT in metadata and a 2-second deadline. |
+| 1 | Browser → API Gateway + ALB | `GET /api/activities` with the user's JWT; an admin may add an agent and a time window. |
+| 2 | API Gateway + ALB → user-service | Forwards the request (JWT already validated once). |
+| 3 | user-service | Validates the JWT again. For an agent, the actor is always the caller's own `sub`. |
+| 4 | user-service → Envoy (Service Connect) | A paged gRPC call listing changes by actor and time window, with the JWT in metadata and a 2-second deadline. |
 | 5 | Envoy → auditor | Routed to a healthy auditor task in either AZ. |
-| 6 | auditor | An interceptor validates the JWT and enforces the role filter. |
-| 7 | auditor → audit-db | Paged `SELECT`. |
-| 8 | auditor → client-service → browser | Audit entries with PII masked, returned as JSON (documented in the service's OpenAPI spec). |
+| 6 | auditor | An interceptor validates the JWT and enforces the role filter: an agent gets only entries whose actor is the token's `sub`. |
+| 7 | auditor → audit-db | Paged `SELECT` of changes only: no reads, dashboard views, sign-ins or system events. |
+| 8 | auditor → user-service → browser | Entries with IDs and action details, the actor's name added by user-service, returned as JSON (documented in its OpenAPI spec). |
 
 ### Audit read decisions
 
 **The auditor is internal-only.** The browser never calls it; there is no ALB route or public endpoint for it.
 
 - This keeps the tamper-resistant store's network exposure to a minimum (NFR 8).
-- Services that own a business context present their own activity views: client history in client-service (`GET /api/clients/{id}/activity`), the admin-wide view of all agents' activity in user-service (`GET /api/activities`, Admin only), and the admin view of tamper findings, also in user-service, which calls a new auditor gRPC method (for example `ListTamperFindings`).
-- Those views are REST endpoints documented in each service's OpenAPI spec, which covers the OpenAPI requirement for everything a client can reach.
+- One activity feed, `GET /api/activities` in user-service, serves both audiences: admins see all agents' activities, agents their own. It is Feature 1 in the base spec, so it lives in user-service, not the business dashboard. It shows changes only.
+- Admins reach tamper findings through user-service too. Which operations they have on findings, and how they are served, are decided with chain-verify in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) ([open item 13](open-items.md#13-tamper-findings-and-chain-verify-on-dev)).
+- These are REST endpoints documented in user-service's OpenAPI spec, which covers the OpenAPI requirement for everything a client can reach.
 
 **Reads use gRPC, not SQS.** A read needs an immediate answer to a specific question, one page at a time; that is request/response by nature. gRPC also gives a typed contract generated from one `.proto` file for the Go server and the Java and Go callers.
 
@@ -131,13 +132,13 @@ How an agent's client activity view is served:
 **Zero Trust on every call (NFR 8):**
 
 - **Network:** the auditor's security group opens the gRPC port only to the security groups of the named calling services.
-- **User identity:** callers forward the end user's JWT in gRPC metadata. The auditor validates it itself (signature, issuer, expiry) and enforces role filters: an Admin may query any activity; an Agent's queries are restricted to their own clients and actions, even if the caller asks for more.
+- **User identity:** callers forward the end user's JWT in gRPC metadata. The auditor validates it itself (signature, issuer, expiry) and enforces role filters from the token alone: an Admin may query any actor's activity; an Agent's queries return only entries whose actor is their own `sub`, even if the caller asks for more.
 - **Service identity:** background callers with no user (for example an F4 AI job) use a Cognito client-credentials token with an `audit/read` scope.
 - **Caller-side checks:** calling services also enforce their own ownership rules. Both sides check.
 
 **Encryption in transit:** the auditor serves gRPC over TLS with a certificate from a project CA generated by Terraform, avoiding AWS Private CA costs. Because the TLS is end-to-end, Envoy balances connections rather than individual calls, so the server sets `keepalive.MaxConnectionAge` (about 5 minutes) and callers reconnect regularly.
 
-**Resiliency (NFR 5):** callers set a deadline on every call (about 2 seconds), retry only on `UNAVAILABLE`, and use a circuit breaker (Resilience4j in Java, gobreaker in Go). If the auditor is unavailable, activity views show "history temporarily unavailable"; business actions are unaffected because writes go through SQS.
+**Resiliency (NFR 5):** callers set a deadline on every call (about 2 seconds), retry only on `UNAVAILABLE`, and use a circuit breaker (Resilience4j in Java, gobreaker in Go). If the auditor is unavailable, the feed shows "activity temporarily unavailable"; business actions are unaffected because writes go through SQS.
 
 **Contract and backward compatibility (NFR 3):** the `.proto` lives in a shared `proto/` directory under a versioned package (`audit.v1`). Fields are only added with new field numbers, never renumbered or reused. CI runs `buf lint` and `buf breaking` and fails any pull request that would break existing callers. Responses are paged (`page_size`, `page_token`).
 
