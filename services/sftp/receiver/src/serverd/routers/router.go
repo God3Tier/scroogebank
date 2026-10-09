@@ -9,11 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.Engine, transactions repository.Transaction) {
+func RegisterRoutes(router *gin.Engine, transactions repository.Transaction, stats repository.TransactionStats) {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 	router.GET("/api/accounts/:accountId/transactions", getTransactions(transactions))
+	// Like the route above, private and unauthenticated: user-service checks
+	// the caller and chooses the accounts first (ADR-0006, ADR-0039).
+	router.POST("/aggregates/transactions/stats", transactionStats(stats))
 }
 
 func getTransactions(transactionRepository repository.Transaction) gin.HandlerFunc {

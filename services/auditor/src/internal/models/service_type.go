@@ -9,11 +9,12 @@ const (
 	CRMServiceType            ServiceType = "CRM"
 	TransactionServiceType    ServiceType = "TRANSACTION_SERVICE"
 	AuditService              ServiceType = "AUDIT_SERVICE"
+	DashboardServiceType      ServiceType = "DASHBOARD"
 )
 
 func (s ServiceType) IsValid() bool {
 	switch s {
-	case UserManagementServiceType, CRMServiceType, TransactionServiceType, AuditService:
+	case UserManagementServiceType, CRMServiceType, TransactionServiceType, AuditService, DashboardServiceType:
 		return true
 	}
 
@@ -41,6 +42,9 @@ func (s ServiceType) IsValidAction(action string) bool {
 
 	case AuditService:
 		return strings.EqualFold("SECURITY_VIOLATION", action) || strings.EqualFold("VALIDATION_REJECTED", action)
+
+	case DashboardServiceType:
+		return strings.EqualFold("DASHBOARD_VIEW", action)
 	}
 
 	return false

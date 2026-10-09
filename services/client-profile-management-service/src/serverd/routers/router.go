@@ -1,7 +1,9 @@
 package routers
 
 import (
+	aggregatecontroller "client-profile-management-service/src/internal/controller/aggregate"
 	clientcontroller "client-profile-management-service/src/internal/controller/client"
+	"client-profile-management-service/src/internal/models"
 	"client-profile-management-service/src/internal/security"
 	"database/sql"
 	"net/http"
@@ -27,7 +29,17 @@ import (
 
 // RegisterRoutes serves client profiles only. Accounts moved to account-service
 // (ADR-0017, ADR-0035).
-func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientController, db *sql.DB, authenticate, auditLogger gin.HandlerFunc) {
+func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientController, aggregates aggregatecontroller.Controller, db *sql.DB, authenticate, auditLogger gin.HandlerFunc) {
+	// The business dashboard's figures, fetched with the caller's own token.
+	// Outside /api, so API Gateway never routes them, and not audited here:
+	// the dashboard audits each view (ADR-0039).
+	aggregate := router.Group("/aggregates")
+	aggregate.Use(authenticate)
+	aggregate.Use(security.RequireCRMRole())
+	aggregate.GET("/clients/stats", withCaller(aggregates.ClientStats))
+	aggregate.GET("/clients/action-items", withCaller(aggregates.ActionItems))
+	aggregate.GET("/clients/team-comparison", withCaller(aggregates.TeamComparison))
+
 	api := router.Group("/api")
 	api.Use(authenticate)
 	api.Use(security.RequireCRMRole())
@@ -40,6 +52,19 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 		client.PUT("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
 		client.GET("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientProfile, "clientId"))
 		client.DELETE("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.DeleteClientProfile, "clientId"))
+	}
+}
+
+// withCaller hands the verified caller to the controller explicitly. Aggregates
+// are scoped by that caller, so it must never come from request data.
+func withCaller(handler func(http.ResponseWriter, *http.Request, models.Caller)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := security.PrincipalFromGin(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		handler(c.Writer, c.Request, models.Caller{Subject: principal.Subject, Admin: principal.Role == "ADMIN"})
 	}
 }
 

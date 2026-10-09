@@ -60,9 +60,12 @@ Agents receive alerts when public market news may matter to instruments their cl
 
 ## X-factor 2: business dashboard
 
-Recorded in [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (Proposed).
+Recorded in [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (Accepted). What each figure means is in [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) (Accepted), and the owning services' endpoints are in [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (Proposed). Plan: [business-dashboard_plan.md](../feature-plans/business-dashboard_plan.md).
 
 Admins see bank-wide and per-agent figures; agents see their own book and work queue. The pages ship inside the existing frontend; the figures come from `dashboard-service`.
+
+- The owning services serve the figures on private `/aggregates` routes, outside `/api`, scoped by the caller's token and audited once by the dashboard.
+- Transaction figures come from user-service, which scopes an agent's request to the accounts account-service says they own before asking transaction-service (today, the SFTP receiver).
 
 | Decision | Chosen | Not chosen, and why |
 |---|---|---|

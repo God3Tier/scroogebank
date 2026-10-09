@@ -2,6 +2,7 @@ package routers
 
 import (
 	accountcontroller "account-service/src/internal/controller/account"
+	aggregatecontroller "account-service/src/internal/controller/aggregate"
 	"account-service/src/internal/models"
 	"account-service/src/internal/security"
 	"database/sql"
@@ -26,7 +27,17 @@ import (
 	http.StatusServiceUnavailable = 503
 */
 
-func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, db *sql.DB, authenticate, authenticateService, auditLogger gin.HandlerFunc) {
+func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, aggregates aggregatecontroller.Controller, db *sql.DB, authenticate, authenticateService, auditLogger gin.HandlerFunc) {
+	// The business dashboard's figures, and the account IDs user-service
+	// scopes an agent's transaction figures by, fetched with the caller's own
+	// user token. Outside /api, so API Gateway never routes them, and not
+	// audited here: the dashboard audits each view (ADR-0039).
+	aggregate := router.Group("/aggregates")
+	aggregate.Use(authenticate)
+	aggregate.Use(security.RequireCRMRole())
+	aggregate.GET("/accounts/stats", withCaller(aggregates.AccountStats))
+	aggregate.GET("/accounts/ids", withCaller(aggregates.OwnedAccountIDs))
+
 	// Service-to-service routes take client-credentials tokens, never user
 	// tokens, and sit outside /api so API Gateway never routes them (ADR-0037).
 	// Not audited: a lookup changes nothing, and the import audits each file.
@@ -53,13 +64,19 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 // listAccounts hands the verified caller to the controller explicitly. The
 // list is scoped by that caller, so it must never come from request data.
 func listAccounts(accounts accountcontroller.AccountController) gin.HandlerFunc {
+	return withCaller(accounts.ListAccounts)
+}
+
+// withCaller hands the verified caller to the controller explicitly, for
+// handlers scoped by that caller.
+func withCaller(handler func(http.ResponseWriter, *http.Request, models.Caller)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		principal, ok := security.PrincipalFromGin(c)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
-		accounts.ListAccounts(c.Writer, c.Request, models.Caller{
+		handler(c.Writer, c.Request, models.Caller{
 			Subject: principal.Subject,
 			Admin:   principal.Role == "ADMIN",
 		})

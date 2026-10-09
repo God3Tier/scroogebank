@@ -19,6 +19,8 @@ func TestServiceTypeIsValidAction(t *testing.T) {
 		{name: "user management CRUD event type", service: UserManagementServiceType, action: "CRUD", want: true},
 		{name: "transaction ingestion event type", service: TransactionServiceType, action: "TRANSACTION_INGESTION", want: true},
 		{name: "audit security violation", service: AuditService, action: "SECURITY_VIOLATION", want: true},
+		{name: "dashboard view event type", service: DashboardServiceType, action: "DASHBOARD_VIEW", want: true},
+		{name: "dashboard rejects CRUD", service: DashboardServiceType, action: "CRUD", want: false},
 		{name: "unknown service", service: ServiceType("UNKNOWN"), action: "CREATE", want: false},
 	}
 

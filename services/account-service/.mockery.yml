@@ -12,6 +12,12 @@ packages:
   account-service/src/internal/repository/account:
     config:
       all: true
+  account-service/src/internal/repository/aggregate:
+    config:
+      all: true
   account-service/src/internal/service/account:
+    config:
+      all: true
+  account-service/src/internal/service/aggregate:
     config:
       all: true

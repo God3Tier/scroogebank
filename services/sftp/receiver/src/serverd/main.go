@@ -35,7 +35,7 @@ func run() error {
 	}
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
-	routers.RegisterRoutes(router, repository.New(db))
+	routers.RegisterRoutes(router, repository.New(db), repository.NewTransactionStats(db))
 	return router.Run(envOrDefault("APP_ADDR", ":8080"))
 }
 

@@ -22,6 +22,7 @@
     <modules>
         <module>services/user-service</module>
         <module>services/client-health-monitor-service</module>
+        <module>services/dashboard-service</module>
     </modules>
 
     <dependencyManagement>

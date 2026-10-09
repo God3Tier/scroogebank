@@ -68,7 +68,7 @@ func TestGetTransactions(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			router := gin.New()
-			RegisterRoutes(router, test.repo)
+			RegisterRoutes(router, test.repo, nil)
 			request := httptest.NewRequest(http.MethodGet, "/api/accounts/"+test.accountID+"/transactions", nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)

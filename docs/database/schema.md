@@ -1,6 +1,6 @@
 # Database design (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-01.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
 
@@ -27,6 +27,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 - **Encryption:** KMS at rest; TLS required on every database connection (`rds.force_ssl`).
 - **Backups:** RDS automated backups with point-in-time recovery (RPO of minutes), plus a daily AWS Backup plan with a copy to ap-southeast-2 ([Why AWS Backup is included when RDS already has backups](#why-aws-backup-is-included-when-rds-already-has-backups)). The client-keys table has DynamoDB point-in-time recovery and is in the same AWS Backup plan: losing it would make all client data unreadable.
 - **Consistency model (NFR 4):** strong (ACID) inside one service's database; eventual for the audit log (seconds behind) and for data that crosses services, such as imported transactions (per ingestion run).
+- **Dashboard indexes** ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)). The business dashboard's figures are computed in each owning database by date: `clients(created_at)`, `accounts(opening_date)` and `transactions(transaction_date)` are indexed for it. No tables or columns are added.
 - **No cache tier.** Database indexes, CloudFront caching of static files and in-process caching (Cognito signing keys, reference data) are enough at project scale. The spec asks for caching only "if needed" (NFR 1).
 - **Identity documents** (synthetic NRIC only) are uploaded to a private SSE-KMS S3 bucket through presigned URLs and kept for audit. The agent verifies them manually and records the result in `verification_status`.
 
