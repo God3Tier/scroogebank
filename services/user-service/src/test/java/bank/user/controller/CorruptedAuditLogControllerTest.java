@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -54,7 +55,8 @@ class CorruptedAuditLogControllerTest {
 
     @Test
     void listReadIsAuditedWithoutAResourceId() throws Exception {
-        when(proxy.getCorruptedLogs()).thenReturn(ResponseEntity.ok(JsonNodeFactory.instance.arrayNode()));
+        // jwt() signs the request in with a token whose value is "token"; it is forwarded.
+        when(proxy.getCorruptedLogs("token")).thenReturn(ResponseEntity.ok(JsonNodeFactory.instance.arrayNode()));
 
         mvc.perform(get("/api/corrupted-logs").with(admin()))
                 .andExpect(status().isOk());
@@ -65,7 +67,7 @@ class CorruptedAuditLogControllerTest {
 
     @Test
     void createIsAuditedWithTheIdFromTheRequest() throws Exception {
-        when(proxy.createCorruptedLog(any())).thenReturn(auditorReply(HttpStatus.CREATED));
+        when(proxy.createCorruptedLog(any(), eq("token"))).thenReturn(auditorReply(HttpStatus.CREATED));
 
         mvc.perform(post("/api/corrupted-logs").with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -78,7 +80,7 @@ class CorruptedAuditLogControllerTest {
 
     @Test
     void createWithAnIdThatIsNotAUuidIsAuditedWithoutIt() throws Exception {
-        when(proxy.createCorruptedLog(any())).thenReturn(auditorReply(HttpStatus.BAD_REQUEST));
+        when(proxy.createCorruptedLog(any(), eq("token"))).thenReturn(auditorReply(HttpStatus.BAD_REQUEST));
 
         mvc.perform(post("/api/corrupted-logs").with(admin())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -91,7 +93,7 @@ class CorruptedAuditLogControllerTest {
 
     @Test
     void deleteIsAuditedWithThePathId() throws Exception {
-        when(proxy.deleteCorruptedLog(id)).thenReturn(auditorReply(HttpStatus.OK));
+        when(proxy.deleteCorruptedLog(id, "token")).thenReturn(auditorReply(HttpStatus.OK));
 
         mvc.perform(delete("/api/corrupted-logs/{id}", id).with(admin()))
                 .andExpect(status().isOk());
@@ -114,7 +116,7 @@ class CorruptedAuditLogControllerTest {
 
     @Test
     void anUnreadableAuditorReplyIsAuditedAsAServerError() {
-        when(proxy.getCorruptedLogs()).thenThrow(new IllegalStateException("Auditor returned an unreadable response"));
+        when(proxy.getCorruptedLogs("token")).thenThrow(new IllegalStateException("Auditor returned an unreadable response"));
 
         assertThatThrownBy(() -> mvc.perform(get("/api/corrupted-logs").with(admin())))
                 .hasRootCauseInstanceOf(IllegalStateException.class);

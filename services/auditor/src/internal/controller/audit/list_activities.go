@@ -3,6 +3,7 @@ package audit
 import (
 	auditv1 "auditor/src/gen/audit/v1"
 	"auditor/src/internal/models"
+	"auditor/src/internal/security"
 	"context"
 	"log"
 	"strconv"
@@ -17,7 +18,22 @@ const maxPageSize = 100
 // ListActivities serves the activity feed's entries, newest first. It is
 // called over the internal network by other services (user-service's
 // activity feed); it is not exposed through the API gateway.
+//
+// The caller is the user whose token the calling service forwarded. An admin
+// may list any actor; an agent only their own entries, whatever the calling
+// service asks for (ADR-0021 decision 6).
 func (s Controller) ListActivities(ctx context.Context, req *auditv1.ListActivitiesRequest) (*auditv1.ListActivitiesResponse, error) {
+	caller, ok := security.CallerFrom(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "bearer access token required")
+	}
+	actor := req.ActorId
+	if !caller.Admin() {
+		if actor != "" && actor != caller.Subject {
+			return nil, status.Error(codes.PermissionDenied, "agents can list only their own activities")
+		}
+		actor = caller.Subject
+	}
 	if req.PageSize < 1 || req.PageSize > maxPageSize {
 		return nil, status.Error(codes.InvalidArgument, "page_size must be between 1 and 100")
 	}
@@ -26,8 +42,8 @@ func (s Controller) ListActivities(ctx context.Context, req *auditv1.ListActivit
 		return nil, status.Error(codes.InvalidArgument, "invalid page_token")
 	}
 
-	filter := models.AuditLogFilter{
-		ActorId:          req.ActorId,
+	filter := models.ActivityFilter{
+		ActorId:          actor,
 		BeforeSequenceNo: before,
 		// One extra row shows whether another page exists.
 		Limit: int(req.PageSize) + 1,
@@ -48,7 +64,7 @@ func (s Controller) ListActivities(ctx context.Context, req *auditv1.ListActivit
 		return nil, status.Error(codes.InvalidArgument, "from must be before to")
 	}
 
-	logs, err := s.svc.ListAuditLogs(ctx, filter)
+	logs, err := s.svc.ListActivities(ctx, filter)
 	if err != nil {
 		log.Printf("Error {%s}\n", err.Error())
 		return nil, status.Error(codes.Internal, "Something went wrong")

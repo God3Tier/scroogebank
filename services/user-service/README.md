@@ -27,6 +27,8 @@ Implements **Feature 1: CRM User Management** — admin/agent enrollment and aut
 | GET | `/api/accounts/{accountId}/transactions` | ADMIN/AGENT | Read transactions for an account the caller may access |
 | GET | `/aggregates/transactions/stats?from&to` | ADMIN/AGENT | The business dashboard's transaction figures: every transaction for an admin, the caller's own accounts for an agent |
 
+The corrupted-log endpoints forward the admin's own access token to the Auditor, which refuses any call without an admin's token ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)).
+
 Full request/response shapes: Swagger UI at `http://localhost:8081/swagger-ui.html` when run locally with the `local` profile. See [API docs (Swagger UI)](../../README.md#api-docs-swagger-ui) in the root README.
 
 `GET /api/accounts/{accountId}/transactions` authenticates the caller here, checks `ADMIN`/`AGENT` access, and forwards the access token to account-service to verify that the requested account belongs to the agent. After that check succeeds, it fetches transactions from the internal SFTP receiver. The receiver must not be exposed as a public API. Configure `ACCOUNT_SERVICE_BASE_URL` and `SFTP_RECEIVER_BASE_URL` for the deployment. Locally, start client-profile-management-service and account-service each with `make run`, start the receiver with `make -C services/sftp up`, then call the user-service at `http://localhost:8081`.
@@ -61,7 +63,7 @@ The endpoint records what the frontend reports; it does not check that a revocat
 - **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through an outbox and SQS; audit payloads omit names, email addresses, passwords, and request bodies.
 - **Resiliency**: audit events wait in the outbox while SQS or the Auditor is unavailable, and are sent when it recovers; user requests never wait on either.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
-- **Activity feed**: `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). Pages are keyed by sequence number, not offset, so new entries do not shift pages the admin has not read yet. The auditor call has a 3-second deadline, and an auditor failure returns `503`. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
+- **Activity feed**: `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). Pages are keyed by sequence number, not offset, so new entries do not shift pages the admin has not read yet. The caller's own access token is forwarded in the gRPC metadata, and the Auditor checks it itself (ADR-0021). The auditor call has a 3-second deadline, and an auditor failure returns `503`. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
 
 ## Configuration
 

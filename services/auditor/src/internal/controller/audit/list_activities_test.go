@@ -3,6 +3,7 @@ package audit
 import (
 	auditv1 "auditor/src/gen/audit/v1"
 	"auditor/src/internal/models"
+	"auditor/src/internal/security"
 	auditSvc "auditor/src/internal/service/audit"
 	"context"
 	"errors"
@@ -16,8 +17,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var (
+	admin = security.Principal{Subject: "admin-sub", Role: "ADMIN"}
+	agent = security.Principal{Subject: "agent-sub-1", Role: "AGENT"}
+)
+
 func TestListActivities(t *testing.T) {
-	ctx := context.Background()
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
 	at := time.Date(2026, 9, 16, 4, 0, 0, 0, time.UTC)
@@ -46,8 +51,10 @@ func TestListActivities(t *testing.T) {
 	}
 
 	tests := map[string]struct {
+		caller       *security.Principal // nil means an admin
+		noCaller     bool
 		request      *auditv1.ListActivitiesRequest
-		wantFilter   *models.AuditLogFilter
+		wantFilter   *models.ActivityFilter
 		serviceLogs  []models.AuditLog
 		serviceError error
 		wantCode     codes.Code
@@ -76,7 +83,7 @@ func TestListActivities(t *testing.T) {
 				PageSize: 2, ActorId: "agent-sub-1",
 				From: timestamppb.New(from), To: timestamppb.New(to), PageToken: "9",
 			},
-			wantFilter: &models.AuditLogFilter{
+			wantFilter: &models.ActivityFilter{
 				ActorId: "agent-sub-1", From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
 			},
 			serviceLogs: []models.AuditLog{entry(8), entry(7)},
@@ -86,7 +93,7 @@ func TestListActivities(t *testing.T) {
 		},
 		"trims the extra row and returns a page token": {
 			request:     &auditv1.ListActivitiesRequest{PageSize: 2},
-			wantFilter:  &models.AuditLogFilter{Limit: 3},
+			wantFilter:  &models.ActivityFilter{Limit: 3},
 			serviceLogs: []models.AuditLog{entry(5), entry(4), entry(3)},
 			wantResponse: &auditv1.ListActivitiesResponse{
 				Activities:    []*auditv1.Activity{activity(5), activity(4)},
@@ -95,18 +102,51 @@ func TestListActivities(t *testing.T) {
 		},
 		"maps a service error to internal": {
 			request:      &auditv1.ListActivitiesRequest{PageSize: 2},
-			wantFilter:   &models.AuditLogFilter{Limit: 3},
+			wantFilter:   &models.ActivityFilter{Limit: 3},
 			serviceError: errors.New("database unavailable"),
 			wantCode:     codes.Internal,
+		},
+		"limits an agent to their own entries": {
+			caller:      &agent,
+			request:     &auditv1.ListActivitiesRequest{PageSize: 2},
+			wantFilter:  &models.ActivityFilter{ActorId: "agent-sub-1", Limit: 3},
+			serviceLogs: []models.AuditLog{entry(5)},
+			wantResponse: &auditv1.ListActivitiesResponse{
+				Activities: []*auditv1.Activity{activity(5)},
+			},
+		},
+		"lets an agent name themselves": {
+			caller:       &agent,
+			request:      &auditv1.ListActivitiesRequest{PageSize: 2, ActorId: "agent-sub-1"},
+			wantFilter:   &models.ActivityFilter{ActorId: "agent-sub-1", Limit: 3},
+			wantResponse: &auditv1.ListActivitiesResponse{Activities: []*auditv1.Activity{}},
+		},
+		"refuses an agent asking for another agent": {
+			caller:   &agent,
+			request:  &auditv1.ListActivitiesRequest{PageSize: 2, ActorId: "agent-sub-2"},
+			wantCode: codes.PermissionDenied,
+		},
+		"refuses a call with no verified caller": {
+			noCaller: true,
+			request:  &auditv1.ListActivitiesRequest{PageSize: 2},
+			wantCode: codes.Unauthenticated,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			if !test.noCaller {
+				caller := admin
+				if test.caller != nil {
+					caller = *test.caller
+				}
+				ctx = security.WithCaller(ctx, caller)
+			}
 			svc := auditSvc.NewMockService(t)
 			if test.wantFilter != nil {
 				svc.EXPECT().
-					ListAuditLogs(ctx, *test.wantFilter).
+					ListActivities(ctx, *test.wantFilter).
 					Return(test.serviceLogs, test.serviceError).
 					Once()
 			}

@@ -8,7 +8,12 @@ import bank.user.exception.AuditorUnavailableException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.Timestamp;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
 import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -31,6 +36,7 @@ class ActivityServiceTest {
     private final AtomicReference<ListActivitiesRequest> received = new AtomicReference<>();
     private final AtomicReference<ListActivitiesResponse> reply = new AtomicReference<>();
     private final AtomicReference<Status> failure = new AtomicReference<>();
+    private final AtomicReference<Metadata> receivedHeaders = new AtomicReference<>();
 
     private Server server;
     private ManagedChannel channel;
@@ -39,8 +45,16 @@ class ActivityServiceTest {
     @BeforeEach
     void startFakeAuditor() throws IOException {
         String name = InProcessServerBuilder.generateName();
+        ServerInterceptor captureHeaders = new ServerInterceptor() {
+            @Override
+            public <Q, R> ServerCall.Listener<Q> interceptCall(
+                    ServerCall<Q, R> call, Metadata headers, ServerCallHandler<Q, R> next) {
+                receivedHeaders.set(headers);
+                return next.startCall(call, headers);
+            }
+        };
         server = InProcessServerBuilder.forName(name).directExecutor()
-                .addService(new AuditServiceGrpc.AuditServiceImplBase() {
+                .addService(ServerInterceptors.intercept(new AuditServiceGrpc.AuditServiceImplBase() {
                     @Override
                     public void listActivities(ListActivitiesRequest request, StreamObserver<ListActivitiesResponse> observer) {
                         received.set(request);
@@ -51,7 +65,7 @@ class ActivityServiceTest {
                         observer.onNext(reply.get());
                         observer.onCompleted();
                     }
-                })
+                }, captureHeaders))
                 .build().start();
         channel = InProcessChannelBuilder.forName(name).directExecutor().build();
         service = new ActivityService(AuditServiceGrpc.newBlockingStub(channel), new ObjectMapper());
@@ -77,7 +91,11 @@ class ActivityServiceTest {
                 .setNextPageToken("8")
                 .build());
 
-        ActivityPage page = service.list(new ActivityQuery(agent, from, to, 1, "9"));
+        ActivityPage page = service.list(new ActivityQuery(agent, from, to, 1, "9"), "caller-token");
+
+        assertThat(receivedHeaders.get().get(ActivityService.AUTHORIZATION))
+                .as("the caller's token is forwarded for the auditor to check")
+                .isEqualTo("Bearer caller-token");
 
         ListActivitiesRequest request = received.get();
         assertThat(request.getActorId()).isEqualTo(agent.toString());
@@ -100,7 +118,7 @@ class ActivityServiceTest {
     void omitsUnsetFiltersAndEndsOnLastPage() {
         reply.set(ListActivitiesResponse.newBuilder().build());
 
-        ActivityPage page = service.list(new ActivityQuery(null, null, null, 20, null));
+        ActivityPage page = service.list(new ActivityQuery(null, null, null, 20, null), "caller-token");
 
         ListActivitiesRequest request = received.get();
         assertThat(request.getActorId()).isEmpty();
@@ -117,7 +135,7 @@ class ActivityServiceTest {
                 .addActivities(Activity.newBuilder().setId("e").setPayload("not json"))
                 .build());
 
-        ActivityResponse entry = service.list(new ActivityQuery(null, null, null, 20, null)).content().getFirst();
+        ActivityResponse entry = service.list(new ActivityQuery(null, null, null, 20, null), "caller-token").content().getFirst();
 
         assertThat(entry.payload().asText()).isEqualTo("not json");
     }
@@ -126,7 +144,7 @@ class ActivityServiceTest {
     void unreachableAuditorIsReportedAsUnavailable() {
         failure.set(Status.UNAVAILABLE);
 
-        assertThatThrownBy(() -> service.list(new ActivityQuery(null, null, null, 20, null)))
+        assertThatThrownBy(() -> service.list(new ActivityQuery(null, null, null, 20, null), "caller-token"))
                 .isInstanceOf(AuditorUnavailableException.class)
                 .hasMessage("Activity log is temporarily unavailable");
     }
@@ -135,7 +153,7 @@ class ActivityServiceTest {
     void auditorErrorIsReportedAsFailedRequest() {
         failure.set(Status.INTERNAL);
 
-        assertThatThrownBy(() -> service.list(new ActivityQuery(null, null, null, 20, null)))
+        assertThatThrownBy(() -> service.list(new ActivityQuery(null, null, null, 20, null), "caller-token"))
                 .isInstanceOf(AuditorUnavailableException.class)
                 .hasMessage("Activity log request failed");
     }

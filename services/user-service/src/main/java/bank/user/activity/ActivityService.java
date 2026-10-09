@@ -10,8 +10,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.protobuf.Timestamp;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import io.grpc.stub.MetadataUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,7 +33,14 @@ public class ActivityService {
     private final AuditServiceGrpc.AuditServiceBlockingStub auditor;
     private final ObjectMapper objectMapper;
 
-    public ActivityPage list(ActivityQuery query) {
+    static final Metadata.Key<String> AUTHORIZATION =
+            Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
+
+    /**
+     * @param accessToken the caller's own access token. It is forwarded, and the
+     *                    auditor checks it and decides what the caller may see (ADR-0021).
+     */
+    public ActivityPage list(ActivityQuery query, String accessToken) {
         ListActivitiesRequest.Builder request = ListActivitiesRequest.newBuilder()
                 .setPageSize(query.size());
         if (query.agentId() != null) {
@@ -49,7 +58,10 @@ public class ActivityService {
 
         ListActivitiesResponse response;
         try {
-            response = auditor.withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
+            Metadata headers = new Metadata();
+            headers.put(AUTHORIZATION, "Bearer " + accessToken);
+            response = auditor.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers))
+                    .withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
                     .listActivities(request.build());
         } catch (StatusRuntimeException e) {
             // Requests are validated before they are sent, so any error here

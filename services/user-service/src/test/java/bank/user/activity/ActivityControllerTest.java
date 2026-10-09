@@ -50,7 +50,8 @@ class ActivityControllerTest {
         Instant from = Instant.parse("2026-09-01T00:00:00Z");
         Instant to = Instant.parse("2026-09-30T00:00:00Z");
         ActivityQuery query = new ActivityQuery(agent, from, to, 10, "42");
-        when(activityService.list(query)).thenReturn(new ActivityPage(List.of(new ActivityResponse(
+        // jwt() signs the request in with a token whose value is "token"; it is forwarded.
+        when(activityService.list(query, "token")).thenReturn(new ActivityPage(List.of(new ActivityResponse(
                 "entry-41", "CRM", "UPDATE", agent.toString(), from, null)), "41"));
 
         mvc.perform(get("/api/activities")
@@ -66,12 +67,12 @@ class ActivityControllerTest {
 
     @Test
     void defaultsToNewestTwenty() throws Exception {
-        when(activityService.list(any())).thenReturn(new ActivityPage(List.of(), null));
+        when(activityService.list(any(), any())).thenReturn(new ActivityPage(List.of(), null));
 
         mvc.perform(get("/api/activities").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
 
-        verify(activityService).list(new ActivityQuery(null, null, null, 20, null));
+        verify(activityService).list(new ActivityQuery(null, null, null, 20, null), "token");
     }
 
     @Test
@@ -101,7 +102,7 @@ class ActivityControllerTest {
 
     @Test
     void unavailableAuditorIsServiceUnavailable() throws Exception {
-        when(activityService.list(any()))
+        when(activityService.list(any(), any()))
                 .thenThrow(new AuditorUnavailableException("Activity log is temporarily unavailable"));
 
         mvc.perform(get("/api/activities").with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))

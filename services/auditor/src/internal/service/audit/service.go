@@ -11,8 +11,8 @@ type Service interface {
 	VerifyChain(ctx context.Context) (map[string]error, error)
 	VerifyChainByOffset(ctx context.Context, beginChain int, offset int) (map[string]error, error)
 	DeleteAuditLog(ctx context.Context, hash string) (models.AuditLog, error)
-	// List audit entries matching a filter, newest first
-	ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, error)
+	// ListActivities returns the activity feed's entries matching filter, newest first.
+	ListActivities(ctx context.Context, filter models.ActivityFilter) ([]models.AuditLog, error)
 }
 
 // TODO: Figure out specifically what is needed for this service

@@ -40,8 +40,13 @@ export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 export AUDIT_QUEUE_URL=http://localhost:4566/000000000000/audit-insert
 export AUDIT_DLQ_URL=http://localhost:4566/000000000000/audit-insert-dlq
+export COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>
+export COGNITO_APP_CLIENT_ID=<app-client-id>
+make proto   # once, and after the contract changes
 go run ./src/serverd
 ```
+
+The auditor loads the user pool's signing keys at startup and refuses to start without the two Cognito settings. Every call to `/api` and to the gRPC port must carry a CRM user's Cognito access token (see [Access](#access)).
 
 The server listens on port `8080` by default. To use another port:
 
@@ -61,10 +66,22 @@ Expected response:
 {"status":"ok"}
 ```
 
+### Access
+
+Only other CRM services call the auditor, and each forwards the token of the user it is acting for ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). The auditor checks the token itself: its signature against the user pool's keys, issuer, app client, expiry and `token_use=access`.
+
+| Port | Who is admitted |
+|---|---|
+| HTTP `/health` | Anyone |
+| HTTP `/api/corrupted-logs` | An `ADMIN`'s token in `Authorization: Bearer`; otherwise `401` (no or an invalid token) or `403` (not an admin). user-service forwards it. |
+| gRPC `AuditService` | An `ADMIN`'s or `AGENT`'s token in the `authorization` metadata; otherwise `UNAUTHENTICATED` or `PERMISSION_DENIED`. An agent can list only their own activities. |
+
+Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over TLS, as the target design requires; leave both unset only for local development.
+
 ### Corrupted audit log endpoints
 
-The auditor exposes these HTTP endpoints for reviewing and removing corrupted
-audit entries:
+The auditor exposes these HTTP endpoints, for admins only, for reviewing and removing corrupted
+audit entries. Which of them should exist is still open ([ADR-0022](../../docs/adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [open item 13](../../docs/architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)):
 
 | Method | Path | Behavior |
 |---|---|---|
@@ -76,11 +93,12 @@ Malformed JSON or UUIDs return `400`, a missing entry returns `404`, and
 unexpected storage failures return `500`.
 
 ```sh
-curl http://localhost:8080/api/corrupted-logs
+TOKEN=<an admin's Cognito access token>
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs
 curl -X POST http://localhost:8080/api/corrupted-logs \
-  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"Id":"audit-1","EventType":"CRUD","Action":"UPDATE"}}'
-curl -X DELETE http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
 ```
 
 Send a test event to the local queue (requires the `awslocal` CLI, or use
@@ -125,6 +143,10 @@ docker compose -f compose.yaml down
 | `AUDIT_DLQ_URL` | URL of the `audit-insert-dlq` queue |
 | `AWS_ENDPOINT_URL` | Set only for LocalStack; omit in AWS so the SDK talks to real SQS |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Local/LocalStack only. In AWS, credentials come from the task's IAM role — never hardcode these |
+| `COGNITO_ISSUER_URI` | Required. The Cognito user pool's issuer URL, whose signing keys verify callers' tokens |
+| `COGNITO_APP_CLIENT_ID` | Required. The CRM app client that callers' tokens must be issued to |
+| `COGNITO_API_AUDIENCE` | Optional. The expected `aud`, if access tokens carry one |
+| `AUDITOR_TLS_CERT_FILE` / `AUDITOR_TLS_KEY_FILE` | Certificate and key for TLS on both ports. Set both in deployed environments; unset only locally |
 
 ## Run tests
 
@@ -190,7 +212,7 @@ make proto
 
 | RPC | Purpose |
 |---|---|
-| `ListActivities` | Audit entries for the activity feed, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
+| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
 
 user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
 

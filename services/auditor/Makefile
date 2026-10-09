@@ -23,6 +23,9 @@ TOOLS_RUN    := docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) $(TOOLS_IM
 DOCKER_BUILD_PROGRESS ?= plain
 
 MOCKERY_ARGS ?=
+# Callers' tokens are checked against this user pool and app client (ADR-0021).
+COGNITO_ISSUER_URI ?=
+COGNITO_APP_CLIENT_ID ?=
 
 .PHONY: \
 	db-up db-down db-logs db-reset load-schema psql \
@@ -46,7 +49,7 @@ run:
 		echo "Loading Auditor database schema..."; \
 		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
 	fi
-	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) KAFKABROKERS=localhost:9092 HANDLER_IP=localhost:9092 go run ./src/serverd
+	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" KAFKABROKERS=localhost:9092 HANDLER_IP=localhost:9092 go run ./src/serverd
 
 db-up:
 	$(COMPOSE) up -d postgres

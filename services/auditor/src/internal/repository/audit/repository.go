@@ -12,7 +12,7 @@ type Repository interface {
 	GetChain(ctx context.Context) ([]models.AuditLog, error)
 	GetChainByOffset(ctx context.Context, startChain int, offset int) ([]models.AuditLog, error)
 	RemoveAuditLog(ctx context.Context, hash string) (models.AuditLog, error)
-	ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, error)
+	ListActivities(ctx context.Context, filter models.ActivityFilter) ([]models.AuditLog, error)
 }
 
 type impl struct {
