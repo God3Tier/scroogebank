@@ -14,8 +14,11 @@ import (
 	"receiver/src/internal/models"
 )
 
+// transactionStore saves each file's transactions together with its audit
+// event, and audit events that have no import to join (ADR-0020 decision 3).
 type transactionStore interface {
-	SaveTransaction(context.Context, models.Transaction) error
+	SaveImport(context.Context, []models.Transaction, *models.AuditEvent) error
+	SaveAuditEvent(context.Context, models.AuditEvent) error
 }
 
 // accountDirectory reports which account references are CRM accounts, with
@@ -43,7 +46,7 @@ type Poller struct {
 	config    Config
 	store     transactionStore
 	accounts  accountDirectory
-	audit     AuditWriter
+	audit     *Audit // nil when auditing is off
 	connector remoteConnector
 
 	// lookupFailureAudited holds files whose account lookup failure has been
@@ -52,10 +55,10 @@ type Poller struct {
 	lookupFailureAudited map[string]bool
 }
 
-func New(cfg Config, store transactionStore, accounts accountDirectory, auditWriters ...AuditWriter) *Poller {
+func New(cfg Config, store transactionStore, accounts accountDirectory, audit ...Audit) *Poller {
 	p := &Poller{config: cfg, store: store, accounts: accounts, lookupFailureAudited: make(map[string]bool)}
-	if len(auditWriters) > 0 {
-		p.audit = auditWriters[0]
+	if len(audit) > 0 {
+		p.audit = &audit[0]
 	}
 	p.connector = p.connectSFTP
 	return p
@@ -83,6 +86,10 @@ func pollAndLog(ctx context.Context, p *Poller) {
 }
 
 func (p *Poller) Poll(ctx context.Context) error {
+	// Whatever happens below, send the events this poll saved, and any left
+	// from earlier polls.
+	defer p.relayAuditEvents(ctx)
+
 	client, closeClient, err := p.connector(ctx)
 	if err != nil {
 		return errors.Join(err, p.writeProcessingError(ctx, ProcessingError{Action: "CONNECTION_FAILURE", Stage: "CONNECTION", Error: err.Error()}))
@@ -108,9 +115,35 @@ func (p *Poller) Poll(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
+// writeProcessingError saves a processing-error event on its own: there is no
+// import to join. If it cannot be saved, typically because the database is
+// down, it is sent straight to SQS so the failure is still recorded.
 func (p *Poller) writeProcessingError(ctx context.Context, item ProcessingError) error {
 	if p.audit == nil {
 		return nil
 	}
-	return p.audit.WriteProcessingError(ctx, item)
+	event, err := p.audit.Events.ProcessingError(item)
+	if err != nil {
+		return fmt.Errorf("build %s audit event: %w", item.Action, err)
+	}
+	saveErr := p.store.SaveAuditEvent(ctx, event)
+	if saveErr == nil {
+		return nil
+	}
+	if sendErr := p.audit.Relay.Send(ctx, event); sendErr != nil {
+		return errors.Join(saveErr, sendErr)
+	}
+	log.Printf("audit event %s sent directly because it could not be saved: %v", event.ID, saveErr)
+	return nil
+}
+
+// relayAuditEvents sends waiting audit events. A failure is logged, not
+// returned: the events stay in the outbox for the next poll.
+func (p *Poller) relayAuditEvents(ctx context.Context) {
+	if p.audit == nil {
+		return
+	}
+	if err := p.audit.Relay.RelayOnce(ctx); err != nil {
+		log.Printf("relay audit events: %v", err)
+	}
 }

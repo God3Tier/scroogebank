@@ -28,3 +28,17 @@ CREATE INDEX idx_transactions_date
 
 ALTER TABLE transactions
     ALTER COLUMN transaction_id TYPE TEXT USING transaction_id::text;
+
+-- Ingestion audit events waiting to be sent to the Auditor's SQS queue
+-- (ADR-0020 decision 3). A file's FILE_PROCESSING_COMPLETED event is written in
+-- the same transaction as its transactions; processing errors, which have no
+-- import to join, are written on their own. The poller sends every waiting row
+-- at the end of each poll and deletes it once SQS has accepted it. event_id is
+-- the Auditor's de-duplication key, so a row sent twice is stored only once.
+CREATE TABLE audit_outbox (
+    event_id    TEXT        PRIMARY KEY,
+    body        TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_audit_outbox_created_at ON audit_outbox (created_at);

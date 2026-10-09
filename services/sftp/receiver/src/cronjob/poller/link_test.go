@@ -70,28 +70,13 @@ func TestPollWithoutAccountServiceSavesNothingAndKeepsTheFile(t *testing.T) {
 	assert.Contains(t, remote.files, "/reports/link.json")
 }
 
-type fakeAudit struct {
-	completed []FileCompleted
-	failures  []ProcessingError
-}
-
-func (a *fakeAudit) WriteFileCompleted(_ context.Context, item FileCompleted) error {
-	a.completed = append(a.completed, item)
-	return nil
-}
-
-func (a *fakeAudit) WriteProcessingError(_ context.Context, item ProcessingError) error {
-	a.failures = append(a.failures, item)
-	return nil
-}
-
 func TestPollAuditsOnlyTheFirstLookupFailureOfAnOutage(t *testing.T) {
 	ctx := context.Background()
 	remote := newFakeRemote()
 	remote.add("link.json", linkJSON)
 	directory := &fakeDirectory{err: errors.New("account-service unavailable")}
-	audit := &fakeAudit{}
-	p := New(Config{RemoteDir: "/reports"}, &fakeStore{}, directory, audit)
+	audit := &fakeEvents{}
+	p := New(Config{RemoteDir: "/reports"}, &fakeStore{}, directory, Audit{Events: audit, Relay: &fakeRelay{}})
 	p.connector = func(context.Context) (remoteSFTP, func(), error) { return remote, func() {}, nil }
 
 	// The file is retried on every poll, but the outage is audited once.
