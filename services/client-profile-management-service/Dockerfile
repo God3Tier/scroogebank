@@ -1,4 +1,4 @@
-FROM golang:1.27.1 AS build
+FROM golang:1.27.1-bookworm AS build
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 	-o /client-profile-management-service \
 	./src/serverd
 
-FROM golang:1.27.1 AS tools
+FROM golang:1.27.1-bookworm AS tools
 
 ARG SQLBOILER_VERSION=v4.19.7
 ARG MOCKERY_VERSION=v3.8.0
@@ -24,4 +24,4 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /client-profile-management-service /client-profile-management-service
 
 EXPOSE 8080
-ENTRYPOINT ["/api"]
+ENTRYPOINT ["/client-profile-management-service"]

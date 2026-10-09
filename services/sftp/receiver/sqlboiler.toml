@@ -1,0 +1,13 @@
+output = "src/internal/repository/orm"
+pkgname = "orm"
+
+[psql]
+dbname = "transactions"
+host = "db"
+port = 5432
+user = "crm"
+pass = "crm"
+sslmode = "disable"
+schema = "public"
+# The outbox is written with plain SQL (src/internal/repository/save_import.go), not the ORM.
+blacklist = ["audit_outbox"]

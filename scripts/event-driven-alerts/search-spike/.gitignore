@@ -1,0 +1,4 @@
+.spike-state.json
+evidence/run-*.json
+.venv/
+__pycache__/

@@ -39,7 +39,21 @@ springdoc:
 idp:
   cognito:
     user-pool-id: ${COGNITO_USER_POOL_ID}
+    app-client-id: ${COGNITO_APP_CLIENT_ID}
     region: ${AWS_REGION}
+
+audit:
+  sqs:
+    queue-url: ${AUDIT_QUEUE_URL:}
+
+auditor:
+  base-url: ${AUDITOR_BASE_URL:http://localhost:8080}
+
+account-service:
+  base-url: ${ACCOUNT_SERVICE_BASE_URL:http://localhost:8083}
+
+sftp-receiver:
+  base-url: ${SFTP_RECEIVER_BASE_URL:http://localhost:8082}
 
 root-admin:
   email: ${ROOT_ADMIN_EMAIL}

@@ -9,6 +9,7 @@ func mapToAuditLog(auditLog *orm.AuditLog) models.AuditLog {
 	return models.AuditLog{
 		Id:            auditLog.ID,
 		SequenceNo:    auditLog.SequenceNo.Int64,
+		EventID:       auditLog.EventID.String,
 		EventType:     auditLog.EventType.String,
 		Action:        auditLog.Action.String,
 		ActorId:       auditLog.ActorID.String,

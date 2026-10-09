@@ -1,4 +1,7 @@
 output = "models"
+# Soft deletes (ADR-0036): generated queries skip rows whose deleted_at is set,
+# and Delete(ctx, exec, false) sets deleted_at instead of removing the row.
+add-soft-deletes = true
 
 [psql]
 dbname = "myapp"
@@ -8,3 +11,5 @@ user = "postgres"
 pass = "postgres"
 schema = "public"
 sslmode = "disable"
+# The audit outbox is written with plain SQL (src/serverd/sqs/outbox.go), not the ORM.
+blacklist = ["audit_outbox"]

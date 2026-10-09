@@ -1,4 +1,4 @@
-FROM golang:1.27.1 AS build
+FROM golang:1.27.1-bookworm AS build
 
 WORKDIR /app
 COPY go.mod ./
@@ -7,7 +7,7 @@ COPY src ./src
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /auditor ./src/serverd
 
-FROM golang:1.27.1 AS tools
+FROM golang:1.27.1-bookworm AS tools
 
 ARG SQLBOILER_VERSION=v4.19.7
 ARG MOCKERY_VERSION=v3.8.0

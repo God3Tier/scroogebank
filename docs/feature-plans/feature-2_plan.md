@@ -1,0 +1,34 @@
+# Feature 2 Security Plan
+
+- Status: In progress
+- Feature branch: `feat/refactor-feat-2`
+- Primary developer: Joseph Yau
+- Last updated: 2026-10-09
+
+## Goal
+
+Use the Feature 1 Cognito user pool as the identity source for Feature 2. Every client/account API request must have a valid Cognito access token. Admins can manage all clients; agents can access only profiles they created and accounts belonging to those profiles. The authenticated identity must come from the verified token, never from a caller-controlled header.
+
+## Tasks
+
+| Task | Description | Owner | Expected files/components | Dependencies | Branch | Status |
+|---|---|---|---|---|---|---|
+| F2-SEC-01 | Verify Cognito access tokens and enforce Admin/Agent client ownership | Joseph Yau | `services/client-profile-management-service/src/internal/security`, server/router, schema, Bruno collection | Cognito issuer and app-client ID from the shared pool | `feat/refactor-feat-2` | Implemented; build verified, integration tests not run |
+| F1-SEC-01 | Keep Cognito provisioning, JWT validation, and Admin authorization active in the local database profile | Joseph Yau | `services/user-service` security configuration, Makefile, README | Cognito pool and AWS credentials | `feat/refactor-feat-2` | Implemented; package verified, auth flow not integration-tested |
+| F2-SEC-02 | Configure API Gateway JWT authorizer and encrypted RDS storage in deployment infrastructure | Joseph Yau | Infrastructure/API Gateway and RDS configuration | Infrastructure directory is absent from this checkout | `feat/refactor-feat-2` | Blocked by missing infrastructure files |
+| F2-SEC-03 | Complete hash-chain audit records for Feature 2 business actions | Joseph Yau | Feature 2 data/service and Auditor integration | Audit write contract is not present in the current Auditor API | `feat/refactor-feat-2` | Planned |
+| F2-SPLIT-01 | Split accounts out into `services/account-service` (Go); replace the accounts-to-clients foreign key with API checks and store each account's owning agent ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)) | Neo Jia Wen (coordinate with Joseph Yau, Feature 2 primary developer) | `services/account-service`, `services/client-profile-management-service`, `services/user-service` `TransactionProxy`, `services/sftp` schema mounts | ADR-0017 and ADR-0035 accepted | `task/client-profile-management/account-service-split` | Implemented; builds, vets and passes unit and database tests (2 failing tests also fail on `dev`); end-to-end checks not run |
+| F2-SOFTDEL-01 | Make client and account deletion soft deletes (`deleted_at`), hide deleted records from every endpoint, and make uniqueness ignore deleted rows, per the requirements Q&A (CPM08, CPM21, CPM33) ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) | Neo Jia Wen (coordinate with Joseph Yau, Feature 2 primary developer) | Both services' repositories, `security/authorization.go`, `data/V1_init.sql` and `sqlboiler*.toml` | ADR-0036 accepted | `task/client-profile-management/soft-delete` | Implemented; builds, vets and passes unit and database tests (the same pre-existing failures as F2-SPLIT-01); end-to-end checks not run |
+| F2-DASH-01 | Serve the business dashboard's client and account figures on private `/aggregates` routes scoped by the caller's token, with indexes on `clients(created_at)` and `accounts(opening_date)` ([ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md), [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)) | Dashboard developer (review: Joseph Yau, Feature 2 primary developer) | `services/client-profile-management-service/src/internal/*/aggregate`, `services/account-service/src/internal/*/aggregate`, both routers and `data/V1_init.sql` | ADR-0039 agreed with Joseph Yau | `task/business-dashboard/client-stats`, `task/business-dashboard/account-stats` | Implemented; unit, router and database tests pass; review and end-to-end checks pending |
+
+## Security behavior
+
+- The Feature 2 service validates the JWT signature against Cognito JWKS and checks issuer, app client, token use, and time claims.
+- `cognito:groups` supplies the `ADMIN` or `AGENT` role. The service fails closed when the token is missing, invalid, or lacks a supported group.
+- The opaque Cognito `sub` identifies the creator. It is stored as text because Cognito does not guarantee RFC UUID formatting.
+- Client reads/updates/deletes/verifications and account create/delete requests enforce agent ownership. Admins can access every client.
+- Production service traffic must use TLS, and PostgreSQL connections must verify the RDS certificate. Local HTTP and `sslmode=disable` are limited to local development.
+
+## Open requirements
+
+The source specification also requires encrypted database storage and tamper-resistant audit logging. The infrastructure files needed to configure encrypted RDS/API Gateway are absent here; the current Auditor exposes audit reads but no write endpoint. These gaps must be resolved before Feature 2 security work is considered complete.

@@ -1,0 +1,11 @@
+package bank.alert.scoring;
+
+public enum ExposureStatus {
+    EVALUABLE,
+    MISSING_HOLDING,
+    EXPIRED_VALUATION,
+    MISSING_PORTFOLIO_TOTAL,
+    MIXED_PORTFOLIO_SCOPE,
+    INCOMPATIBLE_VALUATION_TIMES,
+    INVALID_VALUATION
+}

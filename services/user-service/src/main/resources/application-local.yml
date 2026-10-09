@@ -1,7 +1,14 @@
-# Local development only. Activate with SPRING_PROFILES_ACTIVE=local.
-# Never set this profile in a deployed task definition.
+# Local database profile. Cognito JWT verification and Admin authorization
+# remain active when this profile is selected.
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5434}/${USER_DB_NAME:users_db}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
 springdoc:
   api-docs:
     enabled: true
   swagger-ui:
     enabled: true
+root-admin:
+  email: ${ROOT_ADMIN_EMAIL}

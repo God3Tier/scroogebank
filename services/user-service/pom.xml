@@ -97,6 +97,11 @@
             <artifactId>cognitoidentityprovider</artifactId>
             <version>2.28.11</version>
         </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
+            <version>2.28.11</version>
+        </dependency>
         <!-- Compile time only; settings in lombok.config. Version managed by Spring Boot. -->
         <dependency>
             <groupId>org.projectlombok</groupId>

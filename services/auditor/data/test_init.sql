@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS audit_log CASCADE;
 CREATE TABLE audit_log (
     id UUID PRIMARY KEY,
     sequence_no BIGINT UNIQUE,
+    event_id VARCHAR(64),
     event_type VARCHAR(50),
     action VARCHAR(100),
     source_service VARCHAR(50),
@@ -10,12 +11,14 @@ CREATE TABLE audit_log (
     timestamp TIMESTAMP,
     payload JSONB,
     parent_hash VARCHAR(64),
-    hash VARCHAR(64)
+    hash VARCHAR(64),
+    CONSTRAINT audit_log_event_id_unique UNIQUE (event_id)
 );
 
 INSERT INTO audit_log (
     id,
     sequence_no,
+    event_id,
     event_type,
     action,
     source_service,
@@ -29,6 +32,7 @@ VALUES
     (
         '00000000-0000-0000-0000-000000000001',
         1,
+        'seed-event-1',
         'AUTH',
         'LOGIN_FAILED',
         'CRM',
@@ -41,6 +45,7 @@ VALUES
     (
         '00000000-0000-0000-0000-000000000002',
         2,
+        'seed-event-2',
         'CRUD',
         'CREATE_LEAD',
         'CRM',
@@ -53,6 +58,7 @@ VALUES
     (
         '00000000-0000-0000-0000-000000000003',
         3,
+        'seed-event-3',
         'TRANSACTION_INGESTION',
         'FILE_PROCESSED',
         'TRANSACTION_SERVICE',

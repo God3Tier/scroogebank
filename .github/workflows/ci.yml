@@ -33,3 +33,34 @@ jobs:
         with:
           name: surefire-reports
           path: "services/*/target/surefire-reports/**"
+
+  event-alert-auditor-contract:
+    name: Test event-alert auditor contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auditor
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start disposable auditor database
+        run: docker compose -f docker-compose.test.yml -p auditor-ci up -d --wait postgres
+
+      - name: Generate ignored SQLBoiler models
+        run: >-
+          docker compose -f docker-compose.test.yml -p auditor-ci run --rm -T tools
+          sqlboiler -c sqlboiler.toml psql -o src/internal/repository/orm --wipe
+
+      - name: Generate ignored audit repository mock
+        run: >-
+          docker compose -f docker-compose.test.yml -p auditor-ci run --rm -T tools
+          mockery --config .mockery-ci.yml
+
+      - name: Test SQS queue validation and audit deduplication
+        run: >-
+          docker compose -f docker-compose.test.yml -p auditor-ci run --rm -T test-runner
+          go test ./src/serverd/queue ./src/internal/repository/audit
+
+      - name: Stop disposable auditor database
+        if: always()
+        run: docker compose -f docker-compose.test.yml -p auditor-ci down -v --remove-orphans

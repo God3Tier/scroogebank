@@ -1,5 +1,6 @@
 package bank.user.activity;
 
+import bank.user.audit.AuditEventPublisher;
 import bank.user.exception.AuditorUnavailableException;
 import bank.user.security.JwtRoleConverter;
 import bank.user.security.SecurityConfig;
@@ -8,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -33,6 +35,14 @@ class ActivityControllerTest {
 
     @MockitoBean
     private ActivityService activityService;
+
+    // UserAuditInterceptor, which @WebMvcTest loads, publishes through this.
+    @MockitoBean
+    private AuditEventPublisher auditEventPublisher;
+
+    // SecurityConfig's decoder fetches the issuer's OIDC metadata when created.
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @Test
     void adminGetsFilteredActivity() throws Exception {
