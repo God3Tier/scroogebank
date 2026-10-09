@@ -1,6 +1,6 @@
 package bank.user.activity;
 
-import bank.audit.grpc.AuditServiceGrpc;
+import bank.audit.grpc.v1.AuditServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import org.springframework.beans.factory.annotation.Value;

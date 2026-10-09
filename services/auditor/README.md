@@ -178,7 +178,7 @@ The mockery configuration is in `.mockery.yml` and targets the service's interfa
 
 ## Generate protobuf code
 
-The protobuf compiler and Go protobuf plugins must be installed locally. Run this from `services/auditor`; it generates Go files under `src/gen`, matching the imports used by the server and controller:
+The gRPC contract is `proto/audit/v1/audit.proto` at the repository root, shared with its callers ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). The generated Go code goes to `src/gen` and is git-ignored. Generate it before building or testing the server and controller packages; this runs `protoc` in the tools image, so nothing needs to be installed locally:
 
 ```sh
 make proto
@@ -186,25 +186,26 @@ make proto
 
 ## gRPC API
 
-`proto/audit_request.proto` defines `AuditService`. Other services call it over the internal network only. It is not exposed through API Gateway.
+`AuditService` (package `audit.v1`) is served on `GRPC_PORT`. Other services call it over the internal network only; it is not exposed through API Gateway.
 
 | RPC | Purpose |
 |---|---|
-| `GetAuditLog` | All entries from one source service |
-| `ListAuditLogs` | Entries filtered by any of `source_service`, `actor_id` and a `from`/`to` time range, newest first. `page_size` must be 1 to 100. Pass the response's `next_before_sequence_no` as `before_sequence_no` to get the next page; `0` means there are no more pages. |
+| `ListActivities` | Audit entries for the activity feed, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
 
-The user service generates its Java client stubs from this same file at build time, so a change here must stay backward compatible. Add fields and RPCs; do not renumber or remove them.
+user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
 
 ### `actor_id` convention
 
-Every producer sets an event's `actor_id` to the acting user's **agent id**: the user service's `users.id` UUID, the same value the client service stores in `created_by_agent_id`. Work that no user started uses `SYSTEM`. `ListAuditLogs` compares `actor_id` by exact text, and the admin activity feed filters on it (`GET /api/activities?agentId=<users.id>`). An event carrying any other id, such as the Cognito `sub`, will not match that agent's filter, and nothing reports the mismatch. A producer that has only the caller's token must map the token's `sub` to `users.id` first; the user service does this in `AuditRecorder`, looking the user up by `idp_sub`.
+Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**, taken from the verified token. The client service stores the same value as a client's `created_by_agent_id`. Work that no user started uses a `system:` prefix, for example `system:root-admin-initializer`. `ListActivities` compares `actor_id` by exact text, so an event carrying any other id, such as user-service's `users.id`, will not appear in that user's activity feed.
 
 ## Build and run the production image
 
 Build the image:
 
+Build it from the repository root, because the gRPC code is generated from the shared `proto/` directory. The ORM must have been generated first (`make sqlboiler`), as before.
+
 ```sh
-docker build -t auditor services/auditor
+docker build -f services/auditor/Dockerfile -t auditor .
 ```
 
 Run it:

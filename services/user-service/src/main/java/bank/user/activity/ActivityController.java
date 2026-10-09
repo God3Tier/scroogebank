@@ -29,7 +29,7 @@ public class ActivityController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) Long cursor) {
+            @RequestParam(required = false) String cursor) {
         // Checked here rather than left to the auditor, so an error from the
         // auditor always means the auditor failed, never that the caller did.
         if (size < 1 || size > MAX_PAGE_SIZE) {
@@ -37,9 +37,6 @@ public class ActivityController {
         }
         if (from != null && to != null && !from.isBefore(to)) {
             throw new BadRequestException("from: must be before to");
-        }
-        if (cursor != null && cursor < 1) {
-            throw new BadRequestException("cursor: must be a nextCursor from a previous page");
         }
         return activityService.list(new ActivityQuery(agentId, from, to, size, cursor));
     }

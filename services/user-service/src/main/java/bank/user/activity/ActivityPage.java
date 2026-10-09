@@ -8,6 +8,6 @@ import java.util.List;
  */
 public record ActivityPage(
         List<ActivityResponse> content,
-        Long nextCursor
+        String nextCursor
 ) {
 }

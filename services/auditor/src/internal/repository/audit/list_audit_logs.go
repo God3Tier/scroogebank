@@ -15,9 +15,6 @@ import (
 // paging do not shift the pages it has not read yet.
 func (i impl) ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, error) {
 	mods := []qm.QueryMod{}
-	if filter.SourceService != "" {
-		mods = append(mods, qm.Where("source_service = ?", string(filter.SourceService)))
-	}
 	if filter.ActorId != "" {
 		mods = append(mods, qm.Where("actor_id = ?", filter.ActorId))
 	}

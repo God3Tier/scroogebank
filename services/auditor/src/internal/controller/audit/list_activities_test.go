@@ -1,7 +1,7 @@
 package audit
 
 import (
-	"auditor/src/gen"
+	auditv1 "auditor/src/gen/audit/v1"
 	"auditor/src/internal/models"
 	auditSvc "auditor/src/internal/service/audit"
 	"context"
@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestListAuditLogs(t *testing.T) {
+func TestListActivities(t *testing.T) {
 	ctx := context.Background()
 	from := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)
@@ -27,83 +27,74 @@ func TestListAuditLogs(t *testing.T) {
 			Id:            fmt.Sprintf("id-%d", seq),
 			SequenceNo:    seq,
 			EventType:     "CRUD",
-			Action:        "UPDATE_CLIENT",
-			ActorId:       "agent-1",
+			Action:        "UPDATE",
+			ActorId:       "agent-sub-1",
 			SourceService: models.CRMServiceType,
 			Timestamp:     at,
 			Payload:       `{"client_id":"c-1"}`,
 		}
 	}
-	protoEntry := func(seq int64) *gen.AuditLogEntry {
-		return &gen.AuditLogEntry{
+	activity := func(seq int64) *auditv1.Activity {
+		return &auditv1.Activity{
 			Id:            fmt.Sprintf("id-%d", seq),
-			SequenceNo:    seq,
-			EventType:     "CRUD",
-			Action:        "UPDATE_CLIENT",
 			SourceService: "CRM",
-			ActorId:       "agent-1",
+			Action:        "UPDATE",
+			ActorId:       "agent-sub-1",
 			Timestamp:     timestamppb.New(at),
 			Payload:       `{"client_id":"c-1"}`,
 		}
 	}
 
 	tests := map[string]struct {
-		request      *gen.ListAuditLogsRequest
+		request      *auditv1.ListActivitiesRequest
 		wantFilter   *models.AuditLogFilter
 		serviceLogs  []models.AuditLog
 		serviceError error
 		wantCode     codes.Code
-		wantResponse *gen.ListAuditLogsResponse
+		wantResponse *auditv1.ListActivitiesResponse
 	}{
 		"rejects zero page size": {
-			request:  &gen.ListAuditLogsRequest{},
+			request:  &auditv1.ListActivitiesRequest{},
 			wantCode: codes.InvalidArgument,
 		},
-
 		"rejects oversized page": {
-			request:  &gen.ListAuditLogsRequest{PageSize: 101},
+			request:  &auditv1.ListActivitiesRequest{PageSize: 101},
 			wantCode: codes.InvalidArgument,
 		},
-
-		"rejects unknown service": {
-			request:  &gen.ListAuditLogsRequest{PageSize: 10, SourceService: "UNKNOWN"},
+		"rejects a page token that is not one": {
+			request:  &auditv1.ListActivitiesRequest{PageSize: 10, PageToken: "not-a-token"},
 			wantCode: codes.InvalidArgument,
 		},
-
 		"rejects from after to": {
-			request: &gen.ListAuditLogsRequest{
+			request: &auditv1.ListActivitiesRequest{
 				PageSize: 10, From: timestamppb.New(to), To: timestamppb.New(from),
 			},
 			wantCode: codes.InvalidArgument,
 		},
-
-		"passes filters and returns last page": {
-			request: &gen.ListAuditLogsRequest{
-				PageSize: 2, SourceService: "CRM", ActorId: "agent-1",
-				From: timestamppb.New(from), To: timestamppb.New(to), BeforeSequenceNo: 9,
+		"passes filters and returns the last page": {
+			request: &auditv1.ListActivitiesRequest{
+				PageSize: 2, ActorId: "agent-sub-1",
+				From: timestamppb.New(from), To: timestamppb.New(to), PageToken: "9",
 			},
 			wantFilter: &models.AuditLogFilter{
-				SourceService: models.CRMServiceType, ActorId: "agent-1",
-				From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
+				ActorId: "agent-sub-1", From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
 			},
 			serviceLogs: []models.AuditLog{entry(8), entry(7)},
-			wantResponse: &gen.ListAuditLogsResponse{
-				Entries: []*gen.AuditLogEntry{protoEntry(8), protoEntry(7)},
+			wantResponse: &auditv1.ListActivitiesResponse{
+				Activities: []*auditv1.Activity{activity(8), activity(7)},
 			},
 		},
-
-		"trims extra row and returns cursor": {
-			request:     &gen.ListAuditLogsRequest{PageSize: 2},
+		"trims the extra row and returns a page token": {
+			request:     &auditv1.ListActivitiesRequest{PageSize: 2},
 			wantFilter:  &models.AuditLogFilter{Limit: 3},
 			serviceLogs: []models.AuditLog{entry(5), entry(4), entry(3)},
-			wantResponse: &gen.ListAuditLogsResponse{
-				Entries:              []*gen.AuditLogEntry{protoEntry(5), protoEntry(4)},
-				NextBeforeSequenceNo: 4,
+			wantResponse: &auditv1.ListActivitiesResponse{
+				Activities:    []*auditv1.Activity{activity(5), activity(4)},
+				NextPageToken: "4",
 			},
 		},
-
-		"maps service error to internal": {
-			request:      &gen.ListAuditLogsRequest{PageSize: 2},
+		"maps a service error to internal": {
+			request:      &auditv1.ListActivitiesRequest{PageSize: 2},
 			wantFilter:   &models.AuditLogFilter{Limit: 3},
 			serviceError: errors.New("database unavailable"),
 			wantCode:     codes.Internal,
@@ -113,7 +104,6 @@ func TestListAuditLogs(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			svc := auditSvc.NewMockService(t)
-
 			if test.wantFilter != nil {
 				svc.EXPECT().
 					ListAuditLogs(ctx, *test.wantFilter).
@@ -121,14 +111,13 @@ func TestListAuditLogs(t *testing.T) {
 					Once()
 			}
 
-			actual, err := New(svc).ListAuditLogs(ctx, test.request)
+			actual, err := New(svc).ListActivities(ctx, test.request)
 
 			if test.wantCode != codes.OK {
 				assert.Nil(t, actual)
 				assert.Equal(t, test.wantCode, status.Code(err))
 				return
 			}
-
 			assert.NoError(t, err)
 			assert.Equal(t, test.wantResponse, actual)
 		})

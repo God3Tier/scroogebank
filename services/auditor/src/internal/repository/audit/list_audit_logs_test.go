@@ -19,9 +19,9 @@ func TestListAuditLogs(t *testing.T) {
 			filter:  models.AuditLogFilter{Limit: 10},
 			wantSeq: []int64{4, 3, 2, 1},
 		},
-		"filters by service and actor": {
-			filter:  models.AuditLogFilter{SourceService: models.CRMServiceType, ActorId: "agent-a", Limit: 10},
-			wantSeq: []int64{4, 1},
+		"filters by actor": {
+			filter:  models.AuditLogFilter{ActorId: "agent-a", Limit: 10},
+			wantSeq: []int64{4, 3, 1},
 		},
 		"filters by time range with inclusive from and exclusive to": {
 			filter: models.AuditLogFilter{

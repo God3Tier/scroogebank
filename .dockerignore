@@ -6,6 +6,14 @@
 !pom.xml
 !services/*/pom.xml
 !services/*/src/
-# user-service generates its auditor gRPC client from the auditor's proto.
-!services/auditor/proto/
+# The shared gRPC contracts (ADR-0021): user-service generates its auditor
+# client from them, and the auditor its server.
+!proto/
+# The auditor is a Go module, so its build also needs these.
+!services/auditor/go.mod
+!services/auditor/go.sum
 **/target/
+# Mockery's output (git-ignored) is for tests only, and a stale copy left in a
+# working tree would not compile. Not mocks_*.go: client-profile names its
+# generated ORM files that way, and its image needs them.
+**/mocks.go

@@ -49,9 +49,9 @@ class ActivityControllerTest {
         UUID agent = UUID.randomUUID();
         Instant from = Instant.parse("2026-09-01T00:00:00Z");
         Instant to = Instant.parse("2026-09-30T00:00:00Z");
-        ActivityQuery query = new ActivityQuery(agent, from, to, 10, 42L);
+        ActivityQuery query = new ActivityQuery(agent, from, to, 10, "42");
         when(activityService.list(query)).thenReturn(new ActivityPage(List.of(new ActivityResponse(
-                "entry-41", 41, "CRM", "CRUD", "UPDATE_CLIENT", agent.toString(), from, null)), 41L));
+                "entry-41", "CRM", "UPDATE", agent.toString(), from, null)), "41"));
 
         mvc.perform(get("/api/activities")
                         .param("agentId", agent.toString())
@@ -59,9 +59,9 @@ class ActivityControllerTest {
                         .param("size", "10").param("cursor", "42")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].action").value("UPDATE_CLIENT"))
+                .andExpect(jsonPath("$.content[0].action").value("UPDATE"))
                 .andExpect(jsonPath("$.content[0].actorId").value(agent.toString()))
-                .andExpect(jsonPath("$.nextCursor").value(41));
+                .andExpect(jsonPath("$.nextCursor").value("41"));
     }
 
     @Test

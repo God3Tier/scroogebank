@@ -11,9 +11,7 @@ import java.time.Instant;
  */
 public record ActivityResponse(
         String id,
-        long sequenceNo,
         String sourceService,
-        String eventType,
         String action,
         String actorId,
         Instant timestamp,

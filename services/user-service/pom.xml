@@ -46,7 +46,8 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
         <!-- gRPC client for the auditor's AuditService. Stubs are generated at
-             build time from services/auditor/proto, the auditor's own copy. -->
+             build time from the shared contract in the repository's proto/
+             directory (ADR-0021). -->
         <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
@@ -168,7 +169,7 @@
                     <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
                     <pluginId>grpc-java</pluginId>
                     <pluginArtifact>io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
-                    <protoSourceRoot>${project.basedir}/../auditor/proto</protoSourceRoot>
+                    <protoSourceRoot>${project.basedir}/../../proto</protoSourceRoot>
                 </configuration>
                 <executions>
                     <execution>

@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"auditor/src/gen"
+	auditv1 "auditor/src/gen/audit/v1"
 	"auditor/src/internal/bootstrap"
 	"auditor/src/internal/controller/audit"
 	corruptedLogController "auditor/src/internal/controller/corrupted_log"
@@ -68,7 +68,7 @@ func run(ctx context.Context) error {
 	}
 
 	grpcServer := grpc.NewServer()
-	gen.RegisterAuditServiceServer(grpcServer, controller)
+	auditv1.RegisterAuditServiceServer(grpcServer, controller)
 
 	go func() {
 		defer wg.Done()

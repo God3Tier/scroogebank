@@ -8,13 +8,14 @@ import java.util.UUID;
  *
  * @param from   inclusive
  * @param to     exclusive
- * @param cursor a previous page's nextCursor, or null for the newest page
+ * @param cursor a previous page's nextCursor, or null for the newest page. Opaque: the
+ *               auditor's page token.
  */
 public record ActivityQuery(
         UUID agentId,
         Instant from,
         Instant to,
         int size,
-        Long cursor
+        String cursor
 ) {
 }

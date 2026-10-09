@@ -34,6 +34,32 @@ jobs:
           name: surefire-reports
           path: "services/*/target/surefire-reports/**"
 
+  grpc-contract:
+    name: Check the gRPC contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The breaking-change check reads the base branch from git history.
+          fetch-depth: 0
+
+      - name: Lint proto/
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace bufbuild/buf:1.73.0 lint
+
+      # Pull requests only: compare with the branch the change would merge
+      # into (ADR-0021). Skipped while that branch has no buf.yaml, so the
+      # change that adds the contracts can pass.
+      - name: Check proto/ for breaking changes
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/${{ github.base_ref }}"
+          if git cat-file -e "$base:buf.yaml" 2>/dev/null; then
+            docker run --rm -v "$PWD:/workspace" -w /workspace bufbuild/buf:1.73.0 \
+              breaking --against ".git#ref=$base"
+          else
+            echo "$base has no buf.yaml yet; nothing to compare against."
+          fi
+
   event-alert-auditor-contract:
     name: Test event-alert auditor contract
     runs-on: ubuntu-latest

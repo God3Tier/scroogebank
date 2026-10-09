@@ -1,9 +1,9 @@
 package bank.user.activity;
 
-import bank.audit.grpc.AuditLogEntry;
-import bank.audit.grpc.AuditServiceGrpc;
-import bank.audit.grpc.ListAuditLogsRequest;
-import bank.audit.grpc.ListAuditLogsResponse;
+import bank.audit.grpc.v1.Activity;
+import bank.audit.grpc.v1.AuditServiceGrpc;
+import bank.audit.grpc.v1.ListActivitiesRequest;
+import bank.audit.grpc.v1.ListActivitiesResponse;
 import bank.user.exception.AuditorUnavailableException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,7 +32,7 @@ public class ActivityService {
     private final ObjectMapper objectMapper;
 
     public ActivityPage list(ActivityQuery query) {
-        ListAuditLogsRequest.Builder request = ListAuditLogsRequest.newBuilder()
+        ListActivitiesRequest.Builder request = ListActivitiesRequest.newBuilder()
                 .setPageSize(query.size());
         if (query.agentId() != null) {
             request.setActorId(query.agentId().toString());
@@ -44,17 +44,17 @@ public class ActivityService {
             request.setTo(toTimestamp(query.to()));
         }
         if (query.cursor() != null) {
-            request.setBeforeSequenceNo(query.cursor());
+            request.setPageToken(query.cursor());
         }
 
-        ListAuditLogsResponse response;
+        ListActivitiesResponse response;
         try {
             response = auditor.withDeadlineAfter(DEADLINE_SECONDS, TimeUnit.SECONDS)
-                    .listAuditLogs(request.build());
+                    .listActivities(request.build());
         } catch (StatusRuntimeException e) {
             // Requests are validated before they are sent, so any error here
             // is the auditor's or the network's, not the caller's.
-            log.warn("Auditor ListAuditLogs failed: {}", e.getStatus());
+            log.warn("Auditor ListActivities failed: {}", e.getStatus());
             Status.Code code = e.getStatus().getCode();
             boolean transientFailure = code == Status.Code.UNAVAILABLE || code == Status.Code.DEADLINE_EXCEEDED;
             throw new AuditorUnavailableException(transientFailure
@@ -63,16 +63,14 @@ public class ActivityService {
         }
 
         return new ActivityPage(
-                response.getEntriesList().stream().map(this::toResponse).toList(),
-                response.getNextBeforeSequenceNo() == 0 ? null : response.getNextBeforeSequenceNo());
+                response.getActivitiesList().stream().map(this::toResponse).toList(),
+                response.getNextPageToken().isEmpty() ? null : response.getNextPageToken());
     }
 
-    private ActivityResponse toResponse(AuditLogEntry entry) {
+    private ActivityResponse toResponse(Activity entry) {
         return new ActivityResponse(
                 entry.getId(),
-                entry.getSequenceNo(),
                 entry.getSourceService(),
-                entry.getEventType(),
                 entry.getAction(),
                 entry.getActorId(),
                 Instant.ofEpochSecond(entry.getTimestamp().getSeconds(), entry.getTimestamp().getNanos()),

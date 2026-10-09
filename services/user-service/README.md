@@ -61,7 +61,7 @@ The endpoint records what the frontend reports; it does not check that a revocat
 - **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through an outbox and SQS; audit payloads omit names, email addresses, passwords, and request bodies.
 - **Resiliency**: audit events wait in the outbox while SQS or the Auditor is unavailable, and are sent when it recovers; user requests never wait on either.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
-- **Activity feed**: `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListAuditLogs`, stubs generated at build time from `services/auditor/proto`). Pages are keyed by sequence number, not offset, so new entries do not shift pages the admin has not read yet. The auditor call has a 3-second deadline, and an auditor failure returns `503`. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
+- **Activity feed**: `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). Pages are keyed by sequence number, not offset, so new entries do not shift pages the admin has not read yet. The auditor call has a 3-second deadline, and an auditor failure returns `503`. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
 
 ## Configuration
 

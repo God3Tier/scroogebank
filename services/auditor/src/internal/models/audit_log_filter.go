@@ -5,7 +5,6 @@ import "time"
 // AuditLogFilter selects audit entries for ListAuditLogs. A zero value in any
 // field means "no restriction" on that field.
 type AuditLogFilter struct {
-	SourceService    ServiceType
 	ActorId          string
 	From             time.Time // inclusive
 	To               time.Time // exclusive

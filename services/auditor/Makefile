@@ -8,7 +8,10 @@ GRPC_PORT    ?= :9091
 
 SCHEMA_FILE  := data/schema.sql
 ORM_DIR      := src/internal/repository/orm
-PROTO_SRC    := proto/audit_request.proto
+# The gRPC contract is shared with its callers in the repository's proto/
+# directory (ADR-0021).
+PROTO_DIR    := $(abspath $(CURDIR)/../../proto)
+PROTO_SRC    := audit/v1/audit.proto
 PROTO_OUT    := src
 
 COMPOSE := docker compose -f compose.yaml
@@ -96,14 +99,14 @@ tools-image:
 mockery: tools-image
 	$(TOOLS_RUN) mockery $(MOCKERY_ARGS)
 
-proto:
-	mkdir -p $(PROTO_OUT)
-	protoc \
-		--go_out=$(PROTO_OUT) \
-		--go_opt=module=auditor/src \
-		--go-grpc_out=$(PROTO_OUT) \
-		--go-grpc_opt=module=auditor/src \
-		$(PROTO_SRC)
+## Generate the gRPC code into src/gen (git-ignored) from the shared contract.
+## Runs in the tools image, so protoc need not be installed locally.
+proto: tools-image
+	docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) -v "$(PROTO_DIR)":/proto:ro $(TOOLS_IMAGE) \
+		protoc -I /proto -I /usr/include \
+			--go_out=$(PROTO_OUT) --go_opt=module=auditor/src \
+			--go-grpc_out=$(PROTO_OUT) --go-grpc_opt=module=auditor/src \
+			/proto/$(PROTO_SRC)
 
 
 # ============================================================
