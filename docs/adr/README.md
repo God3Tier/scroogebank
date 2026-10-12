@@ -55,7 +55,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0019](ADR-0019-edge-entry-chain.md) — Enter through CloudFront with WAF, then API Gateway HTTP API (JWT check, throttling), a VPC Link and a private internal ALB.
 - [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) — Hash chain covering `parent_hash`, a daily chain-verify task anchoring the head in S3 Object Lock, a findings table, and crypto-shredding for erasure.
 - [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md) — One RDS PostgreSQL instance per service with a Multi-AZ standby, AWS Backup with a cross-region copy, and no cache tier.
-- [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) — Import transactions from a self-hosted external SFTP server with a scheduled VPC-attached Lambda, a ready-file protocol and idempotent inserts.
+- [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) — Import transactions from a self-hosted external SFTP server with a scheduled VPC-attached Lambda written in Go (extending ADR-0017's exception), JSON files, a ready-file protocol and idempotent inserts.
 - [ADR-0025](ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) — Extends ADR-0005: mandatory MFA, managed login with PKCE (unconfirmed), client-credentials service tokens, and Cognito triggers for login auditing.
 - [ADR-0026](ADR-0026-one-stack-per-legal-entity.md) — Segregate data by deploying one full Terraform stack per legal entity; only Singapore is deployed.
 - [ADR-0027](ADR-0027-observability-baseline.md) — Structured PII-masked logs, CloudWatch metrics and dashboard, alarms to SNS with named owners, GuardDuty and CloudTrail.

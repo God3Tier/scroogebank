@@ -24,7 +24,7 @@ The numbers match the arrows on the diagram.
 | 10 | client-service encrypts the 11 personal client fields with a per-client data key. It fetches that key, wrapped by a symmetric KMS key, from the client-keys DynamoDB table (through the DynamoDB gateway endpoint) and unwraps it with KMS Decrypt. |
 | 11 | The alert worker (x-factor 1) runs every 4 hours. It recalculates account sector exposures from holdings in alerts-db through the instrument master (a deterministic lookup; unknown instruments are UNCLASSIFIED, never guessed), and picks instruments held by at least 2 clients and at least 5% of clients. |
 | 11a | Only public terms (company, ticker, sector, event keywords, approved domains, dates) go to Bedrock AgentCore web search in Tokyo, out through the NAT gateway. No client, account, holding, agent or count data leaves Singapore. |
-| 11b | Singapore validates and de-duplicates the public event report, matches holdings deterministically (ticker, sector, company), scores materiality, writes the summary and private client context with Bedrock in Singapore, and routes the alert to the assigned agent (`/api/alerts`). Agent decisions are audited. |
+| 11b | Singapore validates and de-duplicates the public event report, matches holdings deterministically (ticker, sector, company), scores materiality, writes one shared summary from the public report with Bedrock in Singapore (the model receives no client data), adds each client's private context deterministically, and routes the alert to the assigned agent (`/api/alerts`). Agent decisions are audited. |
 | 12 | dashboard-service (x-factor 2) has no database. It fans out to user, client, account and transaction aggregate endpoints with the caller's JWT over Service Connect (four arrows on the diagram), caches each caller's result for 3 minutes, and sends audit events straight to SQS (best-effort). |
 | 13 | The health analysis task (x-factor 3) runs daily at 08:00 SGT. It reads matched activity from transaction-service and agent assignments from client-service, through the internal ALB with a service token (a scheduled task cannot use Service Connect). Its Java rules engine computes signals, severity and evidence, and upserts follow-up tasks in health-db with an outbox audit event. |
 | 13a | Only banded facts (signal type, % changes, counts, windows) go to Bedrock in Singapore for wording. If Bedrock fails, a deterministic template is used, so task creation never depends on AI. |
@@ -150,12 +150,12 @@ The core banking system is **external** to the CRM. For the project it is simula
 
 | Step | Who | What happens |
 |---|---|---|
-| 1 | File generator → SFTP server | Uploads `inbox/txn_20261023_01.csv.tmp`, writes a `.sha256` checksum, then renames the upload to `.csv`. The file is now ready. |
+| 1 | File generator → SFTP server | Uploads `reports/report-<time>-<id>.json.tmp`, then renames it to `.json`. The file is now ready. |
 | 2 | EventBridge Scheduler → transaction-ingest | Invokes the Lambda (for example every 5 minutes, or on demand). |
 | 3 | transaction-ingest → SFTP server | SSH connect: key authentication, pinned host key, retry and circuit breaker. On connection or authentication failure it writes a `FILE_PROCESSED` event with status Failed to `audit_outbox`, relays it (step 8), and stops. |
-| 4 | transaction-ingest → SFTP server | Lists `inbox/`, ignoring `.tmp` files. |
-| 5 | For each ready file | Looks up `ingestion_file` (name, sha256) and skips it if already processed; reads the file and checksum; verifies the checksum, format and each row (no Client ID lookup; [Ingestion decisions](#ingestion-decisions)). |
-| 6 | transaction-ingest → transactions-db | `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` status; records rejected rows with reasons. In the same transaction, records the file in `ingestion_file` and writes its `FILE_PROCESSED` audit event to `audit_outbox`. |
+| 4 | transaction-ingest → SFTP server | Lists `reports/`, ignoring `.tmp` uploads. |
+| 5 | For each ready file | Reads the file; verifies that it is a JSON array of transactions, and each row (no Client ID lookup; [Ingestion decisions](#ingestion-decisions)). |
+| 6 | transaction-ingest → transactions-db | `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` status. In the same transaction, writes the file's `FILE_PROCESSED` audit event to `audit_outbox`, listing each rejected row's record number and reason. |
 | 7 | transaction-ingest → SFTP server | Moves the file to `processed/` or `rejected/`. |
 | 8 | transaction-ingest → SQS | At the end of the run, sends every unsent `audit_outbox` row (including any left from earlier runs) to the audit queue and marks it sent. Each `FILE_PROCESSED` event holds start, end, status, processed/accepted/rejected counts and reasons. If SQS cannot be reached, the rows wait for the next run. |
 
@@ -163,18 +163,18 @@ The core banking system is **external** to the CRM. For the project it is simula
 
 ### How a file is marked ready
 
-The file generator uploads each file with a `.tmp` suffix, writes a `.sha256` checksum file, and then renames the upload to its final name. A rename within one directory is atomic, so the worker never sees a half-written file under its final name.
+The file generator uploads each file with a `.tmp` suffix and then renames it to its final name. A rename within one directory is atomic, so the worker never sees a half-written file under its final name. There is no checksum file: SSH checks the data in transit, and a truncated or damaged file fails to parse and is rejected ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md)).
 
 ### How the spec's audit requirements are met
 
 | Spec audit requirement | How it is detected |
 |---|---|
-| File processing start/end, status (Successful / Partially Successful / Failed) | Recorded for every file in the `FILE_PROCESSED` audit event and the `ingestion_file` table. |
+| File processing start/end, status (Successful / Partially Successful / Failed) | Recorded for every file in its `FILE_PROCESSED` audit event. |
 | Records processed, accepted and rejected | Counted per file. |
-| Records that could not be parsed, with reason | Row number and reason stored in transactions-db; reasons summarised in the audit event, with no raw PII. |
-| Corrupted, invalid or unsupported file formats | Checksum mismatch, unknown extension, wrong header or wrong encoding. The whole file is rejected and moved to `rejected/`. |
+| Records that could not be parsed, with reason | Record number and reason, listed in the file's `FILE_PROCESSED` audit event, with no raw PII. |
+| Corrupted, invalid or unsupported file formats | An unknown extension, or a file that is not a JSON array of transactions, which is how a truncated or damaged file shows. The whole file is rejected and moved to `rejected/`. |
 | External service connection failures | SSH connection, authentication or host-key failures, and timeouts, after retries. |
-| System exceptions and processing errors | Caught per file; the file stays in `inbox/` for the next run and the error is audited. |
+| System exceptions and processing errors | Caught per file; the file stays in `reports/` for the next run and the error is audited. |
 
 ### Ingestion decisions
 
@@ -195,11 +195,11 @@ The file generator uploads each file with a `.tmp` suffix, writes a `.sha256` ch
 - It is **attached to the VPC** (network interfaces in the private app subnets of both AZs), so it can reach transactions-db and reach the SFTP server outbound through the NAT gateway.
 - **Reserved concurrency is 1**, so two runs never process the same files at once. The idempotent import still protects against a file being seen twice.
 - **Limit:** one invocation runs for at most 15 minutes, so each run processes a bounded number of files. If files grow beyond that, the same code can move to an ECS scheduled task.
-- **Runtime:** Java on a Lambda managed runtime, or a container image if the Java 25 baseline is not yet a managed runtime. Recorded in the ingestion ADR.
+- **Runtime:** Go, as built on `dev`, deployed as a compiled binary on Lambda's OS-only runtime (`provided.al2023`). This extends ADR-0017's Go exception ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7).
 
 **No Client ID check at import (provisional; [open item 9](open-items.md#9-client-id-validation-at-import)):**
 
-- Ingest validates the file and each row on its own: checksum, format, required fields, type (Deposit/Withdrawal), amount, date and status. It does **not** check each row's Client ID against client-service.
+- Ingest validates the file and each row on its own: format, required fields, type (Deposit/Withdrawal), amount, date and status. It does **not** check each row's Client ID against client-service.
 - The spec does not require that check. It would also make imports depend on client-service being available, and a Lambda function cannot use ECS Service Connect (its Envoy sidecar runs only inside ECS tasks), so the call would need another route.
 - Client ownership must instead be enforced when transactions are **read**: an agent may only see transactions of clients they own (spec: agents "have access only to their own clients"). user-service enforces it: before reading an account's transactions, it checks with account-service that the caller is an admin or the account's owner ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)).
 - Trade-off: a row whose Client ID matches no CRM client is stored rather than rejected. No agent owns that client, so no agent can see it. An optional reconciliation job can list such rows for an admin.
@@ -207,4 +207,4 @@ The file generator uploads each file with a `.tmp` suffix, writes a `.sha256` ch
 
 **Security (NFR 8):** key-based authentication only; the worker's private key in Secrets Manager; the server's host key pinned in SSM Parameter Store (the worker refuses to connect on a mismatch, which protects against man-in-the-middle attacks); a chrooted, SFTP-only account with no shell; the server accepts port 22 only from the CRM NAT gateway's Elastic IP, and only the ingestion worker's security group may open outbound port 22.
 
-**Idempotency (NFR 4, 9):** each file is recorded by name and SHA-256 in `ingestion_file`, so it is never processed twice. Transactions are inserted with `ON CONFLICT (transaction_id)`, so a replayed or overlapping file never creates duplicates, and a later file can move a transaction from Pending to Completed or Failed.
+**Idempotency (NFR 4, 9):** a file leaves `reports/` only after its import commits, so a finished file is not read again. If moving it fails, the next run reads it again: transactions are inserted with `ON CONFLICT (transaction_id)`, so a replayed or overlapping file never creates duplicates, and a later file can move a transaction from Pending to Completed or Failed. A file read twice gets two `FILE_PROCESSED` events, which records what happened.
