@@ -23,6 +23,7 @@ a decision it governs.
 - [ADR-0038](ADR-0038-dashboard-metric-definitions.md) — X-factor 2: what each dashboard figure means; only figures the data supports exactly, no sums across currencies, deleted records never counted, no composite agent score.
 - [ADR-0030](ADR-0030-client-data-envelope-encryption.md) — client-service encrypts the 11 personal client fields with per-client data keys kept in DynamoDB and wrapped by KMS, so deleting a key erases the client; email and phone stay unique through blind indexes keyed by one shared KMS HMAC key over normalised values.
 - [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) — The auditor is internal-only and checks every caller's token; one changes-only activity feed in user-service (`GET /api/activities`) shows admins all agents' activities and agents their own, read over gRPC through ECS Service Connect; tamper findings are left to ADR-0022.
+- [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) — A hash chain over every field of each audit row and its parent's hash; an auditor database role that can only insert and read; a daily run-once chain-verify task that records each problem once in a findings table and anchors the head in S3 Object Lock (the anchor comes later); crypto-shredding for erasure.
 
 ## Superseded decisions
 
@@ -53,7 +54,6 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0016](ADR-0016-holdings-derived-search-universe.md) - Derive bounded public search terms from sufficiently common client holdings inside Singapore without exporting portfolio facts.
 - [ADR-0018](ADR-0018-ecs-fargate-compute.md) — Run all services and scheduled tasks on ECS Fargate across two AZs with 2–6 tasks per service, rejecting EKS on cost and effort.
 - [ADR-0019](ADR-0019-edge-entry-chain.md) — Enter through CloudFront with WAF, then API Gateway HTTP API (JWT check, throttling), a VPC Link and a private internal ALB.
-- [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) — Hash chain covering `parent_hash`, a daily chain-verify task anchoring the head in S3 Object Lock, a findings table, and crypto-shredding for erasure.
 - [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md) — One RDS PostgreSQL instance per service with a Multi-AZ standby, AWS Backup with a cross-region copy, and no cache tier.
 - [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) — Import transactions from a self-hosted external SFTP server with a scheduled VPC-attached Lambda written in Go (extending ADR-0017's exception), JSON files, a ready-file protocol and idempotent inserts.
 - [ADR-0025](ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) — Extends ADR-0005: mandatory MFA, managed login with PKCE (unconfirmed), client-credentials service tokens, and Cognito triggers for login auditing.

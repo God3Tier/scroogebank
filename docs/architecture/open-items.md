@@ -70,6 +70,17 @@ Confirm which fields the UI must search or sort by; each needs a blind index or 
 
 The auditor code on `dev` differs from [Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr): (a) chain-verify runs as a long-lived process with internal timers (every 24 hours and every hour), not a task started by EventBridge; (b) on a mismatch it deletes the row from `audit_log`, re-links the chain and moves the row to `corrupted_audit_log`, which needs DELETE and UPDATE on `audit_log` ([Tamper resistance](../security/security-model.md#tamper-resistance) allows only INSERT and SELECT) and leaves no break in the chain to show where tampering happened; (c) it also writes an "Error logging" event into the chain itself; (d) no chain head is anchored in S3 Object Lock yet; (e) the findings are served over REST on the auditor (`GET`, `POST` and `DELETE /api/corrupted-logs`), including a delete, rather than read-only through user-service. The auditor owner must bring the code and the target architecture into line, and settle the findings table's columns. [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decision 4 leaves to this item and [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) which operations admins have on findings (read only, or also create and delete) and how they are served; it fixes only that admins reach them through user-service. Since the activity feed (branch `task/base-features/activity-feed`), the auditor refuses `/api/corrupted-logs` without an admin's access token, so the endpoints can no longer be called around user-service; whether create and delete should exist is still open.
 
+**Partly resolved (2026-10-12)** by [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), amended and accepted:
+- The hash covers every field of a row and its parent's hash.
+- chain-verify is a program that checks the chain once per daily start and never writes to `audit_log`. It records each problem once in `corrupted_audit_log`, with the row's id and a reason.
+- The auditor's database role has only `INSERT` and `SELECT` on `audit_log`.
+
+This settles (a), (b), (c) and the findings table's columns. The implementation is on `task/base-features/audit-hash-chain`.
+
+Still open:
+- (d) the S3 anchor, built in a later change;
+- from (e), which operations admins have on findings (read only, or also create and delete). Until that is decided, `dev`'s `GET`, `POST` and `DELETE` stay. Owner: the auditor's owner.
+
 ## 14. Tokyo web search availability
 
 Confirm in the live AWS spike that Bedrock AgentCore web search is available in Tokyo (and whether it is now available in Singapore).
