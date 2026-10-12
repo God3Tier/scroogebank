@@ -35,6 +35,9 @@ AWS_REGION       ?= us-east-1
 AWS_ENDPOINT_URL ?= http://localhost:4566
 AUDIT_QUEUE_URL  ?= http://localhost:4566/000000000000/audit-insert
 AUDIT_DLQ_URL    ?= http://localhost:4566/000000000000/audit-insert-dlq
+# chain-verify's anchor bucket, created in LocalStack by
+# localstack/init-anchor-bucket.sh (ADR-0022).
+CHAIN_ANCHOR_BUCKET ?= chain-anchors
 LOCALSTACK_KEY   := test
 
 .PHONY: \
@@ -62,12 +65,12 @@ run: proto
 	fi
 	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(LOCALSTACK_KEY) AWS_SECRET_ACCESS_KEY=$(LOCALSTACK_KEY) AUDIT_QUEUE_URL=$(AUDIT_QUEUE_URL) AUDIT_DLQ_URL=$(AUDIT_DLQ_URL) go run ./src/serverd
 
-## Check the local audit chain once, as the daily chain-verify task does, and
-## record any problem in corrupted_audit_log (ADR-0022). Needs the database
-## from make run and the ORM (make sqlboiler). Exits 2 when it records a new
-## finding.
+## Check the local audit chain once, as the daily chain-verify task does:
+## record any problem in corrupted_audit_log, and anchor the head in
+## LocalStack's S3 (ADR-0022). Needs the database and LocalStack from make run,
+## and the ORM (make sqlboiler). Exits 2 when it records a new finding.
 chain-verify:
-	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable go run ./src/chainverify
+	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(LOCALSTACK_KEY) AWS_SECRET_ACCESS_KEY=$(LOCALSTACK_KEY) CHAIN_ANCHOR_BUCKET=$(CHAIN_ANCHOR_BUCKET) go run ./src/chainverify
 
 db-up:
 	$(COMPOSE) up -d postgres

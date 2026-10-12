@@ -41,8 +41,11 @@ func TestVerifyChain(t *testing.T) {
 	ctx := context.Background()
 
 	tests := map[string]struct {
-		entries      int
-		tamper       func([]models.AuditLog)
+		entries int
+		// anchored is the sequence number of the untouched entry the anchor
+		// names, or 0 for no anchor.
+		anchored     int64
+		tamper       func([]models.AuditLog) []models.AuditLog
 		wantPages    []int64 // the afterSequenceNo of each page read
 		wantFindings []models.FindingReason
 		wantAt       []int64
@@ -60,17 +63,47 @@ func TestVerifyChain(t *testing.T) {
 			wantPages: []int64{0},
 		},
 		"compares the first entry of a page with the last entry of the page before": {
-			entries:      5,
-			tamper:       func(entries []models.AuditLog) { entries[2].ParentHash = "forged" },
+			entries: 5,
+			tamper: func(entries []models.AuditLog) []models.AuditLog {
+				entries[2].ParentHash = "forged"
+				return entries
+			},
 			wantPages:    []int64{0, 2, 4},
 			wantFindings: []models.FindingReason{models.HashMismatch, models.ParentMismatch},
 			wantAt:       []int64{3, 3},
 		},
 		"checks the newest entry": {
-			entries:      5,
-			tamper:       func(entries []models.AuditLog) { entries[4].Action = "LOGIN" },
+			entries: 5,
+			tamper: func(entries []models.AuditLog) []models.AuditLog {
+				entries[4].Action = "LOGIN"
+				return entries
+			},
 			wantPages:    []int64{0, 2, 4},
 			wantFindings: []models.FindingReason{models.HashMismatch},
+			wantAt:       []int64{5},
+		},
+		"checks the anchored entry on a later page": {
+			entries:  5,
+			anchored: 4,
+			// Rewritten from entry 4 on, with every hash recomputed.
+			tamper: func(entries []models.AuditLog) []models.AuditLog {
+				entries[3].Action = "LOGIN"
+				for i := 3; i < len(entries); i++ {
+					entries[i].ParentHash = entries[i-1].Hash
+					entries[i].Hash = chain.Hash(entries[i])
+				}
+				return entries
+			},
+			wantPages:    []int64{0, 2, 4},
+			wantFindings: []models.FindingReason{models.AnchorMismatch},
+			wantAt:       []int64{4},
+		},
+		"reports an anchored entry that is gone after the last page": {
+			entries:      5,
+			anchored:     5,
+			tamper:       func(entries []models.AuditLog) []models.AuditLog { return entries[:3] },
+			wantPages:    []int64{0, 2},
+			wantFindings: []models.FindingReason{models.AnchorMismatch},
 			wantAt:       []int64{5},
 		},
 	}
@@ -78,8 +111,13 @@ func TestVerifyChain(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			entries := linkedEntries(test.entries)
+			var anchor *models.ChainAnchor
+			if test.anchored > 0 {
+				named := entries[test.anchored-1]
+				anchor = &models.ChainAnchor{SequenceNo: named.SequenceNo, ID: named.Id, Hash: named.Hash}
+			}
 			if test.tamper != nil {
-				test.tamper(entries)
+				entries = test.tamper(entries)
 			}
 			repo := audit.NewMockRepository(t)
 			for _, after := range test.wantPages {
@@ -87,13 +125,19 @@ func TestVerifyChain(t *testing.T) {
 				repo.EXPECT().GetChainPage(ctx, after, 2).Return(entries[after:end], nil).Once()
 			}
 
-			checked, findings, err := impl{repo: repo, pageSize: 2}.VerifyChain(ctx)
+			report, err := impl{repo: repo, pageSize: 2}.VerifyChain(ctx, anchor)
 
 			require.NoError(t, err)
-			assert.Equal(t, int64(test.entries), checked)
+			assert.Equal(t, int64(len(entries)), report.Checked)
+			if len(entries) == 0 {
+				assert.Nil(t, report.Head)
+			} else {
+				require.NotNil(t, report.Head)
+				assert.Equal(t, entries[len(entries)-1], *report.Head)
+			}
 			var reasons []models.FindingReason
 			var at []int64
-			for _, finding := range findings {
+			for _, finding := range report.Findings {
 				reasons = append(reasons, finding.Reason)
 				at = append(at, finding.Entry.SequenceNo)
 			}
@@ -111,9 +155,8 @@ func TestVerifyChainReturnsRepositoryErrors(t *testing.T) {
 	repo.EXPECT().GetChainPage(ctx, int64(0), 2).Return(entries, nil).Once()
 	repo.EXPECT().GetChainPage(ctx, int64(2), 2).Return(nil, databaseErr).Once()
 
-	checked, findings, err := impl{repo: repo, pageSize: 2}.VerifyChain(ctx)
+	report, err := impl{repo: repo, pageSize: 2}.VerifyChain(ctx, nil)
 
 	require.ErrorIs(t, err, databaseErr)
-	assert.Zero(t, checked)
-	assert.Nil(t, findings)
+	assert.Equal(t, models.ChainReport{}, report)
 }

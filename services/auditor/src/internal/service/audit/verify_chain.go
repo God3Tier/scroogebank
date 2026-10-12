@@ -7,25 +7,32 @@ import (
 )
 
 // VerifyChain reads the chain a page at a time and checks each entry against
-// the entries before it (chain.Checker). What to do about the problems is up
-// to the caller.
-func (i impl) VerifyChain(ctx context.Context) (int64, []models.ChainFinding, error) {
-	var checker chain.Checker
-	var findings []models.ChainFinding
-	var checked, afterSequenceNo int64
+// the entries before it and against the anchor (chain.Checker). What to do
+// about the problems is up to the caller.
+func (i impl) VerifyChain(ctx context.Context, anchor *models.ChainAnchor) (models.ChainReport, error) {
+	checker := chain.Checker{Anchor: anchor}
+	var report models.ChainReport
+	var afterSequenceNo int64
 
 	for {
 		page, err := i.repo.GetChainPage(ctx, afterSequenceNo, i.pageSize)
 		if err != nil {
-			return 0, nil, err
+			return models.ChainReport{}, err
 		}
 		for _, entry := range page {
-			findings = append(findings, checker.Check(entry)...)
+			report.Findings = append(report.Findings, checker.Check(entry)...)
 			afterSequenceNo = entry.SequenceNo
 		}
-		checked += int64(len(page))
+		report.Checked += int64(len(page))
+		if len(page) > 0 {
+			head := page[len(page)-1]
+			report.Head = &head
+		}
 		if len(page) < i.pageSize {
-			return checked, findings, nil
+			break
 		}
 	}
+
+	report.Findings = append(report.Findings, checker.Finish()...)
+	return report, nil
 }
