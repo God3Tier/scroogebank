@@ -14,6 +14,10 @@ const (
 	// SequenceGap: the row's sequence number does not follow the previous
 	// row's, so rows before it are missing.
 	SequenceGap FindingReason = "SEQUENCE_GAP"
+	// AnchorMismatch: the row the latest S3 anchor names is missing or has
+	// another id or hash, so the chain was rewritten with every hash
+	// recomputed, or cut back below the anchor.
+	AnchorMismatch FindingReason = "ANCHOR_MISMATCH"
 )
 
 // ChainFinding is one problem chain-verify found with one audit_log row.

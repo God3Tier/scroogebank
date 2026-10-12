@@ -8,10 +8,11 @@ import (
 
 // Service is the placeholder for auditor business logic.
 type Service interface {
-	// VerifyChain checks every entry of the audit chain, oldest first, and
-	// returns how many entries it checked and the problems it found
-	// (ADR-0022 decision 3). It only reads.
-	VerifyChain(ctx context.Context) (int64, []models.ChainFinding, error)
+	// VerifyChain checks every entry of the audit chain, oldest first, and the
+	// entry anchor names (nil for none). It reports how many entries it
+	// checked, the problems it found and the newest entry (ADR-0022
+	// decision 3). It only reads.
+	VerifyChain(ctx context.Context, anchor *models.ChainAnchor) (models.ChainReport, error)
 	// ListActivities returns the activity feed's entries matching filter, newest first.
 	ListActivities(ctx context.Context, filter models.ActivityFilter) ([]models.AuditLog, error)
 }

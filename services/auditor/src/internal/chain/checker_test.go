@@ -32,6 +32,18 @@ func validChain(n int) []models.AuditLog {
 	return entries
 }
 
+// rehash relinks entries from index start onwards and gives each a correct
+// hash, as someone with database access rewriting the chain would.
+func rehash(entries []models.AuditLog, start int) {
+	for i := start; i < len(entries); i++ {
+		entries[i].ParentHash = ""
+		if i > 0 {
+			entries[i].ParentHash = entries[i-1].Hash
+		}
+		entries[i].Hash = Hash(entries[i])
+	}
+}
+
 type problem struct {
 	sequence int64
 	reason   models.FindingReason
@@ -39,8 +51,11 @@ type problem struct {
 
 func TestChecker(t *testing.T) {
 	tests := map[string]struct {
-		tamper func([]models.AuditLog) []models.AuditLog
-		want   []problem
+		// anchored is the sequence number of the untouched entry the latest
+		// anchor names, or 0 for no anchor.
+		anchored int64
+		tamper   func([]models.AuditLog) []models.AuditLog
+		want     []problem
 	}{
 		"finds nothing in an untouched chain": {
 			tamper: func(entries []models.AuditLog) []models.AuditLog { return entries },
@@ -77,16 +92,53 @@ func TestChecker(t *testing.T) {
 			},
 			want: []problem{{5, models.HashMismatch}},
 		},
+		"accepts the entry the anchor names": {
+			anchored: 3,
+			tamper:   func(entries []models.AuditLog) []models.AuditLog { return entries },
+		},
+		"finds a whole chain rewritten with every hash recomputed, at the anchor": {
+			anchored: 4,
+			tamper: func(entries []models.AuditLog) []models.AuditLog {
+				entries[1].Action = "DELETE"
+				rehash(entries, 1)
+				return entries
+			},
+			want: []problem{{4, models.AnchorMismatch}},
+		},
+		"finds a chain cut back below the anchor": {
+			anchored: 5,
+			tamper:   func(entries []models.AuditLog) []models.AuditLog { return entries[:3] },
+			want:     []problem{{5, models.AnchorMismatch}},
+		},
+		"misses a rewrite after the anchor": {
+			// Entries written since the last anchor are protected only by the
+			// next one (ADR-0022, Consequences).
+			anchored: 3,
+			tamper: func(entries []models.AuditLog) []models.AuditLog {
+				entries[3].Action = "DELETE"
+				rehash(entries, 3)
+				return entries
+			},
+		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			entries := validChain(5)
 			var checker Checker
+			if test.anchored > 0 {
+				named := entries[test.anchored-1]
+				checker.Anchor = &models.ChainAnchor{SequenceNo: named.SequenceNo, ID: named.Id, Hash: named.Hash}
+			}
+
 			var got []problem
-			for _, entry := range test.tamper(validChain(5)) {
+			for _, entry := range test.tamper(entries) {
 				for _, finding := range checker.Check(entry) {
 					got = append(got, problem{finding.Entry.SequenceNo, finding.Reason})
 				}
+			}
+			for _, finding := range checker.Finish() {
+				got = append(got, problem{finding.Entry.SequenceNo, finding.Reason})
 			}
 			assert.Equal(t, test.want, got)
 		})

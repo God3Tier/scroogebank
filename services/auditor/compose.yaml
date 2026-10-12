@@ -18,19 +18,21 @@ services:
       timeout: 5s
       retries: 10
 
-  # LocalStack stands in for AWS SQS locally. See ADR-0004 for why the
+  # LocalStack stands in for AWS SQS and S3 locally. See ADR-0004 for why the
   # auditor moved from Kafka to SQS. init-queues.sh creates the
-  # audit-insert / audit-insert-dlq queues on startup.
+  # audit-insert / audit-insert-dlq queues on startup, and
+  # init-anchor-bucket.sh chain-verify's anchor bucket (ADR-0022).
   localstack:
     image: localstack/localstack:3
     container_name: localstack
     ports:
-      - "4566:4566"   # edge port for every LocalStack AWS API, including SQS
+      - "4566:4566"   # edge port for every LocalStack AWS API, including SQS and S3
     environment:
-      SERVICES: sqs
+      SERVICES: sqs,s3
       DEFAULT_REGION: us-east-1
     volumes:
       - ./localstack/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
+      - ./localstack/init-anchor-bucket.sh:/etc/localstack/init/ready.d/init-anchor-bucket.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 2s

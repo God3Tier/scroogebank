@@ -166,13 +166,14 @@ Each item is written as its length in bytes, a colon, its bytes and a comma (`sr
 
 The hash covers the entry exactly as stored: the payload is `json`, not `jsonb` (which rewrites it), and `timestamp` is `TIMESTAMPTZ` in UTC at microsecond precision. Entries are never updated or deleted. Writers take turns through an advisory lock, so sequence numbers start at 1 and have no gaps.
 
-**chain-verify** (`src/chainverify`) reads the whole chain once and exits. For each entry it checks the hash, the link to the previous entry and the sequence number. It records each problem in `corrupted_audit_log`, once per entry and reason:
+**chain-verify** (`src/chainverify`) reads the whole chain once and exits. For each entry it checks the hash, the link to the previous entry and the sequence number. It also checks the entry the latest anchor names (see **Anchors** below). It records each problem in `corrupted_audit_log`, once per entry and reason:
 
 | Reason | Meaning |
 |---|---|
 | `HASH_MISMATCH` | The entry was changed after it was written. |
 | `PARENT_MISMATCH` | An entry before it was deleted, added, or changed and given a new hash. |
 | `SEQUENCE_GAP` | Entries before it are missing. |
+| `ANCHOR_MISMATCH` | The entry the latest anchor names is gone or has another id or hash: the chain was rewritten with every hash recomputed, or cut back below the anchor. For an entry that is gone, the finding holds the anchor's sequence number, id and hash. |
 
 chain-verify never changes the chain, so a problem stays and is found again on every run. Only a new problem is logged, as `CHAIN_TAMPER_DETECTED reason=... sequence_no=... audit_log_id=...`, for the alarm.
 
@@ -182,15 +183,27 @@ chain-verify never changes the chain, so a problem stays and is found again on e
 | 1 | The check could not finish |
 | 2 | A new finding was recorded |
 
-To check the local chain, start the database with `make run` and generate the ORM (`make sqlboiler`) first:
+To check the local chain, start the database and LocalStack with `make run`, and generate the ORM (`make sqlboiler`) first:
 
 ```sh
 make chain-verify
 ```
 
-The S3 Object Lock anchor (ADR-0022 decision 3) is not built yet. Until it is, two kinds of tampering go undetected:
-- rewriting the whole chain with every hash recomputed;
-- removing the newest entries.
+| Setting | Purpose |
+|---|---|
+| `DB_NAME`, `HOST`, `USER`, `PASSWORD`, `SSLMODE` | audit-db, as for the server |
+| `CHAIN_ANCHOR_BUCKET` | Required. The S3 Object Lock bucket for the anchors; chain-verify does not run without it |
+| `AWS_REGION` | AWS region for the S3 client |
+| `AWS_ENDPOINT_URL` | Set only for LocalStack; requests then name the bucket in the path |
+
+**Anchors.** Someone with database access could rewrite the whole chain with every hash recomputed, which the checks above cannot see. So each run ends by writing the chain head (sequence number, id and hash) to the S3 Object Lock bucket (`src/internal/repository/anchor`):
+- **One new object per run,** named `chain-head/<UTC time>.json`, so keys sort in the order they were written. The next run reads back the newest.
+- **Locked on write:** each object is locked in governance mode for 7 days. The lock is set on each write, not left to the bucket's default, so S3 refuses the write, and the run fails, on a bucket without Object Lock.
+- **Written even when problems were found:** the chain is never repaired, so holding back would leave every later entry unanchored. An empty chain writes nothing.
+
+Entries written after the last anchor are protected only by the next one, so up to a day of the newest entries can be removed undetected.
+
+LocalStack (`localstack/init-anchor-bucket.sh`) creates the bucket `chain-anchors` with Object Lock enabled. If your LocalStack container was started before the bucket existed, restart it: `docker compose restart localstack`. Unlike S3, LocalStack accepts a lock on a bucket without Object Lock, so a misconfigured bucket fails only in AWS.
 
 **Database roles.** `data/schema.sql` creates two roles that cannot log in themselves (ADR-0022 decision 2):
 
@@ -212,7 +225,12 @@ Locally, `make run` and `make chain-verify` connect as `postgres`. The tests log
   - it has its own task role and database secret;
   - EventBridge Scheduler starts it daily.
 - **Alarms:** an SNS alarm from a CloudWatch metric filter on `CHAIN_TAMPER_DETECTED` in chain-verify's logs, and one when the task exits with status 1.
-- **Later, with the anchor:** the S3 Object Lock bucket, which only chain-verify's task role can write to.
+- **The anchor bucket:**
+  - created with Object Lock enabled, which also turns on versioning;
+  - chain-verify's task role gets `s3:PutObject`, `s3:PutObjectRetention`, `s3:GetObject` and `s3:ListBucket` on it. No other principal may write to it;
+  - `s3:BypassGovernanceRetention` only for the teardown role;
+  - CloudTrail data events on the bucket;
+  - an S3 gateway endpoint for the private subnets.
 
 ## Run tests
 
@@ -224,7 +242,7 @@ make test
 
 The test database is removed automatically when the command finishes, including after a test failure.
 
-To run the Go tests directly, generate the code first (`make proto`, `make sqlboiler`, `make mockery`). The repository and chain-verify tests also need PostgreSQL, reached through `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`. The user must be able to create roles and databases: the tests create logins holding each role, and chain-verify's tests use a database of their own, `chain_verify_test`.
+To run the Go tests directly, generate the code first (`make proto`, `make sqlboiler`, `make mockery`). The repository and chain-verify tests also need PostgreSQL, reached through `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`. The user must be able to create roles and databases: the tests create logins holding each role, and chain-verify's tests use a database of their own, `chain_verify_test`. The anchor tests run against S3 only when `CHAIN_ANCHOR_TEST_ENDPOINT` names one; `make test` points it at a LocalStack container.
 
 ```sh
 cd services/auditor
@@ -303,7 +321,7 @@ docker run --rm -p 8080:8080 auditor
 The image also holds chain-verify. To run that instead, pass the database settings:
 
 ```sh
-docker run --rm --entrypoint /chain-verify -e HOST=... -e USER=... -e PASSWORD=... -e DB_NAME=... -e SSLMODE=require auditor
+docker run --rm --entrypoint /chain-verify -e HOST=... -e USER=... -e PASSWORD=... -e DB_NAME=... -e SSLMODE=require   -e AWS_REGION=... -e CHAIN_ANCHOR_BUCKET=... auditor
 ```
 
 **Release order with user-service.** user-service forwards the caller's access token, which this service now requires (ADR-0021), so release user-service first when both change together. The opposite holds for new audit event types: release the Auditor first, or user-service's new events go to the dead-letter queue.

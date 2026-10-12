@@ -5,6 +5,7 @@ package main
 // database. Each side logs in with only its role from data/schema.sql: the
 // auditor appends, chain-verify checks, and the test itself plays someone
 // with full database access tampering with the chain (ADR-0022 Validation).
+// The anchors are kept in memory; the anchor package tests the S3 bucket.
 
 import (
 	"context"
@@ -32,6 +33,24 @@ const chainDatabase = "chain_verify_test"
 type found struct {
 	sequence int64
 	reason   models.FindingReason
+}
+
+// memoryAnchors stands in for the S3 Object Lock bucket.
+type memoryAnchors struct {
+	written []models.ChainAnchor
+}
+
+func (m *memoryAnchors) Latest(context.Context) (*models.ChainAnchor, error) {
+	if len(m.written) == 0 {
+		return nil, nil
+	}
+	latest := m.written[len(m.written)-1]
+	return &latest, nil
+}
+
+func (m *memoryAnchors) Write(_ context.Context, anchor models.ChainAnchor) error {
+	m.written = append(m.written, anchor)
+	return nil
 }
 
 func TestChainVerifyFindsTampering(t *testing.T) {
@@ -71,6 +90,30 @@ func TestChainVerifyFindsTampering(t *testing.T) {
 			},
 			want: []found{{3, models.ParentMismatch}, {3, models.SequenceGap}},
 		},
+		"finds a whole chain rewritten with every hash recomputed": {
+			tamper: func(t *testing.T) {
+				entries, err := audit.New(admin).GetChainPage(ctx, 0, 10)
+				require.NoError(t, err)
+				parent := ""
+				for _, entry := range entries {
+					entry.Action, entry.ParentHash = "DELETE", parent
+					entry.Hash = chain.Hash(entry)
+					_, err := admin.Exec(`UPDATE audit_log SET action = $1, parent_hash = $2, hash = $3 WHERE id = $4`,
+						entry.Action, entry.ParentHash, entry.Hash, entry.Id)
+					require.NoError(t, err)
+					parent = entry.Hash
+				}
+			},
+			// Only the anchor catches it: the rewritten chain is consistent.
+			want: []found{{4, models.AnchorMismatch}},
+		},
+		"finds a chain cut back below the anchor": {
+			tamper: func(t *testing.T) {
+				_, err := admin.Exec(`DELETE FROM audit_log WHERE sequence_no >= 3`)
+				require.NoError(t, err)
+			},
+			want: []found{{4, models.AnchorMismatch}},
+		},
 	}
 
 	for name, test := range tests {
@@ -84,18 +127,22 @@ func TestChainVerifyFindsTampering(t *testing.T) {
 					SourceService: models.CRMServiceType, ActorId: "agent-1", Payload: `{"client_id":"c-1"}`,
 				}))
 			}
+			anchors := &memoryAnchors{}
+			require.Equal(t, exitOK, runVerify(ctx, verifier, anchors), "run before tampering")
+			require.Len(t, anchors.written, 1)
+			assert.Equal(t, int64(4), anchors.written[0].SequenceNo)
 			test.tamper(t)
 
-			wantFirstRun := exitOK
+			wantRun := exitOK
 			if len(test.want) > 0 {
-				wantFirstRun = exitNewFindings
+				wantRun = exitNewFindings
 			}
-			assert.Equal(t, wantFirstRun, runVerify(ctx, verifier), "first run")
+			assert.Equal(t, wantRun, runVerify(ctx, verifier, anchors), "run after tampering")
 			assert.Equal(t, test.want, recordedFindings(t, admin))
 
 			// The chain is still broken on the next run, but nothing new is
 			// recorded or alarmed on.
-			assert.Equal(t, exitOK, runVerify(ctx, verifier), "second run")
+			assert.Equal(t, exitOK, runVerify(ctx, verifier, anchors), "next run")
 			assert.Equal(t, test.want, recordedFindings(t, admin))
 		})
 	}
@@ -118,17 +165,18 @@ func TestChainVerifyRoleCannotChangeTheChain(t *testing.T) {
 	}
 }
 
-func runVerify(ctx context.Context, verifier *sql.DB) int {
-	return verify(ctx, auditSvc.New(audit.New(verifier)), corruptedLogSvc.New(corrupted_log.New(verifier)))
+func runVerify(ctx context.Context, verifier *sql.DB, anchors *memoryAnchors) int {
+	return verify(ctx, auditSvc.New(audit.New(verifier)), corruptedLogSvc.New(corrupted_log.New(verifier)), anchors)
 }
 
+// recordedFindings reads each finding's sequence number from the row it
+// recorded, which may no longer be in the chain.
 func recordedFindings(t *testing.T, admin *sql.DB) []found {
 	t.Helper()
 	rows, err := admin.Query(`
-		SELECT entry.sequence_no, finding.reason
-		FROM corrupted_audit_log AS finding
-		JOIN audit_log AS entry ON entry.id = finding.audit_log_id
-		ORDER BY entry.sequence_no, finding.reason`)
+		SELECT (log_type->>'SequenceNo')::bigint AS sequence_no, reason
+		FROM corrupted_audit_log
+		ORDER BY sequence_no, reason`)
 	require.NoError(t, err)
 	defer rows.Close()
 
