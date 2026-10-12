@@ -85,14 +85,13 @@ Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over 
 
 ### Corrupted audit log endpoints
 
-The auditor exposes these HTTP endpoints, for admins only, for reviewing and removing corrupted
-audit entries. Which of them should exist is still open ([ADR-0022](../../docs/adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [open item 13](../../docs/architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)):
+`corrupted_audit_log` holds the tamper findings chain-verify records ([Audit chain and chain-verify](#audit-chain-and-chain-verify)). The auditor exposes these HTTP endpoints, for admins only, for reviewing them. Which of them should exist is still open ([ADR-0022](../../docs/adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 4, [open item 13](../../docs/architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)):
 
 | Method | Path | Behavior |
 |---|---|---|
-| `GET` | `/api/corrupted-logs` | Return all decodable corrupted audit logs as JSON. |
-| `POST` | `/api/corrupted-logs` | Store a corrupted log. The request body contains `id` (UUID) and `payload` (the original audit log). The server sets `date_of_detect`. |
-| `DELETE` | `/api/corrupted-logs/{id}` | Delete the entry with the given UUID. |
+| `GET` | `/api/corrupted-logs` | Return all decodable findings as JSON. A finding chain-verify recorded also carries `audit_log_id` (the affected entry) and `reason`. |
+| `POST` | `/api/corrupted-logs` | Store a finding. The request body contains `id` (UUID) and `payload` (the original audit log); it cannot set `audit_log_id` or `reason`. The server sets `date_of_detect`. |
+| `DELETE` | `/api/corrupted-logs/{id}` | Delete the finding with the given UUID. If the problem is still in the chain, chain-verify records it again on its next run. |
 
 Malformed JSON or UUIDs return `400`, a missing entry returns `404`, and
 unexpected storage failures return `500`.
@@ -153,9 +152,71 @@ docker compose -f compose.yaml down
 | `COGNITO_API_AUDIENCE` | Optional. The expected `aud`, if access tokens carry one |
 | `AUDITOR_TLS_CERT_FILE` / `AUDITOR_TLS_KEY_FILE` | Certificate and key for TLS on both ports. Set both in deployed environments; unset only locally |
 
+## Audit chain and chain-verify
+
+The auditor appends each event to a hash chain in `audit_log`, and the daily chain-verify task checks it ([ADR-0022](../../docs/adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md)).
+
+**The hash.** Each entry's `hash` is SHA-256, in lowercase hex, over the version tag `audit-chain-v1` and then these fields, in order:
+- `id`, `sequence_no` and `event_id`;
+- `event_type`, `action` and `source_service`;
+- `actor_id`, `timestamp` and `payload`;
+- `parent_hash`, the previous entry's hash (empty for the first entry).
+
+Each item is written as its length in bytes, a colon, its bytes and a comma (`src/internal/chain`).
+
+The hash covers the entry exactly as stored: the payload is `json`, not `jsonb` (which rewrites it), and `timestamp` is `TIMESTAMPTZ` in UTC at microsecond precision. Entries are never updated or deleted. Writers take turns through an advisory lock, so sequence numbers start at 1 and have no gaps.
+
+**chain-verify** (`src/chainverify`) reads the whole chain once and exits. For each entry it checks the hash, the link to the previous entry and the sequence number. It records each problem in `corrupted_audit_log`, once per entry and reason:
+
+| Reason | Meaning |
+|---|---|
+| `HASH_MISMATCH` | The entry was changed after it was written. |
+| `PARENT_MISMATCH` | An entry before it was deleted, added, or changed and given a new hash. |
+| `SEQUENCE_GAP` | Entries before it are missing. |
+
+chain-verify never changes the chain, so a problem stays and is found again on every run. Only a new problem is logged, as `CHAIN_TAMPER_DETECTED reason=... sequence_no=... audit_log_id=...`, for the alarm.
+
+| Exit status | Meaning |
+|---|---|
+| 0 | No new finding was recorded |
+| 1 | The check could not finish |
+| 2 | A new finding was recorded |
+
+To check the local chain, start the database with `make run` and generate the ORM (`make sqlboiler`) first:
+
+```sh
+make chain-verify
+```
+
+The S3 Object Lock anchor (ADR-0022 decision 3) is not built yet. Until it is, two kinds of tampering go undetected:
+- rewriting the whole chain with every hash recomputed;
+- removing the newest entries.
+
+**Database roles.** `data/schema.sql` creates two roles that cannot log in themselves (ADR-0022 decision 2):
+
+| Role | `audit_log` | `corrupted_audit_log` | Used by |
+|---|---|---|---|
+| `auditor_service` | `SELECT`, `INSERT` | `SELECT`, `INSERT`, `DELETE` | the auditor |
+| `auditor_chain_verify` | `SELECT` | `SELECT`, `INSERT` | chain-verify |
+
+Locally, `make run` and `make chain-verify` connect as `postgres`. The tests log in with each role and check two things:
+- the role is enough for its job;
+- `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log` are refused.
+
+**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. `make run` loads the schema only into an empty database, so recreate yours: run `make db-reset`, then `make run`.
+
+**Infrastructure requirements**, for when the infrastructure is built (ADR-0022, [ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)):
+- **Database logins:** the schema-migration task owns the tables. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify`. Neither service connects as the owner or the master user.
+- **chain-verify's task:**
+  - the ECS task definition runs the auditor image with the entry point `/chain-verify`;
+  - it has its own task role and database secret;
+  - EventBridge Scheduler starts it daily.
+- **Alarms:** an SNS alarm from a CloudWatch metric filter on `CHAIN_TAMPER_DETECTED` in chain-verify's logs, and one when the task exits with status 1.
+- **Later, with the anchor:** the S3 Object Lock bucket, which only chain-verify's task role can write to.
+
 ## Run tests
 
-The recommended test command creates a disposable PostgreSQL container loaded with `data/test_init.sql`, generates the gRPC code, the SQLBoiler models and the mocks (all git-ignored), and runs all Go tests in a Go container. It works from a clean checkout:
+The recommended test command creates a disposable PostgreSQL container loaded with `data/schema.sql`, generates the gRPC code, the SQLBoiler models and the mocks (all git-ignored), and runs all Go tests in a Go container. It works from a clean checkout:
 
 ```sh
 make test
@@ -163,7 +224,7 @@ make test
 
 The test database is removed automatically when the command finishes, including after a test failure.
 
-To run the Go tests directly, generate the code first (`make proto`, `make sqlboiler`, `make mockery`). The repository tests also need PostgreSQL, reached through `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`:
+To run the Go tests directly, generate the code first (`make proto`, `make sqlboiler`, `make mockery`). The repository and chain-verify tests also need PostgreSQL, reached through `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` and `DB_NAME`. The user must be able to create roles and databases: the tests create logins holding each role, and chain-verify's tests use a database of their own, `chain_verify_test`.
 
 ```sh
 cd services/auditor
@@ -237,6 +298,12 @@ Run it:
 
 ```sh
 docker run --rm -p 8080:8080 auditor
+```
+
+The image also holds chain-verify. To run that instead, pass the database settings:
+
+```sh
+docker run --rm --entrypoint /chain-verify -e HOST=... -e USER=... -e PASSWORD=... -e DB_NAME=... -e SSLMODE=require auditor
 ```
 
 **Release order with user-service.** user-service forwards the caller's access token, which this service now requires (ADR-0021), so release user-service first when both change together. The opposite holds for new audit event types: release the Auditor first, or user-service's new events go to the dead-letter queue.

@@ -1,7 +1,7 @@
 // This binary is the auditor's gRPC/HTTP server entrypoint. It is a
-// separate program from src/cronjob; anything both need (currently just
-// InitialiseDB) lives in src/internal/bootstrap instead of here, since a
-// main package cannot be imported by another package.
+// separate program from chain-verify (src/chainverify); anything both need
+// (currently just InitialiseDB) lives in src/internal/bootstrap instead of
+// here, since a main package cannot be imported by another package.
 package main
 
 import (

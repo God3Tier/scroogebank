@@ -39,7 +39,7 @@ LOCALSTACK_KEY   := test
 
 .PHONY: \
 	db-up db-down db-logs db-reset load-schema psql \
-	run down \
+	run chain-verify down \
 	tools-image mockery proto \
 	test-db-up test-db-down generate-orm sqlboiler \
 	test test-clean all
@@ -61,6 +61,13 @@ run: proto
 		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
 	fi
 	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(LOCALSTACK_KEY) AWS_SECRET_ACCESS_KEY=$(LOCALSTACK_KEY) AUDIT_QUEUE_URL=$(AUDIT_QUEUE_URL) AUDIT_DLQ_URL=$(AUDIT_DLQ_URL) go run ./src/serverd
+
+## Check the local audit chain once, as the daily chain-verify task does, and
+## record any problem in corrupted_audit_log (ADR-0022). Needs the database
+## from make run and the ORM (make sqlboiler). Exits 2 when it records a new
+## finding.
+chain-verify:
+	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable go run ./src/chainverify
 
 db-up:
 	$(COMPOSE) up -d postgres

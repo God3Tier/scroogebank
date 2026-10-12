@@ -27,6 +27,11 @@ type fakeService struct {
 	deleteCalled bool
 }
 
+// RecordFinding is chain-verify's; no endpoint calls it.
+func (f *fakeService) RecordFinding(context.Context, models.ChainFinding) (bool, error) {
+	return false, nil
+}
+
 func (f *fakeService) GetCorruptedAuditLog(context.Context) ([]models.CorruptedAuditLog, error) {
 	f.getCalled = true
 	return f.logs, f.getErr

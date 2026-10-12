@@ -2,8 +2,7 @@ package models
 
 type AuditLogInput struct {
 	// EventID identifies the originating SQS message for de-duplication.
-	// Empty for entries generated internally (e.g. by the cronjob) rather
-	// than received from the queue.
+	// Empty when the event has none; it is then stored as NULL.
 	EventID       string
 	EventType     string
 	Action        string

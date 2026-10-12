@@ -1,245 +1,119 @@
 package audit
 
 import (
+	"auditor/src/internal/chain"
 	"auditor/src/internal/models"
-	"auditor/src/internal/pkg"
 	"auditor/src/internal/repository/audit"
-	"auditor/src/internal/service"
 	"context"
 	"errors"
-	"strconv"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// linkedEntries returns n linked entries with correct hashes.
+func linkedEntries(n int) []models.AuditLog {
+	entries := make([]models.AuditLog, 0, n)
+	parent := ""
+	for sequence := int64(1); sequence <= int64(n); sequence++ {
+		entry := models.AuditLog{
+			Id:            fmt.Sprintf("id-%d", sequence),
+			SequenceNo:    sequence,
+			EventType:     "AUTH",
+			Action:        "LOGIN_FAILED",
+			SourceService: models.AuditService,
+			ActorId:       fmt.Sprintf("actor-%d", sequence),
+			Timestamp:     time.Date(2026, 9, 15, 5, 0, int(sequence), 0, time.UTC),
+			Payload:       `{}`,
+			ParentHash:    parent,
+		}
+		entry.Hash = chain.Hash(entry)
+		parent = entry.Hash
+		entries = append(entries, entry)
+	}
+	return entries
+}
 
 func TestVerifyChain(t *testing.T) {
 	ctx := context.Background()
-	timestamp := time.Date(2026, 9, 15, 5, 0, 0, 0, time.UTC)
-	databaseErr := errors.New("database unavailable")
-
-	first := models.AuditLog{
-		Id:            "id-1",
-		SequenceNo:    1,
-		EventType:     "AUTH",
-		Action:        "LOGIN_FAILED",
-		SourceService: models.AuditService,
-		ActorId:       "actor-1",
-		Timestamp:     timestamp,
-		Payload:       `{}`,
-	}
-	first.Hash = hashAuditLog(first)
-
-	second := models.AuditLog{
-		Id:            "id-2",
-		SequenceNo:    2,
-		EventType:     "AUTH",
-		Action:        "LOGIN_FAILED",
-		SourceService: models.AuditService,
-		ActorId:       "actor-2",
-		Timestamp:     timestamp,
-		Payload:       `{}`,
-		ParentHash:    first.Hash,
-	}
-
-	second.Hash = hashAuditLog(second)
-
-	third := models.AuditLog{
-		Id:            "id-3",
-		SequenceNo:    3,
-		EventType:     "AUTH",
-		Action:        "LOGIN_FAILED",
-		SourceService: models.AuditService,
-		ActorId:       "actor-3",
-		Timestamp:     timestamp,
-		Payload:       `{}`,
-		ParentHash:    second.Hash,
-	}
-	third.Hash = hashAuditLog(third)
-
-	fourth := models.AuditLog{
-		Id:            "id-4",
-		SequenceNo:    4,
-		EventType:     "AUTH",
-		Action:        "LOGIN_FAILED",
-		SourceService: models.AuditService,
-		ActorId:       "actor-4",
-		Timestamp:     timestamp,
-		Payload:       `{}`,
-		ParentHash:    third.Hash,
-	}
-	fourth.Hash = hashAuditLog(fourth)
-
-	fifth := models.AuditLog{
-		Id:            "id-5",
-		SequenceNo:    5,
-		EventType:     "AUTH",
-		Action:        "LOGIN_FAILED",
-		SourceService: models.AuditService,
-		ActorId:       "actor-5",
-		Timestamp:     timestamp,
-		Payload:       `{}`,
-		ParentHash:    fourth.Hash,
-	}
-	fifth.Hash = hashAuditLog(fifth)
 
 	tests := map[string]struct {
-		chain   []models.AuditLog
-		repoErr error
-		want    map[string]error
-		wantErr error
+		entries      int
+		tamper       func([]models.AuditLog)
+		wantPages    []int64 // the afterSequenceNo of each page read
+		wantFindings []models.FindingReason
+		wantAt       []int64
 	}{
-		"returns no mismatch for empty chain": {
-			chain: []models.AuditLog{},
-			want:  map[string]error{},
+		"reads every page of an untouched chain": {
+			entries:   5,
+			wantPages: []int64{0, 2, 4},
 		},
-
-		"returns no mismatch for one log": {
-			chain: []models.AuditLog{first},
-			want:  map[string]error{},
+		"reads one more page when the last one is full": {
+			entries:   4,
+			wantPages: []int64{0, 2, 4},
 		},
-
-		"returns no mismatch for valid chain": {
-			chain: []models.AuditLog{
-				first,
-				second,
-				third,
-				fourth,
-				fifth,
-			},
-			want: map[string]error{},
+		"reads an empty chain": {
+			entries:   0,
+			wantPages: []int64{0},
 		},
-
-		"returns one mismatch": {
-			chain: []models.AuditLog{
-				first,
-				{
-					Id:         "id-2",
-					SequenceNo: 2,
-					ParentHash: first.Hash,
-					Hash:       second.Hash,
-				},
-				third,
-			},
-			want: map[string]error{
-				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
-			},
+		"compares the first entry of a page with the last entry of the page before": {
+			entries:      5,
+			tamper:       func(entries []models.AuditLog) { entries[2].ParentHash = "forged" },
+			wantPages:    []int64{0, 2, 4},
+			wantFindings: []models.FindingReason{models.HashMismatch, models.ParentMismatch},
+			wantAt:       []int64{3, 3},
 		},
-
-		"returns multiple consecutive mismatches": {
-			chain: []models.AuditLog{
-				first,
-				{
-					Id:         "id-2",
-					SequenceNo: 2,
-					ParentHash: first.Hash,
-					Hash:       second.Hash,
-				},
-				{
-					Id:         "id-3",
-					SequenceNo: 3,
-					ParentHash: second.Hash,
-					Hash:       third.Hash,
-				},
-				fourth,
-			},
-			want: map[string]error{
-				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				third.Hash:  service.InvalidChainError("Sequence 2 and 3 out of sync\n"),
-			},
-		},
-
-		"returns multiple non-consecutive mismatches": {
-			chain: []models.AuditLog{
-				first,
-				{
-					Id:         "id-2",
-					SequenceNo: 2,
-					ParentHash: first.Hash,
-					Hash:       second.Hash,
-				},
-				third,
-				{
-					Id:         "id-4",
-					SequenceNo: 4,
-					ParentHash: third.Hash,
-					Hash:       fourth.Hash,
-				},
-				fifth,
-			},
-			want: map[string]error{
-				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				fourth.Hash: service.InvalidChainError("Sequence 3 and 4 out of sync\n"),
-			},
-		},
-
-		"returns all mismatches": {
-			chain: []models.AuditLog{
-				{
-					Id:         "id-1",
-					SequenceNo: 1,
-					Hash:       first.Hash,
-				},
-				{
-					Id:         "id-2",
-					SequenceNo: 2,
-					ParentHash: first.Hash,
-					Hash:       second.Hash,
-				},
-				{
-					Id:         "id-3",
-					SequenceNo: 3,
-					ParentHash: second.Hash,
-					Hash:       third.Hash,
-				},
-				{
-					Id:         "id-4",
-					SequenceNo: 4,
-					ParentHash: fourth.Hash,
-				},
-			},
-			want: map[string]error{
-				first.Hash:  service.InvalidChainError("Sequence 0 and 1 out of sync\n"),
-				second.Hash: service.InvalidChainError("Sequence 1 and 2 out of sync\n"),
-				third.Hash:  service.InvalidChainError("Sequence 2 and 3 out of sync\n"),
-			},
-		},
-
-		"returns repository error": {
-			chain:   nil,
-			repoErr: databaseErr,
-			want:    nil,
-			wantErr: databaseErr,
+		"checks the newest entry": {
+			entries:      5,
+			tamper:       func(entries []models.AuditLog) { entries[4].Action = "LOGIN" },
+			wantPages:    []int64{0, 2, 4},
+			wantFindings: []models.FindingReason{models.HashMismatch},
+			wantAt:       []int64{5},
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			repo := audit.NewMockRepository(t)
-
-			t.Cleanup(func() {
-				repo.AssertExpectations(t)
-			})
-
-			repo.On("GetChain", ctx).
-				Return(test.chain, test.repoErr).
-				Once()
-
-			actual, err := New(repo).VerifyChain(ctx)
-
-			assert.Equal(t, test.want, actual)
-
-			if test.wantErr != nil {
-				assert.ErrorIs(t, err, test.wantErr)
-			} else {
-				assert.NoError(t, err)
+			entries := linkedEntries(test.entries)
+			if test.tamper != nil {
+				test.tamper(entries)
 			}
+			repo := audit.NewMockRepository(t)
+			for _, after := range test.wantPages {
+				end := min(int(after)+2, len(entries))
+				repo.EXPECT().GetChainPage(ctx, after, 2).Return(entries[after:end], nil).Once()
+			}
+
+			checked, findings, err := impl{repo: repo, pageSize: 2}.VerifyChain(ctx)
+
+			require.NoError(t, err)
+			assert.Equal(t, int64(test.entries), checked)
+			var reasons []models.FindingReason
+			var at []int64
+			for _, finding := range findings {
+				reasons = append(reasons, finding.Reason)
+				at = append(at, finding.Entry.SequenceNo)
+			}
+			assert.Equal(t, test.wantFindings, reasons)
+			assert.Equal(t, test.wantAt, at)
 		})
 	}
 }
 
-func hashAuditLog(log models.AuditLog) string {
-	rawString := log.Id + strconv.FormatInt(log.SequenceNo, 10) + log.EventType + log.Action + string(log.SourceService) + log.ActorId + log.Timestamp.Format(time.RFC3339) + log.Payload
-	return pkg.Hash(rawString)
+func TestVerifyChainReturnsRepositoryErrors(t *testing.T) {
+	ctx := context.Background()
+	databaseErr := errors.New("database unavailable")
+	entries := linkedEntries(2)
+	repo := audit.NewMockRepository(t)
+	repo.EXPECT().GetChainPage(ctx, int64(0), 2).Return(entries, nil).Once()
+	repo.EXPECT().GetChainPage(ctx, int64(2), 2).Return(nil, databaseErr).Once()
+
+	checked, findings, err := impl{repo: repo, pageSize: 2}.VerifyChain(ctx)
+
+	require.ErrorIs(t, err, databaseErr)
+	assert.Zero(t, checked)
+	assert.Nil(t, findings)
 }

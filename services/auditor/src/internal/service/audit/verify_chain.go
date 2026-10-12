@@ -1,38 +1,31 @@
 package audit
 
 import (
-	"auditor/src/internal/pkg"
-	"auditor/src/internal/service"
+	"auditor/src/internal/chain"
+	"auditor/src/internal/models"
 	"context"
-	"fmt"
-	"strconv"
-	"time"
 )
 
-/*
- * This function verifies whether the chain is valid. If not, we can confirm that primary indx is out of sync
- * and we need to decide what to do with that error in audit
- */
-func (i impl) VerifyChain(ctx context.Context) (map[string]error, error) {
-	chainList, err := i.repo.GetChain(ctx)
+// VerifyChain reads the chain a page at a time and checks each entry against
+// the entries before it (chain.Checker). What to do about the problems is up
+// to the caller.
+func (i impl) VerifyChain(ctx context.Context) (int64, []models.ChainFinding, error) {
+	var checker chain.Checker
+	var findings []models.ChainFinding
+	var checked, afterSequenceNo int64
 
-	if err != nil {
-		return nil, err
-	}
-
-	response := map[string]error{}
-
-	for indx, chain := range chainList {
-		if indx == len(chainList)-1 {
-			break
+	for {
+		page, err := i.repo.GetChainPage(ctx, afterSequenceNo, i.pageSize)
+		if err != nil {
+			return 0, nil, err
 		}
-
-		rawString := chain.Id + strconv.FormatInt(chain.SequenceNo, 10) + chain.EventType + chain.Action + string(chain.SourceService) + chain.ActorId + chain.Timestamp.Format(time.RFC3339) + chain.Payload
-
-		if pkg.Hash(rawString) != chainList[indx+1].ParentHash {
-			response[chain.Hash] = service.InvalidChainError(fmt.Sprintf("Sequence %d and %d out of sync\n", indx, indx+1))
+		for _, entry := range page {
+			findings = append(findings, checker.Check(entry)...)
+			afterSequenceNo = entry.SequenceNo
+		}
+		checked += int64(len(page))
+		if len(page) < i.pageSize {
+			return checked, findings, nil
 		}
 	}
-
-	return response, nil
 }
