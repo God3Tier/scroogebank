@@ -6,7 +6,7 @@
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
-- Supersedes: N/A
+- Supersedes: on acceptance, the runtime [ADR-0017](ADR-0017-microservices-per-business-area.md) gives transaction-service and transaction-ingest (decision 7)
 - Superseded by: N/A
 
 ## Context
@@ -21,12 +21,11 @@ Feature 3 imports transactions from the bank's core banking system, which is ext
 
 `project_plan.md` §13 requires the ingestion design to be decided explicitly.
 
-The current `dev` implementation, `services/sftp/receiver`, differs from this design:
-- a Go cron job, not a Lambda function;
-- JSON files in `/reports`, not CSV files in `inbox/`;
-- no `.sha256` checksum;
-- `processed/` and `rejected/` archive folders;
-- audit events sent straight to SQS, with no outbox.
+The current `dev` implementation, `services/sftp/receiver`, is written in Go. This ADR adopts its file format, folders and outbox: JSON arrays of transactions named `report-<time>-<id>.json` in `reports/`, archived to `processed/` or `rejected/`, with audit events in `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)). It still differs from this design:
+- a long-running poller (or a single run with `-once`), not a Lambda function;
+- a file that is not valid JSON is audited but left in `reports/`, so it is read again on every run, instead of being moved to `rejected/`;
+- files with another extension are ignored, not rejected and audited;
+- no retries or circuit breaker around the SFTP connection within a run.
 
 ## Decision Drivers
 
@@ -64,31 +63,33 @@ The current `dev` implementation, `services/sftp/receiver`, differs from this de
    - Chrooted, SFTP-only account with key authentication.
    - Accepts port 22 only from the CRM NAT gateway's Elastic IP.
    - A file generator writes synthetic files and can simulate faults.
-2. **Ready-file protocol:** the generator uploads `name.csv.tmp`, writes a `.sha256` checksum, then renames the upload to its final name. The rename is atomic, so the reader never sees a half-written file.
+2. **Ready-file protocol:** the generator uploads `report-<time>-<id>.json.tmp`, then renames it to `report-<time>-<id>.json`. The rename is atomic, so the reader never sees a half-written file. Each file is a JSON array of transactions. There is no checksum file (see Rationale).
 3. **Reader:** `transaction-ingest`, a Lambda function in the private app subnets of both AZs.
    - EventBridge Scheduler invokes it about every 5 minutes.
    - Reserved concurrency is 1.
    - It connects out through the NAT gateway with key authentication and a pinned host key (in SSM Parameter Store).
    - Timeouts, retries and a circuit breaker protect the connection.
 4. **Per file:**
-   - skip it if already recorded in `ingestion_file` (name and SHA-256);
-   - verify the checksum, format and each row;
+   - verify that the file is a JSON array of transactions, and each row; a truncated or damaged file fails this check and is rejected;
    - `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` the status;
-   - record rejected rows with reasons;
-   - in the same transaction, write the `FILE_PROCESSED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md));
+   - in the same transaction, write the `FILE_PROCESSED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)), listing each rejected row's record number and reason; rejected rows are not kept in a table;
    - move the file to `processed/` or `rejected/`.
+
+   There is no table of processed files. A file leaves `reports/` only after its import commits; if moving it fails, the next run reads it again, and the upsert stores no duplicate transactions.
 5. **On failure:**
    - on a connection or authentication failure, write a `Failed` `FILE_PROCESSED` event and stop;
-   - files stay in `inbox/` for the next run;
+   - files stay in `reports/` for the next run;
    - on a system exception, keep the file and audit the error.
 6. **No Client ID check at import (provisional):** rows are validated on their own. Ownership is enforced when transactions are read ([open item 9](../architecture/open-items.md#9-client-id-validation-at-import), [open item 10](../architecture/open-items.md#10-how-transaction-reads-enforce-agent-ownership)).
-7. **Runtime:** Java on a Lambda managed runtime, or a container image if Java 25 is not yet a managed runtime. The Feature 3 owner confirms this, because `dev` has a Go reader; keeping Go would extend the runtime exception in [ADR-0017](ADR-0017-microservices-per-business-area.md).
+7. **Runtime: Go**, as built on `dev`. The receiver module holds both the import and transaction-service's read API, so both Feature 3 components stay in Go. This extends the Go exception in [ADR-0017](ADR-0017-microservices-per-business-area.md), whose table lists them as Java 25; once accepted, it supersedes that runtime entry only. On Lambda, the import runs as a compiled binary on the OS-only runtime (`provided.al2023`) and does what one `-once` run does today. The Feature 3 owner confirms this before acceptance.
 
 ## Rationale
 
 - SFTP is how banks commonly exchange batch files, and SSH encrypts the data in transit.
 - Self-hosting saves about USD 208–210/month against Transfer Family. The single-instance risk is acceptable because the server stands in for an external system, which the CRM must tolerate failing anyway.
 - Lambda fits short, periodic batch work, and reserved concurrency of 1 prevents overlapping runs.
+- No checksum file: the rename already marks a file ready, SSH checks the data in transit, and a truncated or damaged file fails to parse and is rejected. A `.sha256` file from the same generator would add a second file, an ordering rule and new failure cases, and would still miss the generator's own mistakes. If damage that still parses must be caught, a control record in the file (record count and amount total) is the place for it ([open item 5](../architecture/open-items.md#5-sftp-file-format-and-schedule)).
+- Go: the import is already built and tested in Go. Rewriting it in Java would cost delivery time for no functional gain, the reason ADR-0017 gives for its Go exception.
 
 ## Consequences
 
@@ -104,7 +105,8 @@ The current `dev` implementation, `services/sftp/receiver`, differs from this de
 - The 15-minute Lambda limit bounds each run; the same code can move to an ECS scheduled task if needed.
 - A Lambda cannot use ECS Service Connect, so a Client ID lookup at import would need another route.
 - A row whose Client ID matches no CRM client is stored rather than rejected. No agent can see it, and an optional reconciliation job can list such rows.
-- The `dev` receiver must be aligned or this ADR changed. That covers the format, folder, checksum, outbox and runtime ([open item 5](../architecture/open-items.md#5-sftp-file-format-and-schedule)).
+- Damage that still parses, such as one changed digit in an amount, is not detected unless the file format adds a control record ([open item 5](../architecture/open-items.md#5-sftp-file-format-and-schedule)).
+- The `dev` receiver still needs a Lambda handler, the rejection of invalid and unsupported files, and retries with a circuit breaker on the connection (see Context). The field layout and the file schedule are still [open item 5](../architecture/open-items.md#5-sftp-file-format-and-schedule).
 
 ## Security & Privacy Impact
 
@@ -127,7 +129,7 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
 ## Validation
 
 - Tests for:
-  - a corrupted file (checksum mismatch);
+  - a corrupted file (truncated or damaged, so it fails to parse);
   - an unsupported format;
   - partially valid rows;
   - a replayed file (no duplicates);
@@ -141,3 +143,8 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
 - [Open items 5](../architecture/open-items.md#5-sftp-file-format-and-schedule), [9](../architecture/open-items.md#9-client-id-validation-at-import), [10](../architecture/open-items.md#10-how-transaction-reads-enforce-agent-ownership)
 - `services/sftp/receiver` (current `dev` implementation)
 - AWS documentation: AWS Transfer Family pricing; Lambda VPC networking
+
+## Revision history
+
+- 2026-10-01 21:50 +08:00: proposed.
+- 2026-10-12: before acceptance, aligned with the `dev` receiver, as decided by the decision owner: JSON files named `report-<time>-<id>.json` in `reports/`, rejected rows listed in the `FILE_PROCESSED` event instead of a table, no `ingestion_file` table, Go as the runtime (extending ADR-0017's exception), and no `.sha256` checksum file. The Lambda reader is unchanged.

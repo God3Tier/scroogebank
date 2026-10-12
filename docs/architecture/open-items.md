@@ -1,8 +1,8 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
-> Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
+> Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
 Each item needs a decision from the owner it names. When an item is decided, record the decision in an ADR and mark the item here as resolved, with a link to that ADR.
 
@@ -24,11 +24,13 @@ Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: 
 
 ## 4. Reconcile the x-factor branch ADRs with the target architecture
 
-Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) changed to match, so ADR-0006 and the `initial-lookback: 4h` setting stay as they are), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
+Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) changed to match, so ADR-0006 and the `initial-lookback: 4h` setting stay as they are), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore; the model receives only public data, so this is a choice about residency and cost, not privacy); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
 
 ## 5. SFTP file format and schedule
 
 File naming, CSV or JSON, header and field layout, and how often files are produced, agreed between the ingestion worker's owner and the SFTP server's owner.
+
+**Partly settled (2026-10-12)** by [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (Proposed): files are JSON arrays of transactions named `report-<time>-<id>.json`, as on `dev`. There is no checksum file. Still to agree: the field layout as a written contract, how often files are produced, and whether each file carries a control record (record count and amount total) to catch damage that still parses.
 
 ## 6. Splitting accounts out of client-profile-management-service
 
@@ -36,7 +38,7 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 ## 7. Go runtime exception
 
-The auditor, client-service and account-service are written in Go, not the Java 25 baseline. [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted 2026-10-08) records the exception (project_plan §2.2).
+The auditor, client-service and account-service are written in Go, not the Java 25 baseline. [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted 2026-10-08) records the exception (project_plan §2.2). The Feature 3 components (the SFTP receiver: the import and transaction-service's read API) are Go too; [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7 (Proposed) extends the exception to them.
 
 ## 8. Migrations on startup or as a task
 

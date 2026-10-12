@@ -1,8 +1,8 @@
 # Target architecture: x-factor features (Features 4–6)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
-> Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
+> Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
 Features 4–6 are the team's innovation features (x-factors). The designs below come from the team's feature branches and the target architecture's decisions. Each subsection lists what was chosen and what was not, with the reason.
 
@@ -18,7 +18,7 @@ Agents receive alerts when public market news may matter to instruments their cl
 | Determine instruments and sectors; choose public search terms | → Search approved public sources for news |
 | — | Create a public event report: headline, source, URL, time, factual summary, affected companies and sectors, event class, direction, confidence, evidence |
 | ← Validate the report, remove duplicates, check safety rules, store the public event | Return sources and the public summary |
-| Match holdings deterministically; score client relevance and materiality; write the shared summary and private client context (Bedrock in Singapore); route alerts to assigned agents | — |
+| Match holdings deterministically; score client relevance and materiality; write one shared summary from the public report (Bedrock in Singapore; the model sees no client data); add each client's private context deterministically; route alerts to assigned agents | — |
 
 **Flow:**
 
@@ -27,7 +27,7 @@ Agents receive alerts when public market news may matter to instruments their cl
 - A worker started every 4 hours selects instruments held by **at least 2 clients and at least 5% of clients** (both configurable), so a rare holding can never be revealed through an outbound query.
 - It builds public queries (for example DBS, D05, Financials, Banks, earnings, regulatory action) and sends them to Tokyo.
 - Back in Singapore, affected holdings are found by **exact ticker or instrument match, sector match and named-company match**. Relevance weighs direct versus sector-level impact, exposure amount and share, event confidence, data freshness and alert thresholds.
-- One shared summary is written per event; private context (for example a client's 45% financial-sector exposure) is added only in Singapore. Only agents assigned to affected clients (`assignedAgentSubject`) receive the alert. Their decisions (`INFORM_CLIENT`, `MONITOR`, `DISMISS`) and feedback are audited.
+- The model writes one shared summary per event, from public data only. Private context (for example a client's 45% financial-sector exposure) is computed in Singapore without the model. Only agents assigned to affected clients (`assignedAgentSubject`) receive the alert. Their decisions (`INFORM_CLIENT`, `MONITOR`, `DISMISS`) and feedback are audited.
 
 **Tokyo never receives:** client or account identifiers; agent assignments; holdings, quantities or values; portfolio percentages; the number or share of clients holding an instrument; client-specific prompts or summaries. **Tokyo receives only** company names, tickers, sectors, event keywords, approved domains and date ranges.
 
@@ -53,7 +53,7 @@ Agents receive alerts when public market news may matter to instruments their cl
 | Matching news to holdings | Deterministic: ticker, sector, named company | Vector relevance scoring: dropped for the same reasons; no vector infrastructure is needed. |
 | Topic selection | At least 2 clients and at least 5% of clients hold the instrument | Searching every holding: would expose rare holdings through outbound queries and multiply search cost. |
 | Schedule | Every 4 hours: a worker started by EventBridge (6 runs a day), as in branch ADR-0006. At the branch cap of 4 grouped searches per run, that is about 720 searches (USD 5.04) a month, within the 1,000-query monthly quota. | Every 6 hours: a third fewer searches and model calls, but news up to about 6 hours old. Daily: news could be almost a day old when agents see it. Per-trade triggering: many more searches, and the privacy thresholds need a whole-population view. |
-| Summaries | Bedrock in Singapore | Global cross-region inference or another provider (branch ADR-0010): private client context must stay in Singapore. |
+| Summaries | Bedrock in Singapore, from public data only | Global cross-region inference or another provider (branch ADR-0010, and the `dev` default): the model sees no client data, so this is a choice about residency and cost, settled in [open item 4](open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture). |
 | Storage | Own RDS instance, alerts-db | A shared database cluster (branch ADR-0008): weaker isolation; inconsistent with one database per service. |
 | Holdings source | Synthetic catalogue in the alert service (alerts branch ADR-0005) | A production holdings feed: future integration work. |
 | Dissemination to clients | Outside the system: the agent decides and contacts the client | Automatic e-mail through SES: out of scope for the MVP. |

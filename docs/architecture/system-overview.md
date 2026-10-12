@@ -1,8 +1,8 @@
 # Target architecture: system overview
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
-> Each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
+> Each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
 This page is the entry point to the CRM's target AWS architecture. It replaces the team's `ARCHITECTURE.docx` as the reviewable source in the repository.
 
@@ -21,7 +21,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
 | [Environments and cost](../cost/budget.md) | dev, staging and prod; rough monthly cost; budget levers |
 | [Decision log](decision-log.md) | Every major decision: chosen, not chosen and why, with its ADR |
 | [Open items](open-items.md) | Decisions still needed from the team, with owners |
-| [ADR index](../adr/README.md) | ADR-0017 to ADR-0034 record these decisions (ADR-0017 Accepted; the rest Proposed) |
+| [ADR index](../adr/README.md) | ADR-0017 to ADR-0039 record these decisions; the index gives each one's status |
 
 ## Summary
 
@@ -29,7 +29,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
 - **Frontend:** static frontend files in a private S3 bucket, served by CloudFront with AWS WAF in front.
 - **API entry:** all `/api/*` traffic goes through API Gateway (which validates the Cognito JWT and applies throttling), then through a VPC Link to an internal Application Load Balancer.
 - **Business services:** containers on **ECS Fargate**, one microservice per business area: user-service, client-service, account-service, transaction-service, the three x-factor services and the auditor. Each runs at least two tasks spread across both AZs.
-- **X-factors (Features 4–6):** event-driven market-news alerts, a business dashboard, and a Client Relationship Health Monitor ([x-factor features (Features 4–6)](x-factors.md)). Only public search terms leave Singapore, for a web search in Tokyo; all client data and AI summaries stay in Singapore.
+- **X-factors (Features 4–6):** event-driven market-news alerts, a business dashboard, and a Client Relationship Health Monitor ([x-factor features (Features 4–6)](x-factors.md)). Only public search terms leave Singapore, for a web search in Tokyo; all client data stays in Singapore, and the alert model receives only public data.
 - **Databases:** each service has its **own RDS for PostgreSQL instance**, with a **Multi-AZ standby** in the second AZ. This balances isolation against cost ([Databases](../database/schema.md#databases)). Client personal data is encrypted field by field with a per-client key, and those keys are kept in a separate **DynamoDB** table, wrapped by a symmetric **KMS** key ([Client data encryption (envelope encryption)](../security/security-model.md#client-data-encryption-envelope-encryption)).
 - **Auditor:** an **internal-only** service; the frontend never calls it.
   - **Writes** reach it asynchronously through one shared **Amazon SQS standard** queue (`audit-insert`). Services with a database use an outbox in their own database, written in the business transaction by default; the Cognito triggers and dashboard-service, which have none, send directly.
@@ -79,7 +79,7 @@ The split into two boxes is only for layout: services used by the browser and th
 | **Cognito triggers (Lambda)** | Small functions Cognito runs after a login or a password-reset confirmation. They send those events straight to the SQS audit queue; if that fails, the login still succeeds and the event is logged to CloudWatch for replay ([Authentication events](../security/security-model.md#authentication-events)). |
 | **S3: ID documents** | Private, KMS-encrypted bucket for client identity documents (synthetic only), uploaded with short-lived presigned URLs. The stored copy is the audit record of what the agent checked. |
 | **Amazon SES** (deferred) | Would send the client a verification request e-mail. Deferred: agents verify NRIC documents manually for now, so nothing is sent. Added only if verification is automated later. |
-| **EventBridge Scheduler** | Invokes the transaction-ingest Lambda about every 5 minutes, and starts chain-verify (daily), the alert worker (every 6 hours) and the health analysis task (daily, 08:00 SGT). |
+| **EventBridge Scheduler** | Invokes the transaction-ingest Lambda about every 5 minutes, and starts chain-verify (daily), the alert worker (every 4 hours) and the health analysis task (daily, 08:00 SGT). |
 
 | Right box | What it does in this design |
 |---|---|
@@ -87,7 +87,7 @@ The split into two boxes is only for layout: services used by the browser and th
 | **SQS dead-letter queue** (`audit-insert-dlq`) | Keeps audit events that failed 5 times, for inspection and replay. |
 | **S3 audit anchor (Object Lock)** | Stores the daily hash-chain head where it cannot be changed or deleted during the retention period. |
 | **client-keys (DynamoDB)** | One item per client: the client UUID and that client's data key, stored only in its KMS-wrapped (encrypted) form. Used only by client-service. |
-| **Amazon Bedrock (ap-southeast-1)** | Foundation models for the x-factors: alert summaries with private client context (x-factor 1), and plain-language wording of health-monitor findings (x-factor 3). |
+| **Amazon Bedrock (ap-southeast-1)** | Foundation models for the x-factors: alert summaries written from public data only (x-factor 1), and plain-language wording of health-monitor findings (x-factor 3). |
 
 ## Components
 
@@ -99,11 +99,11 @@ Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Acce
 | **API Gateway HTTP API** | Single public API entry point; Cognito JWT validation; stage throttling. | Managed |
 | **Internal ALB** | Load balancing across tasks in both AZs; path routing to services; HTTPS. | Managed |
 | **user-service** | F1: create, update and disable users, password reset, logout; root admin protection; Cognito admin API calls; activity feed (`GET /api/activities`: admins see all agents' activities, agents their own; changes only). | Java 25, ECS |
-| **client-service** | F2: client profile CRUD, Appendix 2 validation, identity verification (manual: the agent checks the uploaded NRIC and sets the status), agent ownership rules. Encrypts every client field except IDs and ownership with a per-client data key (envelope encryption, [Client data encryption (envelope encryption)](../security/security-model.md#client-data-encryption-envelope-encryption)). Currently implemented as `client-profile-management-service`, which also holds accounts until they are split out. | Go, ECS |
-| **account-service** | F2: bank account create and delete. Checks that the client exists and belongs to the agent by calling client-service, instead of a database foreign key. | ECS (language to be decided) |
-| **transaction-service** | F3: private transaction query API. user-service serves the public route and calls it only after account-service confirms the caller is an admin or owns the account ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). Today the SFTP receiver's private endpoint plays this part. | Java 25, ECS |
-| **transaction-ingest** | F3: separate ingestion worker. Connects to the external SFTP server over SSH, reads ready files, validates and imports them, and moves each file to `processed/` or `rejected/`. | Java, AWS Lambda (VPC-attached), invoked by EventBridge Scheduler |
-| **event-alert-service** (x-factor 1) | Market-news alerts. `api` mode serves `/api/alerts` to agents: list and view alerts, record a decision (`INFORM_CLIENT`, `MONITOR` or `DISMISS`) and give feedback; admins can read but not decide. The `worker` task, started every 4 hours, selects widely held instruments, calls the Tokyo web search with public terms, matches and scores, writes summaries with Bedrock in Singapore, and routes alerts to assigned agents. | Java 25, ECS service + scheduled ECS task |
+| **client-service** | F2: client profile CRUD, Appendix 2 validation, identity verification (manual: the agent checks the uploaded NRIC and sets the status), agent ownership rules. Encrypts the 11 personal client fields with a per-client data key; IDs, the owning agent, verification status and timestamps stay plaintext (envelope encryption, [Client data encryption (envelope encryption)](../security/security-model.md#client-data-encryption-envelope-encryption)). Currently implemented as `client-profile-management-service`; accounts have moved to account-service ([ADR-0017](../adr/ADR-0017-microservices-per-business-area.md)). | Go, ECS |
+| **account-service** | F2: bank account create and delete. Checks that the client exists and belongs to the agent by calling client-service, instead of a database foreign key. | Go, ECS |
+| **transaction-service** | F3: private transaction query API. user-service serves the public route and calls it only after account-service confirms the caller is an admin or owns the account ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). Today the SFTP receiver's private endpoint plays this part. | Go, ECS |
+| **transaction-ingest** | F3: separate ingestion worker. Connects to the external SFTP server over SSH, reads ready files, validates and imports them, and moves each file to `processed/` or `rejected/`. | Go, AWS Lambda (VPC-attached), invoked by EventBridge Scheduler |
+| **event-alert-service** (x-factor 1) | Market-news alerts. `api` mode serves `/api/alerts` to agents: list and view alerts, record a decision (`INFORM_CLIENT`, `MONITOR` or `DISMISS`) and give feedback; admins can read but not decide. The `worker` task, started every 4 hours, selects widely held instruments, calls the Tokyo web search with public terms, matches and scores, writes a shared summary from public data with Bedrock in Singapore, and routes alerts to assigned agents. | Java 25, ECS service + scheduled ECS task |
 | **dashboard-service** (x-factor 2) | Business dashboard for admins (bank-wide, per agent) and agents (own book). Stateless: fans out to aggregate endpoints on user-, client-, account- and transaction-service with the caller's JWT; 3-minute per-caller cache. | Java 25, ECS |
 | **client-health-monitor-service** (x-factor 3) | Task API for relationship follow-up tasks. A daily scheduled analysis task (08:00 SGT) runs the deterministic rules engine (recurring-credit interruption, activity decline, sustained net outflow) and uses Bedrock only for wording, with a template fallback. | Java 25, ECS service + scheduled ECS task |
 | **auditor** | Consumes audit events from SQS, appends them to the hash chain, and serves audit reads over internal gRPC. | Go, ECS |
@@ -184,7 +184,7 @@ Each service on the diagram is listed with the requirement it serves. "Spec" mea
 
 | Service | Why it is included | Requirement | Optional? |
 |---|---|---|---|
-| **Amazon Bedrock** (ap-southeast-1) | Foundation models, billed per use: alert summaries with private client context (x-factor 1) and wording of verified health-monitor facts (x-factor 3). Kept in Singapore because client context must not leave the region. Model invocation has a kill switch and its own budget alert. | Features 4–6 (at least one must use AI) | No; x-factor 3 still works on templates if Bedrock is off |
+| **Amazon Bedrock** (ap-southeast-1) | Foundation models, billed per use: alert summaries from public event data (x-factor 1) and wording of verified health-monitor facts (x-factor 3). Kept in Singapore because x-factor 3's facts come from client activity; x-factor 1 sends only public data, so whether it may use a global-inference model instead is [open item 4](open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture). Model invocation has a kill switch and its own budget alert. | Features 4–6 (at least one must use AI) | No; x-factor 3 still works on templates if Bedrock is off |
 | **Bedrock AgentCore web search** (ap-northeast-1, Tokyo) | Worldwide public web search for x-factor 1, restricted to approved domains, returning a public event report. In Tokyo only because the capability is not available in Singapore; it can move back when it is. | Feature 4 (market-news alerts) | Yes, but x-factor 1 then has no news source |
 
 ### Security, operations and governance

@@ -17,7 +17,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 - **branch ADR-0009** (AgentCore search region and fallback): agrees on Tokyo, public terms only, approved domains, and no automatic fallback provider;
 - **branch ADR-0006** (alert processing architecture): runs every 4 hours; this ADR first proposed every 6 hours and was changed to match on 2026-10-09;
 - **branch ADR-0008** (database topology): a shared database cluster, against its own RDS instance here;
-- **branch ADR-0010** (AI provider): a global cross-region inference model, against Bedrock in Singapore here.
+- **branch ADR-0010** (AI provider): a global cross-region inference model, against Bedrock in Singapore here. `event-alert-service` on `dev` defaults to the global model and sends it only the public event report, so this is a choice about residency and cost, not about client privacy.
 
 ## Decision Drivers
 
@@ -45,8 +45,8 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 ### Summaries
 
-- **Bedrock in Singapore (chosen):** client context stays in the region; the model is still to be chosen.
-- **Global cross-region inference or another provider (branch ADR-0010):** private client context could leave Singapore.
+- **Bedrock in Singapore (chosen):** every model call stays in the stack's region; the model is still to be chosen.
+- **Global cross-region inference or another provider (branch ADR-0010, and the `dev` default):** the prompt holds public data only, so no client data would leave Singapore, but public event text would be processed outside it.
 
 ### Storage
 
@@ -68,7 +68,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
    1. validates and de-duplicates the report;
    2. matches holdings deterministically ([ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md));
    3. scores materiality;
-   4. writes the shared summary and private client context with **Bedrock in Singapore**;
+   4. writes one shared summary per event with **Bedrock in Singapore**, from the public event report only; each client's exposure and relevance come from steps 2 and 3, without the model;
    5. routes each alert to the assigned agent (`assignedAgentSubject`).
 
    Agent decisions and feedback are audited through the outbox.
@@ -88,7 +88,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 - Only public, non-client data crosses regions, which keeps the privacy argument simple.
 - Every 4 hours matches the feature owner's ADR-0006 and plan, and keeps news fresher; the extra searches still fit the 1,000-query monthly quota.
-- Bedrock in Singapore keeps client context in-region.
+- The model never receives client data, so the privacy boundary does not depend on where it runs. Bedrock in Singapore also keeps every model call in the stack's region; whether the branch's global-inference model is acceptable instead is [open item 4](../architecture/open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture).
 - Its own database follows database-per-service.
 
 ## Consequences
@@ -128,6 +128,7 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 ## Validation
 
 - A test that inspects every outbound search request and finds no client, account, holding, agent or count data.
+- A test that inspects every model request and finds only public event data.
 - A run with Tokyo unavailable ends cleanly with no fabricated alerts.
 - An agent sees only alerts for their own clients.
 
@@ -142,3 +143,4 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 
 - 2026-10-01 21:50 +08:00: proposed, with the worker every 6 hours.
 - 2026-10-09: before acceptance, the schedule changed to every 4 hours to match branch ADR-0006, as decided by the decision owner. Searches rise from about 480 to about 720 a month (USD 3.36 to 5.04). The rest of the decision is unchanged.
+- 2026-10-12: before acceptance, decision 3 corrected to match `event-alert-service`, as decided by the decision owner: the model writes one shared summary from public data only, and each client's private context is computed without it. The proposed region is unchanged; open item 4 settles it.
