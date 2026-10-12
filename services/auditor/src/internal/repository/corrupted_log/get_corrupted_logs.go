@@ -28,6 +28,8 @@ func (i impl) GetCorruptedLogs(ctx context.Context) ([]models.CorruptedAuditLog,
 
 		corruptedLogs = append(corruptedLogs, models.CorruptedAuditLog{
 			ID:           audit.ID,
+			AuditLogID:   audit.AuditLogID.String,
+			Reason:       models.FindingReason(audit.Reason.String),
 			Payload:      payload,
 			DateOfDetect: audit.DateOfDetect.Time,
 		})

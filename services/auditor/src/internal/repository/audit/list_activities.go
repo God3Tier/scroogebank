@@ -27,7 +27,8 @@ var changesOnly, changesOnlyArgs = func() (string, []any) {
 			args = append(args, action)
 		}
 	}
-	succeeded := `CASE WHEN jsonb_typeof(payload->'status_code') = 'number'
+	// payload is json, not jsonb (data/schema.sql), hence json_typeof.
+	succeeded := `CASE WHEN json_typeof(payload->'status_code') = 'number'
 		THEN (payload->>'status_code')::numeric < 400 ELSE true END`
 	return "(" + strings.Join(clauses, " OR ") + ") AND " + succeeded, args
 }()

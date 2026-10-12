@@ -28,6 +28,7 @@ RUN protoc -I /proto -I /usr/include \
 	--go-grpc_out=src --go-grpc_opt=module=auditor/src \
 	/proto/audit/v1/audit.proto
 RUN CGO_ENABLED=0 GOOS=linux go build -o /auditor ./src/serverd
+RUN CGO_ENABLED=0 GOOS=linux go build -o /chain-verify ./src/chainverify
 
 FROM protoc AS tools
 
@@ -41,6 +42,9 @@ RUN go install github.com/aarondl/sqlboiler/v4@${SQLBOILER_VERSION} \
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /auditor /auditor
+# chain-verify's scheduled task runs /chain-verify from this image instead of
+# the auditor (ADR-0022 decision 3).
+COPY --from=build /chain-verify /chain-verify
 
 EXPOSE 8080
 ENTRYPOINT ["/auditor"]

@@ -6,9 +6,6 @@ include-auto-generated: false
 filename: mocks.go
 
 packages:
-  auditor/src/cronjob:
-    config:
-      all: true
   auditor/src/internal/repository:
     config:
       all: true

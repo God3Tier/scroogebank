@@ -1,5 +1,5 @@
 // Package bootstrap holds startup logic shared by the auditor's entrypoints
-// (the server in src/serverd and the cronjob in src/cronjob). It exists
+// (the server in src/serverd and chain-verify in src/chainverify). It exists
 // because a Go main package cannot be imported by another package, so
 // anything more than one entrypoint needs lives here instead.
 package bootstrap

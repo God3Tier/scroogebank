@@ -50,6 +50,10 @@ func (s *routeService) InsertCorruptedAuditLog(context.Context, models.Corrupted
 	return nil
 }
 
+func (s *routeService) RecordFinding(context.Context, models.ChainFinding) (bool, error) {
+	return false, nil
+}
+
 func (s *routeService) DeleteCorruptedAuditLog(_ context.Context, id string) error {
 	s.deletedID = id
 	return nil

@@ -1,21 +1,25 @@
 package audit
 
 import (
+	"auditor/src/internal/chain"
 	"auditor/src/internal/models"
-	"auditor/src/internal/pkg"
 	orm "auditor/src/internal/repository/orm"
 	"context"
 	"database/sql"
 	"errors"
-	"strconv"
-	"time"
+	"strings"
 
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/aarondl/sqlboiler/v4/types"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	pkgerrors "github.com/pkg/errors"
 )
+
+// chainLockKey names the advisory lock that writers to the chain take turns
+// with. Any constant works; nothing else in audit-db takes advisory locks.
+const chainLockKey = 22
 
 func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput) error {
 	tx, err := i.db.BeginTx(ctx, nil)
@@ -24,50 +28,53 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 	}
 	defer tx.Rollback()
 
-	// The head is the log entry that no other entry references as its parent.
-	// Use the sequence only to choose among multiple leaves; sequence numbers
-	// can have gaps and therefore must not be derived from row counts.
-	var previousSequence int64
-	var parentHash string
-	err = tx.QueryRowContext(ctx, `
-		SELECT COALESCE(candidate.sequence_no, 0), COALESCE(candidate.hash, '')
-		FROM audit_log AS candidate
-		WHERE NOT EXISTS (
-			SELECT 1
-			FROM audit_log AS successor
-			WHERE successor.parent_hash = candidate.hash
-		)
-		ORDER BY candidate.sequence_no DESC NULLS LAST
-		LIMIT 1
-		FOR UPDATE OF candidate`,
-	).Scan(&previousSequence, &parentHash)
-	if errors.Is(err, sql.ErrNoRows) {
-		// An empty table has no head. Start a new chain at sequence 1 with no
-		// parent; this is the only case where no previous sequence exists.
-		previousSequence = 0
-		parentHash = ""
-	} else if err != nil {
+	// Writers take turns, so each one appends after the newest entry and the
+	// sequence numbers have no gaps. The lock is released when the transaction
+	// ends. Unlike SELECT ... FOR UPDATE, an advisory lock needs no UPDATE
+	// privilege on audit_log (ADR-0022 decision 2).
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, chainLockKey); err != nil {
 		return pkgerrors.WithStack(err)
 	}
 
-	now := time.Now()
+	// Entries are never deleted, so the newest has the highest sequence
+	// number. An empty table starts the chain at 1 with no parent.
+	var previousSequence int64
+	var parentHash string
+	err = tx.QueryRowContext(ctx,
+		`SELECT sequence_no, hash FROM audit_log ORDER BY sequence_no DESC LIMIT 1`,
+	).Scan(&previousSequence, &parentHash)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return pkgerrors.WithStack(err)
+	}
 
-	auditID := uuid.New().String()
-
-	rawString := auditID + strconv.FormatInt(previousSequence+1, 10) + auditLog.EventType + auditLog.Action + string(auditLog.SourceService) + auditLog.ActorId + now.Format(time.RFC3339) + auditLog.Payload
+	entry := models.AuditLog{
+		Id:            uuid.New().String(),
+		SequenceNo:    previousSequence + 1,
+		EventID:       auditLog.EventID,
+		EventType:     auditLog.EventType,
+		Action:        auditLog.Action,
+		SourceService: auditLog.SourceService,
+		ActorId:       auditLog.ActorId,
+		Timestamp:     chain.Now(),
+		// The ORM stores a JSON value without the whitespace around it, so it
+		// is hashed without it too.
+		Payload:    strings.Trim(auditLog.Payload, " \t\r\n"),
+		ParentHash: parentHash,
+	}
+	entry.Hash = chain.Hash(entry)
 
 	newLog := &orm.AuditLog{
-		ID:            auditID,
-		SequenceNo:    null.Int64From(previousSequence + 1),
-		EventID:       null.NewString(auditLog.EventID, auditLog.EventID != ""),
-		EventType:     null.StringFrom(auditLog.EventType),
-		Action:        null.StringFrom(auditLog.Action),
-		SourceService: null.StringFrom(string(auditLog.SourceService)),
-		ActorID:       null.StringFrom(auditLog.ActorId),
-		Timestamp:     null.TimeFrom(now),
-		Payload:       null.JSONFrom([]byte(auditLog.Payload)),
-		ParentHash:    null.StringFrom(parentHash),
-		Hash:          null.StringFrom(pkg.Hash(rawString)),
+		ID:            entry.Id,
+		SequenceNo:    entry.SequenceNo,
+		EventID:       null.NewString(entry.EventID, entry.EventID != ""),
+		EventType:     entry.EventType,
+		Action:        entry.Action,
+		SourceService: string(entry.SourceService),
+		ActorID:       entry.ActorId,
+		Timestamp:     entry.Timestamp,
+		Payload:       types.JSON(entry.Payload),
+		ParentHash:    entry.ParentHash,
+		Hash:          entry.Hash,
 	}
 
 	err = newLog.Insert(ctx, tx, boil.Infer())
