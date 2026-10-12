@@ -49,7 +49,6 @@ func run() error {
 	repo := repository.New(db)
 	auditSvc := auditSvc.New(repo.GetAudit())
 	corruptedSvc := corruptedSvc.New(repo.GetCorruptedLog())
-	
 
 	// Jobs
 	jobs := New(auditSvc, corruptedSvc, repo.GetAudit())

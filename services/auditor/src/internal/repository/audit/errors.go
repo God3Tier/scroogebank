@@ -1,11 +1,10 @@
-package audit 
+package audit
 
 import (
 	"errors"
 )
 
 var (
-
 	UnimplementedRepositoryError = errors.New("Error function not yet implemented")
 
 	// DuplicateEventError indicates the EventID on this request was already

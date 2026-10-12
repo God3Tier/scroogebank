@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-
 func (c clientController) DeleteClientProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	idStr := r.URL.Query().Get("id")

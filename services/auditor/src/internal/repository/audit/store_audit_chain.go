@@ -1,14 +1,14 @@
 package audit
 
 import (
+	"auditor/src/internal/models"
+	"auditor/src/internal/pkg"
+	orm "auditor/src/internal/repository/orm"
 	"context"
 	"database/sql"
 	"errors"
 	"strconv"
 	"time"
-	"auditor/src/internal/models"
-	"auditor/src/internal/pkg"
-	orm "auditor/src/internal/repository/orm"
 
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"

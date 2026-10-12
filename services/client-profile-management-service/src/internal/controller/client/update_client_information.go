@@ -58,7 +58,7 @@ func (c clientController) UpdateClientInformation(w http.ResponseWriter, r *http
 		Country:     cli.Country,
 		PostalCode:  cli.PostalCode,
 	}
-	
+
 	err = c.svc.UpdateClientInformation(ctx, client)
 	if err != nil {
 		switch {
