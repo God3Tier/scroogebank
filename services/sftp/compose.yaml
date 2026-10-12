@@ -16,7 +16,8 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-transactions}"]
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-transactions}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -35,7 +36,8 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crm -d transactions"]
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U crm -d transactions"]
       interval: 5s
       timeout: 5s
       retries: 10

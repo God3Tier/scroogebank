@@ -1,3 +1,6 @@
+# pg_isready checks over TCP (-h 127.0.0.1): on first start the postgres
+# image runs a setup server on the Unix socket only, then restarts, so a
+# socket check can pass just before that restart.
 DB_USER      := postgres
 DB_PASS      := postgres
 DB_NAME      := myapp
@@ -51,7 +54,7 @@ LOCALSTACK_KEY   := test
 ## generate the gRPC code, and run the Auditor
 run: proto
 	$(COMPOSE) up -d postgres localstack
-	@until $(COMPOSE) exec -T postgres pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done
+	@until $(COMPOSE) exec -T postgres pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done
 	@until $(COMPOSE) exec -T localstack awslocal sqs get-queue-url --queue-name audit-insert >/dev/null 2>&1; do sleep 2; done
 	@if ! $(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -tAc "SELECT to_regclass('public.audit_log') IS NOT NULL" | grep -qx t; then \
 		echo "Loading Auditor database schema..."; \
@@ -63,7 +66,7 @@ db-up:
 	$(COMPOSE) up -d postgres
 	@echo "Waiting for PostgreSQL..."
 	@until $(COMPOSE) exec -T postgres \
-		pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
+		pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
 		sleep 1; \
 	done
 	@echo "PostgreSQL is ready."
@@ -137,7 +140,7 @@ test-db-up:
 
 	@echo "Waiting for test PostgreSQL..."
 	@until $(TEST_COMPOSE) exec -T postgres \
-		pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
+		pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
 		sleep 1; \
 	done
 
@@ -184,8 +187,9 @@ sqlboiler:
 # Tests
 # ============================================================
 
+## Stops at the first failed step, so a failed generation is reported as such.
 test:
-	@trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
+	@set -e; trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
 	echo "========================================"; \
 	echo "Starting integration test environment"; \
 	echo "========================================"; \

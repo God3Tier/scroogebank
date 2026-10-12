@@ -1,3 +1,6 @@
+# pg_isready checks over TCP (-h 127.0.0.1): on first start the postgres
+# image runs a setup server on the Unix socket only, then restarts, so a
+# socket check can pass just before that restart.
 DB_USER     := postgres
 DB_PASS     := postgres
 DB_NAME     := accounts
@@ -34,7 +37,7 @@ APP_TLS_KEY_FILE ?=
 db-up:
 	$(COMPOSE) up -d
 	@echo "Waiting for postgres to be healthy..."
-	@until $(COMPOSE) exec -T postgres pg_isready -U $(DB_USER) >/dev/null 2>&1; do sleep 1; done
+	@until $(COMPOSE) exec -T postgres pg_isready -h 127.0.0.1 -U $(DB_USER) >/dev/null 2>&1; do sleep 1; done
 	@echo "Postgres is up."
 
 ## Stop and remove the container (keeps the volume)
@@ -85,20 +88,17 @@ psql:
 tools-image:
 	docker build --progress=$(DOCKER_BUILD_PROGRESS) --platform linux/amd64 --target tools -t $(TOOLS_IMAGE) .
 
-## Run SQLBoiler against a disposable Docker Postgres database
+## Run SQLBoiler against a disposable Docker Postgres database.
+## SQLBoiler runs as root in the tools container, so the files are renamed
+## there too: on Linux the host user cannot rename them in the root-owned
+## orm directory.
 sqlboiler:
 	@$(TEST_COMPOSE) down -v --remove-orphans >/dev/null 2>&1 || true
 	@set -e; trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
 	$(TEST_COMPOSE) up -d postgres; \
-	until $(TEST_COMPOSE) exec -T postgres pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done; \
+	until $(TEST_COMPOSE) exec -T postgres pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done; \
 	$(TEST_COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
-	$(TEST_COMPOSE) run --rm tools sqlboiler -c sqlboiler.docker.toml psql -o src/internal/repository/orm --wipe; \
-	for f in $(ORM_DIR)/*.go; do \
-		case "$$f" in \
-			*/mocks_*) ;; \
-			*) mv "$$f" "$(ORM_DIR)/mocks_$$(basename "$$f")" ;; \
-		esac; \
-	done
+	$(TEST_COMPOSE) run --rm tools sh -c 'sqlboiler -c sqlboiler.docker.toml psql -o $(ORM_DIR) --wipe && cd $(ORM_DIR) && for f in *.go; do case "$$f" in mocks_*) ;; *) mv "$$f" "mocks_$$f" ;; esac; done'
 
 ## Generate mocks for every interface recursively
 mockery: tools-image
@@ -112,15 +112,9 @@ test:
 	@$(TEST_COMPOSE) down -v --remove-orphans >/dev/null 2>&1 || true
 	@set -e; trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
 	$(TEST_COMPOSE) up -d postgres; \
-	until $(TEST_COMPOSE) exec -T postgres pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done; \
+	until $(TEST_COMPOSE) exec -T postgres pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done; \
 	$(TEST_COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
-	$(TEST_COMPOSE) run --rm tools sqlboiler -c sqlboiler.docker.toml psql -o src/internal/repository/orm --wipe; \
-	for f in $(ORM_DIR)/*.go; do \
-		case "$$f" in \
-			*/mocks_*) ;; \
-			*) mv "$$f" "$(ORM_DIR)/mocks_$$(basename "$$f")" ;; \
-		esac; \
-	done; \
+	$(TEST_COMPOSE) run --rm tools sh -c 'sqlboiler -c sqlboiler.docker.toml psql -o $(ORM_DIR) --wipe && cd $(ORM_DIR) && for f in *.go; do case "$$f" in mocks_*) ;; *) mv "$$f" "mocks_$$f" ;; esac; done'; \
 	find src -name mocks.go -delete; \
 	$(TEST_COMPOSE) run --rm tools mockery; \
 	$(TEST_COMPOSE) run --rm test-runner go test ./... -cover

@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: accounts
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d accounts"]
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d accounts"]
       interval: 2s
       timeout: 5s
       retries: 2
