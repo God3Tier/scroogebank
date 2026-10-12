@@ -43,4 +43,3 @@ func TestInsertCorruptedLog(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), actual.DateOfDetect, 5*time.Second)
 	assert.JSONEq(t, `{"Id":"audit-101","SequenceNo":101,"EventID":"event-101","EventType":"CRUD","Action":"UPDATE_CLIENT","SourceService":"CRM","ActorId":"agent-1","Timestamp":"2026-09-29T10:00:00Z","Payload":"{\"client\":\"client-1\"}","ParentHash":"parent-hash","Hash":"entry-hash"}`, string(payload))
 }
-

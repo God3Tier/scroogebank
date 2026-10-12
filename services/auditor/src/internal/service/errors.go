@@ -1,13 +1,12 @@
-package service 
+package service
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 )
 
 var (
-	
-	InvalidServiceError = errors.New("Unknown service request")
+	InvalidServiceError       = errors.New("Unknown service request")
 	UnimplementedServiceError = errors.New("TODO: implement service")
 )
 

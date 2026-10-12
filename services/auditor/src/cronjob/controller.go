@@ -21,7 +21,7 @@ type impl struct {
 func New(auditSvc auditSvc.Service, corruptedSvc corruptedSvc.Service, repo audit.Repository) Controller {
 	return impl{
 		auditSvc,
-		corruptedSvc, 
+		corruptedSvc,
 		repo,
 	}
 }

@@ -10,8 +10,8 @@ const (
 )
 
 func (a AccountStatus) IsValid() bool {
-	switch a{
-		case AccountStatusActive, AccountStatusInactive, AccountStatusPending, AccountStatusClosed: 
+	switch a {
+	case AccountStatusActive, AccountStatusInactive, AccountStatusPending, AccountStatusClosed:
 		return true
 	}
 

@@ -63,7 +63,7 @@ For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transacti
 
 | Command | Purpose |
 |---|---|
-| `make test` | Disposable PostgreSQL (port 5435), SQLBoiler generation, then `go test ./... -cover` |
+| `make test` | Disposable PostgreSQL (port 5435), SQLBoiler models and mocks, then `go test ./... -cover`. Works from a clean checkout; CI runs it |
 | `make mockery` | Regenerate mocks. Mocks and the SQLBoiler models are generated, not committed |
 | `make sqlboiler` | Regenerate the SQLBoiler models from `data/V1_init.sql` |
 | `make down` / `make db-reset` | Stop the database, keeping or deleting its data |

@@ -7,9 +7,9 @@ import (
 )
 
 type Repository interface {
-	InsertCorruptedLog(ctx context.Context, raw models.CorruptedAuditLog) error 
-	GetCorruptedLogs(ctx context.Context)( []models.CorruptedAuditLog, error)
-	DeleteCorruptedLog(ctx context.Context, uuid string) error 
+	InsertCorruptedLog(ctx context.Context, raw models.CorruptedAuditLog) error
+	GetCorruptedLogs(ctx context.Context) ([]models.CorruptedAuditLog, error)
+	DeleteCorruptedLog(ctx context.Context, uuid string) error
 }
 
 type impl struct {
@@ -18,6 +18,6 @@ type impl struct {
 
 func New(db *sql.DB) Repository {
 	return impl{
-		db, 
+		db,
 	}
 }

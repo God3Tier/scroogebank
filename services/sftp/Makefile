@@ -12,13 +12,21 @@ compose-check:
 deps: tools-build
 	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools run --rm go-tools go mod tidy
 
-test: deps
+## Run the receiver's tests against a disposable database. It generates the ORM
+## and the mocks (both git-ignored) first, so it works from a clean checkout, as
+## in CI. It does not run go mod tidy: before the mocks exist, tidy would drop
+## the testify/mock dependencies they need. PSQL_HOST points SQLBoiler at the
+## test database instead of sqlboiler.toml's host.
+test: tools-build
 	@set -e; \
 	$(COMPOSE) -f $(COMPOSE_FILE) --profile test up -d --wait test-db; \
 	trap '$(COMPOSE) -f $(COMPOSE_FILE) --profile test rm -sf test-db >/dev/null 2>&1 || true' EXIT; \
-	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools --profile test run --rm \
-		-e DB_HOST=test-db -e DB_PORT=5432 -e DB_USER=crm -e DB_PASSWORD=crm -e DB_NAME=transactions \
-		go-tools go test -v ./src/internal/repository ./src/internal/models ./src/cronjob ./src/cronjob/poller ./src/cronjob/accounts ./src/cronjob/sqs
+	run="$(COMPOSE) -f $(COMPOSE_FILE) --profile tools --profile test run --rm \
+		-e PSQL_HOST=test-db -e DB_HOST=test-db -e DB_PORT=5432 -e DB_USER=crm -e DB_PASSWORD=crm -e DB_NAME=transactions \
+		go-tools"; \
+	$$run sqlboiler psql --config sqlboiler.toml --output src/internal/repository/orm --pkgname orm --wipe; \
+	$$run sh -c 'find src -name mocks.go -delete && mockery --config .mockery.yaml'; \
+	$$run go test -v ./...
 
 build:
 	$(COMPOSE) --progress plain -f $(COMPOSE_FILE) build
