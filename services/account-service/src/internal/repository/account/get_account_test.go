@@ -11,20 +11,23 @@ import (
 )
 
 func TestGetAccount(t *testing.T) {
-	const accountID = "00000000-0000-0000-0000-000000000202"
+	// Each case looks up the account its fixture sets up: account_empty.sql
+	// removes ...0299, while account_lookup.sql (loaded by the first case)
+	// leaves ...0202 in the shared test database.
 	tests := []struct {
 		name      string
 		fixture   string
+		accountID string
 		wantFound bool
 	}{
-		{name: "returns existing account", fixture: "account_lookup.sql", wantFound: true},
-		{name: "returns not found for missing account", fixture: "account_empty.sql"},
+		{name: "returns existing account", fixture: "account_lookup.sql", accountID: "00000000-0000-0000-0000-000000000202", wantFound: true},
+		{name: "returns not found for missing account", fixture: "account_empty.sql", accountID: "00000000-0000-0000-0000-000000000299"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			db := openTestDB(t)
 			loadTestFixture(t, db, test.fixture)
-			got, err := NewAccountRepository(db).GetAccount(context.Background(), accountID)
+			got, err := NewAccountRepository(db).GetAccount(context.Background(), test.accountID)
 			if !test.wantFound {
 				require.ErrorIs(t, err, clienterrors.ErrNotFound)
 				assert.Nil(t, got)
@@ -32,7 +35,7 @@ func TestGetAccount(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.NotNil(t, got)
-			assert.Equal(t, accountID, got.ID)
+			assert.Equal(t, test.accountID, got.ID)
 		})
 	}
 }

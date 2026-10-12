@@ -112,7 +112,10 @@ sqlboiler:
 mockery: tools-image
 	$(TOOLS_RUN) mockery $(MOCKERY_ARGS)
 
-## Run the full test loop in disposable Docker containers
+## Run the full test loop in disposable Docker containers. It generates the
+## ORM and the mocks (both git-ignored), so it works from a clean checkout, as
+## in CI. Old mocks are removed first: one left over from a removed method
+## would stop mockery loading its package.
 test:
 	@$(TEST_COMPOSE) down -v --remove-orphans >/dev/null 2>&1 || true
 	@set -e; trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
@@ -126,6 +129,8 @@ test:
 			*) mv "$$f" "$(ORM_DIR)/mocks_$$(basename "$$f")" ;; \
 		esac; \
 	done; \
+	find src -name mocks.go -delete; \
+	$(TEST_COMPOSE) run --rm tools mockery; \
 	$(TEST_COMPOSE) run --rm test-runner go test ./... -cover
 
 all: test
