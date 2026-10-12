@@ -23,16 +23,22 @@ Recorded in [ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.
 
 ## Audit integrity and GDPR
 
-Recorded in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) (Proposed).
+Recorded in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) (Accepted).
 
 ### Tamper resistance
 
-- Each `audit_log` row stores the previous row's hash (`parent_hash`) and its own `hash`, computed over its fields plus the parent hash. Changing or deleting any past row breaks every later hash.
+- Each `audit_log` row stores the previous row's hash (`parent_hash`) and its own `hash`. The hash covers every field of the row, the parent hash included, in a length-prefixed encoding, so changing or deleting any past row breaks every later hash. Rows are never updated or deleted, and sequence numbers have no gaps.
+- The hash is computed over the row exactly as stored: the payload is kept as `json` (not `jsonb`, which rewrites it), and timestamps as `TIMESTAMPTZ` in UTC at microsecond precision.
 - The **chain head** is the newest row's `sequence_no` and `hash`. Because each hash covers everything before it, the head stands for the whole history up to that row.
-- The auditor's database role has only `INSERT` and `SELECT` on `audit_log`, with no `UPDATE` or `DELETE`.
-- The daily **chain-verify** task recomputes the chain, raises an alarm on any mismatch, and writes the current chain head to the **S3 Object Lock** bucket. Someone with database access could rewrite rows and recompute every hash, but could not change the anchors already locked in S3, so the next check detects it.
+- The auditor's database role has only `INSERT` and `SELECT` on `audit_log`, with no `UPDATE`, `DELETE` or `TRUNCATE`, and does not own the table. chain-verify's role can only read `audit_log`. So a compromised or faulty auditor can add entries but not change them.
+- The daily **chain-verify** task checks every row against three things:
+  - its own hash;
+  - the previous row's hash;
+  - the next sequence number.
+
+  It raises an alarm on each new finding, and writes the current chain head to the **S3 Object Lock** bucket. Someone with database access could rewrite rows and recompute every hash, but could not change the anchors already locked in S3, so the next check detects it: it checks that the row the latest anchor names still has the anchored hash. Each run writes a new anchor, locked in governance mode for 7 days.
 - Object Lock uses governance mode with short retention so the project can still be torn down.
-- **Tamper findings table.** chain-verify records each mismatch it finds in a separate table in audit-db (on `dev`: `corrupted_audit_log`, holding the affected row and the detection time), apart from the chain itself. Admins reach the findings through user-service; the auditor stays internal-only. Which operations they have on findings is open ([ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [open item 13](../architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)). The current `dev` code handles mismatches differently ([open item 13](../architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)).
+- **Tamper findings table.** chain-verify records each problem in a separate table in audit-db (`corrupted_audit_log`), apart from the chain itself, which it never changes. A finding holds the affected row, its id, the reason and the detection time. A problem is recorded once, when first found, not on every run. Admins reach the findings through user-service; the auditor stays internal-only. Which operations they have on findings is open ([open item 13](../architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)).
 
 ### Why chain-verify is a separate task, not part of the auditor service
 
