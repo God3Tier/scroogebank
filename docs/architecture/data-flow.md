@@ -1,8 +1,8 @@
 # Target architecture: request, audit and ingestion flows
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-09.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
-> Part of the [target architecture](system-overview.md); each decision is recorded as a Proposed ADR in the [ADR index](../adr/README.md).
+> Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
 ## Numbered flows
 
@@ -18,10 +18,10 @@ The numbers match the arrows on the diagram.
 | 6 | A service writes the business change and an outbox row in one database transaction; a service that builds its audit events in request middleware saves the row in a short transaction of its own right after the commit instead ([ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) exception). A relay then sends the audit event to the shared SQS standard queue (`audit-insert`). Every service with a database does this; one path is drawn. The ingest job relays its `audit_outbox` rows at the end of each run ([Transaction ingestion (Feature 3)](#transaction-ingestion-feature-3)). The Cognito triggers have no database, so they send straight to the queue ([Authentication events](../security/security-model.md#authentication-events)). |
 | 7 | The auditor consumes the events and appends them to the hash chain in audit-db. A message that fails 5 receives moves to the dead-letter queue and raises an alarm. |
 | 8 | user-service's activity feed reads audit data from the auditor over gRPC through ECS Service Connect (TLS, user JWT in metadata); admins also reach tamper findings through user-service. Only other services call the auditor. |
-| 9 | EventBridge Scheduler invokes the transaction-ingest Lambda about every 5 minutes ("9 invoke"), and starts the chain-verify task daily. The same scheduler bus ("9 · 11 · 13 scheduled starts") also starts the alert worker (11, every 6 hours) and the health analysis task (13, daily at 08:00 SGT). |
+| 9 | EventBridge Scheduler invokes the transaction-ingest Lambda about every 5 minutes ("9 invoke"), and starts the chain-verify task daily. The same scheduler bus ("9 · 11 · 13 scheduled starts") also starts the alert worker (11, every 4 hours) and the health analysis task (13, daily at 08:00 SGT). |
 | 9a | The ingest Lambda (VPC-attached) connects out through the NAT gateway and internet gateway to the SFTP server on EC2 (SSH key authentication, pinned host key). It imports the transactions into transactions-db and audits a FILE_PROCESSED event. |
 | 9b | chain-verify reads and verifies the chain in audit-db ("verify chain"), then writes the daily chain head to the S3 Object Lock bucket, and records any mismatch in the tamper-findings table in audit-db. |
-| 10 | client-service encrypts every client field except IDs and ownership with a per-client data key. It fetches that key, wrapped by a symmetric KMS key, from the client-keys DynamoDB table (through the DynamoDB gateway endpoint) and unwraps it with KMS Decrypt. |
+| 10 | client-service encrypts the 11 personal client fields with a per-client data key. It fetches that key, wrapped by a symmetric KMS key, from the client-keys DynamoDB table (through the DynamoDB gateway endpoint) and unwraps it with KMS Decrypt. |
 | 11 | The alert worker (x-factor 1) runs every 4 hours. It recalculates account sector exposures from holdings in alerts-db through the instrument master (a deterministic lookup; unknown instruments are UNCLASSIFIED, never guessed), and picks instruments held by at least 2 clients and at least 5% of clients. |
 | 11a | Only public terms (company, ticker, sector, event keywords, approved domains, dates) go to Bedrock AgentCore web search in Tokyo, out through the NAT gateway. No client, account, holding, agent or count data leaves Singapore. |
 | 11b | Singapore validates and de-duplicates the public event report, matches holdings deterministically (ticker, sector, company), scores materiality, writes the summary and private client context with Bedrock in Singapore, and routes the alert to the assigned agent (`/api/alerts`). Agent decisions are audited. |
