@@ -74,12 +74,11 @@ The auditor code on `dev` differs from [Audit integrity and GDPR](../security/se
 - The hash covers every field of a row and its parent's hash.
 - chain-verify is a program that checks the chain once per daily start and never writes to `audit_log`. It records each problem once in `corrupted_audit_log`, with the row's id and a reason.
 - The auditor's database role has only `INSERT` and `SELECT` on `audit_log`.
+- Each run checks the latest S3 Object Lock anchor and writes a new one.
 
-This settles (a), (b), (c) and the findings table's columns. The implementation is on `task/base-features/audit-hash-chain`.
+This settles (a) to (d) and the findings table's columns. The implementation is on `task/base-features/audit-hash-chain`, and the anchor on `task/base-features/audit-chain-anchor`.
 
-Still open:
-- (d) the S3 anchor, built in a later change;
-- from (e), which operations admins have on findings (read only, or also create and delete). Until that is decided, `dev`'s `GET`, `POST` and `DELETE` stay. Owner: the auditor's owner.
+Still open, from (e): which operations admins have on findings (read only, or also create and delete). Until that is decided, `dev`'s `GET`, `POST` and `DELETE` stay. Owner: the auditor's owner.
 
 ## 14. Tokyo web search availability
 

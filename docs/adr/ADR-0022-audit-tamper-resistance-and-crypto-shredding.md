@@ -80,8 +80,8 @@ Three more problems on `dev`:
      - that the row's fields produce its stored hash;
      - that its `parent_hash` is the previous row's hash (empty for the first row);
      - that its `sequence_no` is one more than the previous row's (1 for the first row);
-   - compares the head with the latest S3 anchor;
-   - writes the new chain head (`sequence_no`, `hash`) to an **S3 Object Lock** bucket (governance mode, short retention so the project can be torn down);
+   - checks that the row the latest S3 anchor names still has the anchored id and hash. This catches a chain rewritten with every hash recomputed, or cut back below the anchor. The latest anchor is the one written most recently;
+   - writes the new chain head (`sequence_no`, `id`, `hash`) as a new object in an **S3 Object Lock** bucket, locked in governance mode for 7 days, short enough that the project can be torn down. It writes the head even when it found problems: the chain is never repaired, so holding back would leave every later row unanchored;
    - records each problem it finds as a finding (decision 4);
    - raises an alarm on each new finding:
      - it logs each one as `CHAIN_TAMPER_DETECTED`, for a CloudWatch metric filter;
@@ -89,11 +89,11 @@ Three more problems on `dev`:
 
      A problem already recorded on an earlier run is not alarmed on again.
 
-   chain-verify never writes to `audit_log`. Only chain-verify's role can write to the anchor bucket. **The S3 anchor is built in a later change than the rest of this ADR;** until then, a full rewrite of the chain, or removing its newest rows, goes undetected.
+   chain-verify never writes to `audit_log`. Only chain-verify's role can write to the anchor bucket.
 4. **Tamper findings** go to a separate table in audit-db (`corrupted_audit_log`). Each finding holds:
    - the affected row as chain-verify found it;
    - the row's id;
-   - the reason: `HASH_MISMATCH`, `PARENT_MISMATCH` or `SEQUENCE_GAP`;
+   - the reason: `HASH_MISMATCH`, `PARENT_MISMATCH`, `SEQUENCE_GAP` or `ANCHOR_MISMATCH`. For an anchored row that is gone, the finding holds the anchor's sequence number, id and hash instead;
    - the detection time.
 
    The row's id and the reason are unique together, so a problem is recorded once, when it is first found, rather than on every daily run. The chain itself is never rewritten.
@@ -128,7 +128,7 @@ Three more problems on `dev`:
 ### Negative / Trade-offs
 
 - The chain is tamper-**evident**, not tamper-proof; prevention relies on database permissions.
-- Rows after the last anchor (up to a day) can be truncated undetected. Until the anchor is built, so can the whole chain be rewritten.
+- Rows after the last anchor (up to a day) can be truncated undetected.
 - The chain proves a row is unchanged since it was written, not that the event was true.
 - A found problem cannot be fixed in the chain, only investigated; its finding stays.
 - The new encoding invalidates chains written by `dev`'s code. Nothing is deployed, so only local databases are recreated.
@@ -149,8 +149,9 @@ The anchor bucket stores one small object per day (negligible). chain-verify is 
 - In Terraform:
   - the chain-verify task definition, which runs chain-verify instead of the auditor from the same image;
   - its EventBridge schedule;
-  - a database login per role in decision 2.
-- Object Lock retention chosen so the bucket can be deleted at project end.
+  - a database login per role in decision 2;
+  - the anchor bucket, with Object Lock enabled, writable only by chain-verify's task role.
+- A 7-day Object Lock retention, so the bucket can be deleted at project end.
 
 ## Validation
 
@@ -159,7 +160,8 @@ The anchor bucket stores one small object per day (negligible). chain-verify is 
 - A test that a problem found again on a later run is not recorded or alarmed on twice.
 - A test that the auditor's role can append entries but cannot update, delete or truncate them.
 - A test that concurrent writers produce one chain with no gaps.
-- A test that rewrites the whole chain and checks the S3 anchor comparison catches it (with the anchor).
+- A test that rewrites the whole chain and checks the S3 anchor comparison catches it.
+- A test that cuts the chain back below the anchor and checks it is reported.
 - A test that erases a client and checks verification still passes (with erasure).
 
 ## Revision history
@@ -177,6 +179,14 @@ The anchor bucket stores one small object per day (negligible). chain-verify is 
   - **Decision 4:** adds the finding's row id and reason, each problem recorded once.
 
   Hayyun, who owns the auditor's code, is asked to agree on the implementation's pull request.
+- 2026-10-12 23:45 +08:00: amended by the decision owner before merging, for the S3 anchor's implementation.
+  - **Decision 3** sets out the anchor:
+    - what it holds;
+    - that it is checked against the row it names;
+    - that each run writes a new object, locked for 7 days;
+    - that it is written even when problems were found;
+    - that the latest is the one written most recently.
+  - **Decision 4** adds `ANCHOR_MISMATCH`.
 
 ## References
 

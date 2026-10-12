@@ -36,7 +36,7 @@ Recorded in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredd
   - the previous row's hash;
   - the next sequence number.
 
-  It raises an alarm on each new finding, and writes the current chain head to the **S3 Object Lock** bucket. Someone with database access could rewrite rows and recompute every hash, but could not change the anchors already locked in S3, so the next check detects it. The anchor is built after the rest of chain-verify.
+  It raises an alarm on each new finding, and writes the current chain head to the **S3 Object Lock** bucket. Someone with database access could rewrite rows and recompute every hash, but could not change the anchors already locked in S3, so the next check detects it: it checks that the row the latest anchor names still has the anchored hash. Each run writes a new anchor, locked in governance mode for 7 days.
 - Object Lock uses governance mode with short retention so the project can still be torn down.
 - **Tamper findings table.** chain-verify records each problem in a separate table in audit-db (`corrupted_audit_log`), apart from the chain itself, which it never changes. A finding holds the affected row, its id, the reason and the detection time. A problem is recorded once, when first found, not on every run. Admins reach the findings through user-service; the auditor stays internal-only. Which operations they have on findings is open ([open item 13](../architecture/open-items.md#13-tamper-findings-and-chain-verify-on-dev)).
 
