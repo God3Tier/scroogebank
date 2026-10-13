@@ -1,12 +1,12 @@
-# ADR-0040: Cognito triggers in Python 3.14 on Lambda, sending within a fixed time budget
+# ADR-0040: Cognito triggers as one plain Java 25 Lambda at 1,769 MB, sending within a fixed time budget
 
 - Status: Accepted
-- Decision date/time: 2026-10-13 14:30 +08:00 (Asia/Singapore)
+- Decision date/time: 2026-10-13 14:55 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen (Feature 1 owner, who maintains the triggers)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `task/governance/adr-0040-trigger-runtime` (this record); `task/base-features/cognito-triggers` (implementation)
 - Related issue/PR: TBD (pull requests from both branches to `dev`)
-- Supersedes: N/A. It adds a Python exception to the runtime rule of [ADR-0017](ADR-0017-microservices-per-business-area.md), whose table does not list the triggers, and changes nothing else in it.
+- Supersedes: N/A. The runtime is the Java 25 baseline ([ADR-0017](ADR-0017-microservices-per-business-area.md), `project_plan.md` §2.2), so no runtime exception is needed.
 - Superseded by: N/A
 
 ## Context
@@ -15,53 +15,60 @@
 
 Cognito calls a trigger synchronously and waits 5 seconds, which cannot be changed. If the trigger times out, Cognito retries it, and after three failed attempts it returns an error. An error from the trigger is also returned to the user instead of tokens. The 5 seconds include the function's cold start.
 
-`project_plan.md` §2.2 makes Java 25 the default runtime and requires an ADR for any other deployed runtime. ADR-0017 allows Go for the auditor, client-service and account-service. Plain Java 25 often takes 1–4 seconds to start on Lambda before its first SQS call, depending on memory. The Feature 1 owner maintains the triggers, and works in Java and Python but not Go.
+Java 25 is the project's default runtime. A plain JVM is often said to start too slowly on Lambda for a limit like this. The Feature 1 owner, who maintains the triggers, works in Java and Python but not Go. The cold starts were therefore measured rather than assumed (Validation).
 
 ## Decision Drivers
 
 - Fit inside Cognito's 5 seconds, cold start included, with time left to retry.
 - A login must never fail because auditing failed (ADR-0020 decision 4).
+- Stay on the Java 25 baseline unless it cannot meet the limit.
 - The Feature 1 owner can maintain and explain the code.
 - Few moving parts, and almost no cost.
 - No personal data in audit events or logs.
 
 ## Options Considered
 
-### Option A: Java 25 without SnapStart
+### Option A: plain Java 25 at a small memory size (256–512 MB)
 
-- Pros: the baseline runtime; no ADR needed.
-- Cons: a cold start of 1–4 seconds before the first send leaves little or no time to retry. A start that runs past 5 seconds makes Cognito retry while the user waits.
+- Pros: the baseline runtime, and the cheapest per call.
+- Cons: Lambda's CPU share grows with memory, and a cold start measured about 4 seconds at 256 MB and 1.9 seconds at 512 MB. That leaves little or no time to retry within Cognito's 5 seconds.
 
-### Option B: Java 25 with SnapStart
+### Option B: plain Java 25 at 1,769 MB (chosen)
 
-- Pros: the baseline runtime. Lambda supports SnapStart on Java 25 at no extra cost, and a restore usually takes a few hundred milliseconds.
+- Pros:
+  - the baseline runtime, with no exception to justify and no new language or CI toolchain;
+  - a full vCPU, and a cold start of about 0.5 seconds (Validation);
+  - no SnapStart, so no alias, keep-warm ping or snapshot to manage;
+  - the same SDK as user-service, in a language the owner knows.
+- Cons: far more memory than the work needs, bought only for CPU. Lambda's own runtime start-up could not be measured locally.
+
+### Option C: Java 25 with SnapStart
+
+- Pros: Lambda supports SnapStart on Java 25 at no extra cost, and a restore usually takes a few hundred milliseconds.
 - Cons:
   - SnapStart works only on published versions, so Cognito must call an alias.
   - A version not called for 14 days loses its snapshot, and the next call fails with `SnapStartNotReadyException`, most likely failing that sign-in, unless a scheduled ping keeps it active. Environments in this project sit unused between demos ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)).
-  - The restore time cannot be checked until the infrastructure exists.
+  - Its start time cannot be checked until the infrastructure exists.
+  - Unnecessary once Option B fits.
 
-### Option C: Go on Lambda's OS-only runtime
+### Option D: Python 3.14
 
-- Pros: the fastest start, and the same shape as transaction-ingest ([ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7). The auditor's message types are already in Go.
+- Pros: about 1.6 times faster to start than Java at every memory size measured (0.3 seconds at 1,769 MB).
+- Cons: a third deployed language, needing a runtime ADR, its own CI job, linting and dependency updates. The 0.2 seconds it saves at 1,769 MB do not matter against a 5-second limit. It was built first, then replaced before merging once Java was measured.
+
+### Option E: Go on Lambda's OS-only runtime
+
+- Pros: likely the fastest start, and the same shape as transaction-ingest ([ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7).
 - Cons: the owner does not know Go.
 
-### Option D: Python 3.14 (chosen)
-
-- Pros:
-  - no snapshot to manage, so the start time is the same on every cold start and can be measured locally;
-  - about 0.5 seconds for a cold start at 1,024 MB (Validation);
-  - the owner knows it;
-  - the function is about 230 lines with comments, and the replay tool about 90.
-- Cons: a third deployed language, with its own CI job, linting and dependency updates. boto3 must be bundled and loaded, which is most of the cold start.
-
-### Option E: provisioned concurrency, with any runtime
+### Option F: provisioned concurrency, with any runtime
 
 - Pros: no cold starts.
 - Cons: billed all the time, about USD 5 or more a month per function, for a function called a few hundred times a day.
 
 ## Decision
 
-1. **Runtime:** Python 3.14 on Lambda's managed `python3.14` runtime, on arm64. Python is allowed for the Cognito triggers only; any other Python component needs its own ADR. ADR-0017's Java 25 baseline and Go exception are unchanged.
+1. **Runtime:** Lambda's managed `java25` runtime on arm64, as a plain JVM with no framework, no SnapStart and no provisioned concurrency. Lambda's default JIT setting for Java 25 (tiered compilation stopping at level 1) is kept. The function has 1,769 MB of memory, for a full vCPU, and a 5-second timeout as a backstop.
 2. **One function for both triggers**, `services/cognito-triggers`, set as the user pool's `PostAuthentication` and `PostConfirmation` trigger. It audits:
    - `PostAuthentication_Authentication` as `LOGIN`;
    - `PostConfirmation_ConfirmForgotPassword` as `PASSWORD_RESET`.
@@ -78,23 +85,24 @@ Cognito calls a trigger synchronously and waits 5 seconds, which cannot be chang
 4. **A fixed time budget.** The handler sends within 3 seconds of being called, or less if Lambda's own timeout is closer.
    - Each SQS attempt is cut off by a 0.5-second connect timeout and a 1-second read timeout, with the SDK's own retries off.
    - After a failure it waits 50 ms, doubling each time, and tries again only while another whole attempt would still finish within the budget.
-   - The function has 1,024 MB of memory, for the CPU share that keeps a cold start near 0.5 seconds, and a 5-second Lambda timeout as a backstop.
-5. **Fail open, always.** The handler never raises an error. If the configuration is missing, the SDK does not load, the Cognito event cannot be read or every attempt fails, it does two things:
+5. **Fail open, always.** The handler never throws. If the configuration is missing, the SDK does not load, the Cognito event cannot be read or every attempt fails, it does two things:
    - writes one JSON log line with `"msg": "AUDIT_SEND_FAILED"`, the audit event (when it could be built) and the error;
    - returns the Cognito event, so the sign-in or password reset goes ahead.
 
-   boto3 is loaded on the first send rather than at start-up, so even a broken package cannot block a login.
-6. **Replay.** `python -m cognito_triggers.replay` reads the output of `aws logs filter-log-events` and sends each logged audit event to the queue unchanged. The event keeps its `event_id`, so the auditor drops any it had stored after all.
+   The SDK is loaded by the first send rather than when Lambda creates the handler, so even a broken package cannot block a login.
+6. **Replay.** `bank.cognito.Replay` (`make replay`) reads the output of `aws logs filter-log-events` and sends each logged audit event to the queue unchanged. The event keeps its `event_id`, so the auditor drops any it had stored after all.
 7. **Packaging and network:**
-   - **The zip:** it bundles pinned versions of boto3 and its dependencies rather than using the runtime's copy, so every build is the same. It also carries their Python 3.14 bytecode, built in `python:3.14.8-slim-trixie`. Lambda's code folder is read-only, so without bytecode every cold start compiles boto3 from source.
+   - **The zip:** the root Maven build packages the classes, with their dependencies as jars in `lib/`.
+   - **The SQS client:** it is used without the SDK's default Netty and Apache HTTP clients; the JDK's URL connection client takes their place. Its region and credentials come straight from the variables Lambda sets, so a cold start does not search the SDK's default chains.
    - **The network:** the function runs outside the VPC and reaches SQS through its public regional endpoint over TLS, using its IAM role. ECS tasks already reach SQS through the NAT gateway rather than a VPC endpoint. The function needs no NAT, network interface or VPC endpoint.
 
 ## Rationale
 
-- With no snapshot, Python's cold start is predictable and was measured before any infrastructure exists. At 1,024 MB it leaves about 2.5 of the 3 seconds for retrying, which Java without SnapStart does not.
-- SnapStart would keep Java, but brings an alias, a keep-warm ping and a failure mode on idle environments, and its start time could only be checked after deployment.
-- Go starts fastest, but the person who maintains and explains the triggers does not know it. The function is small, so the owner's language matters more than Go's extra margin.
-- Limiting Python to the triggers keeps the third language to one small deployable.
+- Measured, plain Java at 1,769 MB starts in about half a second. That leaves about 2.5 of the 3 seconds for retrying, well inside Cognito's limit.
+- Staying on the baseline avoids a third language, a runtime exception and a separate CI toolchain. The triggers are built and tested in the same Maven build as the other Java services.
+- Python started about 0.2 seconds faster at the same memory, too little to be worth a third language.
+- SnapStart would cut the start further, but brings an alias, a keep-warm ping and a failure mode on idle environments, for time that is not needed.
+- The memory is chosen for CPU. At 1,024 MB a cold start measured 0.9 seconds, which would also fit. 1,769 MB halves it for a cost that stays well under USD 0.10 a month.
 - A source name of its own keeps these events apart from user-service's. It also lets the auditor check the fields Cognito provides, and later tie the name to one IAM role.
 
 ## Consequences
@@ -103,14 +111,14 @@ Cognito calls a trigger synchronously and waits 5 seconds, which cannot be chang
 
 - Logins and user-initiated password resets reach the audit chain, and an SQS outage does not lock users out.
 - The same 3-second budget applies to every call, cold or warm.
-- The function is tested end to end against LocalStack SQS before any infrastructure exists.
+- No new language: CI's existing `mvn -B verify` builds and tests the function, against LocalStack SQS through Testcontainers.
 
 ### Negative / Trade-offs
 
-- **Three languages:** Java, Go and Python are now deployed. CI gets a Python job (ruff and pytest), and Python and boto3 must be pinned and updated.
+- **Memory:** the function is given far more memory than it uses, only for the CPU that comes with it.
 - **Missing logins:** a login whose send fails is missing from the chain until an operator replays it.
 - **Possible duplicates:** Cognito retries a trigger that times out. If the first call's send had already succeeded, the chain holds two `LOGIN` entries with different `event_id`s. The budget makes this unlikely.
-- **Package size:** the zip is about 18 MB, almost all of it boto3. Loading boto3 is most of the cold start.
+- **An unmeasured part:** Lambda's own Java runtime start-up is not in the local figures. If the deployed cold start turns out much slower, SnapStart (Option C) is the next step.
 
 ## Security & Privacy Impact
 
@@ -125,12 +133,12 @@ Cognito calls a trigger synchronously and waits 5 seconds, which cannot be chang
 
 ## Cost Impact
 
-At a few hundred sign-ins a day, a mostly warm call of a few milliseconds and a cold start of about half a second at 1 GB come to well under USD 0.10 a month. The function needs no provisioned concurrency, runs outside the VPC so adds no NAT data, and has one log group.
+At a few hundred sign-ins a day, mostly warm calls of a few milliseconds and cold starts of about half a second at 1.7 GB come to well under USD 0.10 a month. The function needs no provisioned concurrency, runs outside the VPC so adds no NAT data, and has one log group.
 
 ## Operational Impact
 
 - **Infrastructure requirements** (Terraform, later; listed in `services/cognito-triggers/README.md`):
-  - the function: `python3.14`, arm64, 1,024 MB, a 5-second timeout, handler `cognito_triggers.handler.lambda_handler`, `AUDIT_QUEUE_URL`, outside the VPC;
+  - the function: `java25`, arm64, 1,769 MB, a 5-second timeout, handler `bank.cognito.Handler::handleRequest`, `AUDIT_QUEUE_URL`, outside the VPC;
   - the user pool's `PostAuthentication` and `PostConfirmation` triggers pointing at it, and Cognito's permission to invoke it;
   - its IAM role and the queue policy entry;
   - its log group;
@@ -139,8 +147,8 @@ At a few hundred sign-ins a day, a mostly warm call of a few milliseconds and a 
     - the function's `Errors` above 0;
     - its maximum `Duration` above 4 seconds;
   - a replay role.
-- **CI** runs `make -C services/cognito-triggers test`: ruff, pytest and LocalStack SQS.
-- **Versions:** Python 3.14.8 and the dependency pins are kept in `services/cognito-triggers` (the `Makefile`, `docker-compose.test.yml` and `requirements.txt`).
+- **CI:** the module is in the root `pom.xml`, so the existing backend job builds and tests it.
+- **Versions** come from the root `pom.xml`: the AWS SDK and Spring Boot BOMs, the latter for Jackson, SLF4J, Lombok and the test libraries.
 - **The auditor** accepts `COGNITO_TRIGGERS`; the auditor owner reviews that change.
 
 ## Validation
@@ -151,20 +159,20 @@ At a few hundred sign-ins a day, a mostly warm call of a few milliseconds and a 
   - every failure path returns the Cognito event and logs `AUDIT_SEND_FAILED`;
   - retries stop inside the budget.
 - **With the real SDK:** a port that refuses connections and a server that never answers both end inside the budget.
-- **Against LocalStack SQS:**
+- **Against LocalStack SQS (Testcontainers):**
   - a login's message arrives as the auditor expects;
   - a failed send, replayed from its log line, arrives with the same `event_id`.
-- **The auditor's tests:** they accept the exact message the function sends. They reject a wrong trigger source, a missing `sub` or user pool, and an unknown action. The feed lists the triggers' password resets but not their logins.
-- **Measured locally (2026-10-13):** the zip was unpacked read-only, with Docker CPU limits standing in for Lambda's CPU share. A cold call, which loads boto3, creates the client and sends once, took:
+- **The auditor's tests:** they accept the exact message the function sends, the same text as `AuditMessageTest`. They reject a wrong trigger source, a missing `sub` or user pool, and an unknown action. The feed lists the triggers' password resets but not their logins.
+- **Measured locally (2026-10-13):** each package was unpacked read-only, with Docker CPU limits standing in for Lambda's CPU share. Java ran on Corretto 25.0.4 with Lambda's default level-1 JIT. Each figure runs from process start to the end of one cold call, which loads the code, creates the SQS client and sends once:
 
-  | Memory | Cold call |
-  |---|---|
-  | 256 MB | 2.1 s |
-  | 512 MB | 1.0 s |
-  | 1,024 MB | 0.5 s |
-  | 1,769 MB | 0.3 s |
+  | Memory | Java 25 | Python 3.14, for comparison |
+  |---|---|---|
+  | 256 MB | about 4.0 s | 2.4 s |
+  | 512 MB | 1.9 s | 1.1 s |
+  | 1,024 MB | 0.9 s | 0.6 s |
+  | **1,769 MB** | **0.5 s** | 0.3 s |
 
-  A warm call took 3 ms. Without bytecode in the zip, each cold call took 50–70% longer.
+  A warm call took about 6 ms in Java. The 256 MB Java figure is from a first prototype, and the others are from this function's zip. With the JVM's own default JIT settings, which Lambda uses only with SnapStart or provisioned concurrency, Java took about twice as long.
 - **Once deployed (not yet run):**
   - a real login and a forgotten-password reset each add one chain entry;
   - the cold start's `Init Duration` plus `Duration`, from the function's `REPORT` log line, stays under 1.5 seconds;
@@ -173,7 +181,11 @@ At a few hundred sign-ins a day, a mostly warm call of a few milliseconds and a 
 ## References
 
 - [ADR-0017](ADR-0017-microservices-per-business-area.md), [ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md) decision 4, [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 3, [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7, [ADR-0025](ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) decision 5, [ADR-0027](ADR-0027-observability-baseline.md), [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)
-- [Open item 7](../architecture/open-items.md#7-go-runtime-exception), [open item 18](../architecture/open-items.md#18-audit-sender-verification)
+- [Open item 18](../architecture/open-items.md#18-audit-sender-verification)
 - [Security model: authentication events](../security/security-model.md#authentication-events)
-- AWS documentation: [Customizing user pool workflows with Lambda triggers](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html); [AWS Lambda adds support for Python 3.14](https://aws.amazon.com/about-aws/whats-new/2025/11/aws-lambda-python-314); [Activating and managing Lambda SnapStart](https://docs.aws.amazon.com/lambda/latest/dg/snapstart-activate.html)
+- AWS documentation: [Customizing user pool workflows with Lambda triggers](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html); [Customize Java runtime startup behavior for Lambda functions](https://docs.aws.amazon.com/lambda/latest/dg/java-customization.html); [AWS Lambda adds support for Java 25](https://aws.amazon.com/about-aws/whats-new/2025/11/aws-lambda-java-25); [Activating and managing Lambda SnapStart](https://docs.aws.amazon.com/lambda/latest/dg/snapstart-activate.html)
 - `services/cognito-triggers/README.md`
+
+## Revision history
+
+- 2026-10-13: before merging, the runtime was changed from Python 3.14 to plain Java 25 by the decision owner, after Java's cold start was measured at the same memory sizes. The message, budget, fail-open behaviour and replay are unchanged.

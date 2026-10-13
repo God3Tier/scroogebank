@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -38,8 +38,7 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 ## 7. Go runtime exception
 
-The auditor, client-service and account-service are written in Go, not the Java 25 baseline. [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted 2026-10-08) records the exception (project_plan §2.2). The Feature 3 components (the SFTP receiver: the import and transaction-service's read API) are Go too; [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7 (Proposed) extends the exception to them. The Cognito triggers are Python 3.14, the only Python component, so that they fit in Cognito's 5-second limit and their owner can maintain them ([ADR-0040](../adr/ADR-0040-cognito-triggers-python-lambda.md), Accepted 2026-10-13).
-
+The auditor, client-service and account-service are written in Go, not the Java 25 baseline. [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted 2026-10-08) records the exception (project_plan §2.2). The Feature 3 components (the SFTP receiver: the import and transaction-service's read API) are Go too; [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7 (Proposed) extends the exception to them.
 ## 8. Migrations on startup or as a task
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
