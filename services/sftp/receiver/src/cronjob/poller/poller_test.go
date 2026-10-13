@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,6 +125,34 @@ func TestPoll(t *testing.T) {
 				assert.ErrorIs(t, err, dbErr)
 				assert.Contains(t, remote.files, "/reports/retry.json")
 			}
+		})
+	}
+}
+
+func TestPollStopsStartingFilesNearItsDeadline(t *testing.T) {
+	tests := map[string]struct {
+		left      time.Duration
+		wantSaved int
+	}{
+		"too little time left: no file is started": {left: 30 * time.Second, wantSaved: 0},
+		"enough time left: every file is imported": {left: 2 * time.Minute, wantSaved: 2},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			remote := newFakeRemote()
+			remote.add("a.json", validJSON)
+			remote.add("b.json", validJSON)
+			store := &fakeStore{}
+			relay := &fakeRelay{}
+			ctx, cancel := context.WithTimeout(context.Background(), tt.left)
+			defer cancel()
+
+			require.NoError(t, auditedPoller(remote, store, relay).Poll(ctx))
+
+			assert.Len(t, store.saved, tt.wantSaved)
+			assert.Len(t, remote.renamed, tt.wantSaved, "files not started stay for the next poll")
+			assert.Equal(t, 1, relay.runs, "the poll's audit events are still relayed")
 		})
 	}
 }

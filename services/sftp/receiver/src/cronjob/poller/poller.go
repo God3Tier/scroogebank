@@ -41,6 +41,12 @@ type remoteSFTP interface {
 
 type remoteConnector func(context.Context) (remoteSFTP, func(), error)
 
+// runDeadlineReserve is how much time a poll with a deadline, such as a
+// Lambda invocation, must have left to start another file. It covers that
+// file and relaying the poll's audit events; files not started wait for the
+// next poll (ADR-0024 decision 3).
+const runDeadlineReserve = time.Minute
+
 // Poller reads transaction report files from the configured SFTP directory.
 type Poller struct {
 	config    Config
@@ -112,7 +118,11 @@ func (p *Poller) Poll(ctx context.Context) error {
 	p.endListedFailures(waiting)
 
 	var failures []error
-	for _, name := range waiting {
+	for i, name := range waiting {
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < runDeadlineReserve {
+			log.Printf("less than %s of this poll left: leaving %d files for the next poll", runDeadlineReserve, len(waiting)-i)
+			break
+		}
 		if err := p.processFile(ctx, client, path.Join(p.config.RemoteDir, name)); err != nil {
 			failures = append(failures, fmt.Errorf("process %s: %w", name, err))
 			continue
