@@ -10,6 +10,7 @@ import (
 	"time"
 	"uuid"
 
+	"client-profile-management-service/src/internal/documents/documentstest"
 	"client-profile-management-service/src/internal/encryption"
 	"client-profile-management-service/src/internal/encryption/encryptiontest"
 	"client-profile-management-service/src/internal/models"
@@ -62,12 +63,18 @@ func envOrDefault(name, fallback string) string {
 }
 
 // newTestRepository returns a repository whose data keys and blind indexes
-// come from an in-memory protector.
+// come from an in-memory protector, and whose documents are kept in memory
+// (see documentStore).
 func newTestRepository(t *testing.T) (*sql.DB, clientRepository, *encryptiontest.Protector) {
 	t.Helper()
 	db := openTestDB(t)
 	protector := encryptiontest.New()
-	return db, clientRepository{db: db, protector: protector}, protector
+	return db, clientRepository{db: db, protector: protector, documents: documentstest.New()}, protector
+}
+
+// documentStore is the in-memory store newTestRepository gave repo.
+func documentStore(repo clientRepository) *documentstest.Store {
+	return repo.documents.(*documentstest.Store)
 }
 
 // clearContact removes any row with this ID, email or phone, which an

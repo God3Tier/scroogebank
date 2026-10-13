@@ -52,6 +52,11 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 		client.PUT("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
 		client.GET("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientProfile, "clientId"))
 		client.DELETE("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.DeleteClientProfile, "clientId"))
+		// Identity documents: the evidence for Verify, never a verification
+		// themselves (ADR-0041).
+		client.POST("/:clientId/documents", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UploadClientDocument, "clientId"))
+		client.GET("/:clientId/documents", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.ListClientDocuments, "clientId"))
+		client.GET("/:clientId/documents/:documentId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientDocument, "clientId", "documentId"))
 	}
 }
 
@@ -69,14 +74,18 @@ func withCaller(handler func(http.ResponseWriter, *http.Request, models.Caller))
 }
 
 // adaptHandler lets the existing net/http controllers serve Gin routes. The
-// route IDs are copied into the query parameter used by those controllers.
-func adaptHandler(handler func(http.ResponseWriter, *http.Request), routeID string) gin.HandlerFunc {
+// route ID is copied into the "id" query parameter used by those controllers,
+// and any further route parameters into query parameters of their own names.
+func adaptHandler(handler func(http.ResponseWriter, *http.Request), routeID string, moreParams ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		req := c.Request
 		if routeID != "" {
 			urlCopy := *req.URL
 			query := urlCopy.Query()
 			query.Set("id", c.Param(routeID))
+			for _, name := range moreParams {
+				query.Set(name, c.Param(name))
+			}
 			urlCopy.RawQuery = query.Encode()
 			requestCopy := req.Clone(req.Context())
 			requestCopy.URL = &urlCopy

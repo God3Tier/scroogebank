@@ -27,8 +27,8 @@ type DailyCount struct {
 // clients are never counted (ADR-0036).
 type ClientStats struct {
 	// Total and ByVerificationStatus cover every client in scope, whenever
-	// it was created. Statuses are upper-cased, because the service stores
-	// both "UNVERIFIED" and "verified".
+	// it was created. Statuses are upper-cased, because clients verified
+	// before ADR-0041 hold "verified"; newer ones hold "VERIFIED".
 	Total                int64            `json:"total"`
 	ByVerificationStatus map[string]int64 `json:"byVerificationStatus"`
 	// CreatedInWindow and DailyCreated cover clients created in the window.
