@@ -103,7 +103,7 @@ With one shared queue, the auditor trusts the `source_service` field in each mes
 
 The spec says the system sends a verification request to the client, who provides the NRIC. For now the agent collects and uploads the NRIC and verifies it manually, and no request is sent by the system; the SES e-mail is deferred until verification is automated. The Feature 2 owner should confirm this meets the requirement and record the decision in an ADR.
 
-**Resolved (2026-10-13)** by [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md): no request is sent; the agent collects the document and uploads it through client-service, and the requirements Q&A confirms verification is manual (CPM04, CPM07, CPM23). Uploading never verifies the client: the agent checks the documents and then verifies, naming the documents checked. Joseph Yau, the Feature 2 code owner, is asked to agree on the implementation's pull request.
+**Resolved (2026-10-13)** by [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md): no request is sent; the agent collects the document and uploads it through client-service, and the requirements Q&A confirms verification is manual (CPM04, CPM07, CPM23). Uploading never verifies the client: the agent checks the documents and then verifies, naming the documents checked. Documents are optional, as the Q&A does not expect an upload (CPM06); a verification without one is recorded and shown as such. Joseph Yau, the Feature 2 code owner, is asked to agree on the implementation's pull request.
 
 ## 20. Sign-in flow and PKCE
 

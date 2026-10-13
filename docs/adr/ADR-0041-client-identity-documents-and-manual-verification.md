@@ -1,4 +1,4 @@
-# ADR-0041: Client identity documents: uploaded through client-service, encrypted with the client's key, as evidence for a manual verification
+# ADR-0041: Client identity documents: uploaded through client-service, encrypted with the client's key, as optional evidence for a manual verification
 
 - Status: Accepted
 - Decision date/time: 2026-10-13 20:25 +08:00 (Asia/Singapore)
@@ -26,6 +26,7 @@ Identity documents are among the most sensitive personal data the system would h
 
 - A record of what the agent checked, and who verified the client and when
 - The agent decides: uploading a document must not verify anyone
+- The spec's verify endpoint has no body, and the Q&A does not expect an upload (CPM06) or NRIC in the project (CPM03)
 - Protection of identity documents at rest, erasure (NFR 8) and least privilege
 - Every access audited ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md), [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md))
 - Effort and cost
@@ -65,8 +66,8 @@ Verify records only the agent's decision, as CPM06 and CPM23 allow.
 
 ### What Verify requires
 
-- **Option D: documents optional.** A client could be verified with nothing behind it.
-- **Option E: at least one of the client's documents, recorded (chosen).**
+- **Option D: documents optional, and a verification without one recorded and shown as such (chosen).** Matches the spec's endpoint and the Q&A, and allows a check in person, as CPM13 describes. A verification can have no document behind it, so the record must say so plainly.
+- **Option E: at least one of the client's documents.** Every verification has evidence, but the spec's endpoint without a body is refused, and a feature the Q&A calls "not expected" (CPM06) becomes a precondition for the one step it requires (CPM23), with an NRIC upload compulsory despite CPM03.
 
 ### The spec's request to the client
 
@@ -88,12 +89,14 @@ Verify records only the agent's decision, as CPM06 and CPM23 allow.
    - The object is stored before the row is inserted. If the insert fails, the object is left unreferenced, still encrypted with the client's key, and the failure is logged.
    - The API never changes or deletes a document, because it is evidence.
 4. **Reading.** `GET /api/clients/{clientId}/documents` lists the client's documents, newest first, without their content. `GET /api/clients/{clientId}/documents/{documentId}` returns one decrypted file with its stored type, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. Each list and each view is audited.
-5. **Verify.** `POST /api/clients/{clientId}/verify` takes `{"document_ids": ["..."]}`: the documents the agent checked against the client's details.
-   - At least one is required, and each must be one of this client's documents; otherwise 400.
+5. **Verify.** `POST /api/clients/{clientId}/verify` takes an optional body, `{"document_ids": ["..."]}`: the documents the agent checked against the client's details.
+   - Documents are optional. A call with no body, or with an empty list, verifies the client without a document, for example after the agent saw the client's identity document in person.
+   - Each document named must be one of this client's documents; otherwise 400.
    - A client that is already verified gets 409.
-   - In one transaction, client-service sets `verification_status` to `VERIFIED`, records `verified_by_agent_id` (the caller's Cognito `sub`) and `verified_at`, and marks those documents as the verification's evidence.
+   - In one transaction, client-service sets `verification_status` to `VERIFIED`, records `verified_by_agent_id` (the caller's Cognito `sub`), `verified_at` and `verified_with_documents` (whether any document was named), and marks the named documents as the verification's evidence.
+   - A verification without a document is shown as one everywhere it appears: `GET /api/clients/{clientId}` returns `verified_with_documents: false`, the client page says the client was verified without an uploaded document, and the audit event says so (decision 6). Documents uploaded later are not part of that verification.
    - The status is now stored in upper case, like `UNVERIFIED`. Clients verified before this change hold `verified`, so readers compare the status case-insensitively, as the dashboard figures already do ([ADR-0038](ADR-0038-dashboard-metric-definitions.md)).
-6. **Audit.** The existing audit middleware records an upload as `CREATE`, a list or view as `GET`, and Verify as `UPDATE`, as for every client route. Their payload gains `document_ids`: the new document's ID, the viewed document's ID, or the IDs Verify was given. These are IDs only, never content or file names, so the hash chain records which documents a verification was based on. The auditor needs no change.
+6. **Audit.** The existing audit middleware records an upload as `CREATE`, a list or view as `GET`, and Verify as `UPDATE`, as for every client route. Their payload gains `document_ids`: the new document's ID, the viewed document's ID, or the IDs Verify was given. A Verify call that names no document instead carries `"without_document": true`. These are IDs and flags only, never content or file names, so the hash chain records which documents a verification was based on, or that it had none. The auditor needs no change.
 7. **Erasure.** Deleting a client's data key makes their documents unreadable, including copies in backups. When erasure runs ([open item 21](../architecture/open-items.md#21-erasing-soft-deleted-client-data)), it should also delete the objects under `clients/{clientId}/` and the `client_documents` rows. Deleting a client is still a soft delete that keeps both ([ADR-0036](ADR-0036-soft-deletion-of-clients-and-accounts.md)).
 8. **No request is sent to the client.** The agent collects the document from the client and uploads it. SES stays deferred until verification is automated. This resolves open item 19.
 9. **Infrastructure requirements** (for when the infrastructure is built):
@@ -106,14 +109,14 @@ Verify records only the agent's decision, as CPM06 and CPM23 allow.
 
 - Option B is the only upload option where the documents get the same protection as the client's other personal data: encrypted with the client's own key, erased with it, readable only by client-service, and audited on every view.
 - Its costs are bounded: identity documents are small, the WAF exception is limited to one route, and the API Gateway limit is twice the file limit.
-- Requiring and recording the documents (Option E) makes the verification a decision with evidence behind it, while the decision itself stays the agent's, as the Q&A requires.
+- Optional documents (Option D) keep the spec's endpoint and the Q&A's manual verification intact, and leave the upload as the evidence the industry would expect (CPM06). Recording and showing a verification without a document as such keeps that choice visible to anyone reviewing the client or the audit trail.
 - Option G matches how the Q&A describes verification (the agent deals with the client) and avoids a client-facing channel the CRM does not have.
 
 ## Consequences
 
 ### Positive
 
-- Each verification records who verified the client, when, and which documents they checked, in clients-db and in the audit chain.
+- Each verification records who verified the client, when, and which documents they checked or that there were none, in clients-db and in the audit chain.
 - Identity documents are encrypted twice at rest and erased with the client's data key.
 - Uploading and verifying stay separate steps.
 
@@ -121,7 +124,7 @@ Verify records only the agent's decision, as CPM06 and CPM23 allow.
 
 - The WAF's body-size rule no longer applies to the upload route; client-service's own 5 MB limit takes its place.
 - Uploads pass through API Gateway and the service, so a much larger file limit would need a different design.
-- `POST /api/clients/{clientId}/verify` now needs a body; a call without one gets 400.
+- A client can be verified with no document behind it. The record and the page say so, but nothing stops it.
 - A document uploaded by mistake (for example another client's) cannot be removed through the API, and editing a verified client's details does not reset the verification. Both are [open item 22](../architecture/open-items.md#22-identity-documents-wrong-uploads-and-re-verification).
 
 ## Security & Privacy Impact
@@ -145,14 +148,16 @@ Negligible: a few megabytes of S3 storage and requests, and one more KMS key (ab
 
 - A JPEG, PNG or PDF of up to 5 MB is accepted; an HTML or SVG file renamed `.png` gets 415, and a 6 MB file gets 413.
 - The object in S3 is not readable as the uploaded file, and decrypting it as another client or document fails.
-- After an upload the client is still unverified. Verify with no documents or with another client's document gets 400; a second Verify gets 409.
-- After Verify, the client is `VERIFIED` with `verified_by_agent_id` and `verified_at`, the checked documents are marked as evidence, and the audit chain has the `UPDATE` with their IDs.
+- After an upload the client is still unverified. Verify with another client's document gets 400; a second Verify gets 409.
+- After Verify with documents, the client is `VERIFIED` with `verified_by_agent_id`, `verified_at` and `verified_with_documents: true`, the checked documents are marked as evidence, and the audit chain has the `UPDATE` with their IDs.
+- Verify with no body or an empty list gives `verified_with_documents: false`, marks no document, puts `"without_document": true` in the audit event, and the client page shows the client as verified without a document.
 - Another agent gets 404 for the client's documents and for Verify.
 - A role other than client-service's cannot read the bucket.
 
 ## Revision history
 
 - 2026-10-13 20:25 +08:00: proposed and accepted by the decision owner. Joseph Yau, who owns the client-service code, is asked to agree on the implementation's pull request.
+- 2026-10-13 21:03 +08:00: amended by the decision owner before the decision was merged. Documents are now optional for Verify (Option D instead of Option E), because the spec's endpoint has no body and the requirements Q&A does not expect an upload (CPM06) or NRIC in the project (CPM03). A verification without a document is recorded (`verified_with_documents`, `"without_document"` in the audit event) and shown as such.
 
 ## References
 
