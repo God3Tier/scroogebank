@@ -137,7 +137,7 @@ Each service on the diagram is listed with the requirement it serves. "Spec" mea
 | **Cognito user pool** | Managed OAuth 2.0 / OIDC identity provider. Handles MFA, password hashing and storage, and Admin/Agent groups. user-service is already built on it. | Feature 1: OAuth 2.0, MFA, secure password storage | No |
 | **Cognito triggers (Lambda)** | Login and user-initiated password-reset confirmation happen inside Cognito, not in our services. The `PostAuthentication` and `PostConfirmation_ConfirmForgotPassword` triggers are the only way to capture those events for the audit log. | Feature 1 audit: "login ... password changes" | No, unless login auditing is dropped |
 | **API Gateway HTTP API** | Single public API entry point. Checks the Cognito JWT before any request reaches the VPC, and applies throttling. | NFR 8 (Zero Trust), NFR 5 (overload protection) | No |
-| **API Gateway VPC Link ENIs** (both AZs) | Network interfaces that let API Gateway reach the internal ALB without exposing it to the internet. One per AZ, so the entry path survives the loss of an AZ. Its security group is the only one the ALB accepts traffic from. No extra charge. | NFR 2, NFR 8 | No (needed for a private ALB) |
+| **API Gateway VPC Link ENIs** (both AZs) | Network interfaces that let API Gateway reach the internal ALB without exposing it to the internet. One per AZ, so the entry path survives the loss of an AZ. Its security group is the only way in from outside the VPC; inside it, the ALB also accepts the health analysis task and the ingest Lambda ([ADR-0019](../adr/ADR-0019-edge-entry-chain.md) decision 4). No extra charge. | NFR 2, NFR 8 | No (needed for a private ALB) |
 
 ### Network
 
@@ -229,7 +229,7 @@ Recorded in [ADR-0019](../adr/ADR-0019-edge-entry-chain.md) (Proposed).
 - The VPC (`10.0.0.0/16`) has three subnet tiers in each AZ: public (`10.0.0.0/24`, `10.0.1.0/24`: NAT only), private app (`10.0.10.0/24`, `10.0.11.0/24`) and isolated DB (`10.0.20.0/24`, `10.0.21.0/24`). Nothing in the private or isolated tiers is reachable from the internet.
 - Each service's RDS primary is in AZ-1a's isolated subnet and its Multi-AZ standby in AZ-1b's. After a failover the roles swap; the endpoint name stays the same.
 - Each database instance has its own security group that allows port 5432 only from its owning service's security group.
-- API Gateway enters the VPC through VPC Link network interfaces in both AZs' private app subnets; the ALB accepts traffic only from the VPC Link's security group.
+- API Gateway enters the VPC through VPC Link network interfaces in both AZs' private app subnets; the ALB accepts traffic only from the VPC Link's security group and from the two callers that cannot use Service Connect, the health analysis task and the ingest Lambda.
 - There is one NAT gateway per AZ, so outbound traffic survives the loss of an AZ.
 - The external SFTP server is outside the CRM network. The ingestion Lambda reaches it outbound through the NAT gateway and internet gateway, and the server accepts connections only from the NAT gateway's Elastic IP.
 - The free S3 and DynamoDB gateway endpoints keep traffic to those services off the NAT.

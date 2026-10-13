@@ -25,7 +25,9 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
 - a long-running poller (or a single run with `-once`), not a Lambda function;
 - a file that is not valid JSON is audited but left in `reports/`, so it is read again on every run, instead of being moved to `rejected/`;
 - files with another extension are ignored, not rejected and audited;
-- no retries or circuit breaker around the SFTP connection within a run.
+- no retries or circuit breaker around the SFTP connection within a run;
+- a re-sent transaction keeps its first version, status included (`ON CONFLICT DO NOTHING`), so a Pending transaction never completes;
+- failure events have no time, and their IDs come from their content, so the auditor drops every later outage that has the same error text.
 
 ## Decision Drivers
 
@@ -69,17 +71,28 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
    - Reserved concurrency is 1.
    - It connects out through the NAT gateway with key authentication and a pinned host key (in SSM Parameter Store).
    - Timeouts, retries and a circuit breaker protect the connection.
+   - It stops starting new files when less than a minute of the invocation remains; the rest wait for the next run.
+   - It calls account-service's `/internal/accounts/lookup` ([ADR-0037](ADR-0037-transactions-database-and-account-linking.md)) through the internal ALB with its client-credentials token, as standalone scheduled tasks call services ([ADR-0018](ADR-0018-ecs-fargate-compute.md)): a Lambda function cannot use ECS Service Connect.
 4. **Per file:**
-   - verify that the file is a JSON array of transactions, and each row; a truncated or damaged file fails this check and is rejected;
-   - `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` the status;
-   - in the same transaction, write the `FILE_PROCESSED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)), listing each rejected row's record number and reason; rejected rows are not kept in a table;
+   - verify that the file is a JSON array of transactions, and each row; a truncated or damaged file fails this check and is rejected with a `FILE_FORMAT_INVALID` event;
+   - `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` the status, only while the stored status is Pending: a later file can complete or fail a transaction but never reopen it. Every other field, the account link included, keeps its first imported value ([ADR-0037](ADR-0037-transactions-database-and-account-linking.md) decision 6);
+   - in the same transaction, write the file's `FILE_PROCESSING_COMPLETED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)), with its start and end times, status, record counts, and each rejected row's record number and reason; rejected rows are not kept in a table;
    - move the file to `processed/` or `rejected/`.
 
    There is no table of processed files. A file leaves `reports/` only after its import commits; if moving it fails, the next run reads it again, and the upsert stores no duplicate transactions.
 5. **On failure:**
-   - on a connection or authentication failure, write a `Failed` `FILE_PROCESSED` event and stop;
+   - on a connection or authentication failure, write a `CONNECTION_FAILURE` event and stop;
    - files stay in `reports/` for the next run;
-   - on a system exception, keep the file and audit the error.
+   - on a system exception, keep the file and write a `SYSTEM_EXCEPTION` event.
+
+   Every ingestion event has event type `TRANSACTION_INGESTION`. A failure event holds the file name (empty for a connection failure), the stage, the error message and `occurred_at`. It has no import to join, so it is saved to `audit_outbox` on its own, and sent straight to SQS if that save fails.
+
+   **Each failure is audited once per episode**, when it first happens; `occurred_at` is that time. Repeats on later runs are not audited until the episode ends:
+   - a connection failure ends when a run connects and lists `reports/`;
+   - an account lookup failure ends when a lookup succeeds ([ADR-0037](ADR-0037-transactions-database-and-account-linking.md) decision 5);
+   - any other failure on a file ends when the file is imported or leaves `reports/`.
+
+   A new episode gets a new `occurred_at`, so its event ID differs from earlier ones and the auditor stores it. A retried write within one episode keeps its event ID, so it is stored once. The reader keeps episodes in memory: a restart, or a new Lambda execution environment, audits an ongoing failure again, the trade-off ADR-0037 decision 5 already accepts.
 6. **No Client ID check at import (provisional):** rows are validated on their own. Ownership is enforced when transactions are read ([open item 9](../architecture/open-items.md#9-client-id-validation-at-import), [open item 10](../architecture/open-items.md#10-how-transaction-reads-enforce-agent-ownership)).
 7. **Runtime: Go**, as built on `dev`. The receiver module holds both the import and transaction-service's read API, so both Feature 3 components stay in Go. This extends the Go exception in [ADR-0017](ADR-0017-microservices-per-business-area.md), whose table lists them as Java 25; once accepted, it supersedes that runtime entry only. On Lambda, the import runs as a compiled binary on the OS-only runtime (`provided.al2023`) and does what one `-once` run does today. The Feature 3 owner confirms this before acceptance.
 
@@ -103,14 +116,16 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
 
 - The team patches the SFTP host.
 - The 15-minute Lambda limit bounds each run; the same code can move to an ECS scheduled task if needed.
-- A Lambda cannot use ECS Service Connect, so a Client ID lookup at import would need another route.
+- A Lambda cannot use ECS Service Connect, so the account lookup goes through the internal ALB, and imports depend on it as well as on account-service. A Client ID lookup at import would need the same route.
+- A later file cannot correct a transaction's amount, date or account: only a Pending status moves forward. A correction must arrive as a new transaction.
 - A row whose Client ID matches no CRM client is stored rather than rejected. No agent can see it, and an optional reconciliation job can list such rows.
 - Damage that still parses, such as one changed digit in an amount, is not detected unless the file format adds a control record ([open item 5](../architecture/open-items.md#5-sftp-file-format-and-schedule)).
 - The `dev` receiver still needs a Lambda handler, the rejection of invalid and unsupported files, and retries with a circuit breaker on the connection (see Context). The field layout and the file schedule are still [open item 5](../architecture/open-items.md#5-sftp-file-format-and-schedule).
 
 ## Security & Privacy Impact
 
-- Key-based authentication only, with the worker's private key in Secrets Manager.
+- Key-based authentication only. The worker's private key and its Cognito client secret are in Secrets Manager and read when the function starts, never stored as Lambda environment variables.
+- TLS to transactions-db.
 - A pinned host key, which protects against man-in-the-middle attacks.
 - A chrooted SFTP-only account.
 - An IP allow-list on the server, and outbound port 22 only from the ingest security group.
@@ -133,7 +148,8 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
   - an unsupported format;
   - partially valid rows;
   - a replayed file (no duplicates);
-  - a server outage (a `Failed` event, and the file picked up later);
+  - a re-sent transaction (only a Pending status changes);
+  - a server outage (one `CONNECTION_FAILURE` event per outage, and the file picked up later);
   - a host-key mismatch (refused).
 - Check that every case produces the spec's audit fields.
 
@@ -148,3 +164,9 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
 
 - 2026-10-01 21:50 +08:00: proposed.
 - 2026-10-12: before acceptance, aligned with the `dev` receiver, as decided by the decision owner: JSON files named `report-<time>-<id>.json` in `reports/`, rejected rows listed in the `FILE_PROCESSED` event instead of a table, no `ingestion_file` table, Go as the runtime (extending ADR-0017's exception), and no `.sha256` checksum file. The Lambda reader is unchanged.
+- 2026-10-13: before acceptance, the audit event names in decisions 4 and 5 aligned with the `dev` receiver and the auditor: an imported file's event is `FILE_PROCESSING_COMPLETED`, and failures are `CONNECTION_FAILURE`, `FILE_FORMAT_INVALID` and `SYSTEM_EXCEPTION` events, not a `FILE_PROCESSED` event with status Failed. The decisions are otherwise unchanged.
+- 2026-10-13: before acceptance, as decided by the decision owner:
+  - decision 3: the reader stops starting files a minute before its timeout, and reaches account-service through the internal ALB;
+  - decision 4: the upsert moves only a Pending status forward. The `dev` receiver keeps the first version of a transaction (`ON CONFLICT DO NOTHING`), so a Pending transaction never completes;
+  - decision 5: each failure is audited once per episode, with `occurred_at`. On `dev`, event IDs come from content that has no time, so the auditor drops every later outage with the same error text;
+  - Security: the Cognito client secret in Secrets Manager, and TLS to transactions-db.
