@@ -1,3 +1,4 @@
+import { authorizationHeader } from '../auth/session.js'
 import { syntheticAlerts, syntheticDetail } from '../data/alerts.js'
 
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
@@ -8,11 +9,10 @@ const SYNTHETIC_DECISION_STATUSES = {
   DISMISS: 'DISMISSED',
 }
 
-function headers(extra = {}) {
-  const token = window.localStorage.getItem('access_token')
+async function headers(extra = {}) {
   return {
     Accept: 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(await authorizationHeader()),
     ...extra,
   }
 }
@@ -20,7 +20,7 @@ function headers(extra = {}) {
 async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
-    headers: headers(options.headers),
+    headers: await headers(options.headers),
   })
 
   if (!response.ok) {

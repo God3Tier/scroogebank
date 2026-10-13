@@ -32,6 +32,8 @@ Only these two seed accounts have passwords. Login is a front-end check against 
 
 The agent dashboard always shows Sarah Lee's book, so log in as Sarah when you present the agent view.
 
+These credentials work on `feat/midterm-demo` only. On `dev`, sign-in goes through Cognito managed login (README, "Sign-in"), and the seed data has no passwords: sign in as a Cognito test user in the `Admin` group for Part A and one in the `Agent` group for Part B. Each role sees only its own pages, and every page except Home needs a signed-in user. The figures stay synthetic, so the agent dashboard still shows Sarah Lee's book.
+
 ## 3. Demo flow
 
 Figures depend on today's date, because each window ends today. The script therefore describes what to point at, not exact numbers.

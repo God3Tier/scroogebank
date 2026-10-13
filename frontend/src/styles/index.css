@@ -190,6 +190,47 @@ p {
   font-weight: 700;
 }
 
+.sidebar-session {
+  margin-top: auto;
+  padding: var(--stack-lg) var(--stack-md) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-sm);
+}
+
+.sidebar-user {
+  padding: 0 16px;
+  color: var(--on-primary-container);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.sidebar-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: none;
+  border-left: 4px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: transparent;
+  color: var(--on-primary-container);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.sidebar-button:hover:not(:disabled) {
+  background: var(--primary-container);
+  color: var(--on-primary);
+}
+
+.sidebar-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .main {
   flex: 1;
   min-width: 0;
