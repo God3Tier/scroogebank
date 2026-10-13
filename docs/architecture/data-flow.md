@@ -11,7 +11,7 @@ The numbers match the arrows on the diagram.
 | # | Flow |
 |---|---|
 | 1 | The browser loads the frontend through CloudFront over HTTPS, filtered by AWS WAF. CloudFront reads the static files from a private S3 bucket using Origin Access Control (OAC). |
-| 2 | The user signs in with Cognito managed login: OAuth 2.0 authorization-code flow, plus MFA. PKCE is proposed but not yet confirmed ([open item 20](open-items.md#20-sign-in-flow-and-pkce-unconfirmed)). |
+| 2 | The user signs in with Cognito managed login: OAuth 2.0 authorization-code flow with PKCE, plus MFA ([ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) decision 2). On sign-out the frontend reports the logout to user-service, which audits it, then revokes the refresh token and ends the managed login session (decision 5). |
 | 3 | `/api/*` requests go from CloudFront to API Gateway, which validates the Cognito JWT and applies throttling. |
 | 4 | API Gateway forwards the request through the VPC Link (private integration) to the internal ALB over HTTPS. |
 | 5 | The ALB routes by path to the ECS Fargate services (auto scaling across two AZs). Every service validates the JWT again and talks only to its own database (SQL over TLS). The auditor has no ALB route. |

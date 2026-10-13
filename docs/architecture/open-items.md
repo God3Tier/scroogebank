@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -103,9 +103,11 @@ With one shared queue, the auditor trusts the `source_service` field in each mes
 
 The spec says the system sends a verification request to the client, who provides the NRIC. For now the agent collects and uploads the NRIC and verifies it manually, and no request is sent by the system; the SES e-mail is deferred until verification is automated. The Feature 2 owner should confirm this meets the requirement and record the decision in an ADR.
 
-## 20. Sign-in flow and PKCE (unconfirmed)
+## 20. Sign-in flow and PKCE
 
-The target architecture proposes Cognito managed login with the authorization-code flow and PKCE ([Identity and security](../security/security-model.md#identity-and-security)), but the team has not confirmed it. Cognito does not enforce PKCE, so it holds only if the client sends it. The `feat/frontend` branch signs in through `react-oidc-context` (`oidc-client-ts`) with `response_type: "code"`, which adds PKCE by default. The Feature 1 owner and the frontend owner must confirm: (a) managed login (a redirect, where PKCE applies) rather than a custom login form using Cognito's SRP API (no redirect, so PKCE does not apply); (b) the app client settings in [Identity and security](../security/security-model.md#identity-and-security), set in Terraform; (c) a test that the `/oauth2/authorize` request carries `code_challenge` with `code_challenge_method=S256`. Record the decision in [ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md).
+The target architecture proposed Cognito managed login with the authorization-code flow and PKCE ([Identity and security](../security/security-model.md#identity-and-security)). Cognito does not enforce PKCE, so it holds only if the client sends it. The Feature 1 owner and the frontend owner were to confirm: (a) managed login (a redirect, where PKCE applies) rather than a custom login form using Cognito's SRP API (no redirect, so PKCE does not apply); (b) the app client settings, set in Terraform; (c) a test that the `/oauth2/authorize` request carries `code_challenge` with `code_challenge_method=S256`.
+
+**Resolved (2026-10-13)** by [ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) decision 2: managed login with PKCE, through `oidc-client-ts` and `react-oidc-context`, from a public app client with the authorization-code grant only, and a frontend test for (c). This item had said `feat/frontend` already signed in that way; no branch has that code, so the sign-in is built new.
 
 ## 21. Erasing soft-deleted client data
 

@@ -73,7 +73,7 @@ The split into two boxes is only for layout: services used by the browser and th
 
 | Left box | What it does in this design |
 |---|---|
-| **Cognito user pool** | Signs users in (OAuth 2.0 authorization-code flow; PKCE proposed), enforces MFA, stores password hashes, and puts the Admin/Agent group in the JWT. |
+| **Cognito user pool** | Signs users in (OAuth 2.0 authorization-code flow with PKCE), enforces MFA, stores password hashes, and puts the Admin/Agent group in the JWT. |
 | **API Gateway HTTP API** | The one public API entry point. Validates the JWT and throttles traffic, then forwards through the VPC Link to the internal ALB. |
 | **S3: frontend static files** | Private bucket holding the built frontend, served only through CloudFront (OAC). |
 | **Cognito triggers (Lambda)** | One small function Cognito runs after a login and after a password-reset confirmation. It sends those events straight to the SQS audit queue; if that fails, the login still succeeds and the event is logged to CloudWatch for replay ([Authentication events](../security/security-model.md#authentication-events)). |
