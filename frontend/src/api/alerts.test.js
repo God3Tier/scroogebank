@@ -1,15 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { authorizationHeader } from '../auth/session.js'
 import { getAlert, listAlerts, recordDecision } from './alerts.js'
 
+vi.mock('../auth/session.js', () => ({ authorizationHeader: vi.fn() }))
+
 describe('alert API', () => {
+  beforeEach(() => {
+    authorizationHeader.mockResolvedValue({})
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
-    window.localStorage.clear()
   })
 
   it('scopes list filters into the contract query', async () => {
-    window.localStorage.setItem('access_token', 'synthetic-token')
+    authorizationHeader.mockResolvedValue({ Authorization: 'Bearer synthetic-token' })
     const fetchMock = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ items: [], nextCursor: null }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -46,5 +52,17 @@ describe('alert API', () => {
     await getAlert('alert-1')
 
     expect(fetchMock.mock.calls[0][0]).toBe('/api/alerts/alert-1')
+  })
+
+  it('sends no Authorization header when signed out', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ id: 'alert-1' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await getAlert('alert-1')
+
+    expect(fetchMock.mock.calls[0][1].headers).not.toHaveProperty('Authorization')
   })
 })
