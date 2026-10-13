@@ -25,6 +25,7 @@
         <module>services/event-alert-service</module>
         <module>services/client-health-monitor-service</module>
         <module>services/dashboard-service</module>
+        <module>services/cognito-triggers</module>
     </modules>
 
     <dependencyManagement>
