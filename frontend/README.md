@@ -61,6 +61,16 @@ It should show:
 
 Change them in the Cognito console, on the app client's login pages settings. `aws cognito-idp update-user-pool-client` resets every setting you leave out of the command to its default, so use it only with the full current configuration. The settings move to Terraform when infrastructure is built.
 
+### Signing out
+
+Cognito has no sign-out trigger, so a logout reaches the audit log only because the frontend reports it ([ADR-0025](../docs/adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) decision 5). **Sign out** in the sidebar runs `signOut()` from `src/auth/signOut.js`, which:
+
+1. calls user-service's `POST /api/users/me/logout` with the access token, audited as `LOGOUT`;
+2. revokes the refresh token at Cognito's `/oauth2/revoke`;
+3. drops the tokens and sends the browser to Cognito's `/logout`, which ends the managed login session and returns to `/`. Without this step, the next sign-in in that browser would skip the password and MFA.
+
+Each step runs even if the one before fails or takes more than 5 seconds, so an audit failure never stops a sign-out. A failure is only logged to the browser console, and that logout is then missing from the audit log. Locally, Vite sends `/api/users` to user-service on port 8081; start it with `make -C services/user-service run`.
+
 ### Checking PKCE
 
 Open the browser's network tab and click **Sign in**. The `/oauth2/authorize` request carries `code_challenge` and `code_challenge_method=S256`. `src/auth/config.test.js` checks the same on the request the library builds, including that the challenge is the SHA-256 of the verifier.
@@ -107,7 +117,8 @@ The alert tests cover scoped API requests, problem responses, evidence and
 exposure rendering, optimistic-version decisions, administrator read-only
 behavior, latest-decision presentation, terminal-state action guards, and
 empty/error states. The sign-in tests cover the PKCE challenge, page access by
-role, the callback page and returning to the page asked for.
+role, the callback page and returning to the page asked for; the sign-out tests
+cover the order of the steps and that a failed step never stops the rest.
 
 ## Conventions
 

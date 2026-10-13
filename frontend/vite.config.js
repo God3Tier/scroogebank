@@ -5,7 +5,14 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // The first matching rule wins. Locally, user-service listens on 8081
+    // (sign-out calls /api/users/me/logout) and client-profile-management-
+    // service on 8080.
     proxy: {
+      '/api/users': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,

@@ -1,12 +1,20 @@
+import { useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { NavLink } from 'react-router-dom';
 
 import { ADMIN, AGENT, inAnyGroup } from '../auth/roles.js'
+import { signOut } from '../auth/signOut.js'
 
 // Links are shown for the signed-in user's role only.
 function NavBar() {
   const auth = useAuth()
+  const [signingOut, setSigningOut] = useState(false)
   const signedIn = auth.isAuthenticated
+
+  function handleSignOut() {
+    setSigningOut(true)
+    signOut()
+  }
   const isAdmin = signedIn && inAnyGroup(auth.user, [ADMIN])
   const isAgent = signedIn && inAnyGroup(auth.user, [AGENT])
 
@@ -64,6 +72,10 @@ function NavBar() {
       {signedIn && (
         <div className="sidebar-session">
           <p className="sidebar-user">{auth.user?.profile?.email}</p>
+          <button type="button" className="sidebar-button" onClick={handleSignOut} disabled={signingOut}>
+            <span className="material-symbols-outlined" aria-hidden="true">logout</span>
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
         </div>
       )}
     </aside>
