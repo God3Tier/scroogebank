@@ -47,13 +47,25 @@ func TestEvents_FileCompleted(t *testing.T) {
 }
 
 func TestEvents_ProcessingError(t *testing.T) {
-	built, err := Events{}.ProcessingError(poller.ProcessingError{
+	item := poller.ProcessingError{
 		FileName: "txn.json", Action: "SYSTEM_EXCEPTION", Stage: "SYSTEM_EXCEPTION", Error: "save transactions: database unavailable",
-	})
+		OccurredAt: time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC),
+	}
+	built, err := Events{}.ProcessingError(item)
 	require.NoError(t, err)
 
 	decoded, payload := decode(t, built.Body)
 	assert.Equal(t, built.ID, decoded.EventID)
 	assert.Equal(t, "SYSTEM_EXCEPTION", decoded.Action)
 	assert.Equal(t, "save transactions: database unavailable", payload["error"])
+	assert.Equal(t, "2026-10-13T08:00:00Z", payload["occurred_at"])
+
+	again, err := Events{}.ProcessingError(item)
+	require.NoError(t, err)
+	assert.Equal(t, built.ID, again.ID, "a retry within one episode keeps its event ID")
+
+	item.OccurredAt = item.OccurredAt.Add(time.Hour)
+	later, err := Events{}.ProcessingError(item)
+	require.NoError(t, err)
+	assert.NotEqual(t, built.ID, later.ID, "a later episode of the same failure gets its own event ID")
 }

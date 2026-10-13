@@ -53,8 +53,8 @@ func (i impl) SaveAuditEvent(ctx context.Context, event models.AuditEvent) error
 }
 
 // saveAuditEvent adds the event to audit_outbox. Event IDs are derived from
-// the event's content, so the same outcome recorded twice, such as a repeated
-// connection failure, is kept once, as the Auditor would keep it.
+// the event's content, so an event written twice, such as a failure event
+// retried within its episode, is kept once, as the Auditor would keep it.
 func saveAuditEvent(ctx context.Context, exec boil.ContextExecutor, event models.AuditEvent) error {
 	if _, err := exec.ExecContext(ctx,
 		`INSERT INTO audit_outbox (event_id, body) VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING`,

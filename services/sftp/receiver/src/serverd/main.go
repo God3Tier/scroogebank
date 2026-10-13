@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"receiver/src/internal/repository"
@@ -40,13 +41,18 @@ func run() error {
 }
 
 func databaseDSN() string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		envOrDefault("DB_HOST", "db"),
 		envOrDefault("DB_PORT", "5432"),
 		envOrDefault("DB_USER", "crm"),
 		envOrDefault("DB_PASSWORD", "crm"),
 		envOrDefault("DB_NAME", "crm"),
+		envOrDefault("DB_SSLMODE", "disable"),
 	)
+	if rootCert := os.Getenv("DB_SSLROOTCERT"); rootCert != "" {
+		dsn += fmt.Sprintf(" sslrootcert='%s'", strings.ReplaceAll(rootCert, "'", "\\'"))
+	}
+	return dsn
 }
 
 func envOrDefault(name, fallback string) string {

@@ -46,8 +46,9 @@ type ParseFailure struct {
 }
 
 type ProcessingError struct {
-	FileName string
-	Action   string
-	Stage    string
-	Error    string
+	FileName   string
+	Action     string
+	Stage      string
+	Error      string
+	OccurredAt time.Time // when the failure's episode began
 }

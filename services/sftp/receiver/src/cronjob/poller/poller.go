@@ -41,6 +41,12 @@ type remoteSFTP interface {
 
 type remoteConnector func(context.Context) (remoteSFTP, func(), error)
 
+// runDeadlineReserve is how much time a poll with a deadline, such as a
+// Lambda invocation, must have left to start another file. It covers that
+// file and relaying the poll's audit events; files not started wait for the
+// next poll (ADR-0024 decision 3).
+const runDeadlineReserve = time.Minute
+
 // Poller reads transaction report files from the configured SFTP directory.
 type Poller struct {
 	config    Config
@@ -48,15 +54,16 @@ type Poller struct {
 	accounts  accountDirectory
 	audit     *Audit // nil when auditing is off
 	connector remoteConnector
+	now       func() time.Time
 
-	// lookupFailureAudited holds files whose account lookup failure has been
-	// audited. Such a file is retried on every poll, so only the first failure
-	// of each outage is audited. Polls run one at a time, so no lock is needed.
-	lookupFailureAudited map[string]bool
+	// failures holds the failures of the current episodes, so a failure that
+	// repeats on every poll is audited once per episode (see recordFailure).
+	// Polls run one at a time, so no lock is needed.
+	failures map[failureKey]*failureEpisode
 }
 
 func New(cfg Config, store transactionStore, accounts accountDirectory, audit ...Audit) *Poller {
-	p := &Poller{config: cfg, store: store, accounts: accounts, lookupFailureAudited: make(map[string]bool)}
+	p := &Poller{config: cfg, store: store, accounts: accounts, now: time.Now, failures: make(map[failureKey]*failureEpisode)}
 	if len(audit) > 0 {
 		p.audit = &audit[0]
 	}
@@ -92,25 +99,35 @@ func (p *Poller) Poll(ctx context.Context) error {
 
 	client, closeClient, err := p.connector(ctx)
 	if err != nil {
-		return errors.Join(err, p.writeProcessingError(ctx, ProcessingError{Action: "CONNECTION_FAILURE", Stage: "CONNECTION", Error: err.Error()}))
+		return errors.Join(err, p.recordFailure(ctx, failureKey{kind: connectionFailure}, err))
 	}
 	defer closeClient()
 
 	entries, err := client.ReadDir(p.config.RemoteDir)
 	if err != nil {
 		wrapped := fmt.Errorf("list remote directory %q: %w", p.config.RemoteDir, err)
-		return errors.Join(wrapped, p.writeProcessingError(ctx, ProcessingError{Action: "CONNECTION_FAILURE", Stage: "CONNECTION", Error: wrapped.Error()}))
+		return errors.Join(wrapped, p.recordFailure(ctx, failureKey{kind: connectionFailure}, wrapped))
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	var waiting []string
+	for _, entry := range entries {
+		if entry.Mode().IsRegular() && strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			waiting = append(waiting, entry.Name())
+		}
+	}
+	p.endListedFailures(waiting)
 
 	var failures []error
-	for _, entry := range entries {
-		if !entry.Mode().IsRegular() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+	for i, name := range waiting {
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < runDeadlineReserve {
+			log.Printf("less than %s of this poll left: leaving %d files for the next poll", runDeadlineReserve, len(waiting)-i)
+			break
+		}
+		if err := p.processFile(ctx, client, path.Join(p.config.RemoteDir, name)); err != nil {
+			failures = append(failures, fmt.Errorf("process %s: %w", name, err))
 			continue
 		}
-		if err := p.processFile(ctx, client, path.Join(p.config.RemoteDir, entry.Name())); err != nil {
-			failures = append(failures, fmt.Errorf("process %s: %w", entry.Name(), err))
-		}
+		p.endFileFailures(name)
 	}
 	return errors.Join(failures...)
 }
