@@ -70,16 +70,18 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
    - It connects out through the NAT gateway with key authentication and a pinned host key (in SSM Parameter Store).
    - Timeouts, retries and a circuit breaker protect the connection.
 4. **Per file:**
-   - verify that the file is a JSON array of transactions, and each row; a truncated or damaged file fails this check and is rejected;
+   - verify that the file is a JSON array of transactions, and each row; a truncated or damaged file fails this check and is rejected with a `FILE_FORMAT_INVALID` event;
    - `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` the status;
-   - in the same transaction, write the `FILE_PROCESSED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)), listing each rejected row's record number and reason; rejected rows are not kept in a table;
+   - in the same transaction, write the file's `FILE_PROCESSING_COMPLETED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)), with its start and end times, status, record counts, and each rejected row's record number and reason; rejected rows are not kept in a table;
    - move the file to `processed/` or `rejected/`.
 
    There is no table of processed files. A file leaves `reports/` only after its import commits; if moving it fails, the next run reads it again, and the upsert stores no duplicate transactions.
 5. **On failure:**
-   - on a connection or authentication failure, write a `Failed` `FILE_PROCESSED` event and stop;
+   - on a connection or authentication failure, write a `CONNECTION_FAILURE` event and stop;
    - files stay in `reports/` for the next run;
-   - on a system exception, keep the file and audit the error.
+   - on a system exception, keep the file and write a `SYSTEM_EXCEPTION` event.
+
+   Every ingestion event has event type `TRANSACTION_INGESTION`. A failure event holds the file name (empty for a connection failure), the stage and the error message. It has no import to join, so it is saved to `audit_outbox` on its own, and sent straight to SQS if that save fails.
 6. **No Client ID check at import (provisional):** rows are validated on their own. Ownership is enforced when transactions are read ([open item 9](../architecture/open-items.md#9-client-id-validation-at-import), [open item 10](../architecture/open-items.md#10-how-transaction-reads-enforce-agent-ownership)).
 7. **Runtime: Go**, as built on `dev`. The receiver module holds both the import and transaction-service's read API, so both Feature 3 components stay in Go. This extends the Go exception in [ADR-0017](ADR-0017-microservices-per-business-area.md), whose table lists them as Java 25; once accepted, it supersedes that runtime entry only. On Lambda, the import runs as a compiled binary on the OS-only runtime (`provided.al2023`) and does what one `-once` run does today. The Feature 3 owner confirms this before acceptance.
 
@@ -148,3 +150,4 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
 
 - 2026-10-01 21:50 +08:00: proposed.
 - 2026-10-12: before acceptance, aligned with the `dev` receiver, as decided by the decision owner: JSON files named `report-<time>-<id>.json` in `reports/`, rejected rows listed in the `FILE_PROCESSED` event instead of a table, no `ingestion_file` table, Go as the runtime (extending ADR-0017's exception), and no `.sha256` checksum file. The Lambda reader is unchanged.
+- 2026-10-13: before acceptance, the audit event names in decisions 4 and 5 aligned with the `dev` receiver and the auditor: an imported file's event is `FILE_PROCESSING_COMPLETED`, and failures are `CONNECTION_FAILURE`, `FILE_FORMAT_INVALID` and `SYSTEM_EXCEPTION` events, not a `FILE_PROCESSED` event with status Failed. The decisions are otherwise unchanged.

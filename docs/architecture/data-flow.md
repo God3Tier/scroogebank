@@ -1,6 +1,6 @@
 # Target architecture: request, audit and ingestion flows
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -19,7 +19,7 @@ The numbers match the arrows on the diagram.
 | 7 | The auditor consumes the events and appends them to the hash chain in audit-db. A message that fails 5 receives moves to the dead-letter queue and raises an alarm. |
 | 8 | user-service's activity feed reads audit data from the auditor over gRPC through ECS Service Connect (TLS, user JWT in metadata); admins also reach tamper findings through user-service. Only other services call the auditor. |
 | 9 | EventBridge Scheduler invokes the transaction-ingest Lambda about every 5 minutes ("9 invoke"), and starts the chain-verify task daily. The same scheduler bus ("9 · 11 · 13 scheduled starts") also starts the alert worker (11, every 4 hours) and the health analysis task (13, daily at 08:00 SGT). |
-| 9a | The ingest Lambda (VPC-attached) connects out through the NAT gateway and internet gateway to the SFTP server on EC2 (SSH key authentication, pinned host key). It imports the transactions into transactions-db and audits a FILE_PROCESSED event. |
+| 9a | The ingest Lambda (VPC-attached) connects out through the NAT gateway and internet gateway to the SFTP server on EC2 (SSH key authentication, pinned host key). It imports the transactions into transactions-db and audits each file with a FILE_PROCESSING_COMPLETED event. |
 | 9b | chain-verify reads and verifies the chain in audit-db ("verify chain"), then writes the daily chain head to the S3 Object Lock bucket, and records any mismatch in the tamper-findings table in audit-db. |
 | 10 | client-service encrypts the 11 personal client fields with a per-client data key. It fetches that key, wrapped by a symmetric KMS key, from the client-keys DynamoDB table (through the DynamoDB gateway endpoint) and unwraps it with KMS Decrypt. |
 | 11 | The alert worker (x-factor 1) runs every 4 hours. It recalculates account sector exposures from holdings in alerts-db through the instrument master (a deterministic lookup; unknown instruments are UNCLASSIFIED, never guessed), and picks instruments held by at least 2 clients and at least 5% of clients. |
@@ -152,14 +152,14 @@ The core banking system is **external** to the CRM. For the project it is simula
 |---|---|---|
 | 1 | File generator → SFTP server | Uploads `reports/report-<time>-<id>.json.tmp`, then renames it to `.json`. The file is now ready. |
 | 2 | EventBridge Scheduler → transaction-ingest | Invokes the Lambda (for example every 5 minutes, or on demand). |
-| 3 | transaction-ingest → SFTP server | SSH connect: key authentication, pinned host key, retry and circuit breaker. On connection or authentication failure it writes a `FILE_PROCESSED` event with status Failed to `audit_outbox`, relays it (step 8), and stops. |
+| 3 | transaction-ingest → SFTP server | SSH connect: key authentication, pinned host key, retry and circuit breaker. On connection or authentication failure it writes a `CONNECTION_FAILURE` event to `audit_outbox`, relays it (step 8), and stops. |
 | 4 | transaction-ingest → SFTP server | Lists `reports/`, ignoring `.tmp` uploads. |
 | 5 | For each ready file | Reads the file; verifies that it is a JSON array of transactions, and each row (no Client ID lookup; [Ingestion decisions](#ingestion-decisions)). |
-| 6 | transaction-ingest → transactions-db | `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` status. In the same transaction, writes the file's `FILE_PROCESSED` audit event to `audit_outbox`, listing each rejected row's record number and reason. |
+| 6 | transaction-ingest → transactions-db | `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` status. In the same transaction, writes the file's `FILE_PROCESSING_COMPLETED` audit event to `audit_outbox`, listing each rejected row's record number and reason. |
 | 7 | transaction-ingest → SFTP server | Moves the file to `processed/` or `rejected/`. |
-| 8 | transaction-ingest → SQS | At the end of the run, sends every unsent `audit_outbox` row (including any left from earlier runs) to the audit queue and marks it sent. Each `FILE_PROCESSED` event holds start, end, status, processed/accepted/rejected counts and reasons. If SQS cannot be reached, the rows wait for the next run. |
+| 8 | transaction-ingest → SQS | At the end of the run, sends every unsent `audit_outbox` row (including any left from earlier runs) to the audit queue and deletes it once SQS accepts it. Each `FILE_PROCESSING_COMPLETED` event holds start, end, status, processed/accepted/rejected counts and reasons. If SQS cannot be reached, the rows wait for the next run. |
 
-**Audit delivery.** transaction-ingest keeps its events in the `audit_outbox` table in transactions-db. On `dev` the SFTP receiver is both transaction-service and transaction-ingest, so this is the database's only outbox. If the ingest job becomes a separate Lambda, it needs its own outbox table, separate from transaction-service's: each component's database user can then use only its own table, so neither relays the other's events, and each event reaches SQS under the IAM role that produced it ([open item 18](open-items.md#18-audit-sender-verification)). The ingest job has no long-running relay loop, so it relays its own rows at the end of every run; a failed send is retried on the next run, about 5 minutes later.
+**Audit delivery.** transaction-ingest keeps its events in the `audit_outbox` table in transactions-db. On `dev` the SFTP receiver is both transaction-service and transaction-ingest, so this is the database's only outbox. If the ingest job becomes a separate Lambda, it needs its own outbox table, separate from transaction-service's: each component's database user can then use only its own table, so neither relays the other's events, and each event reaches SQS under the IAM role that produced it ([open item 18](open-items.md#18-audit-sender-verification)). The ingest job has no long-running relay loop, so it relays its own rows at the end of every run; a failed send is retried on the next run, about 5 minutes later. A failure event has no import to join, so it is saved to `audit_outbox` on its own; if that save fails too, typically because the database is down, the event is sent straight to SQS.
 
 ### How a file is marked ready
 
@@ -167,14 +167,16 @@ The file generator uploads each file with a `.tmp` suffix and then renames it to
 
 ### How the spec's audit requirements are met
 
+Every ingestion audit event has event type `TRANSACTION_INGESTION`; its action says what happened. An imported file gets one `FILE_PROCESSING_COMPLETED` event. Each failure gets a `FILE_FORMAT_INVALID`, `CONNECTION_FAILURE` or `SYSTEM_EXCEPTION` event holding the file name (empty for a connection failure), the stage and the error message.
+
 | Spec audit requirement | How it is detected |
 |---|---|
-| File processing start/end, status (Successful / Partially Successful / Failed) | Recorded for every file in its `FILE_PROCESSED` audit event. |
-| Records processed, accepted and rejected | Counted per file. |
-| Records that could not be parsed, with reason | Record number and reason, listed in the file's `FILE_PROCESSED` audit event, with no raw PII. |
-| Corrupted, invalid or unsupported file formats | An unknown extension, or a file that is not a JSON array of transactions, which is how a truncated or damaged file shows. The whole file is rejected and moved to `rejected/`. |
-| External service connection failures | SSH connection, authentication or host-key failures, and timeouts, after retries. |
-| System exceptions and processing errors | Caught per file; the file stays in `reports/` for the next run and the error is audited. |
+| File processing start/end, status (Successful / Partially Successful / Failed) | Recorded for every imported file in its `FILE_PROCESSING_COMPLETED` audit event. The status is Failed when every row is rejected. |
+| Records processed, accepted and rejected | Counted per file, in the same event. |
+| Records that could not be parsed, with reason | Record number and reason, listed in the file's `FILE_PROCESSING_COMPLETED` audit event, with no raw PII. |
+| Corrupted, invalid or unsupported file formats | An unknown extension, or a file that is not a JSON array of transactions, which is how a truncated or damaged file shows. The whole file is rejected, moved to `rejected/` and recorded in a `FILE_FORMAT_INVALID` event. |
+| External service connection failures | SSH connection, authentication or host-key failures, timeouts, and a failure to list `reports/`, after retries, each recorded in a `CONNECTION_FAILURE` event. |
+| System exceptions and processing errors | Caught per file; the file stays in `reports/` for the next run and a `SYSTEM_EXCEPTION` event records the error. |
 
 ### Ingestion decisions
 
@@ -207,4 +209,4 @@ The file generator uploads each file with a `.tmp` suffix and then renames it to
 
 **Security (NFR 8):** key-based authentication only; the worker's private key in Secrets Manager; the server's host key pinned in SSM Parameter Store (the worker refuses to connect on a mismatch, which protects against man-in-the-middle attacks); a chrooted, SFTP-only account with no shell; the server accepts port 22 only from the CRM NAT gateway's Elastic IP, and only the ingestion worker's security group may open outbound port 22.
 
-**Idempotency (NFR 4, 9):** a file leaves `reports/` only after its import commits, so a finished file is not read again. If moving it fails, the next run reads it again: transactions are inserted with `ON CONFLICT (transaction_id)`, so a replayed or overlapping file never creates duplicates, and a later file can move a transaction from Pending to Completed or Failed. A file read twice gets two `FILE_PROCESSED` events, which records what happened.
+**Idempotency (NFR 4, 9):** a file leaves `reports/` only after its import commits, so a finished file is not read again. If moving it fails, the next run reads it again: transactions are inserted with `ON CONFLICT (transaction_id)`, so a replayed or overlapping file never creates duplicates, and a later file can move a transaction from Pending to Completed or Failed. A file read twice gets two `FILE_PROCESSING_COMPLETED` events, which records what happened.
