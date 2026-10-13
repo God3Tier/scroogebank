@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import AppRouter from './AppRouter.jsx'
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
+vi.mock('./api/clients.js', () => ({
+  getClient: vi.fn().mockResolvedValue({ first_name: 'Synthetic', last_name: 'Client', verification_status: 'UNVERIFIED' }),
+  listDocuments: vi.fn().mockResolvedValue([]),
+}))
 
 const signedOut = { isLoading: false, isAuthenticated: false, user: null }
 
@@ -97,5 +101,14 @@ describe('routes', () => {
     renderAt('/agent/client/1/transactions')
 
     expect(screen.queryByText('not available to your role')).not.toBeInTheDocument()
+  })
+
+  it.each([['Agent'], ['Admin']])('opens a client page, with its documents and Verify, for an %s', async (group) => {
+    useAuth.mockReturnValue(signedInAs([group]))
+
+    renderAt('/clients/client-1')
+
+    expect(await screen.findByRole('heading', { name: 'Synthetic Client' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Identity documents' })).toBeInTheDocument()
   })
 })

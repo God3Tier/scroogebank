@@ -1,15 +1,39 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-// Below imports are seeded data, testing purposes
+import { createClient } from '../api/clients.js'
+// Below imports are seeded data, testing purposes. client-service has no
+// endpoint that lists clients, so the list below is still synthetic.
 import clients from '../data/clients.js'
 import transactions from '../data/transactions.js'
 import StatCard from '../components/StatCard.jsx'
+
+const EMPTY_CLIENT = {
+    first_name: '',
+    last_name: '',
+    date_of_birth: '',
+    gender: '',
+    email: '',
+    phone_number: '',
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    postal_code: '',
+}
+
+function createProblem(error) {
+    if (error.status === 409) return 'A client with this email or phone number already exists.'
+    if (error.status === 400) return `Check the details: ${error.message.replace(/^bad input:?\s*/i, '')}`
+    return 'The client could not be created. Try again.'
+}
 
 function AgentDashboard() {
 
     // Variables and States
     const [openSection, setOpenSection] = useState(null)
+    const [newClient, setNewClient] = useState(EMPTY_CLIENT)
+    const [creating, setCreating] = useState({ saving: false, error: '' })
     const navigate = useNavigate()
 
     // Functions
@@ -17,10 +41,24 @@ function AgentDashboard() {
         setOpenSection(openSection === section ? null : section)
     }
 
-    function handleCreateClient(event) {
-        event.preventDefault()
+    function setField(name) {
+        return (event) => setNewClient((current) => ({ ...current, [name]: event.target.value }))
+    }
 
-        console.log('Creating client profile...')
+    // The new client opens on its own page, where the agent uploads the
+    // identity document and verifies the client (ADR-0041).
+    async function handleCreateClient(event) {
+        event.preventDefault()
+        setCreating({ saving: true, error: '' })
+        try {
+            const created = await createClient({
+                ...newClient,
+                date_of_birth: `${newClient.date_of_birth}T00:00:00Z`,
+            })
+            navigate(`/clients/${created.client_id}`)
+        } catch (error) {
+            setCreating({ saving: false, error: createProblem(error) })
+        }
     }
 
     // Render
@@ -62,26 +100,27 @@ function AgentDashboard() {
             {openSection === 'createClientProfile' && (
                 <form className="card form-grid" onSubmit={handleCreateClient}>
                     <h2>Create Client Profile</h2>
-                    <label>First Name:<input type="text" /></label>
-                    <label>Last Name:<input type="text" /></label>
-                    <label>Date of Birth:<input type="date" /></label>
+                    <label>First Name:<input type="text" required maxLength={50} value={newClient.first_name} onChange={setField('first_name')} /></label>
+                    <label>Last Name:<input type="text" required maxLength={50} value={newClient.last_name} onChange={setField('last_name')} /></label>
+                    <label>Date of Birth:<input type="date" required value={newClient.date_of_birth} onChange={setField('date_of_birth')} /></label>
                     <label>Gender:
-                        <select>
+                        <select required value={newClient.gender} onChange={setField('gender')}>
                             <option value="">Select Gender</option>
                             <option value="male">Male</option>
                             <option value="female">Female</option>
                             <option value="other">Other</option>
                         </select>
                     </label>
-                    <label>Email:<input type="email" /></label>
-                    <label>Phone Number:<input type="tel" /></label>
-                    <label>Address:<input type="text" /></label>
-                    <label>City:<input type="text" /></label>
-                    <label>State:<input type="text" /></label>
-                    <label>Country:<input type="text" /></label>
-                    <label>Postal Code:<input type="text" /></label>
+                    <label>Email:<input type="email" required maxLength={255} value={newClient.email} onChange={setField('email')} /></label>
+                    <label>Phone Number:<input type="tel" required maxLength={20} value={newClient.phone_number} onChange={setField('phone_number')} /></label>
+                    <label>Address:<input type="text" required maxLength={100} value={newClient.address} onChange={setField('address')} /></label>
+                    <label>City:<input type="text" required maxLength={50} value={newClient.city} onChange={setField('city')} /></label>
+                    <label>State:<input type="text" required maxLength={50} value={newClient.state} onChange={setField('state')} /></label>
+                    <label>Country:<input type="text" required maxLength={50} value={newClient.country} onChange={setField('country')} /></label>
+                    <label>Postal Code:<input type="text" required maxLength={10} value={newClient.postal_code} onChange={setField('postal_code')} /></label>
+                    {creating.error && <p className="form-error form-grid__full" role="alert">{creating.error}</p>}
                     <div className="form-actions">
-                        <button type="submit">Create Profile</button>
+                        <button type="submit" disabled={creating.saving}>{creating.saving ? 'Creating…' : 'Create Profile'}</button>
                         <button type="button" onClick={() => toggleSection('createClientProfile')}>Cancel</button>
                     </div>
                 </form>

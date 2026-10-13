@@ -75,6 +75,23 @@ Each step runs even if the one before fails or takes more than 5 seconds, so an 
 
 Open the browser's network tab and click **Sign in**. The `/oauth2/authorize` request carries `code_challenge` and `code_challenge_method=S256`. `src/auth/config.test.js` checks the same on the request the library builds, including that the challenge is the SHA-256 of the verifier.
 
+## Client verification
+
+`/clients/:clientId` is one client's page: the profile, the client's identity documents and the verification ([ADR-0041](../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md)). It is open to admins and agents; client-service decides which clients each may see, and answers 404 for another agent's client. An agent:
+
+1. creates the client with **Create Client Profile** on the Agent Dashboard, which opens the new client's page;
+2. uploads the identity document the client gave them, if any: JPEG, PNG or PDF, up to 5 MB. Use synthetic documents only, never a real NRIC;
+3. opens it with **View**, compares it with the profile and ticks **Checked**. A document can be ticked only once it has been opened;
+4. confirms that they checked the documents and clicks **Verify client**.
+
+Uploading never verifies anyone. Verify sends the checked documents' IDs, and client-service records who verified, when and which documents; the page then shows that, and marks the documents used.
+
+Documents are optional, because the requirements Q&A does not expect an upload (CPM06). With no document checked, the agent confirms "I have checked this client's identity without an uploaded document" and clicks **Verify without a document**. That verification is never hidden: the page shows a **Without a document** badge and says the client was verified without an uploaded document, client-service returns `verified_with_documents: false`, and the audit event says so. The calls are in `src/api/clients.js`. Locally, Vite's `/api` rule sends them to client-profile-management-service on port 8080, which `make run` starts with its LocalStack bucket (see its README).
+
+The Agent Dashboard's **Manage Client Profiles** list is still synthetic: client-service has no endpoint that lists clients, so those rows do not open this page.
+
+The page uses the existing tokens and components from the Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision), in `src/styles/index.css`.
+
 ## Synthetic alerts
 
 For an offline event-alert UI review, enable the synthetic fixture adapter:
@@ -118,7 +135,12 @@ exposure rendering, optimistic-version decisions, administrator read-only
 behavior, latest-decision presentation, terminal-state action guards, and
 empty/error states. The sign-in tests cover the PKCE challenge, page access by
 role, the callback page and returning to the page asked for; the sign-out tests
-cover the order of the steps and that a failed step never stops the rest.
+cover the order of the steps and that a failed step never stops the rest. The
+client tests cover the client API calls, creating a client, that uploading never
+verifies, the 5 MB check and the service's refusals, that a document can be
+checked only once opened, that Verify needs a confirmation that matches what was
+checked, verifying without a document and how that is shown, and the verified
+state.
 
 ## Conventions
 
