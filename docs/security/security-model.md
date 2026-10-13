@@ -1,6 +1,6 @@
 # Security model (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -66,6 +66,8 @@ chain-verify reads audit-db directly rather than through the auditor's gRPC API:
 - Logout, user creation, update, disable, role change and admin password reset come from user-service.
 - user-service sends its events through its outbox. The Cognito triggers have no database, so they send each event straight to the audit queue.
 - **Fail open.** A trigger retries the send briefly (Cognito allows a trigger about 5 seconds). If it still fails, the trigger writes the full event to CloudWatch Logs as `AUDIT_SEND_FAILED`, a metric filter raises an alarm, and an operator replays the event to the queue. The login or password reset itself goes ahead: an SQS outage must not lock every user out.
+- **Time budget.** Both triggers are one Python 3.14 Lambda, which gives itself 3 seconds to send, so a cold start (about half a second at 1,024 MB) still finishes well inside Cognito's limit ([ADR-0040](../adr/ADR-0040-cognito-triggers-python-lambda.md)).
+- **No personal data.** The events carry the user's Cognito `sub` and the user pool and app client IDs, never the user's email, phone number or name.
 - **Trade-off accepted:** a login can be missing from the audit chain until it is replayed. The event keeps its `event_id`, so a replay never creates a duplicate.
 
 ## Client data encryption (envelope encryption)

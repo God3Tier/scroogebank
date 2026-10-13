@@ -24,6 +24,7 @@ a decision it governs.
 - [ADR-0030](ADR-0030-client-data-envelope-encryption.md) — client-service encrypts the 11 personal client fields with per-client data keys kept in DynamoDB and wrapped by KMS, so deleting a key erases the client; email and phone stay unique through blind indexes keyed by one shared KMS HMAC key over normalised values.
 - [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) — The auditor is internal-only and checks every caller's token; one changes-only activity feed in user-service (`GET /api/activities`) shows admins all agents' activities and agents their own, read over gRPC through ECS Service Connect; tamper findings are left to ADR-0022.
 - [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) — A hash chain over every field of each audit row and its parent's hash; an auditor database role that can only insert and read; a daily run-once chain-verify task that records each problem once in a findings table and anchors the head in S3 Object Lock; crypto-shredding for erasure.
+- [ADR-0040](ADR-0040-cognito-triggers-python-lambda.md) — The Cognito login and password-reset triggers are one Python 3.14 Lambda at 1,024 MB (Python is allowed for it only), sending `COGNITO_TRIGGERS` events within a 3-second budget, never failing the sign-in, and logging failed sends for a replay tool.
 
 ## Superseded decisions
 

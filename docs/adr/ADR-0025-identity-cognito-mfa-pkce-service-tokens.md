@@ -64,7 +64,7 @@ Feature 1 requires OAuth 2.0, MFA, secure password storage, and auditing of logi
 3. **Defense in depth:** API Gateway validates every token, and each service validates it again (ADR-0005).
 4. **Service identity:** calls with no user use Cognito client-credentials tokens with scopes, for example `audit/read`. Such callers include scheduled tasks and the health analysis task. Calls with a user forward the user's JWT.
 5. **Auth-event capture:**
-   - the two Cognito triggers send login and password-reset events directly to the audit queue and **fail open** ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md));
+   - the two Cognito triggers send login and password-reset events directly to the audit queue and **fail open** ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)). They are one Python 3.14 Lambda that gives itself 3 seconds to send ([ADR-0040](ADR-0040-cognito-triggers-python-lambda.md));
    - user-service audits logout, user creation, update, disable, role change and admin password reset through its outbox.
 
 ## Rationale
@@ -98,12 +98,12 @@ Feature 1 requires OAuth 2.0, MFA, secure password storage, and auditing of logi
 
 ## Cost Impact
 
-Cognito is free at this number of users. The trigger Lambdas cost almost nothing.
+Cognito is free at this number of users. The trigger Lambda costs almost nothing ([ADR-0040](ADR-0040-cognito-triggers-python-lambda.md)).
 
 ## Operational Impact
 
 - User pool, app clients, groups, scopes and triggers are defined in Terraform.
-- An `AUDIT_SEND_FAILED` alarm and a replay runbook.
+- An `AUDIT_SEND_FAILED` alarm and a replay runbook (in `services/cognito-triggers/README.md`).
 
 ## Validation
 

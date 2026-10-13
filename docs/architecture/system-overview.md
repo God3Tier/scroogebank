@@ -1,6 +1,6 @@
 # Target architecture: system overview
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -76,7 +76,7 @@ The split into two boxes is only for layout: services used by the browser and th
 | **Cognito user pool** | Signs users in (OAuth 2.0 authorization-code flow; PKCE proposed), enforces MFA, stores password hashes, and puts the Admin/Agent group in the JWT. |
 | **API Gateway HTTP API** | The one public API entry point. Validates the JWT and throttles traffic, then forwards through the VPC Link to the internal ALB. |
 | **S3: frontend static files** | Private bucket holding the built frontend, served only through CloudFront (OAC). |
-| **Cognito triggers (Lambda)** | Small functions Cognito runs after a login or a password-reset confirmation. They send those events straight to the SQS audit queue; if that fails, the login still succeeds and the event is logged to CloudWatch for replay ([Authentication events](../security/security-model.md#authentication-events)). |
+| **Cognito triggers (Lambda)** | One small function Cognito runs after a login and after a password-reset confirmation. It sends those events straight to the SQS audit queue; if that fails, the login still succeeds and the event is logged to CloudWatch for replay ([Authentication events](../security/security-model.md#authentication-events)). |
 | **S3: ID documents** | Private, KMS-encrypted bucket for client identity documents (synthetic only), uploaded with short-lived presigned URLs. The stored copy is the audit record of what the agent checked. |
 | **Amazon SES** (deferred) | Would send the client a verification request e-mail. Deferred: agents verify NRIC documents manually for now, so nothing is sent. Added only if verification is automated later. |
 | **EventBridge Scheduler** | Invokes the transaction-ingest Lambda about every 5 minutes, and starts chain-verify (daily), the alert worker (every 4 hours) and the health analysis task (daily, 08:00 SGT). |
@@ -91,7 +91,7 @@ The split into two boxes is only for layout: services used by the browser and th
 
 ## Components
 
-Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted).
+Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted); the Cognito triggers' runtime in [ADR-0040](../adr/ADR-0040-cognito-triggers-python-lambda.md) (Accepted).
 
 | Component | Responsibility | Runtime |
 |---|---|---|
@@ -108,6 +108,7 @@ Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Acce
 | **client-health-monitor-service** (x-factor 3) | Task API for relationship follow-up tasks. A daily scheduled analysis task (08:00 SGT) runs the deterministic rules engine (recurring-credit interruption, activity decline, sustained net outflow) and uses Bedrock only for wording, with a template fallback. | Java 25, ECS service + scheduled ECS task |
 | **auditor** | Consumes audit events from SQS, appends them to the hash chain, and serves audit reads over internal gRPC. | Go, ECS |
 | **chain-verify** | Daily hash-chain verification; writes the chain head to S3 Object Lock. Built from the auditor codebase and image. | Go, ECS scheduled task |
+| **cognito-triggers** | F1: sends each login and forgotten-password reset to the audit queue within 3 seconds, and never fails the sign-in; a failed send is logged for replay ([Authentication events](../security/security-model.md#authentication-events)). | Python 3.14, AWS Lambda (outside the VPC), invoked by Cognito |
 | **db-migrate** | Applies one service's versioned schema migrations to that service's database before the service deploys. One task definition per service. | ECS one-off task |
 | **RDS for PostgreSQL** (users-db, clients-db, accounts-db, transactions-db, audit-db) | Relational ACID storage. One instance per service, each with a Multi-AZ standby. | Managed |
 | **alerts-db, health-db** | The x-factor services' own RDS instances: holdings, instrument master, events, alerts and decisions (alerts-db); activity projection, signals, evidence, tasks and explanations (health-db). Each has its own outbox. | Managed |
