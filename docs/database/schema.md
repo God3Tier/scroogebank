@@ -1,6 +1,6 @@
 # Database design (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -11,7 +11,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 | Database | Owned by | Holds |
 |---|---|---|
 | `users-db` | user-service | CRM users (Admin/Agent), linked to Cognito; `audit_outbox` |
-| `clients-db` | client-service | Client profiles, verification status, and `deleted_at` for soft-deleted clients ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) |
+| `clients-db` | client-service | Client profiles, verification status with who verified and when, `deleted_at` for soft-deleted clients ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), and `client_documents`: one row per identity document ([ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md)) |
 | `accounts-db` | account-service | Bank accounts, each with `owner_agent_id`: the owning agent's Cognito `sub`, copied from client-service when the account is opened ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)), and `deleted_at` for soft-deleted accounts ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) |
 | `transactions-db` | transaction-service and transaction-ingest | Imported transactions and `audit_outbox`, the only outbox, because on `dev` the SFTP receiver is both transaction-service and transaction-ingest. Each transaction stores the `account_id` and `client_id` that account-service confirmed at import, with no foreign keys ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)) |
 | `audit-db` | auditor and chain-verify | The hash-chained `audit_log`, and the tamper-findings table (`corrupted_audit_log` on `dev`) |
@@ -29,7 +29,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 - **Consistency model (NFR 4):** strong (ACID) inside one service's database; eventual for the audit log (seconds behind) and for data that crosses services, such as imported transactions (per ingestion run).
 - **Dashboard indexes** ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)). The business dashboard's figures are computed in each owning database by date: `clients(created_at)`, `accounts(opening_date)` and `transactions(transaction_date)` are indexed for it. No tables or columns are added.
 - **No cache tier.** Database indexes, CloudFront caching of static files and in-process caching (Cognito signing keys, reference data) are enough at project scale. The spec asks for caching only "if needed" (NFR 1).
-- **Identity documents** (synthetic NRIC only) are uploaded to a private SSE-KMS S3 bucket through presigned URLs and kept for audit. The agent verifies them manually and records the result in `verification_status`.
+- **Identity documents** (synthetic NRIC only) are uploaded through client-service, encrypted with the client's data key, and kept for audit in a private SSE-KMS S3 bucket ([ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md)). `client_documents` holds each document's ID, client, detected type, size, uploader and time, and whether it was a verification's evidence; never the file or its name. Uploading changes nothing else: the agent checks the documents and then verifies the client, which sets `verification_status`, `verified_by_agent_id`, `verified_at` and `verified_with_documents`. Documents are optional, so `verified_with_documents` is false for a verification without one.
 
 ## Why one RDS instance per service: balancing cost and isolation
 
