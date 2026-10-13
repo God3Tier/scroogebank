@@ -51,7 +51,7 @@ Option D:
 1. **CloudFront** serves the frontend from a private S3 bucket through Origin Access Control and forwards `/api/*` to API Gateway. **AWS WAF** (AWS managed rule groups) is attached to CloudFront.
 2. **API Gateway HTTP API** is the single public API entry point. Its JWT authorizer validates the Cognito token, and stage throttling limits traffic.
 3. A **VPC Link** with network interfaces in both AZs' private app subnets forwards requests to the **internal ALB** over HTTPS.
-4. The **internal ALB** routes by path to each ECS service. It accepts traffic only from the VPC Link's security group. The auditor has no ALB route.
+4. The **internal ALB** routes by path to each ECS service. It accepts traffic only from the VPC Link's security group and from the security groups of the callers that cannot use ECS Service Connect: the health analysis task ([ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md)) and the transaction-ingest Lambda ([ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md)), which call with service tokens. API Gateway has no route for `/internal/*`, so those paths are reachable only from inside the VPC. The auditor has no ALB route.
 5. ACM provides the certificates (one in us-east-1 for CloudFront); Route 53 serves the custom domain if one is bought ([open item 2](../architecture/open-items.md#2-domain-name)).
 
 ## Rationale
@@ -74,7 +74,7 @@ Option D is the only option that keeps every service private, checks the JWT at 
 
 ## Security & Privacy Impact
 
-No public IP in the application or database tiers. The security group chain is VPC Link → ALB → each service. WAF blocks common exploits, bad inputs and known bad IPs. Tokens are validated twice (API Gateway and each service, as [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md) already requires).
+No public IP in the application or database tiers. The security group chain is VPC Link → ALB → each service; the health analysis task and the ingest Lambda also reach the ALB. WAF blocks common exploits, bad inputs and known bad IPs. Tokens are validated twice (API Gateway and each service, as [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md) already requires).
 
 ## Cost Impact
 
@@ -97,3 +97,8 @@ ALB target groups and health checks per service; API Gateway access logs and WAF
 - [Network layout](../architecture/system-overview.md#network-layout)
 - [`nfr-notes.md`](../architecture/nfr-notes.md) edge, rate-limiting and WAF sections (earlier design; conflicts with this ADR)
 - [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md) (extended, not superseded)
+
+## Revision history
+
+- 2026-10-01 21:50 +08:00: proposed.
+- 2026-10-13: before acceptance, decision 4 also lets the health analysis task and the transaction-ingest Lambda reach the ALB. Neither can use ECS Service Connect, and ADR-0034 and ADR-0024 already route their service calls through the internal ALB, which the earlier wording ("only from the VPC Link's security group") did not allow.
