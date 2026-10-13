@@ -78,6 +78,23 @@ type ValidDashboardViewPayload struct {
 	DateTime    string            `json:"datetime"`
 }
 
+// ValidAuthenticationPayload records a login or a forgotten-password reset
+// that Cognito reported through its triggers; the actor is the user (ADR-0040).
+// It names the user pool and app client only, never the user's attributes.
+type ValidAuthenticationPayload struct {
+	UserPoolID    string `json:"user_pool_id"`
+	AppClientID   string `json:"app_client_id,omitempty"`
+	TriggerSource string `json:"trigger_source"`
+	DateTime      string `json:"datetime"`
+}
+
+// authenticationTriggers are the actions the Cognito triggers send, each with
+// the trigger source it must come from.
+var authenticationTriggers = map[string]string{
+	"LOGIN":          "PostAuthentication_Authentication",
+	"PASSWORD_RESET": "PostConfirmation_ConfirmForgotPassword",
+}
+
 // userAuditActions lists, for each resource type user-service reports, the
 // actions it may send about it.
 var userAuditActions = map[string]map[string]bool{
@@ -152,6 +169,9 @@ func validatePayload(envelope ValidEvent) error {
 	case models.EventAlertServiceType:
 		return validateEventAlertPayload(envelope)
 
+	case models.CognitoTriggersServiceType:
+		return validateAuthenticationPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
@@ -215,6 +235,30 @@ func validateUserManagementPayload(envelope ValidEvent) error {
 	}
 	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
 		return fmt.Errorf("invalid UserAuditPayload datetime: %w", err)
+	}
+	return nil
+}
+
+func validateAuthenticationPayload(envelope ValidEvent) error {
+	triggerSource, known := authenticationTriggers[envelope.Action]
+	if !known {
+		return fmt.Errorf("unrecognized action for COGNITO_TRIGGERS: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorId) == "" {
+		return fmt.Errorf("COGNITO_TRIGGERS event requires actor_id")
+	}
+	var payload ValidAuthenticationPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid AuthenticationPayload: %w", err)
+	}
+	if payload.UserPoolID == "" {
+		return fmt.Errorf("invalid AuthenticationPayload: missing user_pool_id")
+	}
+	if payload.TriggerSource != triggerSource {
+		return fmt.Errorf("%s must come from trigger source %s, not %q", envelope.Action, triggerSource, payload.TriggerSource)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
+		return fmt.Errorf("invalid AuthenticationPayload datetime: %w", err)
 	}
 	return nil
 }

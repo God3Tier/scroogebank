@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "region": "ap-southeast-1",
+  "userPoolId": "ap-southeast-1_Example01",
+  "userName": "4a1b2c3d-0000-4000-8000-000000000001",
+  "callerContext": {
+    "awsSdkVersion": "aws-sdk-unknown-unknown",
+    "clientId": "example0app0client0id0001"
+  },
+  "triggerSource": "PostAuthentication_Authentication",
+  "request": {
+    "userAttributes": {
+      "sub": "4a1b2c3d-0000-4000-8000-000000000001",
+      "cognito:user_status": "CONFIRMED",
+      "email_verified": "true",
+      "email": "agent.one@example.test",
+      "phone_number": "+6560000001",
+      "given_name": "Agent",
+      "family_name": "One"
+    },
+    "newDeviceUsed": false
+  },
+  "response": {}
+}

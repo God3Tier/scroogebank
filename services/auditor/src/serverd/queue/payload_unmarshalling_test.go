@@ -304,6 +304,100 @@ func TestValidatePayload_DashboardRejectsInvalidEvents(t *testing.T) {
 	}
 }
 
+// cognitoLogin is a message exactly as services/cognito-triggers sends it for
+// its sample login event (src/test/resources/events/post-authentication.json;
+// AuditMessageTest checks the same text).
+const cognitoLogin = `{"event_id":"evt-1","event_type":"AUTHENTICATION","action":"LOGIN",` +
+	`"source_service":"COGNITO_TRIGGERS","actor_id":"4a1b2c3d-0000-4000-8000-000000000001",` +
+	`"payload":{"user_pool_id":"ap-southeast-1_Example01","trigger_source":"PostAuthentication_Authentication",` +
+	`"datetime":"2026-10-13T05:54:00.123Z","app_client_id":"example0app0client0id0001"}}`
+
+func authenticationPayload(triggerSource string) ValidAuthenticationPayload {
+	return ValidAuthenticationPayload{
+		UserPoolID:    "ap-southeast-1_Example01",
+		AppClientID:   "example0app0client0id0001",
+		TriggerSource: triggerSource,
+		DateTime:      "2026-10-13T05:54:00.123Z",
+	}
+}
+
+func TestValidatePayload_CognitoTriggersMessage(t *testing.T) {
+	var event ValidEvent
+	if err := json.Unmarshal([]byte(cognitoLogin), &event); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected the triggers' login message to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_ValidAuthentication(t *testing.T) {
+	tests := []struct {
+		action        string
+		triggerSource string
+	}{
+		{action: "LOGIN", triggerSource: "PostAuthentication_Authentication"},
+		{action: "PASSWORD_RESET", triggerSource: "PostConfirmation_ConfirmForgotPassword"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			event := buildEvent(t, "AUTHENTICATION", tt.action, string(models.CognitoTriggersServiceType),
+				authenticationPayload(tt.triggerSource))
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected %s to pass, got error: %v", tt.action, err)
+			}
+		})
+	}
+
+	withoutAppClient := authenticationPayload("PostAuthentication_Authentication")
+	withoutAppClient.AppClientID = ""
+	event := buildEvent(t, "AUTHENTICATION", "LOGIN", string(models.CognitoTriggersServiceType), withoutAppClient)
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected a login without an app client to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_AuthenticationRejectsInvalidEvents(t *testing.T) {
+	login := "PostAuthentication_Authentication"
+	tests := []struct {
+		name      string
+		eventType string
+		action    string
+		actor     string
+		change    func(*ValidAuthenticationPayload)
+	}{
+		{name: "wrong event type", eventType: "CRUD", action: "LOGIN", actor: "sub-1"},
+		{name: "unknown action", eventType: "AUTHENTICATION", action: "LOGOUT", actor: "sub-1"},
+		{name: "missing actor", eventType: "AUTHENTICATION", action: "LOGIN", actor: " "},
+		{name: "missing user pool", eventType: "AUTHENTICATION", action: "LOGIN", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.UserPoolID = "" }},
+		{name: "login from the password reset trigger", eventType: "AUTHENTICATION", action: "LOGIN", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.TriggerSource = "PostConfirmation_ConfirmForgotPassword" }},
+		{name: "password reset from a sign-up confirmation", eventType: "AUTHENTICATION", action: "PASSWORD_RESET", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.TriggerSource = "PostConfirmation_ConfirmSignUp" }},
+		{name: "missing datetime", eventType: "AUTHENTICATION", action: "LOGIN", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.DateTime = "" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := authenticationPayload(login)
+			if tt.change != nil {
+				tt.change(&payload)
+			}
+			event := buildEvent(t, tt.eventType, tt.action, string(models.CognitoTriggersServiceType), payload)
+			event.ActorId = tt.actor
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s to be rejected, got nil", tt.name)
+			}
+		})
+	}
+}
+
 func TestValidatePayload_UnknownSourceService(t *testing.T) {
 	event := buildEvent(t, "CRUD", "UPDATE", "NOT_A_REAL_SERVICE", ValidCRUDPayload{})
 
