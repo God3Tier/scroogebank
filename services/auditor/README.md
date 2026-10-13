@@ -129,6 +129,17 @@ resource type allows these actions:
 A successful event must carry `resource_id`, except a `READ` of
 `CORRUPTED_AUDIT_LOG`, which reads the whole list.
 
+The Cognito triggers (`services/cognito-triggers`, [ADR-0040](../../docs/adr/ADR-0040-cognito-triggers-java-lambda.md))
+send `source_service=COGNITO_TRIGGERS` with `event_type=AUTHENTICATION`. The
+actor is the user's Cognito `sub`, and the payload names the user pool, the
+app client (optional), the Cognito trigger source and the time, never the
+user's attributes. Each action must come from its own trigger source:
+
+| `action` | `trigger_source` |
+|---|---|
+| `LOGIN` | `PostAuthentication_Authentication` |
+| `PASSWORD_RESET` (a user's own forgotten-password reset) | `PostConfirmation_ConfirmForgotPassword` |
+
 The auditor long-polls the queue (up to 20s), so it should pick the message
 up, store it, and delete it shortly after.
 
@@ -296,7 +307,7 @@ make proto
 
 | RPC | Purpose |
 |---|---|
-| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
+| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
 
 user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
 

@@ -11,11 +11,15 @@ const (
 	EventAlertServiceType     ServiceType = "EVENT_ALERT_SERVICE"
 	AuditService              ServiceType = "AUDIT_SERVICE"
 	DashboardServiceType      ServiceType = "DASHBOARD"
+
+	// CognitoTriggersServiceType is the Lambda Cognito runs after a login or a
+	// forgotten-password reset (ADR-0040).
+	CognitoTriggersServiceType ServiceType = "COGNITO_TRIGGERS"
 )
 
 func (s ServiceType) IsValid() bool {
 	switch s {
-	case UserManagementServiceType, CRMServiceType, TransactionServiceType, EventAlertServiceType, AuditService, DashboardServiceType:
+	case UserManagementServiceType, CRMServiceType, TransactionServiceType, EventAlertServiceType, AuditService, DashboardServiceType, CognitoTriggersServiceType:
 		return true
 	}
 
@@ -51,6 +55,9 @@ func (s ServiceType) IsValidAction(action string) bool {
 
 	case DashboardServiceType:
 		return strings.EqualFold("DASHBOARD_VIEW", action)
+
+	case CognitoTriggersServiceType:
+		return strings.EqualFold("AUTHENTICATION", action)
 	}
 
 	return false

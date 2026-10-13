@@ -25,6 +25,8 @@ func TestServiceTypeIsValidAction(t *testing.T) {
 		{name: "audit security violation", service: AuditService, action: "SECURITY_VIOLATION", want: true},
 		{name: "dashboard view event type", service: DashboardServiceType, action: "DASHBOARD_VIEW", want: true},
 		{name: "dashboard rejects CRUD", service: DashboardServiceType, action: "CRUD", want: false},
+		{name: "cognito triggers authentication event type", service: CognitoTriggersServiceType, action: "AUTHENTICATION", want: true},
+		{name: "cognito triggers reject CRUD", service: CognitoTriggersServiceType, action: "CRUD", want: false},
 		{name: "unknown service", service: ServiceType("UNKNOWN"), action: "CREATE", want: false},
 	}
 

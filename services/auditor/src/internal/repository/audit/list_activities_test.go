@@ -17,9 +17,14 @@ func TestListActivities(t *testing.T) {
 	}{
 		"returns only changes, newest first": {
 			// Leaves out the reads, the sign-out, the failed delete, the
-			// dashboard view and the ingestion event (5 to 10).
+			// dashboard view, the ingestion event (5 to 10) and the sign-in
+			// (12).
 			filter:  models.ActivityFilter{Limit: 20},
-			wantSeq: []int64{11, 4, 3, 2, 1},
+			wantSeq: []int64{13, 11, 4, 3, 2, 1},
+		},
+		"shows a user's own password reset but not their sign-in": {
+			filter:  models.ActivityFilter{ActorId: "agent-c", Limit: 20},
+			wantSeq: []int64{13},
 		},
 		"filters by actor": {
 			filter:  models.ActivityFilter{ActorId: "agent-a", Limit: 20},
