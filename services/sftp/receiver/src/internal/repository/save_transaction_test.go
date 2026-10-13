@@ -123,42 +123,75 @@ func TestSaveTransaction(t *testing.T) {
 	}
 }
 
-func TestSaveTransactionDoesNotOverwriteDuplicateID(t *testing.T) {
+// A re-sent transaction moves only a Pending status forward; everything else
+// keeps its first imported value (ADR-0024 decision 4).
+func TestSaveTransactionOnARepeatedID(t *testing.T) {
 	db := openTestDB(t)
-	transaction := models.Transaction{
-		TransactionID:   "00000000-0000-0000-0000-000000000103",
-		AccountID:       "account-103",
-		TransactionType: "Deposit",
-		Amount:          25.50,
-		Currency:        "SGD",
-		TransferDate:    time.Date(2026, 9, 24, 8, 30, 0, 0, time.UTC),
-		Status:          "Completed",
-		Description:     "original transaction",
-	}
-	clearTransaction(t, db, transaction.TransactionID)
-	t.Cleanup(func() { clearTransaction(t, db, transaction.TransactionID) })
-
 	repo := New(db)
-	if err := repo.SaveTransaction(context.Background(), transaction); err != nil {
-		t.Fatalf("save initial transaction: %v", err)
+	ctx := context.Background()
+
+	tests := map[string]struct {
+		firstStatus, laterStatus, wantStatus string
+	}{
+		"a pending transaction completes":         {"Pending", "Completed", "Completed"},
+		"a pending transaction fails":             {"Pending", "Failed", "Failed"},
+		"a pending transaction stays pending":     {"Pending", "Pending", "Pending"},
+		"a completed transaction is not reopened": {"Completed", "Pending", "Completed"},
+		"a completed transaction does not fail":   {"Completed", "Failed", "Completed"},
+		"a failed transaction does not complete":  {"Failed", "Completed", "Failed"},
 	}
 
-	transaction.Amount = 99.99
-	transaction.Description = "duplicate file retry"
-	if err := repo.SaveTransaction(context.Background(), transaction); err != nil {
-		t.Fatalf("retry duplicate transaction: %v", err)
-	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			first := models.Transaction{
+				TransactionID:   "00000000-0000-0000-0000-000000000103",
+				AccountID:       "account-103",
+				TransactionType: "Deposit",
+				Amount:          25.50,
+				Currency:        "SGD",
+				TransferDate:    time.Date(2026, 9, 24, 8, 30, 0, 0, time.UTC),
+				Status:          test.firstStatus,
+				Description:     "original transaction",
+			}
+			clearTransaction(t, db, first.TransactionID)
+			t.Cleanup(func() { clearTransaction(t, db, first.TransactionID) })
+			if err := repo.SaveTransaction(ctx, first); err != nil {
+				t.Fatalf("save first version: %v", err)
+			}
 
-	var amount, description string
-	err := db.QueryRowContext(context.Background(),
-		"SELECT amount::text, description FROM transactions WHERE transaction_id = $1",
-		transaction.TransactionID,
-	).Scan(&amount, &description)
-	if err != nil {
-		t.Fatalf("read transaction after retry: %v", err)
-	}
-	if amount != "25.50" || description != "original transaction" {
-		t.Fatalf("duplicate retry changed stored row: amount=%s description=%q", amount, description)
+			// A later file sends the same ID with a new status and different
+			// values, now for an account that exists.
+			later := first
+			later.Status = test.laterStatus
+			later.Amount = 99.99
+			later.Description = "re-sent with other values"
+			later.AccountID = "a0000000-0000-0000-0000-000000000231"
+			later.LinkedAccountID = "a0000000-0000-0000-0000-000000000231"
+			later.ClientID = "00000000-0000-0000-0000-000000000203"
+			later.ImportStatus = "Matched"
+			if err := repo.SaveTransaction(ctx, later); err != nil {
+				t.Fatalf("save later version: %v", err)
+			}
+
+			var status, amount, description, sourceRef, importStatus string
+			var accountID sql.NullString
+			err := db.QueryRowContext(ctx, `
+				SELECT status, amount::text, description, source_account_ref, account_id::text, import_status
+				FROM transactions WHERE transaction_id = $1`, first.TransactionID,
+			).Scan(&status, &amount, &description, &sourceRef, &accountID, &importStatus)
+			if err != nil {
+				t.Fatalf("read transaction: %v", err)
+			}
+			if status != test.wantStatus {
+				t.Errorf("status = %q, want %q", status, test.wantStatus)
+			}
+			if amount != "25.50" || description != "original transaction" || sourceRef != "account-103" {
+				t.Errorf("re-sent values changed the stored row: amount=%s description=%q source=%q", amount, description, sourceRef)
+			}
+			if accountID.Valid || importStatus != "Unmatched" {
+				t.Errorf("re-sent row was linked later: account=%v import status=%q, want no link and Unmatched (ADR-0037 decision 6)", accountID, importStatus)
+			}
+		})
 	}
 }
 

@@ -79,6 +79,10 @@ Someone with admin rights on the team's shared user pool does this once. It is t
 
    Imported rows for accounts listed in `CRM_ACCOUNT_IDS` should be `Matched`.
 
+## Re-sent transactions
+
+A transaction already imported keeps its first version. A later file with the same `transaction_id` changes only a `Pending` status, to `Completed` or `Failed`: it never reopens a settled transaction, and never changes the amount, date, description or account link ([ADR-0024](../../../docs/adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 4). A row imported as `Unmatched` therefore stays `Unmatched` ([ADR-0037](../../../docs/adr/ADR-0037-transactions-database-and-account-linking.md) decision 6).
+
 ## Audit events
 
 When `AUDIT_QUEUE_URL` is set (with `AWS_REGION`), the poller records a `TRANSACTION_INGESTION` audit event for each processed file (`FILE_PROCESSING_COMPLETED`) and for each failure (`CONNECTION_FAILURE`, `FILE_FORMAT_INVALID` or `SYSTEM_EXCEPTION`). This receiver acts as transaction-service and transaction-ingest, so it implements [ADR-0020](../../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) decision 3 through the `audit_outbox` table:
