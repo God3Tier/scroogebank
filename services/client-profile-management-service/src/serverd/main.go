@@ -4,6 +4,7 @@ import (
 	"client-profile-management-service/src/internal/accounts"
 	aggregatecontroller "client-profile-management-service/src/internal/controller/aggregate"
 	"client-profile-management-service/src/internal/controller/client"
+	"client-profile-management-service/src/internal/documents"
 	"client-profile-management-service/src/internal/encryption"
 	"client-profile-management-service/src/internal/repository"
 	aggregaterepository "client-profile-management-service/src/internal/repository/aggregate"
@@ -25,6 +26,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -73,8 +75,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	documentStore, err := newDocumentStore(awsCfg)
+	if err != nil {
+		return err
+	}
 
-	registry := repository.New(db, protector)
+	registry := repository.New(db, protector, documentStore)
 	clientSvc := clientservice.NewClientService(
 		registry.GetClientRepository(),
 		accounts.NewHTTPDirectory(accountServiceURL, accountLookupTimeout),
@@ -135,6 +141,21 @@ func newProtector(awsCfg aws.Config) (encryption.Protector, error) {
 	}
 	return encryption.NewAWS(kms.NewFromConfig(awsCfg), dynamodb.NewFromConfig(awsCfg),
 		settings["CLIENT_KEYS_TABLE"], settings["CLIENT_DATA_KEY_ID"], settings["CLIENT_INDEX_KEY_ID"]), nil
+}
+
+// newDocumentStore keeps identity documents, already sealed with each client's
+// data key, in the private bucket CLIENT_DOCUMENTS_BUCKET (ADR-0041). Locally,
+// AWS_ENDPOINT_URL_S3 points the SDK at LocalStack, which needs path-style
+// addressing.
+func newDocumentStore(awsCfg aws.Config) (documents.Store, error) {
+	bucket := strings.TrimSpace(os.Getenv("CLIENT_DOCUMENTS_BUCKET"))
+	if bucket == "" {
+		return nil, fmt.Errorf("CLIENT_DOCUMENTS_BUCKET is required for identity documents")
+	}
+	client := s3.NewFromConfig(awsCfg, func(options *s3.Options) {
+		options.UsePathStyle = os.Getenv("AWS_ENDPOINT_URL_S3") != ""
+	})
+	return documents.NewS3(client, bucket), nil
 }
 
 func databaseURL() string {

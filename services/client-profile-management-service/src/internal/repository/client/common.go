@@ -7,12 +7,8 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/aarondl/sqlboiler/v4/queries/qm"
 )
-
-// keepDeletedAt stops an update from undoing a delete that happened after the read.
-var keepDeletedAt = boil.Blacklist(orm.ClientColumns.DeletedAt)
 
 // findClient treats a deleted client as not found (ADR-0036).
 func (r clientRepository) findClient(ctx context.Context, clientID string) (*orm.Client, error) {

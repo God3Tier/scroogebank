@@ -20,17 +20,18 @@ services:
   # The auditor's messaging moved from Kafka to SQS (ADR-0004). Local SQS
   # is provided by the localstack service in compose.yaml, not here.
 
-  # KMS and DynamoDB for client data encryption (ADR-0030). Port 4567, so it
-  # can run beside the auditor's LocalStack on 4566. Keys live only as long as
-  # this container: after a restart, clients created before it cannot be
-  # read, so run make db-reset.
+  # KMS and DynamoDB for client data encryption (ADR-0030), and S3 for the
+  # identity documents (ADR-0041). Port 4567, so it can run beside the
+  # auditor's LocalStack on 4566. Keys and documents live only as long as this
+  # container: after a restart, clients created before it cannot be read, so
+  # run make db-reset.
   localstack:
     image: localstack/localstack:3
     container_name: client-keys-localstack
     ports:
       - "4567:4566"
     environment:
-      SERVICES: kms,dynamodb
+      SERVICES: kms,dynamodb,s3
       DEFAULT_REGION: ap-southeast-1
     volumes:
       - ./localstack/init-client-keys.sh:/etc/localstack/init/ready.d/init-client-keys.sh

@@ -677,6 +677,234 @@ textarea:focus {
   text-align: center;
 }
 
+/* ---------- Client profile and verification (ADR-0041) ---------- */
+
+.back-row a {
+  color: var(--primary-container);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-row a:hover {
+  text-decoration: underline;
+}
+
+.client-header__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.client-header__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--stack-sm);
+}
+
+.client-header .status-badge {
+  gap: 4px;
+  font-size: 12px;
+}
+
+.client-header .status-badge .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--stack-md) var(--stack-lg);
+  margin: 0;
+}
+
+.profile-grid dt {
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.profile-grid dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.card-body {
+  padding: var(--stack-md) var(--stack-lg);
+}
+
+.card-body .success-message {
+  text-align: left;
+}
+
+.section-note {
+  max-width: 72ch;
+  color: var(--on-surface-variant);
+}
+
+.document-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--stack-md);
+  margin-top: var(--stack-md);
+}
+
+.document-upload label {
+  display: flex;
+  flex: 1 1 280px;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.documents-table input[type='checkbox'],
+.confirm-check input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 1px 0 0;
+  accent-color: var(--secondary);
+}
+
+.documents-table .status-badge {
+  margin-left: var(--stack-sm);
+}
+
+.document-name {
+  font-weight: 600;
+}
+
+.document-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--stack-md);
+  margin-bottom: var(--stack-md);
+  padding-bottom: var(--stack-sm);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.document-preview__header h2 {
+  margin: 0;
+}
+
+.document-preview img,
+.document-preview iframe {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius);
+}
+
+.document-preview img {
+  max-height: 640px;
+  margin: 0 auto;
+}
+
+.document-preview iframe {
+  width: 100%;
+  height: 640px;
+}
+
+.verify-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-md);
+}
+
+.verify-form > p:first-child {
+  max-width: 72ch;
+}
+
+.verify-count {
+  color: var(--on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+
+.confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--stack-sm);
+  font-weight: 600;
+}
+
+.verify-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--stack-md);
+  border-top: 1px solid var(--outline-variant);
+}
+
+.verify-without {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--stack-sm);
+  max-width: 72ch;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.verify-done {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-sm);
+}
+
+.verify-done > p:first-child {
+  display: flex;
+  align-items: center;
+  gap: var(--stack-sm);
+  color: var(--secondary);
+  font-weight: 600;
+}
+
+.client-profile button:disabled,
+.form-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.form-grid__full {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .client-header {
+    flex-wrap: wrap;
+  }
+
+  .document-preview iframe {
+    height: 420px;
+  }
+}
+
 /* ---------- Home ---------- */
 
 .hero {

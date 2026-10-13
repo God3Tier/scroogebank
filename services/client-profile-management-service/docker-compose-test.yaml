@@ -14,11 +14,12 @@ services:
       timeout: 5s
       retries: 2
 
-  # KMS and DynamoDB for the encryption package's LocalStack test.
+  # KMS and DynamoDB for the encryption package's LocalStack test, and S3 for
+  # the documents package's.
   localstack:
     image: localstack/localstack:3
     environment:
-      SERVICES: kms,dynamodb
+      SERVICES: kms,dynamodb,s3
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 2s
@@ -48,6 +49,7 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: myapp
       ENCRYPTION_TEST_ENDPOINT: http://localstack:4566
+      DOCUMENTS_TEST_ENDPOINT: http://localstack:4566
     depends_on:
       postgres:
         condition: service_healthy

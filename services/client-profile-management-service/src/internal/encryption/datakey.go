@@ -39,11 +39,10 @@ func NewDataKey(clientID string, key []byte) (DataKey, error) {
 
 // Encrypt returns base64(nonce || ciphertext) for one field's value.
 func (k DataKey) Encrypt(field, plaintext string) (string, error) {
-	nonce := make([]byte, k.aead.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("generate nonce: %w", err)
+	sealed, err := k.SealBytes(field, []byte(plaintext))
+	if err != nil {
+		return "", err
 	}
-	sealed := k.aead.Seal(nonce, nonce, []byte(plaintext), k.additionalData(field))
 	return base64.StdEncoding.EncodeToString(sealed), nil
 }
 
@@ -54,15 +53,35 @@ func (k DataKey) Decrypt(field, ciphertext string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("decode %s: %w", field, err)
 	}
+	plaintext, err := k.OpenBytes(field, sealed)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
+}
+
+// SealBytes returns nonce || ciphertext for raw bytes, such as an identity
+// document (ADR-0041). field binds them the way Encrypt binds a column.
+func (k DataKey) SealBytes(field string, plaintext []byte) ([]byte, error) {
+	nonce := make([]byte, k.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("generate nonce: %w", err)
+	}
+	return k.aead.Seal(nonce, nonce, plaintext, k.additionalData(field)), nil
+}
+
+// OpenBytes reverses SealBytes. It fails if the bytes were sealed for another
+// client or field, or have been changed.
+func (k DataKey) OpenBytes(field string, sealed []byte) ([]byte, error) {
 	nonceSize := k.aead.NonceSize()
 	if len(sealed) < nonceSize {
-		return "", fmt.Errorf("decrypt %s: ciphertext is shorter than its nonce", field)
+		return nil, fmt.Errorf("decrypt %s: ciphertext is shorter than its nonce", field)
 	}
 	plaintext, err := k.aead.Open(nil, sealed[:nonceSize], sealed[nonceSize:], k.additionalData(field))
 	if err != nil {
-		return "", fmt.Errorf("decrypt %s: %w", field, err)
+		return nil, fmt.Errorf("decrypt %s: %w", field, err)
 	}
-	return string(plaintext), nil
+	return plaintext, nil
 }
 
 func (k DataKey) additionalData(field string) []byte {

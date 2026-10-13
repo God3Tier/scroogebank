@@ -29,6 +29,17 @@ func (r clientRepository) GetClientProfile(ctx context.Context, clientID string)
 	}
 	profile.ClientID = c
 	profile.VerificationStatus = client.VerificationStatus
+	profile.VerifiedByAgentID = client.VerifiedByAgentID.String
+	if client.VerifiedAt.Valid {
+		verifiedAt := client.VerifiedAt.Time
+		profile.VerifiedAt = &verifiedAt
+	}
+	if client.VerifiedWithDocuments.Valid {
+		withDocuments := client.VerifiedWithDocuments.Bool
+		profile.VerifiedWithDocuments = &withDocuments
+	}
 	profile.CreatedByAgentID = client.CreatedByAgentID
+	profile.CreatedAt = client.CreatedAt
+	profile.UpdatedAt = client.UpdatedAt
 	return profile, nil
 }

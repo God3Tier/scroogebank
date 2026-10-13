@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"client-profile-management-service/src/internal/auditnote"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,10 +39,15 @@ type EndpointPayload struct {
 	AttributeName string `json:"attribute_name"`
 	AgentID       string `json:"agent_id"`
 	ClientID      string `json:"client_id,omitempty"`
-	Endpoint      string `json:"endpoint"`
-	HTTPMethod    string `json:"http_method"`
-	StatusCode    int    `json:"status_code"`
-	DateTime      string `json:"datetime"`
+	// DocumentIDs names the identity documents the call uploaded, read or
+	// verified the client with; WithoutDocument marks a Verify call that named
+	// none (ADR-0041 decision 6).
+	DocumentIDs     []string `json:"document_ids,omitempty"`
+	WithoutDocument bool     `json:"without_document,omitempty"`
+	Endpoint        string   `json:"endpoint"`
+	HTTPMethod      string   `json:"http_method"`
+	StatusCode      int      `json:"status_code"`
+	DateTime        string   `json:"datetime"`
 }
 
 // AuditLogger saves one event to the outbox after each protected CRM endpoint
@@ -74,6 +81,12 @@ func AuditLogger(outbox Outbox) gin.HandlerFunc {
 			}
 		}
 
+		// Handlers add the document IDs they act on; a document's own route
+		// names it as well.
+		ctx, notes := auditnote.WithNotes(c.Request.Context())
+		c.Request = c.Request.WithContext(ctx)
+		auditnote.AddDocumentIDs(ctx, c.Param("documentId"))
+
 		c.Next()
 
 		actorID, ok := c.Get("agent_id")
@@ -94,13 +107,15 @@ func AuditLogger(outbox Outbox) gin.HandlerFunc {
 			return
 		}
 		payload, err := json.Marshal(EndpointPayload{
-			AttributeName: "endpoint_call",
-			AgentID:       actor,
-			ClientID:      clientID,
-			Endpoint:      c.FullPath(),
-			HTTPMethod:    c.Request.Method,
-			StatusCode:    c.Writer.Status(),
-			DateTime:      time.Now().UTC().Format(time.RFC3339Nano),
+			AttributeName:   "endpoint_call",
+			AgentID:         actor,
+			ClientID:        clientID,
+			DocumentIDs:     notes.DocumentIDs(),
+			WithoutDocument: notes.WithoutDocument(),
+			Endpoint:        c.FullPath(),
+			HTTPMethod:      c.Request.Method,
+			StatusCode:      c.Writer.Status(),
+			DateTime:        time.Now().UTC().Format(time.RFC3339Nano),
 		})
 		if err != nil {
 			log.Printf("audit event not sent: marshal payload: %v", err)

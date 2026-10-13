@@ -11,6 +11,10 @@ type ClientController interface {
 	UpdateClientInformation(w http.ResponseWriter, r *http.Request)
 	GetClientProfile(w http.ResponseWriter, r *http.Request)
 	DeleteClientProfile(w http.ResponseWriter, r *http.Request)
+	// Identity documents (ADR-0041)
+	UploadClientDocument(w http.ResponseWriter, r *http.Request)
+	ListClientDocuments(w http.ResponseWriter, r *http.Request)
+	GetClientDocument(w http.ResponseWriter, r *http.Request)
 }
 
 type clientController struct {

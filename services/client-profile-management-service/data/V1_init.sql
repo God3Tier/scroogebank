@@ -20,6 +20,13 @@ CREATE TABLE clients (
     country               TEXT         NOT NULL,
     postal_code           TEXT         NOT NULL,
     verification_status   VARCHAR(20)  NOT NULL DEFAULT 'UNVERIFIED',
+    -- Who verified the client, when, and whether the verification named any
+    -- identity documents (ADR-0041). Documents are optional, so false means
+    -- verified without one. All NULL until verified, and for clients
+    -- verified before ADR-0041.
+    verified_by_agent_id  VARCHAR(128),
+    verified_at           TIMESTAMPTZ,
+    verified_with_documents BOOLEAN,
     created_by_agent_id   VARCHAR(128) NOT NULL,
     created_at            TIMESTAMPTZ  NOT NULL,
     updated_at            TIMESTAMPTZ  NOT NULL,
@@ -34,6 +41,24 @@ CREATE INDEX idx_clients_created_by_agent_id ON clients (created_by_agent_id);
 CREATE INDEX idx_clients_updated_at ON clients (updated_at DESC);
 -- The business dashboard counts clients by creation date (ADR-0038).
 CREATE INDEX idx_clients_created_at ON clients (created_at DESC);
+
+-- Identity documents, the evidence an agent checks before verifying a client
+-- (ADR-0041). The file itself is in S3, encrypted with the client's data key,
+-- at clients/{client_id}/{document_id}; this row never holds it or its name.
+-- verification_evidence marks the documents named when the client was
+-- verified. The API never changes or deletes a document; the cascade only
+-- applies when a client row is erased.
+CREATE TABLE client_documents (
+    document_id            UUID         PRIMARY KEY,
+    client_id              UUID         NOT NULL REFERENCES clients (client_id) ON DELETE CASCADE,
+    content_type           VARCHAR(50)  NOT NULL,
+    size_bytes             INTEGER      NOT NULL,
+    uploaded_by_agent_id   VARCHAR(128) NOT NULL,
+    uploaded_at            TIMESTAMPTZ  NOT NULL,
+    verification_evidence  BOOLEAN      NOT NULL DEFAULT false
+);
+
+CREATE INDEX idx_client_documents_client_id ON client_documents (client_id, uploaded_at DESC);
 
 -- Accounts moved to account-service, which owns them in its own database
 -- (services/account-service/data/V1_init.sql, ADR-0017, ADR-0035). The old

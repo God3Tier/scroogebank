@@ -62,6 +62,26 @@ func TestDataKeyRejectsValuesMovedOrChanged(t *testing.T) {
 	assert.Error(t, err, "a value shorter than its nonce")
 }
 
+func TestDataKeySealsBytesForOneClientAndField(t *testing.T) {
+	key := mustDataKey(t, "client-1")
+	document := []byte("\x89PNG\r\n\x1a\nsynthetic document")
+
+	sealed, err := key.SealBytes("document/doc-1", document)
+	require.NoError(t, err)
+	assert.False(t, bytes.Contains(sealed, []byte("synthetic")), "the sealed bytes do not contain the document")
+
+	opened, err := key.OpenBytes("document/doc-1", sealed)
+	require.NoError(t, err)
+	assert.Equal(t, document, opened)
+
+	_, err = key.OpenBytes("document/doc-2", sealed)
+	assert.Error(t, err, "bytes moved to another document")
+	_, err = mustDataKey(t, "client-2").OpenBytes("document/doc-1", sealed)
+	assert.Error(t, err, "bytes moved to another client with the same key bytes")
+	_, err = key.OpenBytes("document/doc-1", sealed[:4])
+	assert.Error(t, err, "bytes shorter than their nonce")
+}
+
 func TestNewDataKeyRequires32Bytes(t *testing.T) {
 	_, err := NewDataKey("client-1", make([]byte, 16))
 	assert.Error(t, err)

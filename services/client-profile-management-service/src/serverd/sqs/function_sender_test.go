@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"client-profile-management-service/src/internal/auditnote"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -170,6 +172,8 @@ func TestActionForRequest(t *testing.T) {
 		{name: "update", method: http.MethodPut, route: "/api/clients/:clientId", want: "UPDATE", ok: true},
 		{name: "delete", method: http.MethodDelete, route: "/api/clients/:clientId", want: "DELETE", ok: true},
 		{name: "verify", method: http.MethodPost, route: "/api/clients/:clientId/verify", want: "UPDATE", ok: true},
+		{name: "upload a document", method: http.MethodPost, route: "/api/clients/:clientId/documents", want: "CREATE", ok: true},
+		{name: "view a document", method: http.MethodGet, route: "/api/clients/:clientId/documents/:documentId", want: "GET", ok: true},
 		{name: "unsupported method", method: http.MethodOptions, route: "/api/clients", ok: false},
 	}
 
@@ -178,6 +182,71 @@ func TestActionForRequest(t *testing.T) {
 			got, ok := actionForRequest(test.method, test.route)
 			assert.Equal(t, test.ok, ok)
 			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestAuditLogger_RecordsTheDocumentIDsOfTheCall(t *testing.T) {
+	const (
+		viewed  = "0199f1d2-0000-7000-8000-000000000001"
+		checked = "0199f1d2-0000-7000-8000-000000000002"
+	)
+	tests := map[string]struct {
+		route           string
+		method          string
+		path            string
+		handler         gin.HandlerFunc
+		want            []string
+		withoutDocument bool
+	}{
+		"a document's own route names it": {
+			route: "/api/clients/:clientId/documents/:documentId", method: http.MethodGet,
+			path:    "/api/clients/client-123/documents/" + viewed,
+			handler: func(c *gin.Context) { c.Status(http.StatusOK) },
+			want:    []string{viewed},
+		},
+		"a handler adds the IDs it acted on, and only UUIDs are kept": {
+			route: "/api/clients/:clientId/verify", method: http.MethodPost,
+			path: "/api/clients/client-123/verify",
+			handler: func(c *gin.Context) {
+				auditnote.AddDocumentIDs(c.Request.Context(), checked, "Alice Tan")
+				c.Status(http.StatusOK)
+			},
+			want: []string{checked},
+		},
+		"a verification that names no document says so": {
+			route: "/api/clients/:clientId/verify", method: http.MethodPost,
+			path: "/api/clients/client-123/verify",
+			handler: func(c *gin.Context) {
+				auditnote.MarkWithoutDocument(c.Request.Context())
+				c.Status(http.StatusOK)
+			},
+			withoutDocument: true,
+		},
+		"other calls name none": {
+			route: "/api/clients/:clientId", method: http.MethodGet,
+			path:    "/api/clients/client-123",
+			handler: func(c *gin.Context) { c.Status(http.StatusOK) },
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			outbox := &fakeOutbox{}
+			router := setupAuditRouter(outbox, test.route, test.method, test.handler)
+
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(test.method, test.path, nil))
+
+			require.Len(t, outbox.saved, 1)
+			_, payload := decodeSavedEvent(t, outbox.saved[0])
+			assert.Equal(t, test.want, payload.DocumentIDs)
+			assert.Equal(t, test.withoutDocument, payload.WithoutDocument)
+			if test.want == nil {
+				assert.NotContains(t, string(outbox.saved[0].body), "document_ids")
+			}
+			if !test.withoutDocument {
+				assert.NotContains(t, string(outbox.saved[0].body), "without_document")
+			}
+			assert.NotContains(t, string(outbox.saved[0].body), "Alice Tan")
 		})
 	}
 }
