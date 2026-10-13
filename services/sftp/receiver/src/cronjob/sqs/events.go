@@ -46,10 +46,14 @@ type failure struct {
 	Reason    string `json:"reason"`
 }
 
+// processingErrorPayload records one failure episode. occurred_at is when it
+// began, so a later episode of the same failure gets its own event ID instead
+// of being dropped by the Auditor as a repeat.
 type processingErrorPayload struct {
-	FileName string `json:"file_name"`
-	Stage    string `json:"stage"`
-	Error    string `json:"error"`
+	FileName   string    `json:"file_name"`
+	Stage      string    `json:"stage"`
+	Error      string    `json:"error"`
+	OccurredAt time.Time `json:"occurred_at"`
 }
 
 func (Events) FileCompleted(result poller.FileCompleted) (models.AuditEvent, error) {
@@ -67,7 +71,7 @@ func (Events) FileCompleted(result poller.FileCompleted) (models.AuditEvent, err
 }
 
 func (Events) ProcessingError(item poller.ProcessingError) (models.AuditEvent, error) {
-	payload := processingErrorPayload{FileName: item.FileName, Stage: item.Stage, Error: item.Error}
+	payload := processingErrorPayload{FileName: item.FileName, Stage: item.Stage, Error: item.Error, OccurredAt: item.OccurredAt}
 	return encode(item.Action, item.FileName, payload)
 }
 

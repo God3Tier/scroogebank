@@ -26,8 +26,7 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
 - a file that is not valid JSON is audited but left in `reports/`, so it is read again on every run, instead of being moved to `rejected/`;
 - files with another extension are ignored, not rejected and audited;
 - no retries or circuit breaker around the SFTP connection within a run;
-- a re-sent transaction keeps its first version, status included (`ON CONFLICT DO NOTHING`), so a Pending transaction never completes;
-- failure events have no time, and their IDs come from their content, so the auditor drops every later outage that has the same error text.
+- a re-sent transaction keeps its first version, status included (`ON CONFLICT DO NOTHING`), so a Pending transaction never completes.
 
 ## Decision Drivers
 

@@ -18,23 +18,23 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 	fileName := path.Base(remotePath)
 	remoteFile, err := client.Open(remotePath)
 	if err != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("open remote file: %w", err))
+		return p.processingFailure(ctx, fileName, readFailure, fmt.Errorf("open remote file: %w", err))
 	}
 	contents, readErr := io.ReadAll(remoteFile)
 	closeErr := remoteFile.Close()
 	if readErr != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("read remote file: %w", readErr))
+		return p.processingFailure(ctx, fileName, readFailure, fmt.Errorf("read remote file: %w", readErr))
 	}
 	if closeErr != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("close remote file: %w", closeErr))
+		return p.processingFailure(ctx, fileName, readFailure, fmt.Errorf("close remote file: %w", closeErr))
 	}
 
 	var records []json.RawMessage
 	if err := json.Unmarshal(contents, &records); err != nil {
-		return p.processingFailure(ctx, fileName, "FILE_FORMAT_INVALID", "FILE_FORMAT", fmt.Errorf("parse JSON transaction file: %w", err))
+		return p.processingFailure(ctx, fileName, formatFailure, fmt.Errorf("parse JSON transaction file: %w", err))
 	}
 	if records == nil {
-		return p.processingFailure(ctx, fileName, "FILE_FORMAT_INVALID", "FILE_FORMAT", fmt.Errorf("parse JSON transaction file: expected an array"))
+		return p.processingFailure(ctx, fileName, formatFailure, fmt.Errorf("parse JSON transaction file: expected an array"))
 	}
 
 	rejected := 0
@@ -59,16 +59,12 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 
 	// Without account-service's answer, nothing is saved and the file stays
 	// for the next poll: Unmatched must mean "no such account", never "could
-	// not check".
+	// not check". The file is retried on every poll, so only the first failure
+	// of each outage is audited.
 	if err := p.linkAccounts(ctx, transactions); err != nil {
-		err = fmt.Errorf("look up accounts: %w", err)
-		if p.lookupFailureAudited[fileName] {
-			return err
-		}
-		p.lookupFailureAudited[fileName] = true
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", err)
+		return p.processingFailure(ctx, fileName, lookupFailure, fmt.Errorf("look up accounts: %w", err))
 	}
-	delete(p.lookupFailureAudited, fileName)
+	p.endFailure(failureKey{file: fileName, kind: lookupFailure})
 	// The import saves every valid transaction or none of them.
 	accepted := len(transactions)
 
@@ -97,14 +93,14 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 		completed = &event
 	}
 	if err := p.store.SaveImport(ctx, transactions, completed); err != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("save transactions: %w", err))
+		return p.processingFailure(ctx, fileName, saveFailure, fmt.Errorf("save transactions: %w", err))
 	}
 	archiveDir := path.Join(p.config.RemoteDir, archiveStatus)
 	if err := client.MkdirAll(archiveDir); err != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("create %s directory: %w", archiveStatus, err))
+		return p.processingFailure(ctx, fileName, archiveFailure, fmt.Errorf("create %s directory: %w", archiveStatus, err))
 	}
 	if err := client.Rename(remotePath, path.Join(archiveDir, path.Base(remotePath))); err != nil {
-		return p.processingFailure(ctx, fileName, "SYSTEM_EXCEPTION", "SYSTEM_EXCEPTION", fmt.Errorf("archive processed file: %w", err))
+		return p.processingFailure(ctx, fileName, archiveFailure, fmt.Errorf("archive processed file: %w", err))
 	}
 	log.Printf("processed %d transactions from %s (%d accepted, %d rejected)", len(records), path.Base(remotePath), accepted, rejected)
 	return nil
@@ -149,11 +145,11 @@ func accountUUID(reference string) (string, bool) {
 	return id.String(), true
 }
 
-func (p *Poller) processingFailure(ctx context.Context, fileName, action, stage string, cause error) error {
-	wrapped := cause
-	auditErr := p.writeProcessingError(ctx, ProcessingError{FileName: fileName, Action: action, Stage: stage, Error: cause.Error()})
-	if auditErr != nil {
-		wrapped = fmt.Errorf("%w; write audit event: %v", cause, auditErr)
+// processingFailure audits a failure on one file, once per episode, and
+// returns its cause.
+func (p *Poller) processingFailure(ctx context.Context, fileName string, kind failureKind, cause error) error {
+	if auditErr := p.recordFailure(ctx, failureKey{file: fileName, kind: kind}, cause); auditErr != nil {
+		return fmt.Errorf("%w; write audit event: %v", cause, auditErr)
 	}
-	return wrapped
+	return cause
 }
