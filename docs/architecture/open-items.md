@@ -39,7 +39,6 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 ## 7. Go runtime exception
 
 The auditor, client-service and account-service are written in Go, not the Java 25 baseline. [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Accepted 2026-10-08) records the exception (project_plan §2.2). The Feature 3 components (the SFTP receiver: the import and transaction-service's read API) are Go too; [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7 (Proposed) extends the exception to them.
-
 ## 8. Migrations on startup or as a task
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
