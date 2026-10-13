@@ -6,10 +6,14 @@
 
 ## Identity and security
 
-Recorded in [ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) (Proposed).
+Recorded in [ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) (Accepted).
 
 - **Cognito user pool:** mandatory MFA (TOTP); Cognito handles password hashing; `Admin` and `Agent` groups carried in the JWT `cognito:groups` claim; sign-in through Cognito managed login using the OAuth 2.0 authorization-code flow.
-- **PKCE (proposed, not yet confirmed; [open item 20](../architecture/open-items.md#20-sign-in-flow-and-pkce-unconfirmed)):** the frontend is a single-page app and cannot keep a client secret, so the sign-in should use PKCE. The app makes a random `code_verifier`, sends only its SHA-256 hash (`code_challenge`) with the sign-in redirect, and must present the verifier to exchange the code for tokens, so an intercepted code is useless on its own. Cognito checks PKCE when a challenge is sent but does not require one, so the protection depends on configuration: a public app client with no client secret, the authorization-code grant only (implicit grant off), and a frontend library that adds PKCE automatically, such as `oidc-client-ts` or Amplify `signInWithRedirect()`.
+- **PKCE:** the frontend is a single-page app and cannot keep a client secret, so the sign-in uses PKCE. The app makes a random `code_verifier`, sends only its SHA-256 hash (`code_challenge`, method `S256`) with the sign-in redirect, and must present the verifier to exchange the code for tokens, so an intercepted code is useless on its own. Cognito checks PKCE when a challenge is sent but does not require one, so the protection depends on configuration:
+  - a public app client with no client secret, the authorization-code grant only (implicit grant off), scopes `openid` and `email`, and token revocation on;
+  - `oidc-client-ts`, used through `react-oidc-context`, which adds PKCE automatically;
+  - a frontend test that the sign-in request carries `code_challenge_method=S256`.
+- **Tokens in the browser:** kept in the tab's `sessionStorage`, so they last only as long as the tab; cross-site scripting is the main risk to them.
 - **Defense in depth:** API Gateway validates every token, and each service validates it again. Service-to-service calls use Cognito client-credentials tokens with scopes; no call is trusted just because it comes from inside the network.
 - **Authorization:** agents can only access their own clients (services filter on `created_by_agent_id = jwt.sub`). The root admin cannot be deleted or disabled.
 - **Perimeter:** AWS WAF on CloudFront, API Gateway throttling, and a security group chain: VPC Link to ALB, ALB to services, each service to its own database only on port 5432, named callers to the auditor's gRPC port, and the ingestion worker outbound to the external SFTP server on port 22. The health analysis task and the ingestion worker cannot use Service Connect, so they also reach the ALB, calling `/internal` routes with service tokens ([ADR-0019](../adr/ADR-0019-edge-entry-chain.md) decision 4); the ingestion worker also reaches transactions-db on port 5432.
@@ -64,6 +68,7 @@ chain-verify reads audit-db directly rather than through the auditor's gRPC API:
 
 - Login comes from Cognito's `PostAuthentication` trigger; password-reset confirmation from the `PostConfirmation_ConfirmForgotPassword` trigger.
 - Logout, user creation, update, disable, role change and admin password reset come from user-service.
+- **Logout.** Cognito has no sign-out trigger, so the frontend reports each sign-out. It calls user-service's `POST /api/users/me/logout` with the access token (audited as `LOGOUT`), then revokes the refresh token at Cognito's `/oauth2/revoke`, then sends the browser to Cognito's `/logout` to end the managed login session. Each step runs even if the one before fails, so an audit failure never stops a sign-out. The trade-off, accepted: a `LOGOUT` event records what the frontend reports, not a verified revocation, and a failed report, a closed tab or a session that simply expires records no `LOGOUT`.
 - user-service sends its events through its outbox. The Cognito triggers have no database, so they send each event straight to the audit queue.
 - **Fail open.** A trigger retries the send briefly (Cognito allows a trigger about 5 seconds). If it still fails, the trigger writes the full event to CloudWatch Logs as `AUDIT_SEND_FAILED`, a metric filter raises an alarm, and an operator replays the event to the queue. The login or password reset itself goes ahead: an SQS outage must not lock every user out.
 - **Time budget.** Both triggers are one plain Java 25 Lambda, which gives itself 3 seconds to send, so a cold start (about half a second at 1,769 MB) still finishes well inside Cognito's limit ([ADR-0040](../adr/ADR-0040-cognito-triggers-java-lambda.md)).

@@ -47,13 +47,13 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 
 **Role changes.** `PATCH /api/users/{id}/role` moves the user between Cognito groups and then updates the local `role` column. It adds the new group before removing the old one, so a failure part-way leaves the user in both groups rather than in none; both calls are idempotent, so repeating the request completes the change. Tokens already issued still carry the old `cognito:groups` claim until they expire and are refreshed, so a demoted admin keeps admin access for up to one access-token lifetime.
 
-<a id="logout"></a>**Logout.** Cognito ends the session itself, but it has no sign-out trigger, so a logout reaches the audit log only if the frontend reports it ([ADR-0025](../../docs/adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md)). On sign-out the frontend should:
+<a id="logout"></a>**Logout.** Cognito ends the session itself, but it has no sign-out trigger, so a logout reaches the audit log only if the frontend reports it ([ADR-0025](../../docs/adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md)). On sign-out the frontend:
 
-1. Revoke the refresh token at Cognito's `/oauth2/revoke`. The app client has no secret, so the browser can call it directly.
-2. Call `POST /api/users/me/logout` with the session's access token. It is still accepted after step 1: Cognito's revocation only affects Cognito's own APIs, and this service checks tokens locally (signature, expiry, issuer, client).
-3. Send the browser to Cognito's `/logout` to end the Hosted UI session, and drop its local tokens.
+1. Calls `POST /api/users/me/logout` with the session's access token. This comes first, while the token is certainly valid.
+2. Revokes the refresh token at Cognito's `/oauth2/revoke`. The app client has no secret, so the browser calls it directly.
+3. Drops its local tokens and sends the browser to Cognito's `/logout` to end the managed login session.
 
-The endpoint records what the frontend reports; it does not check that a revocation happened. If the call fails or is skipped, the user is still signed out but no `LOGOUT` event is recorded. The frontend should go on to step 3 either way, so an audit failure never blocks a sign-out.
+Each step runs even if the one before fails, so an audit failure never blocks a sign-out. The endpoint records what the frontend reports; it does not check that a revocation happened. If the call fails or is skipped, the user is still signed out but no `LOGOUT` event is recorded.
 
 **`idpSub` in responses.** Every user response includes `idpSub`, the user's Cognito `sub`. Other services identify agents by it, not by `id`: the client profile service stores it as `created_by_agent_id`, and audit events carry it as `actor_id`. Without it, an admin view such as the business dashboard's per-agent table cannot match those records to a named user. It is safe to return because every endpoint here is admin-only, and the `sub` is already in every token the user presents. A future non-admin endpoint that returns a user should use a narrower response.
 

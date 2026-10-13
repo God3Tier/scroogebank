@@ -25,8 +25,8 @@ public class SessionController {
     /**
      * Records that the caller signed out, so the logout reaches the audit log
      * (UserAuditInterceptor publishes it as LOGOUT). Cognito has no sign-out
-     * trigger (ADR-0025), so the frontend revokes the refresh token with
-     * Cognito itself and then calls this. Nothing is revoked here.
+     * trigger (ADR-0025), so the frontend calls this first and then revokes
+     * the refresh token with Cognito itself. Nothing is revoked here.
      */
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@AuthenticationPrincipal Jwt jwt, HttpServletRequest request) {
