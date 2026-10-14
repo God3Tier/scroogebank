@@ -50,6 +50,7 @@ func (r *fakeRelay) Send(_ context.Context, event models.AuditEvent) error {
 func auditedPoller(remote *fakeRemote, store *fakeStore, relay *fakeRelay) *Poller {
 	p := New(Config{RemoteDir: "/reports"}, store, &fakeDirectory{}, Audit{Events: &fakeEvents{}, Relay: relay})
 	p.connector = func(context.Context) (remoteSFTP, func(), error) { return remote, func() {}, nil }
+	p.sleep = noSleep
 	return p
 }
 

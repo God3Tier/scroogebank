@@ -3,28 +3,47 @@ package poller
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
+// permanentError is a connection failure that retrying cannot fix: a private
+// key that cannot be read, a host key that does not match the pinned
+// fingerprint, or a refused login. A poll does not retry it (ADR-0024
+// decision 3).
+type permanentError struct{ error }
+
+func (e permanentError) Unwrap() error { return e.error }
+
+func isPermanent(err error) bool {
+	var permanent permanentError
+	return errors.As(err, &permanent)
+}
+
 func (p *Poller) connectSFTP(ctx context.Context) (remoteSFTP, func(), error) {
 	privateKey, err := os.ReadFile(p.config.PrivateKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read SFTP private key: %w", err)
+		return nil, nil, permanentError{fmt.Errorf("read SFTP private key: %w", err)}
 	}
 	signer, err := ssh.ParsePrivateKey(privateKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse SFTP private key: %w", err)
+		return nil, nil, permanentError{fmt.Errorf("parse SFTP private key: %w", err)}
 	}
 
+	// Set by the callback rather than read from the handshake's error, so it
+	// does not depend on how x/crypto/ssh wraps that error.
+	hostKeyMismatch := false
 	callback := func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		actual := ssh.FingerprintSHA256(key)
 		if subtle.ConstantTimeCompare([]byte(actual), []byte(p.config.HostKeySHA256)) != 1 {
+			hostKeyMismatch = true
 			return fmt.Errorf("SFTP host key fingerprint mismatch: got %s", actual)
 		}
 		return nil
@@ -46,7 +65,12 @@ func (p *Poller) connectSFTP(ctx context.Context) (remoteSFTP, func(), error) {
 	sshConnection, channels, requests, err := ssh.NewClientConn(connection, p.config.Address, sshConfig)
 	if err != nil {
 		_ = connection.Close()
-		return nil, nil, fmt.Errorf("establish SSH session: %w", err)
+		err = fmt.Errorf("establish SSH session: %w", err)
+		// x/crypto/ssh reports a refused login only as text.
+		if hostKeyMismatch || strings.Contains(err.Error(), "ssh: unable to authenticate") {
+			return nil, nil, permanentError{err}
+		}
+		return nil, nil, err
 	}
 	_ = connection.SetDeadline(time.Time{})
 	sshClient := ssh.NewClient(sshConnection, channels, requests)

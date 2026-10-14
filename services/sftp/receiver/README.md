@@ -96,6 +96,14 @@ It records a `FILE_FORMAT_INVALID` event (stage `FILE_FORMAT`) and then moves th
 
 A file keeps its name when it moves to `processed/` or `rejected/`. If a file of that name is already there, OpenSSH refuses the move, so the file stays, with one `SYSTEM_EXCEPTION` event, until the older file is removed. Generated `report-<time>-<id>.json` names make this unlikely.
 
+## Connection resilience
+
+[ADR-0024](../../../docs/adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 3 protects the SFTP connection with timeouts, retries and a circuit breaker:
+
+- **Retries:** each poll tries to connect and list `SFTP_REMOTE_DIR` up to 3 times. Before the second attempt it waits 2 seconds, before the third 4 seconds, each plus up to 1 second at random. It does not retry a private key it cannot read, a host key that does not match `SFTP_HOST_KEY_FINGERPRINT`, or a refused login: retrying cannot fix them. Nor does it wait so long that less than a minute of a poll with a deadline would be left. Only the last attempt's error is audited, as one `CONNECTION_FAILURE` per outage.
+- **Circuit breaker:** after 3 polls in a row cannot connect, the circuit opens for 15 minutes. While it is open, a poll does not connect: it logs `SFTP circuit open until <time>`, still relays audit events, and audits nothing new. After the 15 minutes, one poll tries again; if it connects, the circuit closes, and if not, it opens for another 15 minutes. The state is kept in memory, like failure episodes, so a restarted poller starts with the circuit closed.
+- **Timeouts:** connecting and the SSH handshake have 10 seconds each. A whole poll has at most 10 minutes, or less if its context ends sooner, as a Lambda invocation's does. When the poll's time is up, the poller closes the connection, which ends any SFTP call still waiting for the server.
+
 ## Audit events
 
 When `AUDIT_QUEUE_URL` is set (with `AWS_REGION`), the poller records a `TRANSACTION_INGESTION` audit event for each processed file (`FILE_PROCESSING_COMPLETED`) and for each failure (`CONNECTION_FAILURE`, `FILE_FORMAT_INVALID` or `SYSTEM_EXCEPTION`). This receiver acts as transaction-service and transaction-ingest, so it implements [ADR-0020](../../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) decision 3 through the `audit_outbox` table:
