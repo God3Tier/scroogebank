@@ -23,11 +23,11 @@ func TestListActivities(t *testing.T) {
 			wantSeq: []int64{13, 11, 4, 3, 2, 1},
 		},
 		"shows a user's own password reset but not their sign-in": {
-			filter:  models.ActivityFilter{ActorId: "agent-c", Limit: 20},
+			filter:  models.ActivityFilter{ActorID: "agent-c", Limit: 20},
 			wantSeq: []int64{13},
 		},
 		"filters by actor": {
-			filter:  models.ActivityFilter{ActorId: "agent-a", Limit: 20},
+			filter:  models.ActivityFilter{ActorID: "agent-a", Limit: 20},
 			wantSeq: []int64{4, 1},
 		},
 		"filters by time range with inclusive from and exclusive to": {

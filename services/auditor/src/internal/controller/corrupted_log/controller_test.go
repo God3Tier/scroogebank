@@ -98,7 +98,7 @@ func TestInsertCorruptedAuditLog(t *testing.T) {
 		callSvc    bool
 	}{
 		"creates a corrupted log": {
-			body:       `{"id":"` + id + `","payload":{"Action":"DELETE"}}`,
+			body:       `{"id":"` + id + `","payload":{"action":"DELETE"}}`,
 			wantStatus: http.StatusCreated,
 			callSvc:    true,
 		},
@@ -195,7 +195,7 @@ func TestCorruptedAuditLogResponseIsJSON(t *testing.T) {
 
 	New(svc).GetCorruptedAuditLog(response, request)
 
-	var logs []models.CorruptedAuditLog
+	var logs []corruptedAuditLogResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &logs))
 	require.Len(t, logs, 1)
 	assert.Equal(t, "log-2", logs[0].ID)

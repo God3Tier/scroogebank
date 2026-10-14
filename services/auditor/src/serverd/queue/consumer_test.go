@@ -77,7 +77,7 @@ func TestConsumer_Handle_SuccessfulStore_DeletesMessage(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "actor-1",
+		ActorID:       "actor-1",
 		Payload:       `{"agent_id":"AGT-1"}`,
 	}).Return(nil).Once()
 
@@ -103,7 +103,7 @@ func TestConsumer_Handle_EventAlertEnvelope_StoresAndDeletesMessage(t *testing.T
 		EventType:     "EVENT_ALERT",
 		Action:        "GENERATED",
 		SourceService: models.EventAlertServiceType,
-		ActorId:       "synthetic-agent",
+		ActorID:       "synthetic-agent",
 		Payload:       payload,
 	}).Return(nil).Once()
 
@@ -129,7 +129,7 @@ func TestConsumer_Handle_StoreFails_LeavesMessageForRetry(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "actor-1",
+		ActorID:       "actor-1",
 		Payload:       `{"agent_id":"AGT-1"}`,
 	}).Return(errors.New("db unavailable")).Once()
 
@@ -153,7 +153,7 @@ func TestConsumer_Handle_DuplicateEvent_DeletesWithoutRewriting(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "actor-1",
+		ActorID:       "actor-1",
 		Payload:       `{"agent_id":"AGT-1"}`,
 	}).Return(audit.DuplicateEventError).Once()
 

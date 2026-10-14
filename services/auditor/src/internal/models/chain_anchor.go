@@ -7,10 +7,10 @@ import "time"
 // entry before it, so the anchor stands for the whole chain up to that entry,
 // and a later rewrite of that history changes the entry's hash or removes it.
 type ChainAnchor struct {
-	SequenceNo int64     `json:"sequence_no"`
-	ID         string    `json:"id"`
-	Hash       string    `json:"hash"`
-	AnchoredAt time.Time `json:"anchored_at"`
+	SequenceNo int64
+	ID         string
+	Hash       string
+	AnchoredAt time.Time
 }
 
 // ChainReport is what one check of the whole chain found.

@@ -15,12 +15,12 @@ func validChain(n int) []models.AuditLog {
 	parent := ""
 	for sequence := int64(1); sequence <= int64(n); sequence++ {
 		entry := models.AuditLog{
-			Id:            fmt.Sprintf("00000000-0000-4000-8000-%012d", sequence),
+			ID:            fmt.Sprintf("00000000-0000-4000-8000-%012d", sequence),
 			SequenceNo:    sequence,
 			EventType:     "CRUD",
 			Action:        "UPDATE",
 			SourceService: models.CRMServiceType,
-			ActorId:       "agent-1",
+			ActorID:       "agent-1",
 			Timestamp:     time.Date(2026, 10, 12, 7, 0, int(sequence), 0, time.UTC),
 			Payload:       `{}`,
 			ParentHash:    parent,
@@ -128,7 +128,7 @@ func TestChecker(t *testing.T) {
 			var checker Checker
 			if test.anchored > 0 {
 				named := entries[test.anchored-1]
-				checker.Anchor = &models.ChainAnchor{SequenceNo: named.SequenceNo, ID: named.Id, Hash: named.Hash}
+				checker.Anchor = &models.ChainAnchor{SequenceNo: named.SequenceNo, ID: named.ID, Hash: named.Hash}
 			}
 
 			var got []problem

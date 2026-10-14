@@ -21,7 +21,7 @@ func buildEvent(t *testing.T, eventType, action, sourceService string, payload a
 		EventType:     eventType,
 		Action:        action,
 		SourceService: sourceService,
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       payloadBytes,
 	}
 }
@@ -295,7 +295,7 @@ func TestValidatePayload_DashboardRejectsInvalidEvents(t *testing.T) {
 				tt.change(&payload)
 			}
 			event := buildEvent(t, tt.eventType, tt.action, string(models.DashboardServiceType), payload)
-			event.ActorId = tt.actor
+			event.ActorID = tt.actor
 
 			if err := validatePayload(event); err == nil {
 				t.Errorf("expected %s to be rejected, got nil", tt.name)
@@ -389,7 +389,7 @@ func TestValidatePayload_AuthenticationRejectsInvalidEvents(t *testing.T) {
 				tt.change(&payload)
 			}
 			event := buildEvent(t, tt.eventType, tt.action, string(models.CognitoTriggersServiceType), payload)
-			event.ActorId = tt.actor
+			event.ActorID = tt.actor
 
 			if err := validatePayload(event); err == nil {
 				t.Errorf("expected %s to be rejected, got nil", tt.name)
@@ -432,7 +432,7 @@ func TestValidatePayload_MalformedCRUDPayload(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: string(models.CRMServiceType),
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       json.RawMessage(`{"agent_id": 12345}`), // agent_id should be a string, not a number
 	}
 
@@ -446,7 +446,7 @@ func TestValidatePayload_MalformedFileCompletedPayload(t *testing.T) {
 		EventType:     "TRANSACTION_INGESTION",
 		Action:        "FILE_PROCESSING_COMPLETED",
 		SourceService: string(models.TransactionServiceType),
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       json.RawMessage(`{"records_processed": "not-a-number"}`),
 	}
 

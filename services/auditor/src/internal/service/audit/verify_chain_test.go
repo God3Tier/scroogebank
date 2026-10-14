@@ -20,12 +20,12 @@ func linkedEntries(n int) []models.AuditLog {
 	parent := ""
 	for sequence := int64(1); sequence <= int64(n); sequence++ {
 		entry := models.AuditLog{
-			Id:            fmt.Sprintf("id-%d", sequence),
+			ID:            fmt.Sprintf("id-%d", sequence),
 			SequenceNo:    sequence,
 			EventType:     "AUTH",
 			Action:        "LOGIN_FAILED",
 			SourceService: models.AuditService,
-			ActorId:       fmt.Sprintf("actor-%d", sequence),
+			ActorID:       fmt.Sprintf("actor-%d", sequence),
 			Timestamp:     time.Date(2026, 9, 15, 5, 0, int(sequence), 0, time.UTC),
 			Payload:       `{}`,
 			ParentHash:    parent,
@@ -114,7 +114,7 @@ func TestVerifyChain(t *testing.T) {
 			var anchor *models.ChainAnchor
 			if test.anchored > 0 {
 				named := entries[test.anchored-1]
-				anchor = &models.ChainAnchor{SequenceNo: named.SequenceNo, ID: named.Id, Hash: named.Hash}
+				anchor = &models.ChainAnchor{SequenceNo: named.SequenceNo, ID: named.ID, Hash: named.Hash}
 			}
 			if test.tamper != nil {
 				entries = test.tamper(entries)

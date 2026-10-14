@@ -15,12 +15,12 @@ func TestRecordFinding(t *testing.T) {
 	loadTestFixture(t, db, "insert_corrupted_log.sql")
 	repository := impl{db: db}
 	entry := models.AuditLog{
-		Id:            "00000000-0000-4000-8000-000000000301",
+		ID:            "00000000-0000-4000-8000-000000000301",
 		SequenceNo:    3,
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "agent-1",
+		ActorID:       "agent-1",
 		Timestamp:     time.Date(2026, 10, 12, 7, 0, 0, 0, time.UTC),
 		Payload:       `{}`,
 		ParentHash:    "parent-hash",
@@ -46,7 +46,7 @@ func TestRecordFinding(t *testing.T) {
 	require.Len(t, findings, 2)
 	reasons := []models.FindingReason{}
 	for _, finding := range findings {
-		assert.Equal(t, entry.Id, finding.AuditLogID)
+		assert.Equal(t, entry.ID, finding.AuditLogID)
 		assert.Equal(t, entry, finding.Payload)
 		assert.WithinDuration(t, time.Now(), finding.DateOfDetect, 5*time.Second)
 		reasons = append(reasons, finding.Reason)

@@ -19,8 +19,8 @@ func TestVerify(t *testing.T) {
 	databaseErr := errors.New("database unavailable")
 	s3Err := errors.New("access denied")
 	latest := &models.ChainAnchor{SequenceNo: 4, ID: "id-4", Hash: "hash-4"}
-	head := &models.AuditLog{Id: "id-5", SequenceNo: 5, Hash: "hash-5"}
-	finding := models.ChainFinding{Entry: models.AuditLog{Id: "id-3", SequenceNo: 3}, Reason: models.HashMismatch}
+	head := &models.AuditLog{ID: "id-5", SequenceNo: 5, Hash: "hash-5"}
+	finding := models.ChainFinding{Entry: models.AuditLog{ID: "id-3", SequenceNo: 3}, Reason: models.HashMismatch}
 
 	tests := map[string]struct {
 		latestErr error
@@ -80,7 +80,7 @@ func TestVerify(t *testing.T) {
 			}
 			if test.writes {
 				anchors.EXPECT().Write(ctx, mock.MatchedBy(func(written models.ChainAnchor) bool {
-					return written.SequenceNo == head.SequenceNo && written.ID == head.Id &&
+					return written.SequenceNo == head.SequenceNo && written.ID == head.ID &&
 						written.Hash == head.Hash && !written.AnchoredAt.IsZero()
 				})).Return(test.writeErr).Once()
 			}

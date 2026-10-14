@@ -20,7 +20,7 @@ func TestGetCorruptedLogs(t *testing.T) {
 			want: []models.CorruptedAuditLog{{
 				ID: "00000000-0000-0000-0000-000000000102",
 				Payload: models.AuditLog{
-					Id:         "audit-102",
+					ID:         "audit-102",
 					SequenceNo: 102,
 					EventType:  "AUTH",
 					Action:     "LOGIN_FAILED",
@@ -31,7 +31,7 @@ func TestGetCorruptedLogs(t *testing.T) {
 				AuditLogID: "00000000-0000-0000-0000-000000000206",
 				Reason:     models.HashMismatch,
 				Payload: models.AuditLog{
-					Id:         "00000000-0000-0000-0000-000000000206",
+					ID:         "00000000-0000-0000-0000-000000000206",
 					SequenceNo: 206,
 					EventType:  "CRUD",
 					Action:     "UPDATE",

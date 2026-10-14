@@ -5,12 +5,12 @@ import (
 )
 
 type AuditLog struct {
-	Id            string
+	ID            string
 	SequenceNo    int64
 	EventID       string
 	EventType     string
 	Action        string
-	ActorId       string
+	ActorID       string
 	SourceService ServiceType
 	Timestamp     time.Time
 	Payload       string

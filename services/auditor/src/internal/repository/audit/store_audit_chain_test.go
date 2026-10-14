@@ -25,7 +25,7 @@ func TestStoreAuditChain(t *testing.T) {
 			fixture: "store_audit_chain_empty.sql",
 			request: models.AuditLogInput{
 				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
-				ActorId: "actor-first", Payload: `{}`,
+				ActorID: "actor-first", Payload: `{}`,
 			},
 			wantSequence: 1,
 		},
@@ -33,7 +33,7 @@ func TestStoreAuditChain(t *testing.T) {
 			fixture: "store_audit_chain_previous.sql",
 			request: models.AuditLogInput{
 				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
-				ActorId: "actor-next", Payload: `{}`,
+				ActorID: "actor-next", Payload: `{}`,
 			},
 			wantSequence: 4,
 			wantParent:   "chain-hash-3",
@@ -42,7 +42,7 @@ func TestStoreAuditChain(t *testing.T) {
 			fixture: "store_audit_chain_sparse.sql",
 			request: models.AuditLogInput{
 				EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
-				ActorId: "actor-after-gap", Payload: `{}`,
+				ActorID: "actor-after-gap", Payload: `{}`,
 			},
 			wantSequence: 8,
 			wantParent:   "sparse-head-hash",
@@ -51,7 +51,7 @@ func TestStoreAuditChain(t *testing.T) {
 			fixture: "store_audit_chain_empty.sql",
 			request: models.AuditLogInput{
 				EventID: "evt-new", EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
-				ActorId: "actor-first", Payload: `{}`,
+				ActorID: "actor-first", Payload: `{}`,
 			},
 			wantSequence: 1,
 			wantEventID:  "evt-new",
@@ -60,7 +60,7 @@ func TestStoreAuditChain(t *testing.T) {
 			fixture: "store_audit_chain_duplicate.sql",
 			request: models.AuditLogInput{
 				EventID: "evt-existing", EventType: "AUTH", Action: "LOGIN_FAILED", SourceService: models.AuditService,
-				ActorId: "actor-retry", Payload: `{}`,
+				ActorID: "actor-retry", Payload: `{}`,
 			},
 			wantSequence: 1, // unchanged: the duplicate must not be inserted
 			wantEventID:  "evt-existing",
@@ -101,7 +101,7 @@ func TestStoreAuditChain_DeduplicatesSourceEventId(t *testing.T) {
 		EventID:   "70000000-0000-4000-8000-000000000001",
 		EventType: "EVENT_ALERT", Action: "GENERATED",
 		SourceService: models.EventAlertServiceType,
-		ActorId:       "event-alert-service", Payload: `{}`,
+		ActorID:       "event-alert-service", Payload: `{}`,
 	}
 
 	repository := New(db)
@@ -125,11 +125,11 @@ func TestStoreAuditChain_StoredEntryMatchesItsHash(t *testing.T) {
 	repository := New(db)
 	require.NoError(t, repository.StoreAuditChain(context.Background(), models.AuditLogInput{
 		EventID: "evt-hash", EventType: "CRUD", Action: "UPDATE", SourceService: models.CRMServiceType,
-		ActorId: "agent-1", Payload: " \n" + payload + "\n",
+		ActorID: "agent-1", Payload: " \n" + payload + "\n",
 	}))
 	require.NoError(t, repository.StoreAuditChain(context.Background(), models.AuditLogInput{
 		EventType: "CRUD", Action: "CREATE", SourceService: models.CRMServiceType,
-		ActorId: "agent-1", Payload: `{}`,
+		ActorID: "agent-1", Payload: `{}`,
 	}))
 
 	entries, err := repository.GetChainPage(context.Background(), 0, 10)
@@ -154,7 +154,7 @@ func TestStoreAuditChain_ConcurrentWritersKeepOneChain(t *testing.T) {
 		go func() {
 			errs <- repository.StoreAuditChain(context.Background(), models.AuditLogInput{
 				EventID: fmt.Sprintf("evt-concurrent-%d", writer), EventType: "CRUD", Action: "UPDATE",
-				SourceService: models.CRMServiceType, ActorId: "agent-1", Payload: `{}`,
+				SourceService: models.CRMServiceType, ActorID: "agent-1", Payload: `{}`,
 			})
 		}()
 	}
@@ -182,7 +182,7 @@ func TestStoreAuditChain_AuditorRoleCanOnlyAppend(t *testing.T) {
 	for _, eventID := range []string{"evt-role-1", "evt-role-2"} {
 		require.NoError(t, repository.StoreAuditChain(context.Background(), models.AuditLogInput{
 			EventID: eventID, EventType: "CRUD", Action: "UPDATE", SourceService: models.CRMServiceType,
-			ActorId: "agent-1", Payload: `{}`,
+			ActorID: "agent-1", Payload: `{}`,
 		}))
 	}
 	_, err := repository.GetChainPage(context.Background(), 0, 10)
