@@ -3,6 +3,7 @@ package bank.alert.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -14,7 +15,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import java.io.IOException;
 import java.util.UUID;
 
+// A worker runs without a web server and has no requests to secure.
 @Configuration
+@ConditionalOnWebApplication
 @EnableMethodSecurity
 public class SecurityConfiguration {
 
