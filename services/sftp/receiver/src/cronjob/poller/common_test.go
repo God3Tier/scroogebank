@@ -121,7 +121,9 @@ func (d *fakeDirectory) Lookup(_ context.Context, ids []string) (map[string]stri
 
 type fakeRemote struct {
 	files                                                       map[string]string
+	dirs                                                        []string // subdirectories of /reports
 	readDirErr, openErr, readErr, closeErr, mkdirErr, renameErr error
+	openErrs                                                    map[string]error // by file name, for one file only
 	renamed                                                     [][2]string
 }
 
@@ -131,15 +133,21 @@ func (r *fakeRemote) ReadDir(string) ([]os.FileInfo, error) {
 	if r.readDirErr != nil {
 		return nil, r.readDirErr
 	}
-	entries := make([]os.FileInfo, 0, len(r.files))
+	entries := make([]os.FileInfo, 0, len(r.files)+len(r.dirs))
 	for filename := range r.files {
 		entries = append(entries, fakeFileInfo{name: path.Base(filename)})
+	}
+	for _, dir := range r.dirs {
+		entries = append(entries, fakeFileInfo{name: dir, dir: true})
 	}
 	return entries, nil
 }
 func (r *fakeRemote) Open(filename string) (remoteFile, error) {
 	if r.openErr != nil {
 		return nil, r.openErr
+	}
+	if err := r.openErrs[path.Base(filename)]; err != nil {
+		return nil, err
 	}
 	content, ok := r.files[filename]
 	if !ok {
@@ -172,13 +180,21 @@ func (f *fakeRemoteFile) Read(p []byte) (int, error) {
 }
 func (f *fakeRemoteFile) Close() error { return f.closeErr }
 
-type fakeFileInfo struct{ name string }
+type fakeFileInfo struct {
+	name string
+	dir  bool
+}
 
-func (f fakeFileInfo) Name() string     { return f.name }
-func (fakeFileInfo) Size() int64        { return 1 }
-func (fakeFileInfo) Mode() os.FileMode  { return 0 }
+func (f fakeFileInfo) Name() string { return f.name }
+func (fakeFileInfo) Size() int64    { return 1 }
+func (f fakeFileInfo) Mode() os.FileMode {
+	if f.dir {
+		return os.ModeDir
+	}
+	return 0
+}
 func (fakeFileInfo) ModTime() time.Time { return time.Time{} }
-func (fakeFileInfo) IsDir() bool        { return false }
+func (f fakeFileInfo) IsDir() bool      { return f.dir }
 func (fakeFileInfo) Sys() any           { return nil }
 
 func validTransaction(transactionType, status string) models.Transaction {
