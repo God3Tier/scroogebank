@@ -1,14 +1,20 @@
 package bank.alert;
 
+import bank.alert.worker.WorkerMode;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.context.ConfigurableApplicationContext;
 
 @SpringBootApplication
-@EnableScheduling
 public class EventAlertServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(EventAlertServiceApplication.class, args);
+        SpringApplication application = new SpringApplication(EventAlertServiceApplication.class);
+        application.addListeners(new WorkerMode());
+        ConfigurableApplicationContext context = application.run(args);
+        if (WorkerMode.isWorker(context.getEnvironment())) {
+            // WorkerRunner has run its one window; exit with its code.
+            System.exit(SpringApplication.exit(context));
+        }
     }
 }
