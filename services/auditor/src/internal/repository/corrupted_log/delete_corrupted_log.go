@@ -1,15 +1,15 @@
 package corrupted_log
 
 import (
-	orm "auditor/src/internal/repository/orm"
 	"context"
 	"database/sql"
+
+	orm "auditor/src/internal/repository/orm"
 
 	"github.com/aarondl/sqlboiler/v4/queries/qm"
 )
 
 func (i impl) DeleteCorruptedLog(ctx context.Context, uuid string) error {
-
 	rows, err := orm.CorruptedAuditLogs(
 		qm.Where("id = ?", uuid),
 	).DeleteAll(ctx, i.db)

@@ -7,12 +7,12 @@ import (
 
 func mapToAuditLog(auditLog *orm.AuditLog) models.AuditLog {
 	return models.AuditLog{
-		Id:            auditLog.ID,
+		ID:            auditLog.ID,
 		SequenceNo:    auditLog.SequenceNo,
 		EventID:       auditLog.EventID.String,
 		EventType:     auditLog.EventType,
 		Action:        auditLog.Action,
-		ActorId:       auditLog.ActorID,
+		ActorID:       auditLog.ActorID,
 		SourceService: models.ServiceType(auditLog.SourceService),
 		Timestamp:     auditLog.Timestamp,
 		Payload:       string(auditLog.Payload),

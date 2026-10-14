@@ -16,7 +16,7 @@ type ValidEvent struct {
 	EventType     string          `json:"event_type"`
 	Action        string          `json:"action"`
 	SourceService string          `json:"source_service"`
-	ActorId       string          `json:"actor_id"`
+	ActorID       string          `json:"actor_id"`
 	Payload       json.RawMessage `json:"payload"`
 }
 
@@ -204,7 +204,7 @@ func validateUserManagementPayload(envelope ValidEvent) error {
 	if !models.UserManagementServiceType.IsValidAction(envelope.Action) || strings.EqualFold(envelope.Action, "CRUD") {
 		return fmt.Errorf("unrecognized action for USER_MANAGEMENT: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("USER_MANAGEMENT event requires actor_id")
 	}
 	var payload ValidUserAuditPayload
@@ -244,7 +244,7 @@ func validateAuthenticationPayload(envelope ValidEvent) error {
 	if !known {
 		return fmt.Errorf("unrecognized action for COGNITO_TRIGGERS: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("COGNITO_TRIGGERS event requires actor_id")
 	}
 	var payload ValidAuthenticationPayload
@@ -267,7 +267,7 @@ func validateDashboardPayload(envelope ValidEvent) error {
 	if !dashboardViewActions[envelope.Action] {
 		return fmt.Errorf("unrecognized action for DASHBOARD: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("DASHBOARD event requires actor_id")
 	}
 	var payload ValidDashboardViewPayload

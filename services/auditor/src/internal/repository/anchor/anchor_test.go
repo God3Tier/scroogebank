@@ -102,8 +102,9 @@ func TestWriteLocksEachAnchor(t *testing.T) {
 	assert.Equal(t, types.ObjectLockModeGovernance, put.ObjectLockMode)
 	assert.Equal(t, anchoredAt.Add(7*24*time.Hour), aws.ToTime(put.ObjectLockRetainUntilDate))
 	assert.Equal(t, types.ChecksumAlgorithmCrc32, put.ChecksumAlgorithm)
-	var stored models.ChainAnchor
-	require.NoError(t, json.Unmarshal(client.objects[aws.ToString(put.Key)], &stored))
+	var document anchorDocument
+	require.NoError(t, json.Unmarshal(client.objects[aws.ToString(put.Key)], &document))
+	stored := document.model()
 	assert.Equal(t, anchor, stored)
 }
 

@@ -43,7 +43,7 @@ func (s Controller) ListActivities(ctx context.Context, req *auditv1.ListActivit
 	}
 
 	filter := models.ActivityFilter{
-		ActorId:          actor,
+		ActorID:          actor,
 		BeforeSequenceNo: before,
 		// One extra row shows whether another page exists.
 		Limit: int(req.PageSize) + 1,
@@ -79,10 +79,10 @@ func (s Controller) ListActivities(ctx context.Context, req *auditv1.ListActivit
 	activities := make([]*auditv1.Activity, 0, len(logs))
 	for _, entry := range logs {
 		activities = append(activities, &auditv1.Activity{
-			Id:            entry.Id,
+			Id:            entry.ID,
 			SourceService: string(entry.SourceService),
 			Action:        entry.Action,
-			ActorId:       entry.ActorId,
+			ActorId:       entry.ActorID,
 			Timestamp:     timestamppb.New(entry.Timestamp),
 			Payload:       entry.Payload,
 		})

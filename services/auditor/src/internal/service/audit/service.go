@@ -1,12 +1,13 @@
 package audit
 
 import (
+	"context"
+
 	"auditor/src/internal/models"
 	"auditor/src/internal/repository/audit"
-	"context"
 )
 
-// Service is the placeholder for auditor business logic.
+// Service provides audit-chain verification and activity-feed queries.
 type Service interface {
 	// VerifyChain checks every entry of the audit chain, oldest first, and the
 	// entry anchor names (nil for none). It reports how many entries it
@@ -20,7 +21,6 @@ type Service interface {
 // verifyPageSize is how many entries VerifyChain reads at a time.
 const verifyPageSize = 1000
 
-// TODO: Figure out specifically what is needed for this service
 type impl struct {
 	repo     audit.Repository
 	pageSize int

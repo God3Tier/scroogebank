@@ -1,0 +1,31 @@
+# Keep generated mocks beside their interfaces, matching the SFTP receiver.
+dir: "{{.InterfaceDir}}"
+filename: mocks.go
+include-auto-generated: false
+
+packages:
+  auditor/src/internal/repository:
+    interfaces:
+      Registry: {}
+  auditor/src/internal/repository/audit:
+    interfaces:
+      Repository: {}
+  auditor/src/internal/repository/anchor:
+    interfaces:
+      Repository: {}
+      S3API: {}
+  auditor/src/internal/repository/corrupted_log:
+    interfaces:
+      Repository: {}
+  auditor/src/internal/security:
+    interfaces:
+      Verifier: {}
+  auditor/src/internal/service/audit:
+    interfaces:
+      Service: {}
+  auditor/src/internal/service/corrupted_logs:
+    interfaces:
+      Service: {}
+  auditor/src/serverd/queue:
+    interfaces:
+      SQSAPI: {}

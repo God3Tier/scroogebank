@@ -90,8 +90,13 @@ Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over 
 | Method | Path | Behavior |
 |---|---|---|
 | `GET` | `/api/corrupted-logs` | Return all decodable findings as JSON. A finding chain-verify recorded also carries `audit_log_id` (the affected entry) and `reason`. |
-| `POST` | `/api/corrupted-logs` | Store a finding. The request body contains `id` (UUID) and `payload` (the original audit log); it cannot set `audit_log_id` or `reason`. The server sets `date_of_detect`. |
+| `POST` | `/api/corrupted-logs` | Store a finding. The request body contains `id` (UUID) and `payload` (the original audit log, using the snake_case fields below); it cannot set `audit_log_id` or `reason`. The server sets `date_of_detect`. |
 | `DELETE` | `/api/corrupted-logs/{id}` | Delete the finding with the given UUID. If the problem is still in the chain, chain-verify records it again on its next run. |
+
+The `payload` object uses `id`, `sequence_no`, `event_id`, `event_type`,
+`action`, `actor_id`, `source_service`, `timestamp`, `payload`, `parent_hash`
+and `hash`. The response uses the same field names, wrapped in a finding with
+`id`, optional `audit_log_id` and `reason`, and `date_of_detect`.
 
 Malformed JSON or UUIDs return `400`, a missing entry returns `404`, and
 unexpected storage failures return `500`.
@@ -101,7 +106,7 @@ TOKEN=<an admin's Cognito access token>
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs
 curl -X POST http://localhost:8080/api/corrupted-logs \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"Id":"audit-1","EventType":"CRUD","Action":"UPDATE"}}'
+  -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"id":"audit-1","event_type":"CRUD","action":"UPDATE"}}'
 curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
 ```
 

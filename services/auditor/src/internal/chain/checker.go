@@ -45,7 +45,7 @@ func (c *Checker) Check(entry models.AuditLog) []models.ChainFinding {
 	}
 	if c.Anchor != nil && entry.SequenceNo == c.Anchor.SequenceNo {
 		c.anchorFound = true
-		if entry.Id != c.Anchor.ID || entry.Hash != c.Anchor.Hash {
+		if entry.ID != c.Anchor.ID || entry.Hash != c.Anchor.Hash {
 			findings = append(findings, models.ChainFinding{Entry: entry, Reason: models.AnchorMismatch})
 		}
 	}
@@ -61,6 +61,6 @@ func (c *Checker) Finish() []models.ChainFinding {
 	if c.Anchor == nil || c.anchorFound {
 		return nil
 	}
-	missing := models.AuditLog{Id: c.Anchor.ID, SequenceNo: c.Anchor.SequenceNo, Hash: c.Anchor.Hash}
+	missing := models.AuditLog{ID: c.Anchor.ID, SequenceNo: c.Anchor.SequenceNo, Hash: c.Anchor.Hash}
 	return []models.ChainFinding{{Entry: missing, Reason: models.AnchorMismatch}}
 }

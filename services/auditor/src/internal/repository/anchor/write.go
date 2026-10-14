@@ -14,7 +14,7 @@ import (
 )
 
 func (i impl) Write(ctx context.Context, anchor models.ChainAnchor) error {
-	body, err := json.Marshal(anchor)
+	body, err := json.Marshal(newAnchorDocument(anchor))
 	if err != nil {
 		return pkgerrors.WithStack(err)
 	}

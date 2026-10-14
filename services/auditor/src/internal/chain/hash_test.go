@@ -10,13 +10,13 @@ import (
 
 func sampleEntry() models.AuditLog {
 	return models.AuditLog{
-		Id:            "00000000-0000-4000-8000-000000000001",
+		ID:            "00000000-0000-4000-8000-000000000001",
 		SequenceNo:    1,
 		EventID:       "evt-1",
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "agent-1",
+		ActorID:       "agent-1",
 		Timestamp:     time.Date(2026, 10, 12, 7, 4, 5, 123456000, time.UTC),
 		Payload:       `{"client_id":"c-1","status_code":200}`,
 	}
@@ -31,13 +31,13 @@ func TestHashMatchesTheDocumentedEncoding(t *testing.T) {
 
 func TestHashCoversEveryField(t *testing.T) {
 	changes := map[string]func(*models.AuditLog){
-		"id":             func(e *models.AuditLog) { e.Id = "00000000-0000-4000-8000-000000000002" },
+		"id":             func(e *models.AuditLog) { e.ID = "00000000-0000-4000-8000-000000000002" },
 		"sequence_no":    func(e *models.AuditLog) { e.SequenceNo = 2 },
 		"event_id":       func(e *models.AuditLog) { e.EventID = "evt-2" },
 		"event_type":     func(e *models.AuditLog) { e.EventType = "AUTH" },
 		"action":         func(e *models.AuditLog) { e.Action = "DELETE" },
 		"source_service": func(e *models.AuditLog) { e.SourceService = models.UserManagementServiceType },
-		"actor_id":       func(e *models.AuditLog) { e.ActorId = "agent-2" },
+		"actor_id":       func(e *models.AuditLog) { e.ActorID = "agent-2" },
 		"timestamp":      func(e *models.AuditLog) { e.Timestamp = e.Timestamp.Add(time.Microsecond) },
 		"payload":        func(e *models.AuditLog) { e.Payload = `{"client_id":"c-2","status_code":200}` },
 		"parent_hash":    func(e *models.AuditLog) { e.ParentHash = "parent" },

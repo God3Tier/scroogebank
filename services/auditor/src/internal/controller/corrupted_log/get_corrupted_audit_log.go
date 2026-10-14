@@ -15,7 +15,12 @@ func (c Controller) GetCorruptedAuditLog(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	response := make([]corruptedAuditLogResponse, 0, len(logs))
+	for _, entry := range logs {
+		response = append(response, corruptedAuditLogToResponse(entry))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(logs)
+	_ = json.NewEncoder(w).Encode(response)
 }

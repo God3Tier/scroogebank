@@ -1,16 +1,17 @@
 package audit
 
 import (
-	"auditor/src/internal/chain"
-	"auditor/src/internal/models"
-	orm "auditor/src/internal/repository/orm"
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 
+	"auditor/src/internal/chain"
+	"auditor/src/internal/models"
+	orm "auditor/src/internal/repository/orm"
+
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/aarondl/sqlboiler/v4/queries/qm"
 	"github.com/aarondl/sqlboiler/v4/types"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -40,21 +41,26 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 	// number. An empty table starts the chain at 1 with no parent.
 	var previousSequence int64
 	var parentHash string
-	err = tx.QueryRowContext(ctx,
-		`SELECT sequence_no, hash FROM audit_log ORDER BY sequence_no DESC LIMIT 1`,
-	).Scan(&previousSequence, &parentHash)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	previousLogs, err := orm.AuditLogs(
+		qm.OrderBy("sequence_no desc"),
+		qm.Limit(1),
+	).All(ctx, tx)
+	if err != nil {
 		return pkgerrors.WithStack(err)
+	}
+	if len(previousLogs) > 0 {
+		previousSequence = previousLogs[0].SequenceNo
+		parentHash = previousLogs[0].Hash
 	}
 
 	entry := models.AuditLog{
-		Id:            uuid.New().String(),
+		ID:            uuid.New().String(),
 		SequenceNo:    previousSequence + 1,
 		EventID:       auditLog.EventID,
 		EventType:     auditLog.EventType,
 		Action:        auditLog.Action,
 		SourceService: auditLog.SourceService,
-		ActorId:       auditLog.ActorId,
+		ActorID:       auditLog.ActorID,
 		Timestamp:     chain.Now(),
 		// The ORM stores a JSON value without the whitespace around it, so it
 		// is hashed without it too.
@@ -64,13 +70,13 @@ func (i impl) StoreAuditChain(ctx context.Context, auditLog models.AuditLogInput
 	entry.Hash = chain.Hash(entry)
 
 	newLog := &orm.AuditLog{
-		ID:            entry.Id,
+		ID:            entry.ID,
 		SequenceNo:    entry.SequenceNo,
 		EventID:       null.NewString(entry.EventID, entry.EventID != ""),
 		EventType:     entry.EventType,
 		Action:        entry.Action,
 		SourceService: string(entry.SourceService),
-		ActorID:       entry.ActorId,
+		ActorID:       entry.ActorID,
 		Timestamp:     entry.Timestamp,
 		Payload:       types.JSON(entry.Payload),
 		ParentHash:    entry.ParentHash,

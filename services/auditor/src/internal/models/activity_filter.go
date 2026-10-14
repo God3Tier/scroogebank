@@ -5,7 +5,7 @@ import "time"
 // ActivityFilter selects entries for the activity feed (ListActivities). A
 // zero value in any field means "no restriction" on that field.
 type ActivityFilter struct {
-	ActorId          string
+	ActorID          string
 	From             time.Time // inclusive
 	To               time.Time // exclusive
 	BeforeSequenceNo int64     // only entries with a lower sequence_no

@@ -1,9 +1,10 @@
 package corrupted_log
 
 import (
+	"context"
+
 	"auditor/src/internal/models"
 	"auditor/src/internal/repository/corrupted_log"
-	"context"
 )
 
 type Service interface {

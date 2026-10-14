@@ -5,8 +5,6 @@ import (
 )
 
 var (
-	UnimplementedRepositoryError = errors.New("Error function not yet implemented")
-
 	// DuplicateEventError indicates the EventID on this request was already
 	// stored — expected when SQS redelivers a message the auditor already
 	// processed (standard queues deliver at-least-once). Callers should
