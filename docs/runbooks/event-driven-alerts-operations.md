@@ -17,6 +17,7 @@ and deployment evidence remain pending approved AWS access.
 
 | Environment variable | Default | Meaning |
 |---|---:|---|
+| `ALERT_MODE` | `API` | `API` serves `/api/alerts`; `WORKER` runs one ingestion window and exits, with code 1 if it failed |
 | `ALERT_INGESTION_ENABLED` | `false` | Allows provider ingestion reservations |
 | `ALERT_AI_ENABLED` | `false` | Allows model invocation and model-token reservations |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
@@ -116,3 +117,14 @@ evidence are not implemented. Local auditor publication, bounded retry/recovery,
 and retention are implemented and tested, but no production broker or cloud
 control was exercised. This document must not be used as evidence that cloud
 controls were tested.
+
+The worker runs as a new process every 4 hours, and the controls above keep
+their state in memory. Each worker run starts with the monthly search and token
+counts and the estimated cost at zero, and with no disable in force; only the
+cap of 4 searches per run holds across runs. Six scheduled runs a day use at most
+744 searches in a 31-day month, under the quota of 1,000, but manual runs and
+replays add to that with no monthly limit, and the budget stop never carries
+over to the next run. Keep the counts and
+disables in alerts-db before enabling ingestion or the model for the worker.
+Until then, the enable flags, read at each start, are the only kill switches
+that persist.

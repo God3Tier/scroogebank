@@ -88,6 +88,47 @@ agent's positions. `materiality-v1` uses fixed-decimal, versioned weights and a
 expired valuations fail closed and cannot produce an alert score. These are MVP
 prototype controls, not investment policy.
 
+## Worker mode
+
+`ALERT_MODE=WORKER` runs one ingestion window and exits (ADR-0007; ADR-0031
+decision 1). EventBridge Scheduler is to start it as an ECS task every 4 hours.
+
+- The window ends when the task starts. It begins where the last successful
+  window ended, less the 5-minute overlap, or 4 hours back on the first run.
+- The worker starts no web server and no timers. The API process runs the audit
+  publisher and retention cleanup; it also publishes any audit rows the worker
+  leaves in the shared outbox.
+- Each run logs one line with counts and codes only, never search terms, titles
+  or URLs:
+  `worker run status=SUCCEEDED run_id=… window_from=… window_to=… search_attempts=4 accepted=7 duplicates=1 rejected=0 error_code=null`
+- The exit code is 1 when the window failed (`FAILED`) or the worker could not
+  start, for example with the database unreachable. Every other status exits 0:
+  `DISABLED`, `CONTROL_BLOCKED`, `NO_QUERIES`, `ALREADY_RUNNING`,
+  `ALREADY_SUCCEEDED` and `SUCCEEDED`.
+
+Not done yet:
+
+- A run stores search results only. Nothing turns them into alerts yet:
+  `SourceResultProcessor` (classification, briefing, alert generation) has no
+  caller.
+- There is no AgentCore client, so with `ALERT_INGESTION_ENABLED=true` every run
+  fails with `PROVIDER_NOT_CONFIGURED`.
+- The monthly search and token quotas, the estimated-cost stop and an operator's
+  disable are kept in memory. Each run is a new process, so it starts with the
+  counts at zero and nothing disabled; only the cap of 4 searches per run holds
+  across runs. Keep them in alerts-db before ingestion or the model is enabled
+  for the worker (see the operations runbook).
+- Two runs at once both search if their windows end at different times: the run
+  lease only covers the same window. Do not start a manual run while a scheduled
+  one is running.
+- Micrometer metrics are not exported from the short-lived worker. Until
+  CloudWatch is set up, the log line is the record of each run.
+
+Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
+every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database
+settings, and an alarm when a worker task stops with a non-zero exit code
+(ADR-0031: an alarm on failed runs).
+
 ## Local verification
 
 Docker must be running because repository tests use PostgreSQL Testcontainers.
@@ -124,3 +165,21 @@ parameters match the OpenAPI contract.
 returns exposure, ordered explanation factors, public-source evidence, the
 structured briefing when available, and the latest recorded decision. Alerts
 outside an agent's assignment scope return `404` to prevent enumeration.
+
+## Container image
+
+Build from the repository root, which is the build context for every service
+image:
+
+```powershell
+docker build -f services/event-alert-service/Dockerfile -t event-alert-service:local .
+```
+
+The image runs as a non-root user, and the same image serves both modes. Pass
+the `EVENT_ALERT_DB_*` settings to each; from a container, a database on the
+host is at `host.docker.internal`.
+
+- API: add `COGNITO_ISSUER_URI` and publish port 8080 (`-p 8080:8080`).
+  `GET /actuator/health` needs no token.
+- Worker: add `ALERT_MODE=WORKER`. The container runs one window and exits with
+  the worker's exit code.
