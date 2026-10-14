@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +17,9 @@ import (
 func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath string) error {
 	processingStart := time.Now().UTC()
 	fileName := path.Base(remotePath)
+	if !hasExtension(fileName, ".json") {
+		return p.rejectFile(ctx, client, remotePath, errors.New("unsupported file type: only .json files are imported"))
+	}
 	remoteFile, err := client.Open(remotePath)
 	if err != nil {
 		return p.processingFailure(ctx, fileName, readFailure, fmt.Errorf("open remote file: %w", err))
@@ -31,10 +35,10 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 
 	var records []json.RawMessage
 	if err := json.Unmarshal(contents, &records); err != nil {
-		return p.processingFailure(ctx, fileName, formatFailure, fmt.Errorf("parse JSON transaction file: %w", err))
+		return p.rejectFile(ctx, client, remotePath, fmt.Errorf("parse JSON transaction file: %w", err))
 	}
 	if records == nil {
-		return p.processingFailure(ctx, fileName, formatFailure, fmt.Errorf("parse JSON transaction file: expected an array"))
+		return p.rejectFile(ctx, client, remotePath, fmt.Errorf("parse JSON transaction file: expected an array"))
 	}
 
 	rejected := 0
@@ -95,14 +99,40 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 	if err := p.store.SaveImport(ctx, transactions, completed); err != nil {
 		return p.processingFailure(ctx, fileName, saveFailure, fmt.Errorf("save transactions: %w", err))
 	}
-	archiveDir := path.Join(p.config.RemoteDir, archiveStatus)
-	if err := client.MkdirAll(archiveDir); err != nil {
-		return p.processingFailure(ctx, fileName, archiveFailure, fmt.Errorf("create %s directory: %w", archiveStatus, err))
-	}
-	if err := client.Rename(remotePath, path.Join(archiveDir, path.Base(remotePath))); err != nil {
-		return p.processingFailure(ctx, fileName, archiveFailure, fmt.Errorf("archive processed file: %w", err))
+	if err := p.archive(client, remotePath, archiveStatus); err != nil {
+		return p.processingFailure(ctx, fileName, archiveFailure, err)
 	}
 	log.Printf("processed %d transactions from %s (%d accepted, %d rejected)", len(records), path.Base(remotePath), accepted, rejected)
+	return nil
+}
+
+// rejectFile moves a file the import cannot read, an unsupported or
+// unparseable one, to rejected/ once its FILE_FORMAT_INVALID event is
+// written (ADR-0024 decision 4). If the event cannot be written, the file
+// stays, and the next poll tries again with the same occurred_at: moved
+// first, the file would end its episode and the event would be lost. A
+// rejected file is handled, so it returns nil once the file is moved.
+func (p *Poller) rejectFile(ctx context.Context, client remoteSFTP, remotePath string, cause error) error {
+	fileName := path.Base(remotePath)
+	if err := p.recordFailure(ctx, failureKey{file: fileName, kind: formatFailure}, cause); err != nil {
+		return fmt.Errorf("%w; write audit event: %v", cause, err)
+	}
+	if err := p.archive(client, remotePath, "rejected"); err != nil {
+		return p.processingFailure(ctx, fileName, archiveFailure, err)
+	}
+	log.Printf("rejected %s: %v", fileName, cause)
+	return nil
+}
+
+// archive moves a file out of the remote directory into its subdirectory dir.
+func (p *Poller) archive(client remoteSFTP, remotePath, dir string) error {
+	archiveDir := path.Join(p.config.RemoteDir, dir)
+	if err := client.MkdirAll(archiveDir); err != nil {
+		return fmt.Errorf("create %s directory: %w", dir, err)
+	}
+	if err := client.Rename(remotePath, path.Join(archiveDir, path.Base(remotePath))); err != nil {
+		return fmt.Errorf("move file to %s: %w", dir, err)
+	}
 	return nil
 }
 

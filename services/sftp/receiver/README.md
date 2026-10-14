@@ -85,6 +85,17 @@ Someone with admin rights on the team's shared user pool does this once. It is t
 
 A transaction already imported keeps its first version. A later file with the same `transaction_id` changes only a `Pending` status, to `Completed` or `Failed`: it never reopens a settled transaction, and never changes the amount, date, description or account link ([ADR-0024](../../../docs/adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 4). A row imported as `Unmatched` therefore stays `Unmatched` ([ADR-0037](../../../docs/adr/ADR-0037-transactions-database-and-account-linking.md) decision 6).
 
+## Rejected files
+
+The poller takes every regular file in `SFTP_REMOTE_DIR` except `.tmp` files, which are still being uploaded ([ADR-0024](../../../docs/adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 4). It rejects a whole file when it cannot read it:
+
+- a file with any extension other than `.json` is unsupported;
+- a `.json` file that is not a JSON array of transactions, which is how a truncated or damaged file shows.
+
+It records a `FILE_FORMAT_INVALID` event (stage `FILE_FORMAT`) and then moves the file to `rejected/`. The file moves only once its event is saved or sent: if neither works, the file stays and the next poll tries again. A file whose rows are partly or all invalid is different: it is imported, its `FILE_PROCESSING_COMPLETED` event lists the rejected rows, and it also moves to `rejected/`.
+
+A file keeps its name when it moves to `processed/` or `rejected/`. If a file of that name is already there, OpenSSH refuses the move, so the file stays, with one `SYSTEM_EXCEPTION` event, until the older file is removed. Generated `report-<time>-<id>.json` names make this unlikely.
+
 ## Audit events
 
 When `AUDIT_QUEUE_URL` is set (with `AWS_REGION`), the poller records a `TRANSACTION_INGESTION` audit event for each processed file (`FILE_PROCESSING_COMPLETED`) and for each failure (`CONNECTION_FAILURE`, `FILE_FORMAT_INVALID` or `SYSTEM_EXCEPTION`). This receiver acts as transaction-service and transaction-ingest, so it implements [ADR-0020](../../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md) decision 3 through the `audit_outbox` table:

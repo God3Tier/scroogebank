@@ -12,7 +12,7 @@ type failureKind string
 const (
 	connectionFailure failureKind = "connection" // connecting, or listing the remote directory
 	readFailure       failureKind = "read"       // opening, reading or closing a file
-	formatFailure     failureKind = "format"     // a file that is not a JSON array of transactions
+	formatFailure     failureKind = "format"     // a file that is not a JSON array of transactions, or not a .json file
 	lookupFailure     failureKind = "lookup"     // account-service could not answer
 	saveFailure       failureKind = "save"       // the import did not commit
 	archiveFailure    failureKind = "archive"    // the file could not be moved out of the remote directory

@@ -109,9 +109,12 @@ func (p *Poller) Poll(ctx context.Context) error {
 		return errors.Join(wrapped, p.recordFailure(ctx, failureKey{kind: connectionFailure}, wrapped))
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	// Every regular file is waiting, unsupported ones included, so that they
+	// are rejected and audited. A .tmp file is still being uploaded (ADR-0024
+	// decision 2).
 	var waiting []string
 	for _, entry := range entries {
-		if entry.Mode().IsRegular() && strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+		if entry.Mode().IsRegular() && !hasExtension(entry.Name(), ".tmp") {
 			waiting = append(waiting, entry.Name())
 		}
 	}
@@ -130,6 +133,11 @@ func (p *Poller) Poll(ctx context.Context) error {
 		p.endFileFailures(name)
 	}
 	return errors.Join(failures...)
+}
+
+// hasExtension reports whether name ends in ext, ignoring case.
+func hasExtension(name, ext string) bool {
+	return strings.EqualFold(path.Ext(name), ext)
 }
 
 // writeProcessingError saves a processing-error event on its own: there is no
