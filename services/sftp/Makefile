@@ -4,7 +4,7 @@ SFTP_KEY_FILE ?= $(shell sed -n 's/^SFTP_KEY_FILE=//p' .env)
 SFTP_KEY_PATH := $(abspath $(SFTP_KEY_FILE))
 SFTP_HOST_KEY_FINGERPRINT ?= $(shell sed -n 's/^SFTP_HOST_KEY_FINGERPRINT=//p' .env)
 
-.PHONY: test compose-check build up down tools-build deps db-up sqlboiler mocks generate poller poller-once
+.PHONY: test producer-test compose-check build up down tools-build deps db-up sqlboiler mocks generate poller poller-once fault
 
 compose-check:
 	$(COMPOSE) -f $(COMPOSE_FILE) config --quiet
@@ -16,8 +16,8 @@ deps: tools-build
 ## and the mocks (both git-ignored) first, so it works from a clean checkout, as
 ## in CI. It does not run go mod tidy: before the mocks exist, tidy would drop
 ## the testify/mock dependencies they need. PSQL_HOST points SQLBoiler at the
-## test database instead of sqlboiler.toml's host.
-test: tools-build
+## test database instead of sqlboiler.toml's host. The producer's tests run first.
+test: tools-build producer-test
 	@set -e; \
 	$(COMPOSE) -f $(COMPOSE_FILE) --profile test up -d --wait test-db; \
 	trap '$(COMPOSE) -f $(COMPOSE_FILE) --profile test rm -sf test-db >/dev/null 2>&1 || true' EXIT; \
@@ -73,3 +73,14 @@ poller-once: tools-build
 		-e SFTP_PRIVATE_KEY_PATH=/run/secrets/sftp-client-key \
 		-e SFTP_HOST_KEY_FINGERPRINT="$(SFTP_HOST_KEY_FINGERPRINT)" \
 		go-tools go run ./src/cronjob -once
+
+## Run the producer's tests: they need only Go, so they run in the image's
+## build stage, with no volume to mount.
+producer-test:
+	docker build --progress plain --target test producer
+
+## Publish one fault file for the demo (ADR-0024 decision 1), for example
+## make fault KIND=corrupt. The kinds are listed in README.md.
+fault:
+	@test -n "$(KIND)" || (echo "set KIND to one of: corrupt, partial, all-invalid, unsupported, resend" >&2; exit 1)
+	$(COMPOSE) -f $(COMPOSE_FILE) run --rm --build producer -fault $(KIND)

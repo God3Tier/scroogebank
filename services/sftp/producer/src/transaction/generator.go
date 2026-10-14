@@ -17,6 +17,12 @@ var (
 	status     = []string{"COMPLETED", "PENDING", "FAILED"}
 )
 
+// Generate returns one valid transaction, on one of accountIDs if any are
+// given, or on a random external account reference otherwise.
+func Generate(accountIDs []string) Transaction {
+	return generateTransaction(accountIDs)
+}
+
 func generateTransaction(accountIDs []string) Transaction {
 	accountID := fmt.Sprintf("ACC-%06d", rand.Intn(999999))
 	if len(accountIDs) > 0 {
