@@ -1,12 +1,12 @@
 # ADR-0024: Transaction ingestion: external SFTP server, scheduled VPC-attached Lambda, ready-file protocol, idempotent import
 
-- Status: Proposed
-- Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
+- Status: Accepted
+- Decision date/time: 2026-10-14 10:10 +08:00 (Asia/Singapore); first proposed 2026-10-01 21:50 +08:00
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
-- Feature/branch: `feat/target-architecture`
-- Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
-- Supersedes: on acceptance, the runtime [ADR-0017](ADR-0017-microservices-per-business-area.md) gives transaction-service and transaction-ingest (decision 7)
+- Feature/branch: `feat/target-architecture` (proposed); `task/governance/adr-0024-accept` (amended, accepted); implementation on `task/transaction-integration/*` branches
+- Related issue/PR: TBD
+- Supersedes: the runtime [ADR-0017](ADR-0017-microservices-per-business-area.md) gave transaction-service and transaction-ingest (Java 25), which becomes Go (decision 7)
 - Superseded by: N/A
 
 ## Context
@@ -68,16 +68,20 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
    - EventBridge Scheduler invokes it about every 5 minutes.
    - Reserved concurrency is 1.
    - It connects out through the NAT gateway with key authentication and a pinned host key (in SSM Parameter Store).
-   - Timeouts, retries and a circuit breaker protect the connection.
+   - Timeouts, retries and a circuit breaker protect the connection:
+     - a run retries a failed connection a few times with backoff, but never a host-key mismatch or an authentication failure, which retrying cannot fix;
+     - after several runs in a row fail to connect, the circuit breaker opens: later runs skip the connection until a cool-down has passed, and then one run tries again;
+     - the breaker's state is kept in the reader's memory, like failure episodes (decision 5), so a new execution environment starts with it closed.
    - It stops starting new files when less than a minute of the invocation remains; the rest wait for the next run.
    - It calls account-service's `/internal/accounts/lookup` ([ADR-0037](ADR-0037-transactions-database-and-account-linking.md)) through the internal ALB with its client-credentials token, as standalone scheduled tasks call services ([ADR-0018](ADR-0018-ecs-fargate-compute.md)): a Lambda function cannot use ECS Service Connect.
 4. **Per file:**
+   - skip a file whose name ends in `.tmp`, which is still being uploaded; reject a file with any extension other than `.json` as unsupported, with a `FILE_FORMAT_INVALID` event;
    - verify that the file is a JSON array of transactions, and each row; a truncated or damaged file fails this check and is rejected with a `FILE_FORMAT_INVALID` event;
    - `INSERT ... ON CONFLICT (transaction_id) DO UPDATE` the status, only while the stored status is Pending: a later file can complete or fail a transaction but never reopen it. Every other field, the account link included, keeps its first imported value ([ADR-0037](ADR-0037-transactions-database-and-account-linking.md) decision 6);
    - in the same transaction, write the file's `FILE_PROCESSING_COMPLETED` event to `audit_outbox` ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)), with its start and end times, status, record counts, and each rejected row's record number and reason; rejected rows are not kept in a table;
-   - move the file to `processed/` or `rejected/`.
+   - move the file to `processed/` or `rejected/`. A file rejected as unsupported or as not a JSON array is moved only after its `FILE_FORMAT_INVALID` event is written, so no file leaves `reports/` unaudited.
 
-   There is no table of processed files. A file leaves `reports/` only after its import commits; if moving it fails, the next run reads it again, and the upsert stores no duplicate transactions.
+   There is no table of processed files. A file leaves `reports/` only after its import commits, or after its rejection is audited; if moving it fails, the next run reads it again, and the upsert stores no duplicate transactions.
 5. **On failure:**
    - on a connection or authentication failure, write a `CONNECTION_FAILURE` event and stop;
    - files stay in `reports/` for the next run;
@@ -92,7 +96,7 @@ The current `dev` implementation, `services/sftp/receiver`, is written in Go. Th
 
    A new episode gets a new `occurred_at`, so its event ID differs from earlier ones and the auditor stores it. A retried write within one episode keeps its event ID, so it is stored once. The reader keeps episodes in memory: a restart, or a new Lambda execution environment, audits an ongoing failure again, the trade-off ADR-0037 decision 5 already accepts.
 6. **No Client ID check at import (provisional):** rows are validated on their own. Ownership is enforced when transactions are read ([open item 9](../architecture/open-items.md#9-client-id-validation-at-import), [open item 10](../architecture/open-items.md#10-how-transaction-reads-enforce-agent-ownership)).
-7. **Runtime: Go**, as built on `dev`. The receiver module holds both the import and transaction-service's read API, so both Feature 3 components stay in Go. This extends the Go exception in [ADR-0017](ADR-0017-microservices-per-business-area.md), whose table lists them as Java 25; once accepted, it supersedes that runtime entry only. On Lambda, the import runs as a compiled binary on the OS-only runtime (`provided.al2023`) and does what one `-once` run does today. The Feature 3 owner confirms this before acceptance.
+7. **Runtime: Go**, as built on `dev`. The receiver module holds both the import and transaction-service's read API, so both Feature 3 components stay in Go. This extends the Go exception in [ADR-0017](ADR-0017-microservices-per-business-area.md), whose table lists them as Java 25; once accepted, it supersedes that runtime entry only. On Lambda, the import runs as a compiled binary on the OS-only runtime (`provided.al2023`) and does what one `-once` run does today. Joseph Yau, the Feature 3 owner, confirms this on the pull request that accepts this decision, before it merges.
 
 ## Rationale
 
@@ -148,6 +152,7 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
   - a replayed file (no duplicates);
   - a re-sent transaction (only a Pending status changes);
   - a server outage (one `CONNECTION_FAILURE` event per outage, and the file picked up later);
+  - connection retries and the circuit breaker (no retry on a host-key mismatch; an open breaker skips the connection);
   - a host-key mismatch (refused).
 - Check that every case produces the spec's audit fields.
 
@@ -168,3 +173,7 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
   - decision 4: the upsert moves only a Pending status forward. The `dev` receiver keeps the first version of a transaction (`ON CONFLICT DO NOTHING`), so a Pending transaction never completes;
   - decision 5: each failure is audited once per episode, with `occurred_at`. On `dev`, event IDs come from content that has no time, so the auditor drops every later outage with the same error text;
   - Security: the Cognito client secret in Secrets Manager, and TLS to transactions-db.
+- 2026-10-14 10:10 +08:00: amended before acceptance, then accepted by the decision owner, subject to the Feature 3 owner's confirmation of decision 7 on this pull request. Lambda stays the reader's runtime; an ECS scheduled task remains the fallback (Option C).
+  - **Decision 3:** retries happen within a run and skip host-key and authentication failures; the circuit breaker spans runs and keeps its state in memory, as failure episodes do.
+  - **Decision 4:** a file with an extension other than `.json` is rejected and audited as unsupported, as [data-flow.md](../architecture/data-flow.md#how-the-specs-audit-requirements-are-met) already said, and `.tmp` uploads are skipped. A rejected file moves only after its event is written.
+  - **Validation:** adds the retry and circuit breaker tests.
