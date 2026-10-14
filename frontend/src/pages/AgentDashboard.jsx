@@ -6,6 +6,7 @@ import { createClient } from '../api/clients.js'
 // endpoint that lists clients, so the list below is still synthetic.
 import clients from '../data/clients.js'
 import transactions from '../data/transactions.js'
+import ActivityFeed from '../components/ActivityFeed.jsx'
 import StatCard from '../components/StatCard.jsx'
 
 const EMPTY_CLIENT = {
@@ -151,6 +152,8 @@ function AgentDashboard() {
                     </ul>
                 </div>
             )}
+
+            <ActivityFeed />
         </div>
     )
 }

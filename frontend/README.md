@@ -18,7 +18,9 @@ npm run dev
 ```
 
 The browser uses same-origin `/api` requests. During local development Vite
-proxies them to `http://localhost:8080`, avoiding a separate CORS exception.
+proxies `/api/users` and `/api/activities` to user-service on
+`http://localhost:8081` and the rest to `http://localhost:8080`, avoiding a
+separate CORS exception.
 Set `VITE_API_URL` in `.env` only when the deployed API has a different origin.
 
 ## Sign-in
@@ -92,6 +94,20 @@ The Agent Dashboard's **Manage Client Profiles** list is still synthetic: client
 
 The page uses the existing tokens and components from the Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision), in `src/styles/index.css`.
 
+## Activity panels
+
+The Admin Dashboard's **Recent Activities** and the Agent Dashboard's **My Recent Activities** read user-service's activity feed, `GET /api/activities` ([ADR-0021](../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). Both are `src/components/ActivityFeed.jsx`; the call is in `src/api/activities.js`.
+
+- **Who sees what.** The spec says "Agents can only see their own client activities. Admins can see the activities of all agents." The panel never sends who the caller is: user-service and the auditor take it from the access token, so an agent gets only their own changes whatever the page asks for. The agent panel therefore shows no names.
+- **Changes only.** Creating, updating, deleting or verifying a client, uploading an identity document, opening or closing an account, and user changes. Views and sign-ins stay in the audit log and are not listed.
+- **IDs, not names.** Audit events hold no client personal data ([ADR-0030](../docs/adr/ADR-0030-client-data-envelope-encryption.md)), so an entry shows the first 8 characters of the client, account or user ID (the full ID on hover) and **Open client** where the client still exists. The acting user's name comes from user-service; a user it does not know shows as "Unknown user", and system work as "System". `src/components/activityText.js` turns each event's payload into words.
+- **Verification.** A verification shows how many documents it used, or a **Without a document** badge.
+- **Filters.** **Period** limits the feed to the last 24 hours, 7 or 30 days; the window is fixed when chosen, so every page covers the same one. An admin can select a name to see only that user's changes, and remove the chip to see everyone's again.
+- **Pages.** 10 entries at a time, newest first; **Load more** asks for the next page with the previous page's cursor.
+- **Failures.** If the auditor is down, user-service answers `503` and the panel says "Activity is temporarily unavailable." with **Try again**. A failed later page keeps the entries already shown.
+
+Locally, Vite sends `/api/activities` to user-service on port 8081, like `/api/users`. The feed also needs the auditor's gRPC server (`AUDITOR_GRPC_TARGET`, see the user-service README). The design is the "Admin Dashboard" screen with the Recent Activities card in the Stitch project "Scrooge Global Bank CRM".
+
 ## Synthetic alerts
 
 For an offline event-alert UI review, enable the synthetic fixture adapter:
@@ -140,7 +156,10 @@ client tests cover the client API calls, creating a client, that uploading never
 verifies, the 5 MB check and the service's refusals, that a document can be
 checked only once opened, that Verify needs a confirmation that matches what was
 checked, verifying without a document and how that is shown, and the verified
-state.
+state. The activity tests cover the feed's query (no caller identity, filters,
+cursor), how each kind of event is described, that agents see no names and
+admins can narrow the feed to one user, paging, the unavailable and empty
+states, and that a slow reply for a replaced filter is dropped.
 
 ## Conventions
 

@@ -6,6 +6,9 @@ import { createClient } from '../api/clients.js'
 import AgentDashboard from './AgentDashboard.jsx'
 
 vi.mock('../api/clients.js', () => ({ createClient: vi.fn() }))
+vi.mock('../api/activities.js', () => ({
+  listActivities: vi.fn().mockResolvedValue({ content: [], nextCursor: null }),
+}))
 
 function OpenedClient() {
   const { clientId } = useParams()
