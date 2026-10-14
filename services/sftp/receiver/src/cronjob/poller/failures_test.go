@@ -15,6 +15,7 @@ import (
 func episodePoller(remote *fakeRemote, store *fakeStore, directory *fakeDirectory, relay *fakeRelay, events *fakeEvents) *Poller {
 	p := New(Config{RemoteDir: "/reports"}, store, directory, Audit{Events: events, Relay: relay})
 	p.connector = func(context.Context) (remoteSFTP, func(), error) { return remote, func() {}, nil }
+	p.sleep = noSleep
 	clock := time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC)
 	p.now = func() time.Time {
 		clock = clock.Add(time.Minute)
@@ -46,7 +47,10 @@ func TestPollAuditsAConnectionFailureOncePerOutage(t *testing.T) {
 	assert.Equal(t, "CONNECTION_FAILURE", first.Action)
 	assert.Empty(t, first.FileName)
 
-	// The server is back, then fails the same way again: a new outage.
+	// The server is back, then fails the same way again: a new outage. The
+	// three failed polls opened the circuit, so let its open period pass.
+	clock := p.now
+	p.now = func() time.Time { return clock().Add(breakerCooldown) }
 	down = nil
 	require.NoError(t, p.Poll(ctx))
 	down = errors.New("connection refused")

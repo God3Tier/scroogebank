@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -67,6 +68,9 @@ func TestNormalizeTransaction(t *testing.T) {
 	}
 }
 
+// noSleep stands in for the wait between connection attempts.
+func noSleep(context.Context, time.Duration) error { return nil }
+
 const validJSON = `[{"transaction_id":"t1","account_id":"a1","transfer_date":"2026-09-24T08:30:00Z","transaction_type":"CREDIT","amount":1,"currency":"SGD","status":"COMPLETED"}]`
 
 type fakeStore struct {
@@ -123,6 +127,7 @@ type fakeRemote struct {
 	files                                                       map[string]string
 	dirs                                                        []string // subdirectories of /reports
 	readDirErr, openErr, readErr, closeErr, mkdirErr, renameErr error
+	readDirFailures                                             int              // ReadDir calls that fail before the rest succeed
 	openErrs                                                    map[string]error // by file name, for one file only
 	renamed                                                     [][2]string
 }
@@ -132,6 +137,10 @@ func (r *fakeRemote) add(name, content string) { r.files["/reports/"+name] = con
 func (r *fakeRemote) ReadDir(string) ([]os.FileInfo, error) {
 	if r.readDirErr != nil {
 		return nil, r.readDirErr
+	}
+	if r.readDirFailures > 0 {
+		r.readDirFailures--
+		return nil, errors.New("connection lost")
 	}
 	entries := make([]os.FileInfo, 0, len(r.files)+len(r.dirs))
 	for filename := range r.files {

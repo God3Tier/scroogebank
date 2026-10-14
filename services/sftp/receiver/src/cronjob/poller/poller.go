@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"os"
 	"path"
 	"sort"
@@ -47,6 +48,20 @@ type remoteConnector func(context.Context) (remoteSFTP, func(), error)
 // next poll (ADR-0024 decision 3).
 const runDeadlineReserve = time.Minute
 
+const (
+	// pollTimeout bounds a whole poll. When it ends, the connection is
+	// closed, which ends any SFTP call still waiting: those calls take no
+	// context. A poll whose context ends sooner, such as a Lambda
+	// invocation's, ends then.
+	pollTimeout = 10 * time.Minute
+	// connectAttempts is how many times a poll tries to connect and list the
+	// remote directory. It waits connectBackoff before the second attempt,
+	// twice that before the third, and up to connectJitter more each time.
+	connectAttempts = 3
+	connectBackoff  = 2 * time.Second
+	connectJitter   = time.Second
+)
+
 // Poller reads transaction report files from the configured SFTP directory.
 type Poller struct {
 	config    Config
@@ -55,15 +70,17 @@ type Poller struct {
 	audit     *Audit // nil when auditing is off
 	connector remoteConnector
 	now       func() time.Time
+	sleep     func(context.Context, time.Duration) error
 
 	// failures holds the failures of the current episodes, so a failure that
 	// repeats on every poll is audited once per episode (see recordFailure).
 	// Polls run one at a time, so no lock is needed.
 	failures map[failureKey]*failureEpisode
+	breaker  breaker
 }
 
 func New(cfg Config, store transactionStore, accounts accountDirectory, audit ...Audit) *Poller {
-	p := &Poller{config: cfg, store: store, accounts: accounts, now: time.Now, failures: make(map[failureKey]*failureEpisode)}
+	p := &Poller{config: cfg, store: store, accounts: accounts, now: time.Now, sleep: sleepContext, failures: make(map[failureKey]*failureEpisode)}
 	if len(audit) > 0 {
 		p.audit = &audit[0]
 	}
@@ -95,19 +112,34 @@ func pollAndLog(ctx context.Context, p *Poller) {
 func (p *Poller) Poll(ctx context.Context) error {
 	// Whatever happens below, send the events this poll saved, and any left
 	// from earlier polls.
+	// The relay keeps the caller's context, so it still runs after a poll
+	// timeout.
 	defer p.relayAuditEvents(ctx)
+	ctx, cancel := context.WithTimeout(ctx, pollTimeout)
+	defer cancel()
 
-	client, closeClient, err := p.connector(ctx)
-	if err != nil {
-		return errors.Join(err, p.recordFailure(ctx, failureKey{kind: connectionFailure}, err))
+	connection := failureKey{kind: connectionFailure}
+	if !p.breaker.allow(p.now()) {
+		// The outage's event is written already, unless writing it failed:
+		// then this tries again.
+		err := fmt.Errorf("SFTP circuit open until %s: %w", p.breaker.openUntil.Format(time.RFC3339), p.breaker.lastErr)
+		return errors.Join(err, p.recordFailure(ctx, connection, p.breaker.lastErr))
 	}
-	defer closeClient()
+	client, closeClient, entries, err := p.connectAndList(ctx)
+	if err != nil {
+		p.breaker.failed(p.now(), err)
+		return errors.Join(err, p.recordFailure(ctx, connection, err))
+	}
+	p.breaker.succeeded()
+	// Close the connection when the poll's context ends, to end an SFTP call
+	// that hangs; otherwise close it when the poll returns.
+	stopClosing := context.AfterFunc(ctx, closeClient)
+	defer func() {
+		if stopClosing() {
+			closeClient()
+		}
+	}()
 
-	entries, err := client.ReadDir(p.config.RemoteDir)
-	if err != nil {
-		wrapped := fmt.Errorf("list remote directory %q: %w", p.config.RemoteDir, err)
-		return errors.Join(wrapped, p.recordFailure(ctx, failureKey{kind: connectionFailure}, wrapped))
-	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	// Every regular file is waiting, unsupported ones included, so that they
 	// are rejected and audited. A .tmp file is still being uploaded (ADR-0024
@@ -133,6 +165,61 @@ func (p *Poller) Poll(ctx context.Context) error {
 		p.endFileFailures(name)
 	}
 	return errors.Join(failures...)
+}
+
+// connectAndList connects and lists the remote directory, retrying with
+// backoff (ADR-0024 decision 3). It does not retry a permanent error, which
+// retrying cannot fix, nor wait so long that the poll could no longer start
+// a file.
+func (p *Poller) connectAndList(ctx context.Context) (remoteSFTP, func(), []os.FileInfo, error) {
+	wait := connectBackoff
+	for attempt := 1; ; attempt++ {
+		client, closeClient, entries, err := p.tryConnectAndList(ctx)
+		if err == nil {
+			return client, closeClient, entries, nil
+		}
+		if attempt == connectAttempts || isPermanent(err) || !canWait(ctx, wait+connectJitter) {
+			return nil, nil, nil, err
+		}
+		delay := wait + rand.N(connectJitter)
+		log.Printf("SFTP attempt %d of %d failed, trying again in %s: %v", attempt, connectAttempts, delay.Round(time.Millisecond), err)
+		if p.sleep(ctx, delay) != nil {
+			return nil, nil, nil, err
+		}
+		wait *= 2
+	}
+}
+
+func (p *Poller) tryConnectAndList(ctx context.Context) (remoteSFTP, func(), []os.FileInfo, error) {
+	client, closeClient, err := p.connector(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	entries, err := client.ReadDir(p.config.RemoteDir)
+	if err != nil {
+		closeClient()
+		return nil, nil, nil, fmt.Errorf("list remote directory %q: %w", p.config.RemoteDir, err)
+	}
+	return client, closeClient, entries, nil
+}
+
+// canWait reports whether waiting d still leaves the poll enough time to
+// start a file.
+func canWait(ctx context.Context, d time.Duration) bool {
+	deadline, ok := ctx.Deadline()
+	return !ok || time.Until(deadline)-d >= runDeadlineReserve
+}
+
+// sleepContext waits for d, or until ctx ends.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // hasExtension reports whether name ends in ext, ignoring case.
