@@ -5,6 +5,7 @@ import admins from '../data/admins.js'
 import agents from '../data/agents.js'
 import clients from '../data/clients.js'
 import transactions from '../data/transactions.js'
+import ActivityFeed from '../components/ActivityFeed.jsx'
 import StatCard from '../components/StatCard.jsx'
 
 function AdminDashboard() {
@@ -116,6 +117,8 @@ function AdminDashboard() {
           </ul>
         </div>
       )}
+
+      <ActivityFeed admin />
 
       <section className="card card-flush">
         <h2>All Transactions</h2>
