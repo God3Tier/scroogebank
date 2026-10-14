@@ -106,7 +106,8 @@ decision 1). EventBridge Scheduler is to start it as an ECS task every 4 hours.
   `DISABLED`, `CONTROL_BLOCKED`, `NO_QUERIES`, `ALREADY_RUNNING`,
   `ALREADY_SUCCEEDED` and `SUCCEEDED`.
 
-Not done yet:
+Not done yet (details, owners and suggested fixes in
+[`docs/feature-plans/event-driven-alerts_gaps.md`](../../docs/feature-plans/event-driven-alerts_gaps.md)):
 
 - A run stores search results only. Nothing turns them into alerts yet:
   `SourceResultProcessor` (classification, briefing, alert generation) has no
