@@ -7,7 +7,7 @@
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: in part, [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7 (the Feature 3 runtime, 2026-10-14)
 
 ## Context
 
@@ -58,7 +58,7 @@ Use **one microservice per business area** (Option B), each with its own databas
 | user-service | F1 | Java 25 |
 | client-service | F2 (clients) | Go (today's `client-profile-management-service`) |
 | account-service | F2 (accounts) | Go (extracted from `client-profile-management-service`'s account code; decided 2026-10-08) |
-| transaction-service and transaction-ingest | F3 | Java 25 (ingest on Lambda, [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md)) |
+| transaction-service and transaction-ingest | F3 | Go (ingest on Lambda); superseded on 2026-10-14 by [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7, which replaced Java 25 |
 | event-alert-service | x-factor 1 | Java 25 |
 | dashboard-service | x-factor 2 | Java 25 |
 | client-health-monitor-service | x-factor 3 | Java 25 |
@@ -66,7 +66,7 @@ Use **one microservice per business area** (Option B), each with its own databas
 
 Accounts are split out of `client-profile-management-service` into account-service. The accounts-to-clients foreign key is replaced by an API check when an account is created, and by client-service refusing to delete a client who still has open accounts. How those checks work, and how account-service knows an account's owning agent, is decided in [ADR-0035](ADR-0035-account-ownership-across-services.md).
 
-**Go runtime exception:** the auditor, client-service and account-service may stay in Go. Every other new service uses Java 25. account-service was added to the exception on 2026-10-08: it is extracted from the existing, tested Go account code rather than rewritten, so it shares client-service's toolchain, JWT verification and audit middleware.
+**Go runtime exception:** the auditor, client-service and account-service may stay in Go. Every other new service uses Java 25. account-service was added to the exception on 2026-10-08: it is extracted from the existing, tested Go account code rather than rewritten, so it shares client-service's toolchain, JWT verification and audit middleware. transaction-service and transaction-ingest were added on 2026-10-14 by [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7: the SFTP receiver, which holds both, is already built and tested in Go.
 
 ## Rationale
 

@@ -1,6 +1,6 @@
 # Target architecture: request, audit and ingestion flows
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -144,7 +144,7 @@ How the activity feed is served. It is the dashboards' "Recent Activities" in th
 
 ## Transaction ingestion (Feature 3)
 
-Recorded in [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (Proposed).
+Recorded in [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (Accepted 2026-10-14).
 
 The core banking system is **external** to the CRM. For the project it is simulated by an **SFTP server on an EC2 instance** in its own stack; the architecture treats it as a third-party system reached over the internet. When a transaction file is ready, a **scheduled Lambda function** on the CRM side opens an outbound SSH connection through the NAT gateway, reads the file over SFTP, and imports its transactions.
 
