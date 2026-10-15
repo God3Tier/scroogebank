@@ -1,0 +1,29 @@
+# Copy to prod.tfvars (git-ignored) and fill in. Synthetic client data only.
+
+legal_entity = "sg"
+environment  = "prod"
+
+# true when the AWS account is on the Free account plan (ADR-0042).
+free_plan = false
+
+# true only in the high-availability demo week (ADR-0029).
+high_availability = false
+
+# Leave false: the stack stays stopped (0 tasks, schedules paused, no NAT
+# gateway). Start a session with: terraform apply -var-file=env/prod.tfvars -var running=true
+running = false
+
+# The tag you pushed every image with (runbook step 4), for example the commit
+# SHA. Until then the value does not matter: no task starts while running = false.
+image_tag = "replace-with-the-pushed-tag"
+
+# Mailboxes you can read. Cognito e-mails the root admin's temporary password
+# to root_admin_email, and AWS e-mails a subscription link to alarm_email.
+# Choose root_admin_email before the first start: changing it later creates a
+# second root admin.
+root_admin_email = "you+crm-root@example.edu"
+alarm_email      = "you@example.edu"
+
+# Fill these in after applying the sftp-server stack (runbook step 8).
+# sftp_server_address       = "203.0.113.10:22"
+# sftp_host_key_fingerprint = "SHA256:..."

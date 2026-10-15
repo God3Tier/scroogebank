@@ -1,0 +1,19 @@
+# Copy to staging.tfvars (git-ignored) and fill in. Staging is created for a
+# promotion test and destroyed afterwards (ADR-0029): single-AZ, one NAT
+# gateway, Fargate Spot, no WAF, no AWS Backup.
+
+legal_entity = "sg"
+environment  = "staging"
+
+free_plan = false
+
+# Leave false; start a test with -var running=true.
+running = false
+
+# The tag you pushed every image with (runbook step 4).
+image_tag = "replace-with-the-pushed-tag"
+
+# Mailboxes you can read: Cognito e-mails the root admin's temporary password,
+# and AWS e-mails the alarm subscription link.
+root_admin_email = "you+crm-root-staging@example.edu"
+alarm_email      = "you@example.edu"

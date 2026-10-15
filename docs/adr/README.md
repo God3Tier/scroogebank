@@ -67,6 +67,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) — X-factor 1: deterministic instrument master and matching with no vector similarity; search only instruments held by ≥ 2 clients and ≥ 5% of clients.
 - [ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) — X-factor 3: deterministic rules in a daily 08:00 SGT task, with Bedrock in Singapore used only for wording and a template fallback.
 - [ADR-0039](ADR-0039-dashboard-aggregate-endpoints.md) — X-factor 2: owning services serve dashboard figures on private `/aggregates` routes scoped by the caller's token and not audited there; agents' transaction totals go through user-service.
+- [ADR-0042](ADR-0042-terraform-deployment-and-free-plan-mode.md) — Terraform layout and S3 state with native locking; a `free_plan` switch that keeps RDS at 1 day of backups and micro instances and turns off billed extras; NAT gateways removed between sessions; certificates written into tasks by an init container; Service Connect proxies TLS ports as TCP (supersedes ADR-0021 decision 5 in part on acceptance).
 
 ## Maintenance rule
 
