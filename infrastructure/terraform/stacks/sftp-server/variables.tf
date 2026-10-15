@@ -14,12 +14,6 @@ variable "environment" {
   }
 }
 
-variable "free_plan" {
-  description = "The account is on the AWS Free account plan (ADR-0042): forces a free-tier instance type."
-  type        = bool
-  default     = false
-}
-
 variable "instance_type" {
   description = "An arm64 (Graviton) instance type; the AMI is arm64."
   type        = string

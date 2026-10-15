@@ -6,23 +6,22 @@
 - Primary developer: Neo Jia Wen
 - Current working branch: `task/infrastructure/terraform`
 - Last updated: 2026-10-14
-- Related decisions: [ADR-0018](../adr/ADR-0018-ecs-fargate-compute.md), [ADR-0019](../adr/ADR-0019-edge-entry-chain.md), [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md), [ADR-0026](../adr/ADR-0026-one-stack-per-legal-entity.md), [ADR-0027](../adr/ADR-0027-observability-baseline.md), [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment-and-free-plan-mode.md) (Terraform deployment and Free-plan mode)
+- Related decisions: [ADR-0018](../adr/ADR-0018-ecs-fargate-compute.md), [ADR-0019](../adr/ADR-0019-edge-entry-chain.md), [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md), [ADR-0026](../adr/ADR-0026-one-stack-per-legal-entity.md), [ADR-0027](../adr/ADR-0027-observability-baseline.md), [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md) (Terraform deployment)
 
 ## Goal
 
-Deploy the target architecture ([system overview](../architecture/system-overview.md)) to AWS from Terraform, on a paid or a Free plan account, so the team can test it end to end before CI deploys it.
+Deploy the target architecture ([system overview](../architecture/system-overview.md)) to AWS from Terraform, on an account on the paid plan, so the team can test it end to end before CI deploys it.
 
 ## Scope
 
 - `infrastructure/terraform/`: the bootstrap stack, the CRM stack per legal entity and environment, and the external SFTP server's stack.
 - The services that run on `dev` today: user-service, client-service (`client-profile-management-service`), account-service, the auditor and chain-verify, transaction-service (the SFTP receiver's read API), dashboard-service, the event-alert-service API, and the Cognito triggers.
-- A `free_plan` switch that keeps the stack inside the AWS Free account plan's limits (ADR-0042 decision 3).
 - Out of scope for now: CI checks or deploy workflows for Terraform; the alert worker and its Tokyo search (EDA-D1-02).
 
 ## Acceptance criteria
 
 - `terraform validate` passes for every stack, and `terraform test` passes in `stacks/crm`.
-- On a Free plan account, `terraform apply` finishes without `FreeTierRestrictionError`.
+- On a paid-plan account, `terraform apply` finishes for every stack.
 - After the runbook's one-time steps, every service passes its ALB health check, a user signs in through managed login with MFA, and a client update reaches the audit chain.
 - `running = false` leaves no tasks, schedules or NAT gateways running, and the SFTP server's allow-list still matches after `running = true`.
 - [The runbook](../runbooks/deploy-aws.md) is enough for another team member to deploy and tear down.
@@ -31,7 +30,7 @@ Deploy the target architecture ([system overview](../architecture/system-overvie
 
 | Task | Description | Owner | Expected files/components | Dependencies | Branch | Status |
 |---|---|---|---|---|---|---|
-| INF-01 | Terraform for the target architecture: bootstrap, CRM and SFTP-server stacks, the `postgres` and `ecs-service` modules, the `free_plan` switch, plan tests, the runbook and `scripts/aws-session.sh` | Neo Jia Wen | `infrastructure/terraform/**`, `scripts/aws-session.sh`, `docs/runbooks/deploy-aws.md`, ADR-0042 | None | `task/infrastructure/terraform` | Written; validated and plan-tested with mocked providers; not yet applied to AWS |
+| INF-01 | Terraform for the target architecture: bootstrap, CRM and SFTP-server stacks, the `postgres` and `ecs-service` modules, plan tests, the runbook and `scripts/aws-session.sh` | Neo Jia Wen | `infrastructure/terraform/**`, `scripts/aws-session.sh`, `docs/runbooks/deploy-aws.md`, ADR-0042 | None | `task/infrastructure/terraform` | Written; validated and plan-tested with mocked providers; not yet applied to AWS |
 | INF-02 | First apply to a test account, then fix what the real apply finds | Neo Jia Wen | `infrastructure/terraform/**` | INF-01, images pushed | `task/infrastructure/terraform` | Not started |
 | INF-03 | db-migrate: one migration task per service (Flyway, golang-migrate), creating least-privilege application logins, replacing the runbook's hand-run SQL and the master-user logins (ADR-0028 decision 3, open item 8) | Unassigned | Each Go service's migrations, `stacks/crm/services.tf` | Open item 8 | TBD | Not started |
 | INF-04 | Transaction ingest as a Lambda: a handler for the receiver's poll, reading the database, SSH key and Cognito client secret from Secrets Manager at start (ADR-0024 security), built as `bootstrap` for `provided.al2023` on arm64; then set `enable_ingest_lambda` | Feature 3 owner (Joseph Yau) to confirm | `services/sftp/receiver` | INF-02 | TBD | Not started |

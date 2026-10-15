@@ -1,7 +1,7 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
 > **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.
-> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment-and-free-plan-mode.md).
+> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md).
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
 
@@ -9,20 +9,19 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 
 - **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, JDK 25 and Maven, Node.js for the frontend, Python 3 for `scripts/db-run-sql.sh`.
 - **AWS access.** Terraform and the scripts use the AWS CLI's credentials. Without them, Terraform fails with "No valid credential sources found".
-  - **Standalone account (including a Free plan account):** in IAM, create a user for yourself with `AdministratorAccess` and MFA, then create an access key for the Command Line Interface under its **Security credentials**. Run `aws configure --profile crm` and enter the key, its secret and region `ap-southeast-1`. Never create root access keys, and never put a key in the repository or an AI prompt.
-  - **Account in an AWS Organization with IAM Identity Center:** `aws configure sso --profile crm`. Do not create an organization just for this on a Free plan account: joining one upgrades it to the paid plan.
+  - **Standalone account:** in IAM, create a user for yourself with `AdministratorAccess` and MFA, then create an access key for the Command Line Interface under its **Security credentials**. Run `aws configure --profile crm` and enter the key, its secret and region `ap-southeast-1`. Never create root access keys, and never put a key in the repository or an AI prompt.
+  - **Account in an AWS Organization with IAM Identity Center:** `aws configure sso --profile crm`.
   - Select the profile in each new terminal with `export AWS_PROFILE=crm` (Git Bash), `set AWS_PROFILE=crm` (cmd, with no spaces or quotes) or `$env:AWS_PROFILE="crm"` (PowerShell, whose `set` does not set environment variables). To select it in every new terminal instead, run `setx AWS_PROFILE crm` once, then restart VS Code or open a new terminal window.
   - Check it with `aws sts get-caller-identity`, without `--profile`. If that fails but `--profile crm` works, the profile is not selected in this terminal, and Terraform will fail the same way.
-- **Which plan is the account on?** In the Billing console, "Free Tier" shows the account plan.
-  - On the **Free account plan**, set `free_plan = true` in every stack. The plan refuses RDS backups longer than 1 day and instance classes above micro, and ends after six months or when its credits run out; then the account closes. Joining AWS Organizations upgrades the account to the paid plan.
+- **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
-- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. On the Free plan the stack costs about USD 315 a month left running, and about USD 50 a month stopped (ADR-0042 "Cost Impact").
+- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 445 a month left running and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 110 a month (ADR-0042 "Cost Impact").
 
 ## 1. Bootstrap the account (once per account)
 
 ```sh
 cd infrastructure/terraform/bootstrap
-cp terraform.tfvars.example terraform.tfvars   # set free_plan, budget_emails and budget_start_date
+cp terraform.tfvars.example terraform.tfvars   # set budget_emails and budget_start_date
 terraform init
 terraform apply                  # type yes; it must end with "Apply complete!"
 terraform output state_bucket    # Output is used in step 3
@@ -36,7 +35,7 @@ This stack keeps its state in a local `terraform.tfstate` (git-ignored). Keep th
 
 - `crm-total` counts all spending since `budget_start_date` against the USD 300 project limit. It e-mails when actual cost passes 50, 70, 85, 95 and 100%, and when the forecast passes 100%.
 - `crm-bedrock` e-mails when a month's Bedrock cost passes 50, 80 and 100% of `bedrock_budget_usd`.
-- Both count cost before credits, so they still fire on a Free plan account or when credits cover the bill.
+- Both count cost before credits, so they still fire when credits cover the bill.
 - Each threshold e-mails once per budget period. Cost data refreshes a few times a day, so an alert can arrive hours after the spend.
 
 ## 2. Build the Lambda zip
@@ -53,7 +52,7 @@ The CRM stack deploys this file as the Cognito triggers that audit every login a
 ```sh
 cd infrastructure/terraform/stacks/crm
 cp env/prod.s3.tfbackend.example env/prod.s3.tfbackend   # bucket = the state_bucket output
-cp env/prod.tfvars.example env/prod.tfvars               # free_plan, root_admin_email, alarm_email
+cp env/prod.tfvars.example env/prod.tfvars               # root_admin_email, alarm_email
 terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars -var running=false
 ```
@@ -157,7 +156,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tf
 - Stopping scales every service to 0, pauses the schedules, removes the NAT gateway (its Elastic IP stays) and stops the databases and the SFTP server.
 - Starting takes several minutes, mostly the databases.
 - RDS starts a stopped instance again after 7 days, so stop it again after a longer break.
-- For the high-availability demo week, add `-var high_availability=true` (paid plan only).
+- For the high-availability demo week, add `-var high_availability=true`.
 
 ## Operations
 
@@ -192,8 +191,8 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Symptom | Cause and fix |
 |---|---|
 | `No positional arguments are expected` or `Too many command line arguments` from Terraform | Windows PowerShell split an option at its first dot (`-backend-config=env/prod` and `.s3.tfbackend`). Quote the option, `"-backend-config=env/prod.s3.tfbackend"`, or use Git Bash |
-| `FreeTierRestrictionError` on an RDS instance | The account is on the Free plan: set `free_plan = true` |
-| `SubscriptionRequiredException` creating the GuardDuty detector (bootstrap) | On the Free plan, set `free_plan = true` and apply again. On the paid plan, the new account is still being activated: wait up to 24 hours and apply again |
+| `InstanceQuotaExceeded: ... free plan accounts` or `FreeTierRestrictionError` on an RDS instance | The account is on the AWS Free plan, which this stack does not support: upgrade it to the paid plan and apply again |
+| `SubscriptionRequiredException` creating the GuardDuty detector (bootstrap) | The account is still being activated, after it was opened or upgraded to the paid plan: wait up to 24 hours and apply again |
 | `a secret with this name is already scheduled for deletion` | A destroy ran without the `deletion_protection=false` apply before it, so the secrets got a 7-day recovery window. Delete each one now with `aws secretsmanager delete-secret --force-delete-without-recovery --secret-id <name>` (`aws secretsmanager list-secrets --include-planned-deletion` lists them), then apply again |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | client-service or account-service refuses to start | Production mode needs its TLS files and `verify-full` settings; check the `tls-init` log in the same task |

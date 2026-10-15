@@ -61,7 +61,7 @@ NFR 10 asks the team to demonstrate CI/CD; NFR 11 asks for infrastructure define
    Promotion follows `dev → staging → main` (`project_plan.md` §5).
 2. **AWS access** from CI only through an OIDC-federated IAM role with least privilege.
 3. **db-migrate:** one ECS task definition per service, using Flyway (Java) or golang-migrate (Go), against only that service's database, run before the service deploys. The Go services' SQL files become versioned migrations. Whether staging and prod run migrations as tasks or on startup is still open ([open item 8](../architecture/open-items.md#8-migrations-on-startup-or-as-a-task)).
-4. **Terraform** defines all infrastructure. State is kept remotely with locking and encryption. [ADR-0042](ADR-0042-terraform-deployment-and-free-plan-mode.md) (Proposed) chooses the backend: a versioned, encrypted S3 bucket with native locking.
+4. **Terraform** defines all infrastructure. State is kept remotely with locking and encryption. [ADR-0042](ADR-0042-terraform-deployment.md) (Proposed) chooses the backend: a versioned, encrypted S3 bucket with native locking.
 
 ## Rationale
 

@@ -35,21 +35,8 @@ variable "dr_region" {
 
 # --------------------------------------------------------- cost and lifecycle
 
-variable "free_plan" {
-  description = <<-EOT
-    The AWS account is on the Free account plan (ADR-0042). Keeps every setting
-    inside that plan's limits and spends as few credits as possible: RDS backups
-    (the point-in-time recovery window) capped at 1 day, micro instances only,
-    no Multi-AZ, no storage auto scaling, no DynamoDB point-in-time recovery,
-    one NAT gateway, one task per service, no WAF, no AWS Backup copies and
-    shorter log retention.
-  EOT
-  type        = bool
-  default     = false
-}
-
 variable "high_availability" {
-  description = "The high-availability demo week (ADR-0029): Multi-AZ standbys and a NAT gateway per AZ. Ignored when free_plan is true."
+  description = "The high-availability demo week (ADR-0029): Multi-AZ standbys and a NAT gateway per AZ."
   type        = bool
   default     = false
 }

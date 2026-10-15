@@ -118,21 +118,3 @@ output "alerts_worker_inputs" {
     alarm_topic_arn        = aws_sns_topic.alarms.arn
   }
 }
-
-# --------------------------------------------------------------- the plan
-
-output "free_plan_settings" {
-  description = "What free_plan changed in this stack."
-  value = {
-    free_plan             = local.free_plan
-    rds_backup_days       = local.db_settings.backup_retention_days
-    rds_multi_az          = local.db_settings.multi_az
-    rds_storage_autoscale = local.db_settings.max_allocated_storage > 0
-    dynamodb_pitr         = local.dynamodb_pitr
-    nat_gateways          = local.nat_gateway_count
-    waf                   = local.enable_waf
-    aws_backup            = local.enable_backup
-    tasks_per_service     = "${local.min_tasks}-${local.max_tasks}"
-    log_retention_days    = local.log_retention_days
-  }
-}

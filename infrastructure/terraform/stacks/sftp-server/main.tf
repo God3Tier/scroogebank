@@ -35,10 +35,8 @@ provider "aws" {
 }
 
 locals {
-  name = "core-banking-sftp-${var.environment}"
-  # The Free plan allows only free-tier instance types (ADR-0042).
-  instance_type = var.free_plan ? "t4g.micro" : var.instance_type
-  remote_dir    = "/srv/sftp/${var.sftp_user}/reports"
+  name       = "core-banking-sftp-${var.environment}"
+  remote_dir = "/srv/sftp/${var.sftp_user}/reports"
 }
 
 data "aws_availability_zones" "available" {
@@ -185,7 +183,7 @@ resource "aws_iam_instance_profile" "this" {
 
 resource "aws_instance" "sftp" {
   ami                    = data.aws_ssm_parameter.al2023_arm64.value
-  instance_type          = local.instance_type
+  instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.sftp.id]
   iam_instance_profile   = aws_iam_instance_profile.this.name

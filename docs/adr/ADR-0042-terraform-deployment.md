@@ -1,4 +1,4 @@
-# ADR-0042: Terraform deployment of the target architecture, with a Free-plan mode
+# ADR-0042: Terraform deployment of the target architecture
 
 - Status: Proposed
 - Decision date/time: 2026-10-14 21:38 +08:00 (Asia/Singapore)
@@ -13,14 +13,6 @@
 
 [ADR-0028](ADR-0028-cicd-migrations-terraform.md) (Proposed) puts all infrastructure in Terraform, but no infrastructure code existed. The team now needs to deploy the target architecture by hand from a developer machine, to test it, before any CI pipeline runs Terraform.
 
-Some team members' AWS accounts are on the **Free account plan** (accounts opened after 15 July 2025 can choose it). That plan:
-
-- refuses some settings outright with `FreeTierRestrictionError`: RDS instance classes above micro, and automated backup retention above **1 day**, which is also the point-in-time recovery window;
-- offers no short-term trials, so GuardDuty's 30-day trial is not free there;
-- ends after six months or when its USD 100–200 of credits run out, whichever comes first, and then the account closes.
-
-AWS documents the plan's terms, but not these per-service limits; they come from the error messages reported by teams applying Terraform to new accounts. Verify them against the account before relying on them.
-
 Building the stack also showed that the code on `dev` needs more from the deployment than the architecture documents describe:
 
 - the Go services refuse to start in production mode without TLS certificate files, `DB_SSLMODE=verify-full` with a CA file, and `https://` URLs for the services they call;
@@ -30,18 +22,17 @@ Building the stack also showed that the code on `dev` needs more from the deploy
 ## Decision Drivers
 
 - Deployable today, by hand, from a developer machine; CI comes later
-- Fits Free plan accounts as well as the USD 300 project limit
+- Fits the USD 300 project limit
 - Follows the accepted ADRs, and records every deviation
 - Least privilege; no secret in git, images or task definitions
 - Every team member can explain it
 
 ## Options Considered
 
-### Free-plan handling
+### Account plan
 
-- **One boolean, `free_plan` (chosen).** Every setting the plan refuses or that spends credits for no functional gain follows it, so an apply on a Free plan account cannot miss one.
-- **A separate variable for each setting.** More flexible, but easy to forget one, such as backup retention, and the apply then fails part-way.
-- **Require a paid plan.** No extra code, but loses the Free plan's guarantee of no charges, and not every member can upgrade.
+- **The paid plan only (chosen).** The stack deploys as the accepted ADRs describe it. The stop model (decision 4) and the budgets (decision 10) keep spending within the USD 300 limit.
+- **A `free_plan` switch for accounts on the AWS Free account plan.** Built first, then removed on 15 October 2026 after a real apply. The Free plan refuses RDS backup retention above 1 day and instance classes above micro (`FreeTierRestrictionError`), offers no GuardDuty trial, and closes the account when its credits run out. It also caps how many RDS instances can exist at once (`InstanceQuotaExceeded`): the test account was allowed 4, and a day later 2, against the six this stack needs. AWS does not document these limits, and they changed during testing, so a second mode was not worth keeping.
 
 ### Getting certificates and CA trust into containers
 
@@ -64,22 +55,21 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - `stacks/crm` is one stack per legal entity and environment ([ADR-0026](ADR-0026-one-stack-per-legal-entity.md)), with state at `crm/<entity>/<environment>.tfstate`.
    - `stacks/sftp-server` is the external bank's SFTP server, in its own stack ([ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1).
 2. **State.** A versioned, KMS-encrypted, TLS-only S3 bucket with native locking. This settles ADR-0028 decision 4, which left the backend to be chosen when the infrastructure work started.
-3. **`free_plan`.** One variable in each stack:
+3. **The paid plan.** The stack needs an AWS account on the paid plan; there is no Free-plan mode. Its sizes:
 
-   | Setting | Paid plan | Free plan | Why |
-   |---|---|---|---|
-   | RDS instance class | `db.t4g.micro` | `db.t4g.micro` | The plan allows micro classes only |
-   | RDS backup retention (PITR window) | 7 days | **1 day** | The plan's maximum |
-   | RDS Multi-AZ | in the demo week | never | Doubles database cost |
-   | RDS storage auto scaling | up to 100 GiB | off (20 GiB) | Stays at the free-tier size |   | DynamoDB `client-keys` | on-demand, PITR on | provisioned 5/5, PITR off | Inside the always-free 25 RCU/WCU; PITR is billed per GB |
-   | AWS Backup with a cross-region copy | prod | off | Billed storage and transfer; RDS PITR still applies |
-   | WAF | prod | off | About USD 10 a month |
-   | GuardDuty, CloudTrail data events | on | off | GuardDuty's trial is a paid-plan offer |
-   | Tasks per service | 2–6 | 1–2 | Half the Fargate cost |
-   | Log retention | 30 days | 7 days | Storage |
-   | SFTP server instance | `t4g.micro` | `t4g.micro` (forced) | Free-tier eligible |
+   | Setting | Value |
+   |---|---|
+   | RDS | `db.t4g.micro` ([ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md)), 20 GiB of gp3 that grows to 100 GiB, 7 days of point-in-time recovery |
+   | RDS Multi-AZ | Only in the demo week ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)) |
+   | DynamoDB `client-keys` | On-demand, point-in-time recovery on |
+   | AWS Backup with a cross-region copy | Prod only |
+   | WAF | Prod only (ADR-0029) |
+   | GuardDuty, CloudTrail data events on the anchor buckets | On |
+   | Tasks per service | 2–6 while running, 0 while stopped |
+   | Log retention | 30 days |
+   | SFTP server instance | `t4g.micro` |
 
-   None of these changes how the services behave. The tests in `stacks/crm/tests/` plan each mode against mocked providers and check these values.
+   The tests in `stacks/crm/tests/` plan the stack against mocked providers and check these values.
 4. **Stop model.** `running = false` scales every service to 0 tasks, pauses the schedules and **removes the NAT gateways**. Their Elastic IPs are separate resources and stay allocated, so a recreated NAT gateway gets the same address and the SFTP server's allow-list never changes. This refines ADR-0029, which kept the NAT gateway up for that reason. `scripts/aws-session.sh` stops and starts the RDS instances and the SFTP server's instance. `high_availability = true` is the demo week: Multi-AZ standbys and a NAT gateway per AZ ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)).
 5. **Certificates and trust.** Terraform's `tls` provider creates the project CA (ADR-0021 decision 7) and a certificate for each service that serves TLS: client-service, account-service and the auditor, named for their Service Connect aliases. The certificates and keys are kept in Secrets Manager. In each task, a `tls-init` container writes `/tls`:
    - `ca.pem`: the project CA;
@@ -109,19 +99,19 @@ Building the stack also showed that the code on `dev` needs more from the deploy
 
 ## Rationale
 
-One switch matches how the team decides: an account is either on the Free plan or not. Deriving every affected setting from it means a Free-plan apply cannot fail half-way on a forgotten limit. The init container gets the current code running without code changes or secrets in images, and leaves room to remove it once services read PEM text directly. Native S3 locking needs nothing besides the bucket. Removing the NAT gateways between sessions saves most of the idle cost, without moving the address the external server trusts.
+Requiring the paid plan keeps one configuration, the one the accepted ADRs describe, instead of a second mode whose limits AWS does not document and which changed while it was being tested. The init container gets the current code running without code changes or secrets in images, and leaves room to remove it once services read PEM text directly. Native S3 locking needs nothing besides the bucket. Removing the NAT gateways between sessions saves most of the idle cost, without moving the address the external server trusts.
 
 ## Consequences
 
 ### Positive
 
-- A Free plan account can apply the whole stack without `FreeTierRestrictionError`.
+- One configuration to test, explain and deploy.
 - Each toggle's effect is tested without an AWS account.
 - Deployments are repeatable, and teardown is `terraform destroy`.
 
 ### Negative / Trade-offs
 
-- On the Free plan, point-in-time recovery reaches back 1 day with no cross-region copy, client-keys has no point-in-time recovery, and each service runs one task, so NFR 2 and NFR 9 are not met in that mode. Use it for development and testing, not the graded demo of availability.
+- Every deployment is billed. The account must be on the paid plan, and the stack must be stopped between sessions to stay within the USD 300 limit (see Cost Impact).
 - Until db-migrate exists, schemas are applied by hand, and most services use their database's master user.
 - Starting a session takes longer: the NAT gateway is recreated (about 2–3 minutes) and the RDS instances start (several minutes).
 - The CA and service private keys are in the Terraform state.
@@ -136,18 +126,20 @@ One switch matches how the team decides: an account is either on the Free plan o
 
 ## Cost Impact
 
-Rough ap-southeast-1 figures in USD a month for `free_plan = true`; verify them with the AWS Pricing Calculator:
+Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS Pricing Calculator:
 
 | | Running 24/7 | Stopped (`running = false`, RDS stopped) |
 |---|---|---|
 | NAT gateway | ~43 | 0 (Elastic IP ~4) |
 | Internal ALB | ~20 | ~20 |
 | 6 × RDS `db.t4g.micro`, single-AZ | ~125 | ~17 (storage) |
-| Fargate, 7 services × 1 task | ~110 | 0 |
-| KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~15 | ~10 |
-| **Total** | **~315** | **~50** |
+| Fargate, 7 services × 2 tasks | ~220 | 0 |
+| WAF | ~10 | ~10 |
+| GuardDuty, AWS Backup, CloudTrail data events | ~5 | ~5 |
+| KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~20 | ~10 |
+| **Total** | **~445** | **~65** |
 
-The Free plan's USD 100–200 of credits cover about two to three weeks at 24/7, or one to two months of sessions (two 10-hour sessions a week, about USD 80 a month) with the stack stopped in between. So the stop model is required on the Free plan, not optional.
+Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 110 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
 ## Operational Impact
 
@@ -165,8 +157,8 @@ The Free plan's USD 100–200 of credits cover about two to three weeks at 24/7,
 ## Validation
 
 - `terraform validate` on all three stacks.
-- `terraform test` in `stacks/crm`: six runs plan the stack against mocked providers and check the Free plan's limits, the paid plan, the high-availability week, the stopped state, staging, and the Lambda settings from ADR-0024 and ADR-0040.
-- The first real apply on a Free plan account must finish without `FreeTierRestrictionError`, and the services must pass their ALB health checks.
+- `terraform test` in `stacks/crm`: six runs plan the stack against mocked providers and check prod, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
+- The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks.
 
 ## References
 

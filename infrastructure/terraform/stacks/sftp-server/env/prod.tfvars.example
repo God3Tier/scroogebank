@@ -2,7 +2,6 @@
 # (terraform -chdir=../crm output).
 
 environment = "prod"
-free_plan   = false
 
 allowed_cidrs         = ["203.0.113.10/32"] # nat_public_ips, each as /32
 crm_ingest_public_key = "ssh-ed25519 AAAA... "  # sftp_client_public_key
