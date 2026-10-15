@@ -1,6 +1,6 @@
 # Security model (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -8,13 +8,13 @@
 
 Recorded in [ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) (Accepted).
 
-- **Cognito user pool:** mandatory MFA (TOTP); Cognito handles password hashing; `Admin` and `Agent` groups carried in the JWT `cognito:groups` claim; sign-in through Cognito managed login using the OAuth 2.0 authorization-code flow.
+- **Cognito user pool:** mandatory MFA (TOTP); Cognito handles password hashing; `ADMIN` and `AGENT` groups carried in the JWT `cognito:groups` claim (upper case: client-service and the auditor compare the names exactly, and user-service adds users to the group named by its role); sign-in through Cognito managed login using the OAuth 2.0 authorization-code flow.
 - **PKCE:** the frontend is a single-page app and cannot keep a client secret, so the sign-in uses PKCE. The app makes a random `code_verifier`, sends only its SHA-256 hash (`code_challenge`, method `S256`) with the sign-in redirect, and must present the verifier to exchange the code for tokens, so an intercepted code is useless on its own. Cognito checks PKCE when a challenge is sent but does not require one, so the protection depends on configuration:
   - a public app client with no client secret, the authorization-code grant only (implicit grant off), scopes `openid` and `email`, and token revocation on;
   - `oidc-client-ts`, used through `react-oidc-context`, which adds PKCE automatically;
   - a frontend test that the sign-in request carries `code_challenge_method=S256`.
 - **Tokens in the browser:** kept in the tab's `sessionStorage`, so they last only as long as the tab; cross-site scripting is the main risk to them.
-- **Defense in depth:** API Gateway validates every token, and each service validates it again. Service-to-service calls use Cognito client-credentials tokens with scopes; no call is trusted just because it comes from inside the network.
+- **Defense in depth:** API Gateway validates every token, and each service validates it again. Service-to-service calls use Cognito client-credentials tokens with scopes; no call is trusted just because it comes from inside the network. One accepted exception: transaction-service's private read routes (today the SFTP receiver's) check no token. They have no ALB route, and only user-service calls them, after checking the caller with account-service ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md) decision 5, [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) decision 5). Their security group must admit user-service only.
 - **Authorization:** agents can only access their own clients (services filter on `created_by_agent_id = jwt.sub`). The root admin cannot be deleted or disabled.
 - **Perimeter:** AWS WAF on CloudFront, API Gateway throttling, and a security group chain: VPC Link to ALB, ALB to services, each service to its own database only on port 5432, named callers to the auditor's gRPC port, and the ingestion worker outbound to the external SFTP server on port 22. The health analysis task and the ingestion worker cannot use Service Connect, so they also reach the ALB, calling `/internal` routes with service tokens ([ADR-0019](../adr/ADR-0019-edge-entry-chain.md) decision 4); the ingestion worker also reaches transactions-db on port 5432.
 - **Threat detection and audit trail:** GuardDuty and CloudTrail.
