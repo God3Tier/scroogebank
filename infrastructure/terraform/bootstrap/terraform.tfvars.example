@@ -1,5 +1,8 @@
 # Copy to terraform.tfvars (git-ignored).
 
+# Home region. Learner Lab (voclabs) only allows us-east-1 and us-west-2.
+aws_region = "us-east-1"
+
 free_plan     = false
 budget_emails = ["crm-budget@example.test"]
 
