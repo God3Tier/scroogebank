@@ -7,7 +7,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 
 ## Before you start
 
-- **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, JDK 25 and Maven, Node.js for the frontend, Python 3 for `scripts/db-run-sql.sh`.
+- **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for `scripts/db-run-sql.sh`.
 - **AWS access.** Terraform and the scripts use the AWS CLI's credentials. Without them, Terraform fails with "No valid credential sources found".
   - **Standalone account:** in IAM, create a user for yourself with `AdministratorAccess` and MFA, then create an access key for the Command Line Interface under its **Security credentials**. Run `aws configure --profile crm` and enter the key, its secret and region `ap-southeast-1`. Never create root access keys, and never put a key in the repository or an AI prompt.
   - **Account in an AWS Organization with IAM Identity Center:** `aws configure sso --profile crm`.
@@ -38,7 +38,7 @@ This stack keeps its state in a local `terraform.tfstate` (git-ignored). Keep th
 - Both count cost before credits, so they still fire when credits cover the bill.
 - Each threshold e-mails once per budget period. Cost data refreshes a few times a day, so an alert can arrive hours after the spend.
 
-## 2. Build the Lambda zip
+## 2. Build the Lambda zip and the images
 
 ```sh
 mvn -B -pl services/cognito-triggers -am package
@@ -47,14 +47,36 @@ ls services/cognito-triggers/target/cognito-triggers.zip
 
 The CRM stack deploys this file as the Cognito triggers that audit every login and password reset (ADR-0040), and its plan fails until the file exists. Keep `enable_cognito_triggers = true`: the switch exists for the mocked Terraform tests, and turning it off leaves sign-ins out of the audit log.
 
+Build the images now, before any AWS resource exists; step 4 only pushes them. Docker Desktop must be running. The Go images compile the sqlboiler ORM code in your working tree, which is git-ignored, so regenerate it from each service's current schema first; a stale copy fails the build with `undefined: orm.…`. Each run starts a throwaway PostgreSQL in Docker. Git for Windows has no `make`: install it once with `winget install ezwinports.make`, then open a new terminal.
+
+```sh
+for s in account-service auditor client-profile-management-service; do make -C services/$s sqlboiler; done
+```
+
+Give every image the same tag, and use a new tag each time (the repositories' tags are immutable), for example the commit SHA:
+
+```sh
+TAG=$(git rev-parse --short HEAD)   # echo $TAG to print it; step 3 puts it in env/prod.tfvars
+build() { docker build --platform linux/amd64 -t "crm/$1:$TAG" -f "$2" "$3"; }
+build user-service        services/user-service/Dockerfile        .
+build dashboard-service   services/dashboard-service/Dockerfile   .
+build event-alert-service services/event-alert-service/Dockerfile .
+build auditor             services/auditor/Dockerfile             .
+build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
+build account-service     services/account-service/Dockerfile     services/account-service
+```
+
+transaction-service has no production image yet (INF-05). Until it does, its service cannot start and transaction reads fail; everything else works.
+
 ## 3. Create the CRM stack, stopped
 
 ```sh
 cd infrastructure/terraform/stacks/crm
 cp env/prod.s3.tfbackend.example env/prod.s3.tfbackend   # bucket = the state_bucket output
-cp env/prod.tfvars.example env/prod.tfvars               # root_admin_email, alarm_email
+cp env/prod.tfvars.example env/prod.tfvars               # root_admin_email, alarm_email, image_tag = step 2's $TAG
 terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars -var running=false
+cd -
 ```
 
 `running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. Confirm the alarm e-mail subscription.
@@ -67,24 +89,17 @@ terraform apply -var-file=env/prod.tfvars -var running=false
 
 ## 4. Push the images
 
-Tag every image with the same tag, and set it as `image_tag` in `env/prod.tfvars`. Tags are immutable, so use a new tag each time, for example the commit SHA.
+Step 3 created the ECR repositories. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys:
 
 ```sh
-TAG=$(git rev-parse --short HEAD)
+TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' infrastructure/terraform/stacks/crm/env/prod.tfvars); echo "$TAG"
 REPOS=$(terraform -chdir=infrastructure/terraform/stacks/crm output -json ecr_repositories)
 repo() { printf '%s' "$REPOS" | python -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 aws ecr get-login-password | docker login --username AWS --password-stdin "$(repo auditor | cut -d/ -f1)"
 
-build() { docker build --platform linux/amd64 -t "$(repo "$1"):$TAG" -f "$2" "$3" && docker push "$(repo "$1"):$TAG"; }
-build user-service        services/user-service/Dockerfile        .
-build dashboard-service   services/dashboard-service/Dockerfile   .
-build event-alert-service services/event-alert-service/Dockerfile .
-build auditor             services/auditor/Dockerfile             .
-build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
-build account-service     services/account-service/Dockerfile     services/account-service
+push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
+for s in user-service dashboard-service event-alert-service auditor client-service account-service; do push "$s"; done
 ```
-
-transaction-service has no production image yet (INF-05). Until it does, its service cannot start and transaction reads fail; everything else works.
 
 ## 5. Start the stack and set up the databases
 
@@ -97,6 +112,7 @@ cd -
 Then, **once per new stack**, apply the schemas that no service applies itself. user-service and event-alert-service run Flyway on startup and need nothing. Each command starts a psql task inside the VPC and prints its output.
 
 ```sh
+# Note: switch to Flyway later? So we don't have to maintain these scripts
 scripts/db-run-sql.sh clients      services/client-profile-management-service/data/V1_init.sql
 scripts/db-run-sql.sh clients      services/client-profile-management-service/data/V2_agent_subject.sql
 scripts/db-run-sql.sh accounts     services/account-service/data/V1_init.sql
@@ -118,14 +134,14 @@ cd frontend
 eval "$(terraform -chdir=../infrastructure/terraform/stacks/crm output -json frontend_build_env | python -c "import json,sys; print('\n'.join(f'export {k}=\"{v}\"' for k,v in json.load(sys.stdin).items()))")"
 npm ci && npm run build
 aws s3 sync dist/ "s3://$(terraform -chdir=../infrastructure/terraform/stacks/crm output -raw frontend_bucket)" --delete
-aws cloudfront create-invalidation --distribution-id "$(terraform -chdir=../infrastructure/terraform/stacks/crm output -raw cloudfront_distribution_id)" --paths '/*'
+aws cloudfront create-invalidation --distribution-id "$(terraform -chdir=../infrastructure/terraform/stacks/crm output -raw cloudfront_distribution_id)" --paths '/*' # Clears cloudfront cache so it gets the new frontend
 cd -
 ```
 
 ## 7. Check it works
 
 1. **Services:** in the ECS console, every service reaches its desired count. Alternatively run `aws ecs describe-services --cluster <ecs_cluster> --services user-service client-service account-service auditor dashboard-service event-alert-service`. A service stuck restarting shows why in its log group (`/ecs/<stack>-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 5's schema is missing.
-2. **Sign in:** open `terraform output app_url`. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
+2. **Sign in:** open `terraform output app_url` (from crm stack directory). user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
 ## 8. The external SFTP server (optional until the ingest Lambda exists)
@@ -172,6 +188,17 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 ```
 
 - **Prod first needs its protections lifted:** apply once with `-var deletion_protection=false`. That turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots, so the stack can be created again straight away; take a manual snapshot first if you want to keep any data. Staging has none to lift.
+- **Then hard delete any secret still pending deletion.** The stack's secrets have fixed names (`crm-<entity>-<environment>/...`), so a secret still in its recovery window makes the next apply fail with `a secret with this name is already scheduled for deletion`. Secrets are left like this when destroy runs without the `deletion_protection=false` apply first. This deletes them at once, and does nothing if there are none:
+
+  ```sh
+  stack=crm-sg-prod   # crm-<legal_entity>-<environment>
+  for s in $(aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values="$stack/" \
+      --query 'SecretList[?DeletedDate].Name' --output text); do
+    aws secretsmanager delete-secret --force-delete-without-recovery --secret-id "$s"
+  done
+  ```
+
+  A hard-deleted secret cannot be restored. The databases' master secrets (`rds!db-...`) are deleted with their instances and never conflict.
 - **Starting over** gives a new user pool and empty databases, so you can change `root_admin_email` then.
 - **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). Before destroying, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), or wait 7 days.
 - **Destroy `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
@@ -191,9 +218,11 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Symptom | Cause and fix |
 |---|---|
 | `No positional arguments are expected` or `Too many command line arguments` from Terraform | Windows PowerShell split an option at its first dot (`-backend-config=env/prod` and `.s3.tfbackend`). Quote the option, `"-backend-config=env/prod.s3.tfbackend"`, or use Git Bash |
+| `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine` (steps 2 and 4) | Docker Desktop is not running. Start it, wait for "Engine running" (`docker info` then succeeds), and run the step again. If it is running, switch it to Linux containers |
 | `InstanceQuotaExceeded: ... free plan accounts` or `FreeTierRestrictionError` on an RDS instance | The account is on the AWS Free plan, which this stack does not support: upgrade it to the paid plan and apply again |
 | `SubscriptionRequiredException` creating the GuardDuty detector (bootstrap) | The account is still being activated, after it was opened or upgraded to the paid plan: wait up to 24 hours and apply again |
-| `a secret with this name is already scheduled for deletion` | A destroy ran without the `deletion_protection=false` apply before it, so the secrets got a 7-day recovery window. Delete each one now with `aws secretsmanager delete-secret --force-delete-without-recovery --secret-id <name>` (`aws secretsmanager list-secrets --include-planned-deletion` lists them), then apply again |
+| `a secret with this name is already scheduled for deletion` | A destroy ran without the `deletion_protection=false` apply before it, so the secrets got a 7-day recovery window. Hard delete them as in [Tear down](#tear-down), then apply again |
+| A service's tasks stop with `CannotPullContainerError: ... not found` | `image_tag` in `env/prod.tfvars` is not a tag you pushed (the example's `replace-with-the-pushed-tag`, for instance), or that service's image was never pushed (step 4). Push it, set the tag and apply again. A failed deployment rolls back to the previous one, which keeps failing if it had the same problem, until the next apply |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | client-service or account-service refuses to start | Production mode needs its TLS files and `verify-full` settings; check the `tls-init` log in the same task |
 | The auditor cannot log in | Step 5's `audit-logins.sql` has not run, or the auditor started before it |
