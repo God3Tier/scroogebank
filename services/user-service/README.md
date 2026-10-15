@@ -82,7 +82,7 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 | `SFTP_RECEIVER_BASE_URL` | ECS task definition / local environment | Internal SFTP receiver URL (defaults to `http://localhost:8082`) |
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |
 
-None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. All are set by the ECS task definition in `infra/terraform/envs/prod/main.tf`.
+None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. In AWS, all are set by the task definition in `infrastructure/terraform/stacks/crm/services.tf` ([ADR-0042](../../docs/adr/ADR-0042-terraform-deployment-and-free-plan-mode.md)).
 
 This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool. It also needs `sqs:SendMessage` scoped to the Auditor's `audit-insert` queue when audit publishing is enabled. AWS credentials use the standard SDK provider chain; no credentials are configured in application properties.
 
