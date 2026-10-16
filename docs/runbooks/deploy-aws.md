@@ -155,19 +155,83 @@ cd -
 
 ## 8. The external SFTP server and the ingest Lambda
 
-```sh
-cd infrastructure/terraform/stacks/sftp-server
-cp env/prod.s3.tfbackend.example env/prod.s3.tfbackend
-cp env/prod.tfvars.example env/prod.tfvars
-# allowed_cidrs: each of the crm stack's nat_public_ips as /32
-# crm_ingest_public_key: the crm stack's sftp_client_public_key
-terraform init -backend-config=env/prod.s3.tfbackend
-terraform apply -var-file=env/prod.tfvars
-```
+The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1). transaction-ingest, a Lambda function in the crm stack, imports its files. Each stack needs the other's outputs, so the order is: crm (steps 3–5), then sftp-server, then crm again. Run the commands below in Git Bash, from the repository root.
 
-Push the producer, built for the instance's arm64 CPU (`docker build --platform linux/arm64 -t <producer_repository_url>:<tag> services/sftp/producer`, then `docker push`), set `producer_image`, and apply again.
+### 8.1 Create the SFTP server
 
-Then turn on transaction-ingest, the Lambda function that imports the files ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md), INF-04):
+1. **Backend.** Copy the example:
+
+   ```sh
+   cp infrastructure/terraform/stacks/sftp-server/env/prod.s3.tfbackend.example infrastructure/terraform/stacks/sftp-server/env/prod.s3.tfbackend
+   ```
+
+   Set `bucket` to the same bucket as `stacks/crm/env/prod.s3.tfbackend` (the bootstrap stack's `state_bucket` output). Keep `key = "sftp-server/prod.tfstate"`: it must differ from the crm stack's key, or the two stacks overwrite each other's state.
+
+2. **Variables.** `env/prod.tfvars` takes two values from the crm stack's outputs:
+
+   | Variable | Value |
+   |---|---|
+   | `environment` | `"prod"`, as the crm stack |
+   | `allowed_cidrs` | The crm output `nat_public_ips`, each as a `/32`. Port 22 accepts only these addresses |
+   | `crm_ingest_public_key` | The crm output `sftp_client_public_key`. The private half is in Secrets Manager, for the Lambda |
+   | `producer_image` | Leave unset for now (8.2) |
+   | `crm_account_ids` | Leave unset for now (8.2) |
+
+   This writes the file from the outputs:
+
+   ```sh
+   cd infrastructure/terraform/stacks
+   NAT=$(terraform -chdir=crm output -json nat_public_ips | python -c "import json,sys; print(', '.join(f'\"{ip}/32\"' for ip in json.load(sys.stdin)))")
+   KEY=$(terraform -chdir=crm output -raw sftp_client_public_key | tr -d '\r\n')
+   cat > sftp-server/env/prod.tfvars <<EOF
+   environment           = "prod"
+   allowed_cidrs         = [$NAT]
+   crm_ingest_public_key = "$KEY"
+   EOF
+   cat sftp-server/env/prod.tfvars
+   cd -
+   ```
+
+   Read a single output with `-raw`. Plain `terraform output` prints a value that ends in a newline as `<<EOT`, with the value on the lines below.
+
+3. **Apply:**
+
+   ```sh
+   cd infrastructure/terraform/stacks/sftp-server
+   terraform init -backend-config=env/prod.s3.tfbackend
+   terraform apply -var-file=env/prod.tfvars
+   terraform output   # sftp_server_address, sftp_host_key_fingerprint, producer_repository_url, instance_id
+   cd -
+   ```
+
+### 8.2 Start the producer
+
+The producer is the bank's file generator. It needs the ECR repository that 8.1 created, so it is a second apply.
+
+1. Build it for the instance's arm64 CPU and push it. The repository's tags are immutable, so use a new tag each time:
+
+   ```sh
+   URL=$(terraform -chdir=infrastructure/terraform/stacks/sftp-server output -raw producer_repository_url)
+   PTAG=$(git rev-parse --short HEAD)
+   aws ecr get-login-password | docker login --username AWS --password-stdin "${URL%%/*}"
+   docker build --platform linux/arm64 -t "$URL:$PTAG" services/sftp/producer
+   docker push "$URL:$PTAG"
+   ```
+
+2. Add to `sftp-server/env/prod.tfvars`:
+
+   ```hcl
+   producer_image  = "<producer_repository_url>:<tag>"
+   crm_account_ids = ["<account UUID>", "<account UUID>"]
+   ```
+
+   `crm_account_ids` are the accounts the producer's transactions belong to. It is optional because the accounts do not exist until someone creates them in the deployed app, after the first apply. Left empty, the producer uses random `ACC-000123` references, which the import stores as `Unmatched` ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)), and no agent sees them. For a demo, create a few accounts in the app first and list their IDs. The producer reads no CRM database, so it cannot find them itself.
+
+3. Apply sftp-server again. Changing either value replaces the instance (its startup script changes). The host key comes from Terraform state, so its fingerprint stays the same.
+
+### 8.3 Turn on the ingest Lambda
+
+transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md), INF-04).
 
 1. Build its zip. Docker must be running:
 
@@ -175,16 +239,20 @@ Then turn on transaction-ingest, the Lambda function that imports the files ([AD
    make -C services/sftp lambda   # services/sftp/receiver/dist/transaction-ingest.zip
    ```
 
-2. In the crm stack's `env/prod.tfvars`, set:
+2. Copy the sftp-server outputs into the crm stack's `env/prod.tfvars`. First delete any older `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` or `sftp_host_key_fingerprint` lines: Terraform refuses an attribute set twice.
 
-   ```hcl
+   ```sh
+   cd infrastructure/terraform/stacks
+   cat >> crm/env/prod.tfvars <<EOF
    enable_ingest_lambda      = true
    ingest_lambda_zip         = "../../../../services/sftp/receiver/dist/transaction-ingest.zip"
-   sftp_server_address       = "<sftp-server stack's sftp_server_address>"
-   sftp_host_key_fingerprint = "<sftp-server stack's sftp_host_key_fingerprint>"
+   sftp_server_address       = "$(terraform -chdir=sftp-server output -raw sftp_server_address)"
+   sftp_host_key_fingerprint = "$(terraform -chdir=sftp-server output -raw sftp_host_key_fingerprint)"
+   EOF
+   cd -
    ```
 
-   The path is relative to `stacks/crm`. A plan fails if any of the four is missing.
+   `sftp_server_address` looks like `13.250.0.10:22`, and `sftp_host_key_fingerprint` like `SHA256:AbC…`. `ingest_lambda_zip` is relative to `stacks/crm`. A plan fails if any of the four is missing.
 3. Apply the crm stack again.
 4. Run it once without waiting for the schedule, and read its log:
 
@@ -195,9 +263,19 @@ Then turn on transaction-ingest, the Lambda function that imports the files ([AD
 
    A successful run writes `null`; a failed one writes an `errorMessage`, which the log explains. Files move from the SFTP server's `reports/` to `processed/` or `rejected/`, and the import's audit events reach the auditor.
 
-If the run fails at init, the log names the secret or variable it could not read. A `connect to SFTP server` timeout usually means the SFTP server's `allowed_cidrs` does not hold the crm stack's `nat_public_ips`, or the NAT gateway is down because the stack is stopped. A `host key fingerprint mismatch` means the sftp-server stack was recreated: copy its new fingerprint and apply the crm stack again.
-
 To rebuild after a code change, run `make lambda` and apply the crm stack again: the zip's hash changes, so Terraform updates the function.
+
+### 8.4 When the import cannot reach the server
+
+- **The run fails at init:** the log names the secret or variable it could not read.
+- **`connect to SFTP server` times out:** `allowed_cidrs` does not hold every crm `nat_public_ips` address, or the NAT gateway is down because the crm stack is stopped. `high_availability = true` adds a second NAT address: after turning it on, rerun the 8.1 snippet and apply sftp-server again, or runs in the second AZ time out.
+- **`host key fingerprint mismatch`:** the sftp-server stack was destroyed and created again, with a new host key. Repeat 8.3 step 2 and apply crm.
+- **To check the fingerprint on the server:** port 22 accepts only the NAT addresses, so `ssh-keyscan` from your machine cannot reach it. Use Session Manager instead; the `SHA256:…` it prints must equal the `sftp_host_key_fingerprint` output:
+
+  ```sh
+  aws ssm start-session --target "$(terraform -chdir=infrastructure/terraform/stacks/sftp-server output -raw instance_id)"
+  sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+  ```
 
 ## Between sessions
 
@@ -269,4 +347,8 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | That service's tasks started before the service they call was registered in Service Connect. Restart the calling service (`aws ecs update-service ... --force-new-deployment`), as at the end of step 5 |
 | The auditor cannot log in | Step 5's `audit-logins.sql` has not run, or the auditor started before it |
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
+| `terraform output` shows `sftp_client_public_key = <<EOT` | The key ends in a newline, so it prints as a heredoc. Read it with `terraform output -raw sftp_client_public_key`, as in step 8.1 |
+| `No outputs found` from the sftp-server stack | Its apply has not finished. Run it again and fix the error it reports |
+| `Attribute redefined` in `crm/env/prod.tfvars` | Step 8.3's snippet appends; delete the older lines it repeats |
+| `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why: a database error usually means step 5's `init.sql` is missing. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 8) |
