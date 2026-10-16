@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -132,3 +132,7 @@ When an agent is disabled, deleted or leaves, an admin assigns their clients to 
 ## 25. Business dashboard panels not served yet
 
 The business dashboard mockup showed panels that dashboard-service does not serve: most active clients by transaction value, ingestion freshness (when transactions were last imported), clients without an account, rejected verifications, and failed or long-pending transactions with their clients. The frontend hides them until they exist. Each needs a contract change to [`docs/api/dashboard-api.yaml`](../api/dashboard-api.yaml) and, where it names clients, a decision on how the transaction rows are joined to client names without moving personal data out of client-service ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md)). The business dashboard owner must decide which are worth building.
+
+## 26. Root user without MFA
+
+The account's root user has no MFA, and the team cannot sign in as root to add one: the account is a member of an AWS Organization the team does not control ([ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md)). Root is the one route to full control that the team's MFA-protected role does not cover. The Organization's administrators must decide between adding MFA to the root user and centrally removing member accounts' root credentials, so that no one can sign in as root.
