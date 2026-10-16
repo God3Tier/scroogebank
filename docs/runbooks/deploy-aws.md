@@ -1,6 +1,6 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
-> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.
+> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.
 > Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md).
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
@@ -76,6 +76,8 @@ cp env/prod.s3.tfbackend.example env/prod.s3.tfbackend   # bucket = the state_bu
 cp env/prod.tfvars.example env/prod.tfvars               # root_admin_email, alarm_email, image_tag = step 2's $TAG
 terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars -var running=false
+terraform output app_url # Note url for later
+terraform output -raw ecs_cluster # Note for later (should be crm-sg-prod by default)
 cd -
 ```
 
@@ -123,7 +125,15 @@ scripts/db-run-sql.sh audit        infrastructure/terraform/sql/audit-logins.sql
 
 - **Run `services/auditor/data/schema.sql` only on an empty audit-db.** It begins with `DROP TABLE`.
 - The last command creates the auditor's and chain-verify's own logins (ADR-0022 decision 2). Their passwords stay in Secrets Manager.
-- Then restart the auditor so it connects: `aws ecs update-service --cluster <ecs_cluster output> --service auditor --force-new-deployment`.
+- Then restart every service. The auditor needs the restart to connect with its new login. The other services need it for Service Connect: a task can call only the Service Connect names that existed when the task started. On a new stack, a service can start before the services it calls are registered. It then fails with `UnknownHostException: auditor` or a similar error until it restarts.
+
+  ```sh
+  # Stop gap measure for now: A sturdier long-term fix would be to make Terraform create the called services before the services that call them, or to restart services automatically after the first start
+  cluster=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)
+  for s in user-service client-service account-service auditor dashboard-service event-alert-service; do
+    aws ecs update-service --cluster "$cluster" --service "$s" --force-new-deployment --query 'service.serviceName' --output text
+  done
+  ```
 
 Until the db-migrate task exists (INF-03), the other services log in as their database's master user.
 
@@ -225,6 +235,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | A service's tasks stop with `CannotPullContainerError: ... not found` | `image_tag` in `env/prod.tfvars` is not a tag you pushed (the example's `replace-with-the-pushed-tag`, for instance), or that service's image was never pushed (step 4). Push it, set the tag and apply again. A failed deployment rolls back to the previous one, which keeps failing if it had the same problem, until the next apply |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | client-service or account-service refuses to start | Production mode needs its TLS files and `verify-full` settings; check the `tls-init` log in the same task |
+| A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | That service's tasks started before the service they call was registered in Service Connect. Restart the calling service (`aws ecs update-service ... --force-new-deployment`), as at the end of step 5 |
 | The auditor cannot log in | Step 5's `audit-logins.sql` has not run, or the auditor started before it |
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
 | Transaction reads return 502 | transaction-service has no image yet (INF-05) |
