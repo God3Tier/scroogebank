@@ -1,13 +1,13 @@
-# ADR-0042: Terraform deployment of the target architecture, with a Free-plan mode
+# ADR-0042 historical draft: Terraform deployment of the target architecture, with a Free-plan mode
 
-- Status: Proposed
+- Status: Superseded
 - Decision date/time: 2026-10-14 21:38 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `task/infrastructure/terraform`
 - Related issue/PR: TBD
 - Supersedes: on acceptance, [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 5 in part (the `appProtocol: grpc` on the auditor's port; decision 7 below)
-- Superseded by: N/A
+- Superseded by: [ADR-0042: Terraform deployment of the target architecture](ADR-0042-terraform-deployment.md), which removes Free-plan mode after real-account quota testing
 
 ## Context
 

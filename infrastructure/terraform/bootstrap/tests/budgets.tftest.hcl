@@ -37,6 +37,10 @@ run "budgets_count_real_spend_for_the_whole_project" {
     condition     = toset([for n in aws_budgets_budget.total.notification : n.threshold if n.notification_type == "ACTUAL"]) == toset([50, 70, 85, 95, 100])
     error_message = "crm-total must alert at 50, 70, 85, 95 and 100% of actual spend (ADR-0029)."
   }
+  assert {
+    condition     = aws_s3_bucket_versioning.state.versioning_configuration[0].status == "Enabled" && aws_s3_bucket_versioning.trail.versioning_configuration[0].status == "Enabled"
+    error_message = "Terraform state and CloudTrail logs must both retain version history."
+  }
 }
 
 run "rejects_a_badly_formatted_start_date" {

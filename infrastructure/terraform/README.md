@@ -47,9 +47,9 @@ The CRM for one legal entity and environment:
 | Edge and API | CloudFront serves the frontend from a private bucket and forwards `/api/*` to an API Gateway HTTP API. API Gateway checks the Cognito token, then passes requests through a VPC Link to the internal ALB, which routes by path. In prod, WAF sits on CloudFront |
 | Sign-in | A Cognito user pool with ADMIN and AGENT groups and managed login. The Cognito triggers Lambda, which audits logins and password resets |
 | Services | On ECS Fargate, 2 to 6 tasks each, and 0 while stopped: user-service, client-service, account-service, the auditor, chain-verify (daily at 03:00 SGT), transaction-service, dashboard-service, and event-alert-service (its read API only). Also the ECR repositories, Service Connect, the project CA and the service certificates |
-| Data | 6 RDS PostgreSQL instances: users, clients, accounts, transactions, audit and alerts. Each is `db.t4g.micro` with 20 GB of gp3 that can grow to 100 GB, and 7 days of point-in-time recovery. Also the `client-keys` DynamoDB table, the ID-documents bucket, 4 KMS keys and a psql console task for each database |
+| Data | 6 RDS PostgreSQL instances: users, clients, accounts, transactions, audit and alerts. Each is `db.t4g.micro` with 20 GB of gp3 that can grow to 100 GB, and 7 days of point-in-time recovery. Also the `client-keys` DynamoDB table, the ID-documents bucket, 4 Singapore KMS keys, one Sydney backup key and a psql console task for each database |
 | Audit | The SQS queue and its dead-letter queue. The Object Lock bucket for chain-verify's anchors |
-| Backups | Prod only: a daily AWS Backup of the databases and `client-keys`, copied to a locked vault in Sydney |
+| Backups | Prod only: a daily AWS Backup of the databases and `client-keys`, copied to a locked vault encrypted by a customer-managed key in Sydney |
 | Monitoring | An SNS alarm topic that sends e-mail. Alarms on the audit queue, audit send failures, ALB 5xx errors, API latency, Cognito trigger errors and chain tampering. A dashboard |
 
 `high_availability = true` adds Multi-AZ standbys and a second NAT gateway. Staging has no WAF and no backups, and uses Fargate Spot (ADR-0029).

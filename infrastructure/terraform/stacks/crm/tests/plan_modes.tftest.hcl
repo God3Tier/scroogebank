@@ -57,8 +57,15 @@ run "prod" {
     error_message = "Prod: client-keys has point-in-time recovery and on-demand billing."
   }
   assert {
-    condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_backup_plan.daily) == 1
-    error_message = "Prod: WAF and AWS Backup are on."
+    condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_wafv2_web_acl_logging_configuration.this) == 1 && length(aws_backup_plan.daily) == 1
+    error_message = "Prod: WAF with redacted request logging and AWS Backup are on."
+  }
+  assert {
+    # Provider-computed ARNs are unknown during a mocked plan. The vault's
+    # kms_key_arn argument directly references this key in backup.tf; this
+    # assertion protects the conditional creation in prod.
+    condition     = length(aws_kms_key.backup_dr) == 1 && length(aws_backup_vault.dr) == 1
+    error_message = "Prod: create the customer-managed DR key and cross-region backup vault together."
   }
   assert {
     condition     = length(aws_nat_gateway.this) == 1
@@ -71,6 +78,12 @@ run "prod" {
   assert {
     condition     = !local.db_settings.skip_final_snapshot && alltrue([for s in aws_secretsmanager_secret.service_tls : s.recovery_window_in_days == 7])
     error_message = "Prod: a deleted database leaves a final snapshot, and a deleted secret can be restored for 7 days."
+  }
+  assert {
+    # CloudFront's generated domain is unknown until apply, so the plan test
+    # checks the inputs and the independently known auth-flow configuration.
+    condition     = length(var.local_dev_origins) == 0 && !contains(aws_cognito_user_pool_client.web.explicit_auth_flows, "ALLOW_USER_SRP_AUTH")
+    error_message = "Prod: web sign-in must exclude local callback origins and direct SRP authentication."
   }
 }
 

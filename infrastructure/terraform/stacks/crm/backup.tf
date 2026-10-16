@@ -9,10 +9,30 @@ resource "aws_backup_vault" "primary" {
   kms_key_arn = aws_kms_key.platform.arn
 }
 
+# RDS recovery points are not independently encrypted by AWS Backup. A
+# cross-Region copy therefore needs a customer-managed or RDS-managed key in
+# the destination Region; the destination vault's default aws/backup key is
+# not sufficient for this resource type.
+resource "aws_kms_key" "backup_dr" {
+  count                   = local.enable_backup ? 1 : 0
+  provider                = aws.dr
+  description             = "${local.name}: cross-region backup copies"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+}
+
+resource "aws_kms_alias" "backup_dr" {
+  count         = local.enable_backup ? 1 : 0
+  provider      = aws.dr
+  name          = "alias/${local.name}-backup-dr"
+  target_key_id = aws_kms_key.backup_dr[0].key_id
+}
+
 resource "aws_backup_vault" "dr" {
-  count    = local.enable_backup ? 1 : 0
-  provider = aws.dr
-  name     = "${local.name}-dr"
+  count       = local.enable_backup ? 1 : 0
+  provider    = aws.dr
+  name        = "${local.name}-dr"
+  kms_key_arn = aws_kms_key.backup_dr[0].arn
 }
 
 # Governance-mode Vault Lock: recovery points cannot be deleted or have their

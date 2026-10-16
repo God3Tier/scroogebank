@@ -15,3 +15,6 @@ image_tag = "replace-with-the-pushed-tag"
 # and AWS e-mails the alarm subscription link.
 root_admin_email = "you+crm-root-staging@example.edu"
 alarm_email      = "you@example.edu"
+
+# Optional while testing the frontend from Vite against the staging user pool.
+local_dev_origins = ["http://localhost:5173"]

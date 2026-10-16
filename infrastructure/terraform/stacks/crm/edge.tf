@@ -59,6 +59,22 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 
 data "aws_iam_policy_document" "frontend" {
   statement {
+    sid    = "TlsOnly"
+    effect = "Deny"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.frontend.arn, "${aws_s3_bucket.frontend.arn}/*"]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  statement {
     sid = "CloudFrontOnly"
     principals {
       type        = "Service"
@@ -302,5 +318,33 @@ resource "aws_wafv2_web_acl" "this" {
     cloudwatch_metrics_enabled = true
     metric_name                = local.name
     sampled_requests_enabled   = true
+  }
+}
+
+# CloudFront-scoped WAF resources, including their log group, live in
+# us-east-1. Headers that can carry credentials are redacted before logging.
+resource "aws_cloudwatch_log_group" "waf" {
+  count             = local.enable_waf ? 1 : 0
+  provider          = aws.us_east_1
+  name              = "aws-waf-logs-${local.name}"
+  retention_in_days = local.log_retention_days
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "this" {
+  count                   = local.enable_waf ? 1 : 0
+  provider                = aws.us_east_1
+  resource_arn            = aws_wafv2_web_acl.this[0].arn
+  log_destination_configs = [aws_cloudwatch_log_group.waf[0].arn]
+
+  redacted_fields {
+    single_header {
+      name = "authorization"
+    }
+  }
+
+  redacted_fields {
+    single_header {
+      name = "cookie"
+    }
   }
 }

@@ -85,9 +85,11 @@ resource "aws_cognito_user_pool_client" "web" {
   supported_identity_providers         = ["COGNITO"]
   callback_urls                        = [for o in local.web_origins : "${o}/auth/callback"]
   logout_urls                          = [for o in local.web_origins : "${o}/"]
-  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_SRP_AUTH"]
-  enable_token_revocation              = true
-  prevent_user_existence_errors        = "ENABLED"
+  # Do not enable ALLOW_USER_SRP_AUTH: browser sign-in goes only through the
+  # managed-login authorization-code flow with PKCE (ADR-0025).
+  explicit_auth_flows           = ["ALLOW_REFRESH_TOKEN_AUTH"]
+  enable_token_revocation       = true
+  prevent_user_existence_errors = "ENABLED"
 
   access_token_validity  = 60
   id_token_validity      = 60

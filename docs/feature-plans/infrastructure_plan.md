@@ -2,10 +2,10 @@
 
 ## Plan metadata
 
-- Status: In progress (deployment tested by hand; no CI)
+- Status: In progress (a Free-plan manual apply was attempted; the complete paid-plan apply and Terraform CI are still pending)
 - Primary developer: Neo Jia Wen
 - Current working branch: `task/infrastructure/terraform`
-- Last updated: 2026-10-14
+- Last updated: 2026-10-16
 - Related decisions: [ADR-0018](../adr/ADR-0018-ecs-fargate-compute.md), [ADR-0019](../adr/ADR-0019-edge-entry-chain.md), [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md), [ADR-0026](../adr/ADR-0026-one-stack-per-legal-entity.md), [ADR-0027](../adr/ADR-0027-observability-baseline.md), [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md) (Terraform deployment)
 
 ## Goal
@@ -39,6 +39,7 @@ Deploy the target architecture ([system overview](../architecture/system-overvie
 | INF-07 | The health monitor's service, daily analysis task and health-db, once the service is runnable | Garvit, Swayam | `stacks/crm` | Health monitor RH-SF01 onwards | TBD | Not started |
 | INF-08 | TLS between the ALB and the Java services (user-service, dashboard-service, event-alert-service), as the security model asks; then switch their target groups to HTTPS | Unassigned | Each Java service, `stacks/crm/services.tf` | None | TBD | Not started |
 | INF-09 | CI: build and push images, deploy through the GitHub OIDC role (`enable_github_deploy_role`), `terraform plan` with checkov (ADR-0028) | Unassigned | `.github/workflows/` | INF-02 | TBD | Not started; deferred on purpose |
+| INF-10 | Review and repair the existing Terraform contribution without changing its architecture: resolve ADR-index merge artifacts, preserve the superseded Free-plan draft, run static and mocked-provider validation, and document remaining deployment blockers | Neo Jia Wen | `docs/adr/README.md`, ADR-0042 records, `infrastructure/terraform/**`, `docs/runbooks/deploy-aws.md`, cost/resource documentation, validation evidence | INF-01 | `task/infrastructure/terraform-review-fixes` | Complete locally: formatting and all stack validations pass; bootstrap 2/2 and CRM 6/6 mocked-provider tests pass; Checkov and live AWS plan/apply remain INF-02/INF-09 evidence |
 
 ## Conflict zones
 

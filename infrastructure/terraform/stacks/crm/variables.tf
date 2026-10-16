@@ -94,9 +94,14 @@ variable "cognito_domain_prefix" {
 }
 
 variable "local_dev_origins" {
-  description = "Extra origins allowed as sign-in callbacks, for local development (ADR-0025 decision 2)."
+  description = "Extra origins allowed as sign-in callbacks for an explicit local-development session (ADR-0025 decision 2). Keep empty in prod."
   type        = list(string)
-  default     = ["http://localhost:5173"]
+  default     = []
+
+  validation {
+    condition     = var.environment != "prod" || length(var.local_dev_origins) == 0
+    error_message = "Production must not allow local-development OAuth callback origins."
+  }
 }
 
 variable "root_admin_email" {

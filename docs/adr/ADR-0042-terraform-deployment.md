@@ -62,7 +62,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    | RDS | `db.t4g.micro` ([ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md)), 20 GiB of gp3 that grows to 100 GiB, 7 days of point-in-time recovery |
    | RDS Multi-AZ | Only in the demo week ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)) |
    | DynamoDB `client-keys` | On-demand, point-in-time recovery on |
-   | AWS Backup with a cross-region copy | Prod only |
+   | AWS Backup with a cross-region copy | Prod only; the Sydney vault uses a customer-managed KMS key so encrypted RDS recovery-point copies do not fall back to the incompatible `aws/backup` key |
    | WAF | Prod only (ADR-0029) |
    | GuardDuty, CloudTrail data events on the anchor buckets | On |
    | Tasks per service | 2–6 while running, 0 while stopped |
@@ -95,7 +95,8 @@ Building the stack also showed that the code on `dev` needs more from the deploy
     - the audit queue's policy refuses `SendMessage` from every role except the producers and the replay role;
     - the anchor bucket refuses writes from everyone except chain-verify;
     - transaction-service, which checks no token, accepts connections from user-service only.
-    - the budget alerts count cost before credits, which AWS Budgets subtracts by default, so they fire even when credits cover the bill. `crm-total` is one yearly budget from the project's start date, because ADR-0029's USD 300 is a limit for the whole project, not for each month.
+    - the budget alerts count cost before credits, which AWS Budgets subtracts by default, so they fire even when credits cover the bill. `crm-total` is one yearly budget from the project's start date, because ADR-0029's USD 300 is a limit for the whole project, not for each month;
+    - the Sydney backup vault uses a dedicated customer-managed KMS key because RDS recovery points are not independently encrypted by AWS Backup and cannot use the destination vault's default `aws/backup` key for the cross-region copy.
 
 ## Rationale
 
@@ -136,8 +137,8 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 | Fargate, 7 services × 2 tasks | ~220 | 0 |
 | WAF | ~10 | ~10 |
 | GuardDuty, AWS Backup, CloudTrail data events | ~5 | ~5 |
-| KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~20 | ~10 |
-| **Total** | **~445** | **~65** |
+| KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~21 | ~11 |
+| **Total** | **~446** | **~66** |
 
 Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 110 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
