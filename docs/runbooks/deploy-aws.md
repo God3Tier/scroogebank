@@ -15,7 +15,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
   - Check it with `aws sts get-caller-identity`, without `--profile`. If that fails but `--profile crm` works, the profile is not selected in this terminal, and Terraform will fail the same way.
 - **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
-- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 445 a month left running and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 110 a month (ADR-0042 "Cost Impact").
+- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 335 a month left running at one task per service and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 100 a month (ADR-0042 "Cost Impact").
 
 ## 1. Bootstrap the account (once per account)
 
@@ -24,7 +24,8 @@ cd infrastructure/terraform/bootstrap
 cp terraform.tfvars.example terraform.tfvars   # set budget_emails and budget_start_date
 terraform init
 terraform apply                  # type yes; it must end with "Apply complete!"
-terraform output state_bucket    # Output is used in step 3
+terraform output -raw state_bucket   # steps 3 and 8.1 read this output themselves
+cd -
 ```
 
 `terraform output` reads the state that a finished apply writes, so "No outputs found" means the apply has not completed in this directory: run it again and fix the error it reports. A missing variable, such as a `terraform.tfvars` copied before `budget_start_date` existed, makes it stop and ask for the value.
@@ -58,7 +59,7 @@ for s in account-service auditor client-profile-management-service sftp; do make
 Give every image the same tag, and use a new tag each time (the repositories' tags are immutable), for example the commit SHA:
 
 ```sh
-TAG=$(git rev-parse --short HEAD)   # echo $TAG to print it; step 3 puts it in env/prod.tfvars
+TAG=$(git rev-parse --short HEAD)   # echo $TAG to print it; step 3 writes it into env/prod.tfvars
 build() { docker build --platform linux/amd64 -t "crm/$1:$TAG" -f "$2" "$3"; }
 build user-service        services/user-service/Dockerfile        .
 build dashboard-service   services/dashboard-service/Dockerfile   .
@@ -71,18 +72,26 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 
 ## 3. Create the CRM stack, stopped
 
+In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag in `env/prod.tfvars`:
+
 ```sh
 cd infrastructure/terraform/stacks/crm
-cp env/prod.s3.tfbackend.example env/prod.s3.tfbackend   # bucket = the state_bucket output
-cp env/prod.tfvars.example env/prod.tfvars               # root_admin_email, alarm_email, image_tag = step 2's $TAG
+STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
+sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/prod.tfvars
+grep -E '^(image_tag|root_admin_email|alarm_email)' env/prod.tfvars
+```
+
+Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs. Create the stack, still in `stacks/crm`:
+
+```sh
 terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars -var running=false
-terraform output app_url # Note url for later
-terraform output -raw ecs_cluster # Note for later (should be crm-sg-prod by default)
 cd -
 ```
 
-`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. Confirm the alarm e-mail subscription.
+`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
 
 **Staging (optional).** Staging is a second, separate copy of the stack for short promotion tests (ADR-0029): Fargate Spot, one Availability Zone, no WAF, no AWS Backup and no deletion protection. A test deployment does not need it, and running both doubles the cost.
 
@@ -151,8 +160,17 @@ cd -
 
 ## 7. Check it works
 
-1. **Services:** in the ECS console, every service reaches its desired count. Alternatively run `aws ecs describe-services --cluster <ecs_cluster> --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service`. A service stuck restarting shows why in its log group (`/ecs/<stack>-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 5's schema is missing.
-2. **Sign in:** open `terraform output app_url` (from crm stack directory). user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
+1. **Services:** every service reaches its desired count, in the ECS console or with:
+
+   ```sh
+   STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)   # crm-<legal_entity>-<environment>
+   aws ecs describe-services --cluster "$STACK" \
+     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service \
+     --query 'services[].[serviceName,runningCount,desiredCount]' --output table
+   ```
+
+   A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 5's schema is missing.
+2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
 ## 8. The external SFTP server and the ingest Lambda
@@ -161,13 +179,16 @@ The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-tran
 
 ### 8.1 Create the SFTP server
 
-1. **Backend.** Copy the example:
+1. **Backend.** Write it from the example, with the bootstrap stack's `state_bucket` output, the same bucket as the crm stack's:
 
    ```sh
-   cp infrastructure/terraform/stacks/sftp-server/env/prod.s3.tfbackend.example infrastructure/terraform/stacks/sftp-server/env/prod.s3.tfbackend
+   cd infrastructure/terraform/stacks/sftp-server
+   STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+   sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+   cd -
    ```
 
-   Set `bucket` to the same bucket as `stacks/crm/env/prod.s3.tfbackend` (the bootstrap stack's `state_bucket` output). Keep `key = "sftp-server/prod.tfstate"`: it must differ from the crm stack's key, or the two stacks overwrite each other's state.
+   Keep `key = "sftp-server/prod.tfstate"`: it must differ from the crm stack's key, or the two stacks overwrite each other's state.
 
 2. **Variables.** `env/prod.tfvars` takes two values from the crm stack's outputs:
 
@@ -271,11 +292,12 @@ transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ing
 4. Run it once without waiting for the schedule, and read its log:
 
    ```sh
-   aws lambda invoke --function-name <stack>-transaction-ingest out.json && cat out.json
-   MSYS_NO_PATHCONV=1 aws logs tail /aws/lambda/<stack>-transaction-ingest --since 10m
+   STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)   # crm-<legal_entity>-<environment>
+   aws lambda invoke --function-name "$STACK-transaction-ingest" out.json && cat out.json
+   MSYS_NO_PATHCONV=1 aws logs tail "/aws/lambda/$STACK-transaction-ingest" --since 10m
    ```
 
-   `<stack>` is `crm-<legal_entity>-<environment>`, `crm-sg-prod` by default. `MSYS_NO_PATHCONV=1` stops Git Bash from turning the log group's leading `/` into `C:/Program Files/Git/`, which AWS rejects; other shells ignore it.
+   The cluster is named after the stack, `crm-sg-prod` by default. `MSYS_NO_PATHCONV=1` stops Git Bash from turning the log group's leading `/` into `C:/Program Files/Git/`, which AWS rejects; other shells ignore it.
 
    A successful run writes `null`; a failed one writes an `errorMessage`, which the log explains. Files move from the SFTP server's `reports/` to `processed/` or `rejected/`, and the import's audit events reach the auditor.
 
@@ -321,17 +343,17 @@ terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tf
 ## Tear down
 
 ```sh
+STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster); echo "$STACK"   # the secrets step below needs it after the outputs are gone
 terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
 
 - **Prod first needs its protections lifted:** apply once with `-var deletion_protection=false`. That turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots, so the stack can be created again straight away; take a manual snapshot first if you want to keep any data. Staging has none to lift.
-- **Then hard delete any secret still pending deletion.** The stack's secrets have fixed names (`crm-<entity>-<environment>/...`), so a secret still in its recovery window makes the next apply fail with `a secret with this name is already scheduled for deletion`. Secrets are left like this when destroy runs without the `deletion_protection=false` apply first. This deletes them at once, and does nothing if there are none:
+- **Then hard delete any secret still pending deletion.** The stack's secrets have fixed names (`crm-<entity>-<environment>/...`), so a secret still in its recovery window makes the next apply fail with `a secret with this name is already scheduled for deletion`. Secrets are left like this when destroy runs without the `deletion_protection=false` apply first. This deletes them at once, and does nothing if there are none. It uses `STACK` from the block above; in a new terminal the destroyed stack has no outputs, so set `STACK=crm-<legal_entity>-<environment>` (`crm-sg-prod` by default) instead:
 
   ```sh
-  stack=crm-sg-prod   # crm-<legal_entity>-<environment>
-  for s in $(aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values="$stack/" \
+  for s in $(aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values="${STACK:?set STACK}/" \
       --query 'SecretList[?DeletedDate].Name' --output text); do
     aws secretsmanager delete-secret --force-delete-without-recovery --secret-id "$s"
   done
@@ -344,7 +366,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 
   ```sh
   cd infrastructure/terraform/bootstrap
-  bucket=crm-tfstate-$(aws sts get-caller-identity --query Account --output text)   # or your state_bucket_name
+  bucket=$(terraform output -raw state_bucket); echo "${bucket:?no state_bucket output}"
   aws s3api delete-objects --bucket "$bucket" --delete "$(aws s3api list-object-versions --bucket "$bucket" \
     --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}, Quiet: `true`}' --output json)"
   terraform destroy # If this fails, manually empty bucket in AWS Console S3
