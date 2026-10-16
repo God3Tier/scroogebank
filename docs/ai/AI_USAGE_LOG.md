@@ -338,3 +338,20 @@
   ADR-0006 through ADR-0016; checked Markdown structure, Mermaid participants,
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
+
+## 2026-10-16 — Client Health SF01 transaction intake decision
+
+- Human owner: Garvit; Feature 3 owners must review provider-side changes.
+- Tool: Cursor.
+- Use: inspect the current transaction-service contracts and accepted identity,
+  ingestion and database decisions; select a bounded service-authenticated pull
+  API for six-month replay and daily Client Health intake; update ADR-0044, the
+  feature plan and contract documentation.
+- Human verification required: Feature 3 owners approve the dedicated replay
+  endpoint, stable synthetic source fingerprint and six-month provider fixtures
+  before their shared service files change.
+- Data: repository documentation and synthetic contract examples only. No
+  credentials, real client data, AWS calls or external model calls were used.
+- Verification: synchronized `feat/client-health-monitor` through PR #111,
+  reviewed ADR-0024, ADR-0025, ADR-0034, ADR-0037 and ADR-0043, and ran Git
+  whitespace/diff checks.

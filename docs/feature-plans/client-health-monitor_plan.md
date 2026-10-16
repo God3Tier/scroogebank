@@ -2,16 +2,18 @@
 
 ## Plan metadata
 
-- Status: Draft; SF00 plan/contracts ready for first PR, later contract artifacts prepared locally but not integrated
+- Status: In progress; SF00 and RH-SF05 Stage 1 merged, RH-SF01 transaction intake/replay started
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/sf00-foundation`
+- Current task branch: `task/client-health-monitor/transaction-intake`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-09-29 against `origin/dev` at `048cfb0`
+- Last repository sync: 2026-10-16 through PR #111; feature branch includes `origin/dev` at `6f606ec`
 - AI-assisted planning: Yes; Cursor
 
-This plan authorizes planning and contract work only. Runtime, compute, database, integration, Bedrock, and audit decisions remain proposed until accepted ADRs with human owners exist.
+ADR-0044 accepts API-based transaction intake and replay for RH-SF01. Runtime,
+compute, database, assignment, Bedrock, and audit decisions remain proposed or
+open until accepted ADRs with human owners exist.
 
 ## Problem statement
 
@@ -223,7 +225,12 @@ Required from the transaction owner:
 - schema compatibility policy; and
 - no unmatched/rejected record presented as analysable.
 
-Current gap: merged SFTP import stores a source account reference but does not populate `client_id`, publish events, expose a read API, or provide historical replay.
+Current state: transaction-service populates matched `account_id` and
+`client_id` values through account-service and exposes a private cursor-paged
+admin list. RH-SF01 still needs the dedicated service-authenticated, date-bounded
+replay contract accepted in ADR-0044, a stable synthetic source fingerprint,
+and six months of reproducible synthetic history. Provider-side changes require
+Feature 3 owner coordination.
 
 ### Client assignment
 
@@ -449,12 +456,10 @@ Kill switches:
 
 ## Required architecture decisions
 
-ADR numbering is temporarily deferred because the shared ADR index contains unresolved conflict markers and duplicate IDs.
-
-Decisions still required:
+Decisions:
 
 1. service/runtime/compute boundary;
-2. transaction integration and replay;
+2. transaction integration and replay — accepted in ADR-0044;
 3. client assignment and service authentication;
 4. task API/state/authorization and database topology;
 5. Bedrock Region/model/privacy/fallback/cost;
@@ -471,12 +476,12 @@ Decisions still required:
 
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
-| RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Plan/contracts ready for PR 1; later PRs locally prepared | 2026-09-29 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | Transaction-owner contract; SF00 | `task/client-health-monitor/transaction-intake` | Planned | N/A |
+| RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | In progress: intake/replay ADR accepted; consumer contract next | 2026-10-16 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; future migration ownership | `task/client-health-monitor/activity-projection` | Planned | N/A |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; shared fixtures | `task/client-health-monitor/signal-rules` | Planned | N/A |
 | RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |
-| RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; future migration ownership | `task/client-health-monitor/task-domain` | Planned | N/A |
+| RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; future migration ownership | `task/client-health-monitor/task-domain` | Stage 1 domain foundation implemented and merged; production persistence pending | 2026-10-16 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | Planned | N/A |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Planned | N/A |
 | RH-SF08 | Audit outbox and adapter | TBD | outbox/publisher/auditor contract | Auditor owner; task transactions | TBD | Unassigned | N/A |
@@ -554,7 +559,7 @@ The feature branch never merges directly into `main`.
 1. Exact threshold/confidence/severity per signal.
 2. Daily task cap, cooldown, and worsening rule.
 3. Completion/dismissal reason codes.
-4. Transaction event versus internal API.
+4. Transaction integration uses the internal pull/replay API accepted in ADR-0044; Feature 3 owner approval and provider implementation remain pending.
 5. Assignment lookup versus assignment event.
 6. Lambda/ECS deployment shape and database connection strategy.
 7. Bedrock model/Region/retention/logging/cost caps.

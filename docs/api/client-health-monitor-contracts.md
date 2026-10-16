@@ -2,7 +2,7 @@
 
 ## Status and ownership
 
-- Status: Proposed for SF00 review; not an accepted production contract
+- Status: SF00 internal finding contract implemented; RH-SF01 pull/replay direction accepted by ADR-0044; external provider extensions pending owner review
 - Feature: Client Health Monitor
 - Contract owner: Garvit
 - Required reviewer: Swayam
@@ -46,13 +46,16 @@ The merged SFTP receiver currently stores:
 
 Current gaps:
 
-- save logic does not populate client ID;
-- no account-to-client matching contract;
-- no event publisher;
-- no read API;
-- no historical replay/export;
+- the existing private list is an admin-UI contract rather than a
+  service-authenticated, date-bounded replay contract;
 - no stable source/counterparty fingerprint; and
-- no authoritative balance snapshots.
+- no six-month reproducible relationship-health history.
+
+Matched imports now populate `account_id` and `client_id` through
+account-service under ADR-0037. Transaction-service also exposes a private
+cursor-paged admin list under ADR-0043. ADR-0044 requires a separate internal
+replay endpoint with a least-privilege service token rather than reusing that
+human-admin route.
 
 ### Client assignment
 
@@ -77,54 +80,11 @@ The current allowlist does not recognise this feature's proposed service type or
 
 ### Purpose
 
-Provide transaction facts only after durable import and successful account/client matching.
+Provide transaction facts only after durable import and successful
+account/client matching. ADR-0044 selects a bounded paginated internal pull API
+for initial replay and daily analysis. It does not select an event stream.
 
-The logical schema is transport-neutral. A future ADR will decide whether it is delivered as:
-
-- an at-least-once event; or
-- a paginated internal read/replay API.
-
-### Proposed event
-
-Event name:
-
-```text
-transaction.matched.v1
-```
-
-Example:
-
-```json
-{
-  "schemaVersion": "1",
-  "eventId": "6b50a97e-8a88-4e64-a3df-a686745223cc",
-  "occurredAt": "2026-09-29T04:00:00Z",
-  "importBatchId": "batch-20260929-001",
-  "transaction": {
-    "transactionId": "txn-000001",
-    "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
-    "accountId": "acc-000001",
-    "type": "Deposit",
-    "amount": "4250.00",
-    "currency": "SGD",
-    "transactionDate": "2026-09-28T00:30:00Z",
-    "status": "Completed",
-    "sourceFingerprint": "synthetic-employer-001"
-  }
-}
-```
-
-### Field rules
-
-#### Envelope
-
-- `schemaVersion`: required; exactly `"1"` for this contract.
-- `eventId`: required stable unique identifier for delivery de-duplication.
-- `occurredAt`: required time when the matched event was created.
-- `importBatchId`: required stable identifier for the source import batch.
-- `transaction`: required matched transaction payload.
-
-#### Transaction
+### Transaction field rules
 
 - `transactionId`: required; stable across retries/replays.
 - `clientId`: required; transaction must not be emitted before this is resolved.
@@ -136,32 +96,31 @@ Example:
 - `status`: required; `Completed`, `Pending`, or `Failed`.
 - `sourceFingerprint`: optional opaque stable synthetic source reference. It supports recurring-credit grouping without exposing free-text remitter details.
 
-### Producer guarantees requested
+### Provider guarantees requested
 
-- Publish only after the transaction and matching result are durable.
-- Never publish `Unmatched` or `Rejected` records through this contract.
-- Delivery may be at least once.
-- Preserve `eventId` and `transactionId` across retries.
-- Document whether ordering is guaranteed; health-service logic must not require it.
-- Publish updates/corrections as explicit versioned events rather than silently changing old messages.
+- Return only after the transaction and matching result are durable.
+- Never return `Unmatched` or `Rejected` records through this contract.
+- Preserve `transactionId` across repeated pages and replays.
+- Use stable keyset ordering with opaque cursors.
+- Apply the source rule that only Pending may advance to Completed or Failed.
 - Provide six months of synthetic replay data.
 - Notify consumers before incompatible changes.
 
 ### Consumer guarantees
 
-- De-duplicate by `eventId`.
-- Enforce unique transaction/version handling.
+- De-duplicate by `transactionId`.
+- Enforce immutable fields and allow only Pending-to-terminal status changes
+  across repeated runs.
 - Reject unsupported schema versions.
 - Validate all fields before persistence.
 - Never treat Pending as completed activity/net flow.
 - Record invalid/unsupported input without creating signals/tasks.
 - Store only the minimum read projection required by the selected rules.
 
-### Historical replay proposal
+### Historical replay endpoint
 
-If events are selected, replay uses the same `transaction.matched.v1` payloads with stable transaction IDs and new or documented stable event IDs.
-
-If an API is selected, proposed endpoint:
+Accepted consumer contract in ADR-0044; provider implementation and Feature 3
+owner approval remain pending:
 
 ```text
 GET /internal/v1/transactions
@@ -194,7 +153,10 @@ Proposed response:
 }
 ```
 
-The transport decision remains open. SF00 freezes field meaning, not delivery mechanism.
+The endpoint requires a scoped Cognito client-credentials token, inclusive
+`from`, exclusive `to`, bounded `limit`, and an opaque provider cursor. The
+consumer exposes no completed intake result unless every page validates and the
+provider returns the final cursor.
 
 ## Contract B: Client Assignment V1
 
