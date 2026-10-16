@@ -9,6 +9,11 @@ vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
 vi.mock('./api/clients.js', () => ({
   getClient: vi.fn().mockResolvedValue({ first_name: 'Synthetic', last_name: 'Client', verification_status: 'UNVERIFIED' }),
   listDocuments: vi.fn().mockResolvedValue([]),
+  listClients: vi.fn().mockResolvedValue({ content: [], page: 0, size: 1, totalElements: 0, totalPages: 0 }),
+}))
+vi.mock('./api/dashboard.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDashboard: vi.fn().mockResolvedValue({ panels: {} }),
 }))
 
 const signedOut = { isLoading: false, isAuthenticated: false, user: null }

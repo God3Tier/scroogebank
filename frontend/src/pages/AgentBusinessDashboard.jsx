@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
-// Demo mockup: figures come from src/data/dashboard.js, shaped like
-// docs/api/dashboard-api.yaml on feat/business-dashboard.
-import { getDashboard, windowForDays } from '../data/dashboard.js'
+import { panelData, windowForDays } from '../api/dashboard.js'
 import StatCard from '../components/StatCard.jsx'
 import ActionList from '../components/dashboard/ActionList.jsx'
 import BreakdownChart from '../components/dashboard/BreakdownChart.jsx'
@@ -10,85 +8,67 @@ import DashboardHeader from '../components/dashboard/DashboardHeader.jsx'
 import MetricDefinitions from '../components/dashboard/MetricDefinitions.jsx'
 import PanelCard from '../components/dashboard/PanelCard.jsx'
 import TrendChart from '../components/dashboard/TrendChart.jsx'
+import useDashboards, { panelOf, upperKeys } from '../components/dashboard/useDashboards.js'
 import { hintFor } from '../components/dashboard/definitions.js'
+import { dailyTrend, ratio } from '../components/dashboard/figures.js'
 import {
-  daysSince, formatNumber, formatPercent, formatSGD, formatValue, toRows,
+  NO_FIGURE, daysSince, formatNumber, formatPercent, formatSGD, formatValue, toRows,
 } from '../components/dashboard/format.js'
 
 const STATUS_LABELS = { COMPLETED: 'Completed', PENDING: 'Pending', FAILED: 'Failed' }
+const STALE_DAYS = 7
+// TeamComparison.MIN_COHORT in dashboard-service: below it no median is sent.
+const TEAM_MIN_COHORT = 5
 
-function load(endpoint, days) {
-  return getDashboard(endpoint, { role: 'AGENT', ...windowForDays(days) })
-}
-
+// Figures come from dashboard-service (docs/api/dashboard-api.yaml), scoped
+// to the signed-in agent by their token. Panels it does not serve yet (most
+// active clients, clients without an account, rejected verifications, flagged
+// transactions) are not shown; see docs/architecture/open-items.md.
 function AgentBusinessDashboard() {
   const [days, setDays] = useState(30)
+  const period = windowForDays(days)
 
-  // Recomputed only when the window changes, like a cached API response.
-  const { overview, portfolio, transactions, actions } = useMemo(() => ({
-    overview: load('overview', days),
-    portfolio: load('portfolio', days),
-    transactions: load('transactions', days),
-    actions: load('action-items', days),
-  }), [days])
-
-  const clients = overview.panels.clients.data
-  const accounts = overview.panels.accounts.data
-  const team = overview.panels.team.data
-  const tx = transactions.panels.transactions.data
-  const actionItems = actions.panels.clients.data
-  const flagged = actions.panels.transactions.data.flagged
-  const today = overview.window.to
-
-  const verifiedShare = clients.byVerificationStatus.VERIFIED / clients.total
-  const failureRate = tx.total === 0 ? 0 : tx.byStatus.FAILED / tx.total
-  const trend = tx.daily.map((day) => ({ date: day.date, transactions: day.count }))
-
-  const clientRow = (ref, key) => ({
-    id: `${ref.clientId}-${key}`,
-    clientId: ref.clientId,
-    name: `${ref.firstName} ${ref.lastName}`,
-    meta: `${daysSince(ref.createdAt, today)} days old`,
+  const { responses } = useDashboards({
+    overview: ['overview', period],
+    portfolio: ['portfolio', period],
+    transactions: ['transactions', period],
+    actions: ['action-items', { ...period, staleDays: STALE_DAYS }],
   })
+  const { overview, portfolio, transactions, actions } = responses
+
+  const clients = panelData(overview?.panels?.clients)
+  const accounts = panelData(overview?.panels?.accounts)
+  const team = panelData(overview?.panels?.teamComparison)
+  const tx = panelData(transactions?.panels?.transactions)
+  const portfolioClients = panelData(portfolio?.panels?.clients)
+  const portfolioAccounts = panelData(portfolio?.panels?.accounts)
+  const perClient = panelData(portfolio?.panels?.accountsPerClient)
+  const actionItems = panelData(actions?.panels?.clients)
+  const today = period.to
+
+  const byStatus = upperKeys(tx?.byStatus)
+  const verifiedShare = clients ? ratio(clients.byVerificationStatus?.VERIFIED ?? 0, clients.total) : null
+  const failureRate = tx ? ratio(byStatus.FAILED ?? 0, tx.total) : null
+  const trend = dailyTrend(null, tx?.daily)
 
   const actionGroups = [
     {
       key: 'stale',
-      title: 'Stale unverified (> 7 days)',
+      title: `Stale unverified (> ${STALE_DAYS} days)`,
       icon: 'hourglass_top',
       empty: 'Nothing here: no clients waiting on verification.',
-      rows: actionItems.staleUnverified.map((ref) => clientRow(ref, 'stale')),
-    },
-    {
-      key: 'no-account',
-      title: 'No account yet',
-      icon: 'account_balance_wallet',
-      empty: 'Nothing here: every client has an account.',
-      rows: actionItems.withoutAccount.map((ref) => clientRow(ref, 'no-account')),
-    },
-    {
-      key: 'rejected',
-      title: 'Rejected verification',
-      icon: 'gpp_bad',
-      empty: 'Nothing here: no rejected verifications in your book.',
-      rows: actionItems.rejectedVerification.map((ref) => clientRow(ref, 'rejected')),
-    },
-    {
-      key: 'transactions',
-      title: 'Failed or long-pending transactions',
-      icon: 'report',
-      empty: 'Nothing here: no failed or long-pending transactions.',
-      rows: flagged.map((row) => ({
-        id: `tx-${row.transactionId}`,
-        clientId: row.clientId,
-        name: `${row.firstName} ${row.lastName}`,
-        meta: `Txn ${row.transactionId} · ${STATUS_LABELS[row.status]}`,
+      total: actionItems?.staleUnverifiedTotal,
+      rows: (actionItems?.staleUnverified ?? []).map((ref) => ({
+        id: `${ref.clientId}-stale`,
+        clientId: ref.clientId,
+        name: `${ref.firstName} ${ref.lastName}`,
+        meta: `${daysSince(ref.createdAt, today)} days old`,
       })),
     },
   ]
 
-  const comparisonRows = team.teamMedian === null ? [] : [
-    { key: 'me', name: 'Me', value: team.mine },
+  const comparisonRows = team?.teamMedian == null ? [] : [
+    { key: 'me', name: 'Me', value: team.clientsOnboarded },
     { key: 'median', name: 'Team median', value: team.teamMedian },
   ]
 
@@ -104,10 +84,10 @@ function AgentBusinessDashboard() {
       />
 
       <div className="stat-grid stat-grid-dense">
-        <StatCard label="My clients" value={formatNumber(clients.total)} icon="groups" />
+        <StatCard label="My clients" value={formatNumber(clients?.total)} icon="groups" />
         <StatCard
           label="Added in window"
-          value={formatNumber(clients.createdInWindow)}
+          value={formatNumber(clients?.createdInWindow)}
           icon="person_add"
           caption={`Last ${days} days`}
           hint={hintFor('clientsOnboarded')}
@@ -120,13 +100,13 @@ function AgentBusinessDashboard() {
         />
         <StatCard
           label="My accounts"
-          value={formatNumber(accounts.total)}
+          value={formatNumber(accounts?.total)}
           icon="account_balance"
-          caption={`+${formatNumber(accounts.openedInWindow)} opened`}
+          caption={accounts ? `+${formatNumber(accounts.openedInWindow)} opened` : undefined}
         />
         <StatCard
           label="Booked initial deposits"
-          value={formatSGD(accounts.bookedInitialDeposits, { compact: true })}
+          value={formatSGD(accounts?.bookedInitialDeposits, { compact: true })}
           icon="savings"
           caption="Opening deposits, not a balance"
           hint={hintFor('bookedInitialDeposits')}
@@ -134,12 +114,12 @@ function AgentBusinessDashboard() {
       </div>
 
       <div className="dash-grid">
-        <PanelCard title="My action queue" panel={actions.panels.clients} className="span-8">
+        <PanelCard title="My action queue" panel={panelOf(actions, 'clients')} className="span-8">
           <ActionList groups={actionGroups} />
         </PanelCard>
 
         <div className="span-4 dash-stack">
-          <PanelCard title="How I compare" panel={overview.panels.team}>
+          <PanelCard title="How I compare" panel={panelOf(overview, 'teamComparison')}>
             {comparisonRows.length > 0 ? (
               <>
                 <BreakdownChart title="Clients onboarded in window" rows={comparisonRows} />
@@ -147,25 +127,25 @@ function AgentBusinessDashboard() {
               </>
             ) : (
               <p className="empty-note">
-                Not shown: the team is too small to compare anonymously (fewer than {team.minCohort} active agents).
+                Not shown: the team is too small to compare anonymously (fewer than {TEAM_MIN_COHORT} agents).
               </p>
             )}
           </PanelCard>
 
-          <PanelCard title="Client verification" panel={portfolio.panels.clients}>
-            <BreakdownChart rows={toRows(portfolio.panels.clients.data.byVerificationStatus)} />
+          <PanelCard title="Client verification" panel={panelOf(portfolio, 'clients')}>
+            <BreakdownChart rows={toRows(portfolioClients?.byVerificationStatus)} />
           </PanelCard>
         </div>
 
-        <PanelCard title="My client transactions" panel={transactions.panels.transactions} className="span-12">
+        <PanelCard title="My client transactions" panel={panelOf(transactions, 'transactions')} className="span-12">
           <div className="metric-row">
             <div className="metric">
               <span className="metric-label">Transactions</span>
-              <span className="metric-value">{formatNumber(tx.total)}</span>
+              <span className="metric-value">{formatNumber(tx?.total)}</span>
             </div>
             <div className="metric" title={hintFor('transactionValue')}>
               <span className="metric-label">Value</span>
-              <span className="metric-value">{formatValue(tx.totalValue, { compact: true })}</span>
+              <span className="metric-value">{formatValue(tx?.totalValue, { compact: true })}</span>
             </div>
             <div className="metric" title={hintFor('failureRate')}>
               <span className="metric-label">Failure rate</span>
@@ -173,45 +153,22 @@ function AgentBusinessDashboard() {
             </div>
             <div className="metric" title={hintFor('pendingBacklog')}>
               <span className="metric-label">Pending backlog</span>
-              <span className="metric-value">{formatNumber(tx.pendingBacklog)}</span>
+              <span className="metric-value">{formatNumber(tx?.pendingBacklog)}</span>
             </div>
           </div>
           <div className="tx-grid">
-            <div>
-              <TrendChart data={trend} series={[{ key: 'transactions', label: 'Transactions per day' }]} height="sm" />
-              <BreakdownChart title="By status" rows={toRows(tx.byStatus, STATUS_LABELS)} />
-            </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <caption className="table-caption">Most active clients by value</caption>
-                <thead>
-                  <tr>
-                    <th>Client</th>
-                    <th className="num">Transactions</th>
-                    <th className="num">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tx.topClients.map((client) => (
-                    <tr key={client.clientId}>
-                      <td>{client.firstName} {client.lastName}</td>
-                      <td className="num">{formatNumber(client.count)}</td>
-                      <td className="num">{formatValue(client.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TrendChart data={trend} series={[{ key: 'transactions', label: 'Transactions per day' }]} height="sm" />
+            <BreakdownChart title="By status" rows={toRows(byStatus, STATUS_LABELS)} />
           </div>
         </PanelCard>
 
-        <PanelCard title="My accounts" panel={portfolio.panels.accounts} className="span-12">
+        <PanelCard title="My accounts" panel={panelOf(portfolio, 'accounts')} className="span-12">
           <div className="breakdown-grid">
-            <BreakdownChart title="Accounts by type" rows={toRows(portfolio.panels.accounts.data.byType)} />
-            <BreakdownChart title="Accounts by status" rows={toRows(portfolio.panels.accounts.data.byStatus)} />
+            <BreakdownChart title="Accounts by type" rows={toRows(portfolioAccounts?.byType)} />
+            <BreakdownChart title="Accounts by status" rows={toRows(portfolioAccounts?.byStatus)} />
           </div>
           <p className="panel-footnote" title={hintFor('accountsPerClient')}>
-            Accounts per client: <strong>{portfolio.panels.accounts.data.accountsPerClient}</strong>
+            Accounts per client: <strong>{perClient?.ratio == null ? NO_FIGURE : perClient.ratio.toFixed(1)}</strong>
           </p>
         </PanelCard>
       </div>
@@ -219,7 +176,7 @@ function AgentBusinessDashboard() {
       <MetricDefinitions
         keys={[
           'clientsOnboarded', 'verifiedShare', 'bookedInitialDeposits', 'failureRate',
-          'pendingBacklog', 'transactionValue', 'staleUnverified', 'withoutAccount', 'teamMedian',
+          'pendingBacklog', 'transactionValue', 'staleUnverified', 'teamMedian',
         ]}
       />
     </div>

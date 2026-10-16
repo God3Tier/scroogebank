@@ -1,0 +1,103 @@
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { getDashboard } from '../api/dashboard.js'
+import AdminBusinessDashboard from './AdminBusinessDashboard.jsx'
+import AgentBusinessDashboard from './AgentBusinessDashboard.jsx'
+
+vi.mock('../api/dashboard.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDashboard: vi.fn(),
+}))
+// Recharts measures its container, which jsdom cannot do.
+vi.mock('../components/dashboard/TrendChart.jsx', () => ({ default: () => null }))
+vi.mock('../components/dashboard/BreakdownChart.jsx', () => ({ default: () => null }))
+
+const ok = (data) => ({ status: 'OK', data, reason: null })
+const unavailable = (reason) => ({ status: 'UNAVAILABLE', data: null, reason })
+
+// Shaped like dashboard-service's responses (docs/api/dashboard-api.yaml).
+const CLIENTS = { total: 40, createdInWindow: 6, byVerificationStatus: { VERIFIED: 30, UNVERIFIED: 10 }, dailyCreated: [] }
+const ACCOUNTS = {
+  total: 55, openedInWindow: 4, bookedInitialDeposits: '125000.00', byType: {}, byStatus: {}, byCurrency: { SGD: 55 }, byBranch: {},
+}
+const TRANSACTIONS = {
+  total: 20, byStatus: { Completed: 18, Failed: 2 }, byType: { Deposit: 20 }, totalValue: '5000.00', daily: [], pendingBacklog: 1,
+}
+const STALE = {
+  staleUnverified: [{ clientId: 'client-9', firstName: 'Stale', lastName: 'Client', createdAt: '2026-09-01T00:00:00Z' }],
+  staleUnverifiedTotal: 3,
+}
+
+function respond(scope, panelsByEndpoint) {
+  getDashboard.mockImplementation((endpoint, params) => Promise.resolve({
+    generatedAt: '2026-10-16T03:00:00Z',
+    window: { from: params.from, to: params.to },
+    scope,
+    panels: panelsByEndpoint[endpoint] ?? {},
+  }))
+}
+
+function renderPage(Page) {
+  render(<MemoryRouter><Page /></MemoryRouter>)
+}
+
+describe('business dashboards', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows the admin figures, the roster count and the stale-client queue', async () => {
+    respond('ADMIN', {
+      overview: { clients: ok(CLIENTS), accounts: ok(ACCOUNTS), transactions: ok(TRANSACTIONS), agents: ok({ total: 8, active: 7 }) },
+      portfolio: { clients: ok(CLIENTS), accounts: ok(ACCOUNTS), accountsPerClient: ok({ ratio: 1.375 }) },
+      transactions: { transactions: ok(TRANSACTIONS) },
+      'action-items': { clients: ok(STALE), transactions: ok(TRANSACTIONS) },
+      agents: { agents: ok({ rows: [{ agentId: 'sub-1', name: null, enabled: null, clientsOnboarded: 2, verified: 1, unverified: 1, verificationRate: null, accountsOpened: 0, bookedInitialDeposits: 0 }], sortedBy: 'clientsOnboarded' }) },
+    })
+    renderPage(AdminBusinessDashboard)
+
+    expect(await screen.findByText('75.0%')).toBeInTheDocument()
+    expect(screen.getByText('7')).toBeInTheDocument()
+    expect(screen.getByText('8 on roster')).toBeInTheDocument()
+    expect(screen.getByText('10.0%')).toBeInTheDocument()
+    expect(screen.getByText('1.4')).toBeInTheDocument()
+    expect(screen.getByText('Unknown agent')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open client' })).toHaveAttribute('href', '/clients/client-9')
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.queryByText(/Ingestion freshness/)).not.toBeInTheDocument()
+    expect(getDashboard).toHaveBeenCalledWith('action-items', expect.objectContaining({ staleDays: 7 }))
+  })
+
+  it('shows an unavailable panel without failing the page', async () => {
+    respond('AGENT', {
+      overview: { clients: ok(CLIENTS), accounts: ok(ACCOUNTS), transactions: ok(TRANSACTIONS), teamComparison: unavailable('unsupported_window') },
+      portfolio: { clients: ok(CLIENTS), accounts: ok(ACCOUNTS), accountsPerClient: ok({ ratio: null }) },
+      transactions: { transactions: unavailable('upstream_timeout') },
+      'action-items': { clients: ok({ staleUnverified: [], staleUnverifiedTotal: 0 }) },
+    })
+    renderPage(AgentBusinessDashboard)
+
+    expect(await screen.findByText('Only shown for the last 7, 30 or 90 days.')).toBeInTheDocument()
+    expect(screen.getByText('The source service did not answer in time.')).toBeInTheDocument()
+    expect(screen.getByText('40')).toBeInTheDocument()
+    expect(screen.getByText(/no clients waiting on verification/)).toBeInTheDocument()
+  })
+
+  it('compares the agent with the team median only when it is sent', async () => {
+    respond('AGENT', {
+      overview: { clients: ok(CLIENTS), accounts: ok(ACCOUNTS), teamComparison: ok({ days: 30, clientsOnboarded: 6, teamMedian: null, cohortSize: 3 }) },
+    })
+    renderPage(AgentBusinessDashboard)
+
+    expect(await screen.findByText(/team is too small/)).toBeInTheDocument()
+  })
+
+  it('says when the figures could not be loaded at all', async () => {
+    getDashboard.mockRejectedValue(Object.assign(new Error('down'), { status: 503 }))
+    renderPage(AgentBusinessDashboard)
+
+    expect(await screen.findByText('Figures could not be loaded.')).toBeInTheDocument()
+  })
+})
