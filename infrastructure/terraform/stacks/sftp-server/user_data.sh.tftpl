@@ -5,9 +5,9 @@ set -euo pipefail
 
 # --- host key, pinned by the CRM ------------------------------------------
 aws ssm get-parameter --region "${region}" --name "${host_key_param}" \
-  --with-decryption --query Parameter.Value --output text > /etc/ssh/ssh_host_ed25519_key
-chmod 600 /etc/ssh/ssh_host_ed25519_key
-ssh-keygen -y -f /etc/ssh/ssh_host_ed25519_key > /etc/ssh/ssh_host_ed25519_key.pub
+  --with-decryption --query Parameter.Value --output text > ${host_key_path}
+chmod 600 ${host_key_path}
+ssh-keygen -y -f ${host_key_path} > ${host_key_path}.pub
 
 # --- a chrooted, SFTP-only account with key authentication only -----------
 id -u "${sftp_user}" >/dev/null 2>&1 || useradd --system --shell /sbin/nologin --home-dir "/srv/sftp/${sftp_user}" "${sftp_user}"
@@ -19,7 +19,7 @@ printf '%s\n' "${authorized_key}" > "/etc/ssh/authorized_keys/${sftp_user}"
 chmod 644 "/etc/ssh/authorized_keys/${sftp_user}"
 
 cat > /etc/ssh/sshd_config.d/10-crm-sftp.conf <<'EOF'
-HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey ${host_key_path}
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no

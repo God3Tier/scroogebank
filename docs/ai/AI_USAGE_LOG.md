@@ -1,5 +1,57 @@
 # AI usage log
 
+## 2026-10-16 — INF-05 transaction-service image
+
+- Human owner: Neo Jia Wen; the Feature 3 owner (Joseph Yau) to confirm, as the
+  infrastructure plan lists.
+- Tool: Claude Code (Anthropic).
+- Use: make the SFTP receiver's Dockerfile multi-stage, its default target a
+  distroless transaction-service image built from `src/serverd` as
+  account-service's is, with the development image kept as the `tools` target
+  for the compose file; generate the receiver's ORM for the image in a
+  throwaway database; add transaction-service to the runbook's build, push and
+  check steps; amend ADR-0042 decision 9; replace the hand-written Secrets
+  Manager fake in the INF-04 tests with a mockery mock.
+- Human verification required: build the image with Docker after
+  `make -C services/sftp sqlboiler`, run `make -C services/sftp test`, and check
+  in a test account (INF-02) that transaction-service starts and user-service's
+  transaction reads succeed.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used.
+- Verification: with Docker, `make sqlboiler` generated the ORM in a throwaway
+  database and `make test` passed, the database-backed tests included. The
+  image built for linux/amd64, runs as the distroless nonroot user, and against
+  the test database answered `/health` and `/api/transactions` with 200.
+  `make lambda` built a zip holding an executable arm64 `bootstrap` and the
+  RDS CA bundle; in the `provided.al2023` runtime emulator it initialised, ran
+  one poll per invocation and returned the poll's error. This also covers the
+  INF-04 checks that entry left for Docker. Nothing ran in AWS.
+
+## 2026-10-16 — INF-04 transaction-ingest Lambda
+
+- Human owner: Neo Jia Wen; the Feature 3 owner (Joseph Yau) confirms the
+  runtime (ADR-0024 decision 7) on the pull request.
+- Tool: Claude Code (Anthropic).
+- Use: run the SFTP receiver's poller as the Lambda function ADR-0024 describes:
+  a Lambda mode in `src/cronjob` that builds the poller once per execution
+  environment and polls once per invocation; read the database login, SSH
+  private key and Cognito client secret from Secrets Manager at init; quote the
+  database login in the connection string; add `make lambda` to build the arm64
+  `bootstrap` zip with the RDS CA bundle; in Terraform, point `DB_SSLROOTCERT`
+  at that bundle and turn off Lambda's own retries of the scheduled run; update
+  the receiver README, the runbook, the Terraform README and the
+  infrastructure plan; amend ADR-0042 decisions 9 and 10 to match.
+- Human verification required: review the code; run `make test` and
+  `make lambda` with Docker; apply to a test account (INF-02) and check one
+  invocation imports files and audits them.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used.
+- Verification: `go vet` and the cronjob, accounts and poller tests passed
+  locally, and the arm64 `bootstrap` cross-compiled; the database-backed SQS
+  relay tests were not run (no database or Docker). Terraform validate and 6
+  CRM mocked-provider tests passed. `make lambda` was not run (Docker was not
+  running).
+
 ## 2026-10-16 — Terraform review and repair
 
 - Human owner: Neo Jia Wen.

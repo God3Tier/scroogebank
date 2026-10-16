@@ -85,9 +85,10 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# EC2 refuses an apostrophe in a security group description.
 resource "aws_security_group" "sftp" {
   name        = local.name
-  description = "SFTP from the CRM's NAT gateway addresses only"
+  description = "SFTP from the CRM NAT gateway addresses only"
   vpc_id      = aws_vpc.this.id
 }
 
@@ -109,18 +110,41 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 }
 
 # ----------------------------------------------------------------- host key
-# Generated here so the CRM can pin its fingerprint. The private key is in
-# SSM Parameter Store (SecureString) and in this stack's state.
+# Generated here, or read from host_key_file, so the CRM can pin its
+# fingerprint. The private key is in SSM Parameter Store (SecureString) and in
+# this stack's state.
 
 resource "tls_private_key" "host" {
+  count     = var.host_key_file == null ? 1 : 0
   algorithm = "ED25519"
+}
+
+# The generated key had no count before host_key_file existed.
+moved {
+  from = tls_private_key.host
+  to   = tls_private_key.host[0]
+}
+
+locals {
+  # A key saved on Windows can have CRLF line endings; an OpenSSH key file has LF.
+  host_private_key = (
+    var.host_key_file == null
+    ? tls_private_key.host[0].private_key_openssh
+    : sensitive(replace(file(var.host_key_file), "\r\n", "\n"))
+  )
+}
+
+# The public half and fingerprint, whichever way the key came. Planning fails
+# here if host_key_file is not an unencrypted OpenSSH private key.
+data "tls_public_key" "host" {
+  private_key_openssh = local.host_private_key
 }
 
 resource "aws_ssm_parameter" "host_key" {
   name        = "/${local.name}/ssh-host-key"
   description = "SSH host private key of the simulated core banking server"
   type        = "SecureString"
-  value       = tls_private_key.host.private_key_openssh
+  value       = local.host_private_key
 }
 
 # --------------------------------------------------------------- producer
@@ -207,6 +231,8 @@ resource "aws_instance" "sftp" {
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
     region         = var.aws_region
     host_key_param = aws_ssm_parameter.host_key.name
+    # sshd's usual file name for the key's type: ssh_host_ed25519_key, ssh_host_rsa_key or ssh_host_ecdsa_key.
+    host_key_path  = "/etc/ssh/ssh_host_${lower(data.tls_public_key.host.algorithm)}_key"
     sftp_user      = var.sftp_user
     authorized_key = trimspace(var.crm_ingest_public_key)
     remote_dir     = local.remote_dir
@@ -220,6 +246,9 @@ resource "aws_instance" "sftp" {
 
   lifecycle {
     ignore_changes = [ami] # take a new AMI deliberately, not on every plan
+    # The host key is installed only at first boot, so a new key needs a new
+    # instance. The Elastic IP moves to it.
+    replace_triggered_by = [aws_ssm_parameter.host_key]
   }
 }
 

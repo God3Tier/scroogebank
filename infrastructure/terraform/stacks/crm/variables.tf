@@ -126,13 +126,13 @@ variable "internal_alb_server_name" {
 # ------------------------------------------------------- transaction import
 
 variable "enable_ingest_lambda" {
-  description = "Deploy the transaction-ingest Lambda (ADR-0024). Leave false until the receiver has a Lambda handler; see docs/feature-plans/infrastructure_plan.md."
+  description = "Deploy the transaction-ingest Lambda (ADR-0024). Needs ingest_lambda_zip and the sftp-server stack's outputs; see docs/runbooks/deploy-aws.md."
   type        = bool
   default     = false
 }
 
 variable "ingest_lambda_zip" {
-  description = "Path to the ingest Lambda's zip (a bootstrap binary for provided.al2023, arm64)."
+  description = "Path to the ingest Lambda's zip, built by `make lambda` in services/sftp: a bootstrap binary for provided.al2023 on arm64, and rds-ca.pem."
   type        = string
   default     = null
 }

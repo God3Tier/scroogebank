@@ -4,7 +4,7 @@
 - Decision date/time: 2026-10-14 21:38 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
-- Feature/branch: `task/infrastructure/terraform`
+- Feature/branch: `task/infrastructure/terraform`; decisions 9 and 10 amended on `task/transaction-integration/ingest-lambda`
 - Related issue/PR: TBD
 - Supersedes: on acceptance, [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 5 in part (the `appProtocol: grpc` on the auditor's port; decision 7 below)
 - Superseded by: N/A
@@ -85,8 +85,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - It listens on HTTP inside the VPC until there is a domain for an ACM certificate ([open item 2](../architecture/open-items.md#2-domain-name)); setting `internal_alb_certificate_arn` switches it to HTTPS, with API Gateway verifying the name.
    - Target groups use HTTPS for the Go services, which serve TLS in production, and HTTP for the Java services, which do not. The security model's "self-signed TLS between the ALB and tasks" is therefore not met for the Java services yet.
 9. **Not deployed yet, each a task in `docs/feature-plans/infrastructure_plan.md`:**
-   - the transaction-ingest Lambda (`enable_ingest_lambda`, off): the receiver has no Lambda handler, and reads its secrets from environment variables and files rather than from Secrets Manager at start;
-   - the image for transaction-service: the receiver's Dockerfile is a development image;
+   - the transaction-ingest Lambda (`enable_ingest_lambda`, off): since INF-04 the receiver's poller runs as a Lambda function and reads its secrets from Secrets Manager at start, but it has not run in AWS yet. A deployment turns it on with the zip from `make lambda` and the sftp-server stack's address and host key fingerprint ([runbook](../runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda) §8);
    - the health monitor: it is not runnable yet;
    - the alert worker, its schedule, AgentCore in Tokyo and Bedrock access: EDA-D1-02 (Azeez);
    - the GitHub deploy role (`enable_github_deploy_role`, off) and any CI checks on Terraform: deployments are run by hand for now.
@@ -95,6 +94,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
     - the audit queue's policy refuses `SendMessage` from every role except the producers and the replay role;
     - the anchor bucket refuses writes from everyone except chain-verify;
     - transaction-service, which checks no token, accepts connections from user-service only.
+    - Lambda does not retry a failed transaction-ingest run, and drops a run throttled for more than 5 minutes behind a long one: the next scheduled run picks the files up, and retries would count toward ADR-0024's circuit breaker;
     - the budget alerts count cost before credits, which AWS Budgets subtracts by default, so they fire even when credits cover the bill. `crm-total` is one yearly budget from the project's start date, because ADR-0029's USD 300 is a limit for the whole project, not for each month;
     - the Sydney backup vault uses a dedicated customer-managed KMS key because RDS recovery points are not independently encrypted by AWS Backup and cannot use the destination vault's default `aws/backup` key for the cross-region copy.
 
@@ -166,3 +166,12 @@ Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessi
 - AWS: Choosing a plan (Free account plan terms), AWS Billing and Cost Management User Guide
 - Reported Free plan limits: `FreeTierRestrictionError` on RDS backup retention above 1 day and on non-micro instance classes (GitHub issues yc-software/qm#352, aaronpotter/terraform-aws#18)
 - [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md), [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md), [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md), [ADR-0026](ADR-0026-one-stack-per-legal-entity.md), [ADR-0028](ADR-0028-cicd-migrations-terraform.md), [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0040](ADR-0040-cognito-triggers-java-lambda.md), [ADR-0041](ADR-0041-client-identity-documents-and-manual-verification.md)
+
+## Revision history
+
+- 2026-10-14 21:38 +08:00: proposed.
+- 2026-10-16: amended while Proposed, as decided by the decision owner, after INF-04 gave the receiver a Lambda handler:
+  - **Decision 9:** the transaction-ingest Lambda is still off by default, but no longer because the code cannot run on Lambda. The receiver's poller now runs as a Lambda function, reads its database login, SSH private key and Cognito client secret from Secrets Manager at start, and verifies transactions-db against the RDS CA bundle packaged in its zip (`DB_SSLROOTCERT`). It waits for a deployment to turn it on and for INF-02 to test it.
+  - **Decision 10:** Lambda's asynchronous retries of the scheduled run are off (`maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300`).
+- 2026-10-16: amended while Proposed, as decided by the decision owner, after INF-05 gave transaction-service a production image:
+  - **Decision 9:** transaction-service leaves the not-deployed list. INF-05 made the receiver's Dockerfile build it by default, as a distroless image like account-service's; the development image is its `tools` target. The runbook builds and pushes it with the other images.

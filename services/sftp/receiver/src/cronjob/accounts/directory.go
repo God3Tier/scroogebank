@@ -29,13 +29,21 @@ type Config struct {
 	Scope        string
 }
 
-func LoadConfig() (Config, error) {
+// LoadConfig reads the configuration from the environment. clientID and
+// clientSecret, when given, are used instead of COGNITO_INGEST_CLIENT_ID and
+// COGNITO_INGEST_CLIENT_SECRET: the Lambda function reads them from Secrets
+// Manager (ADR-0024 security).
+func LoadConfig(clientID, clientSecret string) (Config, error) {
 	cfg := Config{
 		BaseURL:      strings.TrimRight(strings.TrimSpace(os.Getenv("ACCOUNT_SERVICE_BASE_URL")), "/"),
 		TokenURL:     strings.TrimSpace(os.Getenv("COGNITO_TOKEN_URL")),
-		ClientID:     strings.TrimSpace(os.Getenv("COGNITO_INGEST_CLIENT_ID")),
-		ClientSecret: os.Getenv("COGNITO_INGEST_CLIENT_SECRET"),
+		ClientID:     strings.TrimSpace(clientID),
+		ClientSecret: clientSecret,
 		Scope:        strings.TrimSpace(os.Getenv("COGNITO_INGEST_SCOPE")),
+	}
+	if cfg.ClientID == "" && cfg.ClientSecret == "" {
+		cfg.ClientID = strings.TrimSpace(os.Getenv("COGNITO_INGEST_CLIENT_ID"))
+		cfg.ClientSecret = os.Getenv("COGNITO_INGEST_CLIENT_SECRET")
 	}
 	if cfg.Scope == "" {
 		cfg.Scope = "crm-accounts/lookup"

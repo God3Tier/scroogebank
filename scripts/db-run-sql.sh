@@ -78,7 +78,8 @@ aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task_arn"
 exit_code=$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task_arn" \
   --query 'tasks[0].containers[0].exitCode' --output text)
 
-aws logs get-log-events --log-group-name "$log_group" \
+# Git Bash would turn the log group's leading / into a Windows path.
+MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name "$log_group" \
   --log-stream-name "$db/psql/${task_arn##*/}" \
   --query 'events[].message' --output text 2>/dev/null || true
 

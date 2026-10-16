@@ -35,6 +35,17 @@ variable "crm_ingest_public_key" {
   type        = string
 }
 
+variable "host_key_file" {
+  description = "A host key you were given: an unencrypted OpenSSH private key, its path relative to stacks/sftp-server. null generates an ED25519 key."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.host_key_file == null || fileexists(coalesce(var.host_key_file, "-"))
+    error_message = "host_key_file names no file. The path is relative to stacks/sftp-server, for example \"../../../../secrets/sftp_host_key\"."
+  }
+}
+
 variable "sftp_user" {
   description = "The account the CRM signs in as."
   type        = string

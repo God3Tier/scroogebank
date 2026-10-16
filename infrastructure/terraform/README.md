@@ -59,16 +59,15 @@ The CRM for one legal entity and environment:
 Stands in for the bank's core banking system, Feature 3's external server. It has its own VPC and contains:
 
 - a `t4g.micro` EC2 instance running OpenSSH, with a fixed Elastic IP;
-- one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key;
+- one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key. Terraform generates the host key, or takes one you were given from `host_key_file` ([runbook §8.1](../../docs/runbooks/deploy-aws.md#81-create-the-sftp-server));
 - an ECR repository for the producer container, which writes a synthetic transaction file every 5 minutes once `producer_image` is set.
 
 ### Deployed but not working yet
 
 | Part | Why it doesn't work | Waiting for |
 |---|---|---|
-| transaction-service | It is the SFTP receiver's read API (`services/sftp/receiver/src/serverd`). It has no production image, so it cannot start, and transaction reads return 502 | INF-05: a production Dockerfile for the receiver |
 | event-alert-service | It runs, but nothing creates alerts, so it has none to show | INF-06: the alert worker |
-| SFTP server | It writes files, but nothing collects them | INF-04: the ingest Lambda |
+| SFTP server | It writes files, but nothing collects them until the ingest Lambda is turned on | INF-04: turn on the ingest Lambda ([runbook §8](../../docs/runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda)) |
 | Database logins | Most services sign in as their database's master user, and schemas are applied by hand | INF-03: db-migrate tasks |
 | Internal ALB | It serves HTTP, not HTTPS, inside the VPC | [Open item 2](../../docs/architecture/open-items.md#2-domain-name): a domain name, so ACM can issue a certificate |
 | ALB to the Java services | user-service, dashboard-service and event-alert-service get plain HTTP | INF-08: TLS in those services |
@@ -78,7 +77,7 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 
 | Part | Waiting for |
 |---|---|
-| transaction-ingest Lambda (`enable_ingest_lambda`), the SFTP receiver's poller (`services/sftp/receiver/src/cronjob`) | INF-04: a Lambda handler for the poller that reads its secrets from Secrets Manager. Until then, no transactions reach transactions-db |
+| transaction-ingest Lambda (`enable_ingest_lambda`), the SFTP receiver's poller (`services/sftp/receiver/src/cronjob`) | INF-04: the poller runs as a Lambda function and reads its secrets from Secrets Manager. Build its zip with `make lambda` in `services/sftp` and turn it on as [runbook §8](../../docs/runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda) says; it has not run in AWS yet (INF-02). Until then, no transactions reach transactions-db |
 | Alert worker, its 4-hourly schedule, AgentCore web search in Tokyo and Bedrock access | INF-06 (EDA-D1-02), blocked until the alerts ADRs are accepted |
 | Health monitor, its daily analysis task and health-db | INF-07: the service does not run yet |
 | GitHub deploy role (`enable_github_deploy_role`) and CI workflows | INF-09: deferred while deployments are run by hand |
@@ -93,6 +92,6 @@ terraform validate
 terraform test      # plans each mode against mocked providers; no AWS account needed
 ```
 
-`bootstrap/` has its own `terraform test` for the budget alerts.
+`bootstrap/` has its own `terraform test` for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
 
 Real `*.tfvars` and `*.s3.tfbackend` files are git-ignored; copy the `.example` files next to them.

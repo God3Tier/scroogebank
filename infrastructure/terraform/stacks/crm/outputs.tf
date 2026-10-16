@@ -99,7 +99,9 @@ output "nat_public_ips" {
 
 output "sftp_client_public_key" {
   description = "transaction-ingest's SSH public key, for the sftp-server stack's authorized key."
-  value       = tls_private_key.sftp_client.public_key_openssh
+  # trimspace: the key ends in a newline, which `terraform output` would show
+  # as a <<EOT heredoc instead of the key.
+  value = trimspace(tls_private_key.sftp_client.public_key_openssh)
 }
 
 # ------------------------------------------- for EDA-D1-02 (alert worker)

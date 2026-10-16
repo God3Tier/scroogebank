@@ -56,17 +56,19 @@ run "prod" {
     condition     = aws_dynamodb_table.client_keys.point_in_time_recovery[0].enabled && aws_dynamodb_table.client_keys.billing_mode == "PAY_PER_REQUEST"
     error_message = "Prod: client-keys has point-in-time recovery and on-demand billing."
   }
+  # WAF logging and the DR vault are commented out while the SCP denies them;
+  # restore the logging check and the DR assertion below with those resources.
   assert {
-    condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_wafv2_web_acl_logging_configuration.this) == 1 && length(aws_backup_plan.daily) == 1
-    error_message = "Prod: WAF with redacted request logging and AWS Backup are on."
+    condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_backup_plan.daily) == 1
+    error_message = "Prod: WAF and AWS Backup are on."
   }
-  assert {
-    # Provider-computed ARNs are unknown during a mocked plan. The vault's
-    # kms_key_arn argument directly references this key in backup.tf; this
-    # assertion protects the conditional creation in prod.
-    condition     = length(aws_kms_key.backup_dr) == 1 && length(aws_backup_vault.dr) == 1
-    error_message = "Prod: create the customer-managed DR key and cross-region backup vault together."
-  }
+  # assert {
+  #   # Provider-computed ARNs are unknown during a mocked plan. The vault's
+  #   # kms_key_arn argument directly references this key in backup.tf; this
+  #   # assertion protects the conditional creation in prod.
+  #   condition     = length(aws_kms_key.backup_dr) == 1 && length(aws_backup_vault.dr) == 1
+  #   error_message = "Prod: create the customer-managed DR key and cross-region backup vault together."
+  # }
   assert {
     condition     = length(aws_nat_gateway.this) == 1
     error_message = "Prod outside the demo week: one NAT gateway."
@@ -174,6 +176,14 @@ run "lambdas_enabled" {
   assert {
     condition     = aws_scheduler_schedule.ingest[0].schedule_expression == "rate(5 minutes)"
     error_message = "Ingest runs every 5 minutes."
+  }
+  assert {
+    condition     = aws_lambda_function_event_invoke_config.ingest[0].maximum_retry_attempts == 0
+    error_message = "Lambda does not retry a failed ingest run; the next scheduled run does."
+  }
+  assert {
+    condition     = aws_lambda_function.ingest[0].environment[0].variables["DB_SSLROOTCERT"] == "/var/task/rds-ca.pem"
+    error_message = "Ingest verifies transactions-db against the RDS CA in its zip."
   }
 }
 

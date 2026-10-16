@@ -127,8 +127,9 @@ resource "aws_iam_role_policy" "cognito_triggers_replay" {
 
 # -------------------------------------------------------- transaction ingest
 # ADR-0024: a scheduled, VPC-attached Lambda in Go on provided.al2023 with
-# reserved concurrency 1. Off until the receiver has a Lambda handler that
-# reads its secrets from Secrets Manager at start (infrastructure plan INF-04).
+# reserved concurrency 1. The zip is the receiver's poller, built by
+# `make lambda` in services/sftp (infrastructure plan INF-04); it reads its
+# secrets from Secrets Manager at start.
 
 # The CRM's SSH key for the bank's SFTP server. The public half goes to the
 # sftp-server stack; the private half stays here.
@@ -222,6 +223,7 @@ resource "aws_lambda_function" "ingest" {
       DB_PORT                   = "5432"
       DB_NAME                   = module.db["transactions"].db_name
       DB_SSLMODE                = "verify-full"
+      DB_SSLROOTCERT            = "/var/task/rds-ca.pem" # packaged in the zip
       DB_SECRET_ARN             = local.db_master_secret["transactions"]
       SFTP_ADDR                 = coalesce(var.sftp_server_address, "unset:22")
       SFTP_USER                 = "reportuser"
@@ -244,4 +246,15 @@ resource "aws_lambda_function" "ingest" {
       error_message = "enable_ingest_lambda needs ingest_lambda_zip, sftp_server_address and sftp_host_key_fingerprint."
     }
   }
+}
+
+# EventBridge Scheduler invokes the function asynchronously. Lambda would retry
+# a failed run twice, which would count toward the circuit breaker's failed
+# runs, and would hold a run throttled behind a long one for hours. The next
+# scheduled run picks the files up instead.
+resource "aws_lambda_function_event_invoke_config" "ingest" {
+  count                        = var.enable_ingest_lambda ? 1 : 0
+  function_name                = aws_lambda_function.ingest[0].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 300
 }

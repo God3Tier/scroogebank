@@ -7,7 +7,7 @@
 | `sftp` | The external SFTP server. Files wait in `/home/reportuser/reports`. |
 | `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. |
 | `db` | transactions-db. |
-| `receiver-api` | transaction-service's internal read API. |
+| `receiver-api` | transaction-service's internal read API, run with `go run` in the development image. The receiver's Dockerfile builds the production image by default; [the deployment runbook](../../docs/runbooks/deploy-aws.md) pushes it. |
 
 The import itself, the poller, runs from `receiver/`. [receiver/README.md](receiver/README.md) explains how it links rows to accounts, rejects files, retries the connection and audits.
 
