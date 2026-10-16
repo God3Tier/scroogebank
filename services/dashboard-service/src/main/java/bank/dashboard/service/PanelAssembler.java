@@ -7,6 +7,7 @@ import bank.dashboard.exception.UpstreamUnavailableException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.concurrent.DelegatingSecurityContextCallable;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -56,8 +57,12 @@ public class PanelAssembler {
             // CompletableFuture.cancel ignores the flag, and the executor is
             // closed below, which waits for every task to end -- so an
             // abandoned call would hold the response open past the budget.
+            // The caller's SecurityContext is thread-local, so each task
+            // carries a copy: the upstream adapters re-present the caller's
+            // token (CurrentUser) from the virtual thread, not this one.
             Map<String, Future<Object>> inFlight = new LinkedHashMap<>();
-            suppliers.forEach((name, supplier) -> inFlight.put(name, executor.submit(supplier::get)));
+            suppliers.forEach((name, supplier) -> inFlight.put(name,
+                    executor.submit(new DelegatingSecurityContextCallable<>(supplier::get))));
 
             // The overall budget is measured from when the calls were
             // submitted, not accumulated per call. They run concurrently, so a
