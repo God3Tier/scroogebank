@@ -63,9 +63,3 @@ variable "publish_interval_seconds" {
   type        = number
   default     = 300
 }
-
-variable "crm_account_ids" {
-  description = "Synthetic CRM account IDs the producer's transactions refer to."
-  type        = list(string)
-  default     = []
-}

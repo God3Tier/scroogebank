@@ -70,6 +70,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0039](ADR-0039-dashboard-aggregate-endpoints.md) — X-factor 2: owning services serve dashboard figures on private `/aggregates` routes scoped by the caller's token and not audited there; agents' transaction totals go through user-service.
 - [ADR-0042](ADR-0042-terraform-deployment.md) — Terraform layout and S3 state with native locking, for an account on the paid plan (a Free-plan mode was tried and dropped); NAT gateways removed between sessions; certificates written into tasks by an init container; Service Connect proxies TLS ports as TCP (supersedes ADR-0021 decision 5 in part on acceptance).
 - [ADR-0043](ADR-0043-client-and-transaction-list-endpoints.md) — `GET /api/clients` lists an agent's own clients or, for an admin, every client, paged; `GET /api/transactions` lists all linked transactions for admins only through user-service, cursor-paged; both audited (Q&A UM04, TM14).
+- [ADR-0045](ADR-0045-producer-account-list-synced-from-crm.md) — The simulated bank's producer reads its account list from a file on the SFTP server on every run and publishes nothing when it is empty; `scripts/sync-producer-accounts.sh` copies the CRM's open, non-deleted accounts into it through SSM Run Command, so the producer never calls the CRM (extends ADR-0024 decision 1).
 
 ## Maintenance rule
 

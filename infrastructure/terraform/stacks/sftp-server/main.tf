@@ -37,6 +37,8 @@ provider "aws" {
 locals {
   name       = "core-banking-sftp-${var.environment}"
   remote_dir = "/srv/sftp/${var.sftp_user}/reports"
+  # The CRM accounts the producer may use (ADR-0045).
+  account_ids_file = "/etc/producer/account-ids"
 }
 
 data "aws_availability_zones" "available" {
@@ -232,14 +234,14 @@ resource "aws_instance" "sftp" {
     region         = var.aws_region
     host_key_param = aws_ssm_parameter.host_key.name
     # sshd's usual file name for the key's type: ssh_host_ed25519_key, ssh_host_rsa_key or ssh_host_ecdsa_key.
-    host_key_path  = "/etc/ssh/ssh_host_${lower(data.tls_public_key.host.algorithm)}_key"
-    sftp_user      = var.sftp_user
-    authorized_key = trimspace(var.crm_ingest_public_key)
-    remote_dir     = local.remote_dir
-    producer_image = var.producer_image == null ? "" : var.producer_image
-    registry       = split("/", aws_ecr_repository.producer.repository_url)[0]
-    interval       = var.publish_interval_seconds
-    account_ids    = join(",", var.crm_account_ids)
+    host_key_path    = "/etc/ssh/ssh_host_${lower(data.tls_public_key.host.algorithm)}_key"
+    sftp_user        = var.sftp_user
+    authorized_key   = trimspace(var.crm_ingest_public_key)
+    remote_dir       = local.remote_dir
+    producer_image   = var.producer_image == null ? "" : var.producer_image
+    registry         = split("/", aws_ecr_repository.producer.repository_url)[0]
+    interval         = var.publish_interval_seconds
+    account_ids_file = local.account_ids_file
   })
 
   tags = { Name = local.name }

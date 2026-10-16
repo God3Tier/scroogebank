@@ -5,8 +5,8 @@
 - Status: In progress
 - Primary developer: Joseph Yau
 - Current working branch: `transaction-integration`
-- Last updated: 2026-10-14
-- Related decisions: [ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (ingestion, accepted 2026-10-14), [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md) (transactions database and account linking)
+- Last updated: 2026-10-16
+- Related decisions: [ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (ingestion, accepted 2026-10-14), [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md) (transactions database and account linking), [ADR-0045](../adr/ADR-0045-producer-account-list-synced-from-crm.md) (producer's account list, proposed)
 
 ## Goal
 
@@ -43,3 +43,4 @@ Import external SFTP transactions, link matched records to CRM account UUIDs, an
 | F3-ING-03 | Protect the SFTP connection: retries with backoff within a run (none for host-key, authentication or key errors), a circuit breaker across runs, and a poll timeout that closes a hung connection (ADR-0024 decision 3) | Neo Jia Wen (review: Joseph Yau) | `services/sftp/receiver/src/cronjob/poller`, receiver README | F3-ING-02 | `task/transaction-integration/sftp-resilience` | Planned |
 | F3-ING-04 | Producer fault files on demand for the demo: corrupt, partially invalid, all invalid, unsupported extension, and a re-sent transaction (ADR-0024 decision 1) | Neo Jia Wen (review: Joseph Yau) | `services/sftp/producer`, `services/sftp/Makefile`, `services/sftp/README.md` | F3-ING-02 | `task/transaction-integration/producer-faults` | Planned |
 | F3-ING-05 | Run the import as a Lambda function: a handler that builds the poller once at init and loads its secrets from Secrets Manager (ADR-0024 decisions 3 and 7) | Neo Jia Wen (review: Joseph Yau) | `services/sftp/receiver` | ADR-0024 accepted; infrastructure | TBD | Deferred |
+| F3-ING-06 | The deployed producer uses only the CRM's accounts: it reads its list from a file on every run and publishes nothing while it is empty; `scripts/sync-producer-accounts.sh` copies the open, non-deleted accounts into it through SSM Run Command; the sftp-server stack's `crm_account_ids` variable is removed ([ADR-0045](../adr/ADR-0045-producer-account-list-synced-from-crm.md)) | Neo Jia Wen (review: Joseph Yau) | `services/sftp/producer` (`src/accounts`, `src/main.go`), `infrastructure/terraform/stacks/sftp-server` (startup script, outputs, test), `scripts/sync-producer-accounts.sh`, `docs/runbooks/deploy-aws.md`, `services/sftp/README.md` | ADR-0045 agreed with Joseph Yau | `task/transaction-integration/producer-account-sync` | Implemented; producer and Terraform tests pass, and the sync script was tested with stubbed AWS calls and its query against the accounts schema; not run against the deployed stack |
