@@ -9,8 +9,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -38,10 +41,31 @@ public class TransactionProxy {
         return request(receiverBaseUrl, "/api/accounts/" + accountId + "/transactions", null);
     }
 
+    /**
+     * Every account's linked transactions, newest first (ADR-0043). The
+     * controller lets only admins call this, so no ownership check is made;
+     * the receiver validates the parameters.
+     */
+    public ResponseEntity<JsonNode> listTransactions(String cursor, Integer size, String status) {
+        URI uri = UriComponentsBuilder.fromUriString(receiverBaseUrl)
+                .path("/api/transactions")
+                .queryParamIfPresent("cursor", Optional.ofNullable(cursor))
+                .queryParamIfPresent("size", Optional.ofNullable(size))
+                .queryParamIfPresent("status", Optional.ofNullable(status))
+                .encode()
+                .build()
+                .toUri();
+        return request(uri, null);
+    }
+
     private ResponseEntity<JsonNode> request(String baseUrl, String path, String authorization) {
+        return request(URI.create(baseUrl + path), authorization);
+    }
+
+    private ResponseEntity<JsonNode> request(URI uri, String authorization) {
         RestClient.RequestHeadersSpec<?> request = restClientBuilder.build()
                 .method(HttpMethod.GET)
-                .uri(baseUrl + path);
+                .uri(uri);
         if (authorization != null) {
             request.header(HttpHeaders.AUTHORIZATION, authorization);
         }

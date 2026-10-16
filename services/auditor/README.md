@@ -129,10 +129,11 @@ resource type allows these actions:
 |---|---|
 | `USER` | `CREATE`, `READ`, `UPDATE`, `DISABLE`, `PASSWORD_RESET`, `ROLE_CHANGE`, `LOGOUT` |
 | `ACCOUNT` (an account's transactions) | `READ` |
+| `TRANSACTION` (every account's transactions, admins only, [ADR-0043](../../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)) | `READ` |
 | `CORRUPTED_AUDIT_LOG` | `CREATE`, `READ`, `DELETE` |
 
 A successful event must carry `resource_id`, except a `READ` of
-`CORRUPTED_AUDIT_LOG`, which reads the whole list.
+`CORRUPTED_AUDIT_LOG` or `TRANSACTION`, which reads a whole list.
 
 The Cognito triggers (`services/cognito-triggers`, [ADR-0040](../../docs/adr/ADR-0040-cognito-triggers-java-lambda.md))
 send `source_service=COGNITO_TRIGGERS` with `event_type=AUTHENTICATION`. The
