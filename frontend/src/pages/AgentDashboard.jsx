@@ -77,7 +77,7 @@ function ClientList({ onChanged }) {
 
     return (
         <div className="card card-flush">
-            <h2>Manage Client Profiles</h2>
+            <h2>Manage Client Profiles and Accounts</h2>
             {state.loading && <p className="empty-note">Loading…</p>}
             {state.error && <p className="form-error" role="alert">{state.error}</p>}
             {problem && <p className="form-error" role="alert">{problem}</p>}
@@ -92,7 +92,7 @@ function ClientList({ onChanged }) {
                         </span>
 
                         <button onClick={() => navigate(`/agent/client/${client.client_id}/transactions`)}>
-                            View Transactions
+                            View Accounts and Transactions
                         </button>
                         <button onClick={() => navigate(`/clients/${client.client_id}`)}>Edit</button>
                         <button onClick={() => handleDelete(client)}>Delete</button>
@@ -209,7 +209,7 @@ function AgentDashboard() {
                     onClick={() => toggleSection('manageProfiles')}
                     aria-expanded={openSection === 'manageProfiles'}
                 >
-                    Manage Client Profiles
+                    Manage Client Profiles and Accounts
                 </button>
             </div>
 
