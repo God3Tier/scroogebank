@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"client-profile-management-service/src/internal/models"
 	"client-profile-management-service/src/internal/security"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,7 @@ const (
 // handler each request reached, with the query the route adapter built.
 type recordingClients struct {
 	reached []string
+	callers []models.Caller
 }
 
 func (r *recordingClients) record(name string, w http.ResponseWriter, req *http.Request) {
@@ -44,6 +46,10 @@ func (r *recordingClients) UpdateClientInformation(w http.ResponseWriter, req *h
 }
 func (r *recordingClients) GetClientProfile(w http.ResponseWriter, req *http.Request) {
 	r.record("GetClientProfile", w, req)
+}
+func (r *recordingClients) ListClients(w http.ResponseWriter, req *http.Request, caller models.Caller) {
+	r.callers = append(r.callers, caller)
+	r.record("ListClients", w, req)
 }
 func (r *recordingClients) DeleteClientProfile(w http.ResponseWriter, req *http.Request) {
 	r.record("DeleteClientProfile", w, req)

@@ -14,6 +14,7 @@ type Repository interface {
 	VerifyClientIdentity(ctx context.Context, clientID, agentID string, documentIDs []string) error
 	UpdateClientInformation(ctx context.Context, clientID string, client models.Client) error
 	GetClientProfile(ctx context.Context, clientID string) (models.Client, error)
+	ListClients(ctx context.Context, ownerID string, page, size int) ([]models.Client, int64, error)
 	DeleteClient(ctx context.Context, clientID string) error
 	CreateDocument(ctx context.Context, document models.ClientDocument, content []byte) error
 	ListDocuments(ctx context.Context, clientID string) ([]models.ClientDocument, error)

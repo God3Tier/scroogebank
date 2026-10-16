@@ -13,7 +13,11 @@ func (r clientRepository) GetClientProfile(ctx context.Context, clientID string)
 	if err != nil {
 		return models.Client{}, errors.ErrClientNotFound
 	}
+	return r.profileFrom(ctx, client)
+}
 
+// profileFrom decrypts a stored client with its own data key (ADR-0030).
+func (r clientRepository) profileFrom(ctx context.Context, client *orm.Client) (models.Client, error) {
 	// Convert string clientID to uuid
 	c, err := uuid.Parse(client.ClientID)
 	if err != nil {

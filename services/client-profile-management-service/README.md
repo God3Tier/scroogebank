@@ -26,6 +26,10 @@ The verified Cognito `sub` is the creator identity. Agents may read, update, ver
 
 account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `created_by_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
 
+## Listing clients
+
+`GET /api/clients?page&size` lists clients that are not deleted, newest first ([ADR-0043](../../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)). An agent gets only the clients they created; an admin gets every client. The scope comes from the verified token only, so there is no parameter that widens it. `page` starts at 0 and `size` is 1 to 100 (default 20); other values return 400. The response is `{content, page, size, totalElements, totalPages}`, the same shape as user-service's pages, and each entry has the fields of `GET /api/clients/{id}`. A client whose data key is gone (erased, [ADR-0030](../../docs/adr/ADR-0030-client-data-envelope-encryption.md)) is left out of the page but still counted in `totalElements`. The request is audited like the other client endpoints, with no client ID.
+
 ## Business dashboard figures
 
 `GET /aggregates/clients/stats?from&to[&groupBy=agent]` and `GET /aggregates/clients/action-items[?staleDays]` serve the business dashboard's client figures and work queue. They take the caller's access token, forwarded by the dashboard, and scope by it: agents see their own clients, and per-agent rows are for admins only (403 otherwise). They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted clients are never counted; statuses are grouped upper-cased because clients verified before [ADR-0041](../../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md) hold `verified` and newer ones `VERIFIED` ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
