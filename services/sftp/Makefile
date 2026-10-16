@@ -82,7 +82,12 @@ poller-once: tools-build
 RDS_CA_URL ?= https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 
 lambda: tools-build
-	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools run --rm --no-deps 		-e GOOS=linux -e GOARCH=arm64 -e CGO_ENABLED=0 		go-tools sh -c 'set -e; rm -rf dist && mkdir -p dist; 			go build -tags lambda.norpc -trimpath -o dist/bootstrap ./src/cronjob; 			curl -fsSL -o dist/rds-ca.pem "$(RDS_CA_URL)"; 			cd dist && zip -q -X transaction-ingest.zip bootstrap rds-ca.pem'
+	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools run --rm --no-deps \
+		-e GOOS=linux -e GOARCH=arm64 -e CGO_ENABLED=0 \
+		go-tools sh -c 'set -e; rm -rf dist && mkdir -p dist; \
+			go build -tags lambda.norpc -trimpath -o dist/bootstrap ./src/cronjob; \
+			curl -fsSL -o dist/rds-ca.pem "$(RDS_CA_URL)"; \
+			cd dist && zip -q -X transaction-ingest.zip bootstrap rds-ca.pem'
 
 ## Run the producer's tests: they need only Go, so they run in the image's
 ## build stage, with no volume to mount.
