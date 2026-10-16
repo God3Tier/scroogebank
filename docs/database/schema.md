@@ -1,6 +1,6 @@
 # Database design (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -20,7 +20,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 | `health-db` | client-health-monitor-service (API and analysis task) | Activity projection, analysis runs and watermarks, signals and evidence, tasks and status history, explanation records, outbox |
 
 - **One RDS for PostgreSQL instance per service**, physically separate. Each service also keeps its **outbox table** in its own database. dashboard-service has no database ([X-factor 2: business dashboard](../architecture/x-factors.md#x-factor-2-business-dashboard)).
-- **Instance size:** `db.t4g.micro` (2 vCPU burstable, 1 GiB memory), gp3 storage with storage auto-scaling. Each instance serves only one service's tasks (about 2–6 tasks × a pool of 10 connections).
+- **Instance size:** `db.t4g.micro` (2 vCPU burstable, 1 GiB memory), gp3 storage with storage auto-scaling. Each instance serves only one service's tasks (about 1–6 tasks × a pool of 10 connections).
 - **Multi-AZ standby for every database (NFR 2, 9).** A synchronously replicated standby in the other AZ's isolated subnet; automatic failover, typically within one to two minutes. Services reconnect to the same endpoint.
 - **No cross-service data access.** A service's security group and credentials reach only its own instance. Cross-service data is fetched through the owning service's API. The accounts-to-clients foreign key in today's `V1_init.sql` cannot cross databases; it is replaced by an API check when accounts are created, and by client-service refusing to delete a client who still has open accounts. Both checks forward the caller's token and fail closed ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)).
 - **Soft deletes in clients-db and accounts-db** ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)). Deleting a client or account sets `deleted_at` and keeps the row; every API treats a deleted row as missing. "Open accounts" above means accounts that are not deleted, including accounts whose status is `closed`. Email, phone number and one-account-per-type are unique only among rows that are not deleted (partial unique indexes).

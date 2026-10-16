@@ -66,7 +66,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    | WAF | Prod only (ADR-0029), without request logging (decision 11) |
    | GuardDuty | On, through the account's existing detector (decision 11) |
    | CloudTrail data events on the anchor buckets | On |
-   | Tasks per service | 2–6 while running, 0 while stopped |
+   | Tasks per service | 1–6 while running, 0 while stopped ([ADR-0018](ADR-0018-ecs-fargate-compute.md)) |
    | Log retention | 30 days |
    | SFTP server instance | `t4g.micro` |
 
@@ -144,13 +144,13 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 | NAT gateway | ~43 | 0 (Elastic IP ~4) |
 | Internal ALB | ~20 | ~20 |
 | 6 × RDS `db.t4g.micro`, single-AZ | ~125 | ~17 (storage) |
-| Fargate, 7 services × 2 tasks | ~220 | 0 |
+| Fargate, 7 services × 1 task | ~110 | 0 |
 | WAF | ~10 | ~10 |
 | GuardDuty, AWS Backup, CloudTrail data events | ~5 | ~5 |
 | KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~21 | ~11 |
-| **Total** | **~446** | **~66** |
+| **Total** | **~336** | **~66** |
 
-Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 110 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
+The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
 ## Operational Impact
 
@@ -188,3 +188,5 @@ Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessi
 - 2026-10-16: amended while Proposed, as decided by the decision owner, after the first applies to the team's account:
   - **Decision 11 (new):** the GuardDuty detector, the cross-region backup copy and WAF request logging are left out, because the account already has a detector and its service control policy denies the other two.
   - **Decisions 1, 3 and 10:** changed to match.
+- 2026-10-16: amended while Proposed, as decided by the decision owner, to cut Fargate cost:
+  - **Decision 3:** services run 1–6 tasks while running instead of 2–6, with [ADR-0018](ADR-0018-ecs-fargate-compute.md) amended to match. Cost Impact changed to match.

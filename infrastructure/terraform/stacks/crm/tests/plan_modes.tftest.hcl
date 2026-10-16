@@ -74,8 +74,8 @@ run "prod" {
     error_message = "Prod outside the demo week: one NAT gateway."
   }
   assert {
-    condition     = local.min_tasks == 2 && local.max_tasks == 6 && local.log_retention_days == 30
-    error_message = "Prod: 2 to 6 tasks per service and 30-day logs."
+    condition     = local.min_tasks == 1 && local.max_tasks == 6 && local.log_retention_days == 30
+    error_message = "Prod: 1 to 6 tasks per service and 30-day logs."
   }
   assert {
     condition     = !local.db_settings.skip_final_snapshot && alltrue([for s in aws_secretsmanager_secret.service_tls : s.recovery_window_in_days == 7])

@@ -1,6 +1,6 @@
 # Target architecture: system overview
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -28,7 +28,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
 - **Region and topology:** one AWS region (`ap-southeast-1`, Singapore), two Availability Zones, and one full stack per legal entity.
 - **Frontend:** static frontend files in a private S3 bucket, served by CloudFront with AWS WAF in front.
 - **API entry:** all `/api/*` traffic goes through API Gateway (which validates the Cognito JWT and applies throttling), then through a VPC Link to an internal Application Load Balancer.
-- **Business services:** containers on **ECS Fargate**, one microservice per business area: user-service, client-service, account-service, transaction-service, the three x-factor services and the auditor. Each runs at least two tasks spread across both AZs.
+- **Business services:** containers on **ECS Fargate**, one microservice per business area: user-service, client-service, account-service, transaction-service, the three x-factor services and the auditor. Each runs at least one task and scales out across both AZs.
 - **X-factors (Features 4–6):** event-driven market-news alerts, a business dashboard, and a Client Relationship Health Monitor ([x-factor features (Features 4–6)](x-factors.md)). Only public search terms leave Singapore, for a web search in Tokyo; all client data stays in Singapore, and the alert model receives only public data.
 - **Databases:** each service has its **own RDS for PostgreSQL instance**, with a **Multi-AZ standby** in the second AZ. This balances isolation against cost ([Databases](../database/schema.md#databases)). Client personal data is encrypted field by field with a per-client key, and those keys are kept in a separate **DynamoDB** table, wrapped by a symmetric **KMS** key ([Client data encryption (envelope encryption)](../security/security-model.md#client-data-encryption-envelope-encryption)).
 - **Auditor:** an **internal-only** service; the frontend never calls it.
@@ -52,7 +52,7 @@ The diagram is kept outside the repository, in the team's Google Drive: `(NEW) A
   - **Public subnet:** the NAT gateway only.
   - **Private app subnet:** ECS tasks, the ingest Lambda's network interfaces, and the API Gateway VPC Link network interfaces.
   - **Isolated DB subnet:** RDS. AZ-1a holds each service's primary; AZ-1b holds its standby.
-- **Orange dashed columns:** one ECS service each, spanning both AZs, with target-tracking auto scaling (min 2, max 6 tasks per service). The three x-factor columns are **alerts (XF1)**, **dashboard (XF2)** and **health-monitor (XF3)**. dashboard-service has no database, so its database slots are empty.
+- **Orange dashed columns:** one ECS service each, spanning both AZs, with target-tracking auto scaling (min 1, max 6 tasks per service). The three x-factor columns are **alerts (XF1)**, **dashboard (XF2)** and **health-monitor (XF3)**. dashboard-service has no database, so its database slots are empty.
 - **Scheduled tasks in AZ-1a:** the alert worker, the health analysis task and chain-verify sit in their owning service's column because each is built from that service's image. One EventBridge line feeds all three.
 - **Region ap-northeast-1 (Tokyo)** sits outside the Singapore region. It holds only the Bedrock AgentCore web search used by x-factor 1, which receives public terms only.
 - **chain-verify** sits in the auditor column because it is built from the auditor's code and container image. It is a separate scheduled task, not part of the auditor service ([Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr)).
@@ -154,7 +154,7 @@ Each service on the diagram is listed with the requirement it serves. "Spec" mea
 
 | Service | Why it is included | Requirement | Optional? |
 |---|---|---|---|
-| **ECS Fargate services** (user, client, account, transaction, event-alert, dashboard, health-monitor, auditor) | Runs the containerised services with no servers to manage. Target-tracking auto scaling keeps at least two tasks per service across two AZs. | NFR 1 (auto-scaling), NFR 2, NFR 11 (cloud native, containers) | No |
+| **ECS Fargate services** (user, client, account, transaction, event-alert, dashboard, health-monitor, auditor) | Runs the containerised services with no servers to manage. Target-tracking auto scaling keeps at least one task per service and scales out across two AZs. | NFR 1 (auto-scaling), NFR 2, NFR 11 (cloud native, containers) | No |
 | **AWS Lambda: transaction-ingest** (VPC-attached) | The Feature 3 ingestion worker. Invoked on a schedule, it connects to the external SFTP server, imports ready files into transactions-db and audits each file. Costs almost nothing between runs ([Transaction ingestion (Feature 3)](data-flow.md#transaction-ingestion-feature-3)). | Feature 3 | No |
 | **chain-verify** (scheduled ECS task) | Daily hash-chain verification and anchoring. Runs to completion and costs nothing between runs. | Spec: "Audit logs should be tamper-resistant" | No |
 | **db-migrate** (one-off ECS task per service) | Applies each service's database migrations before its deployment, using a database user that is the only one allowed to change the schema. | NFR 3, NFR 10 (automated deployment) | Yes: migrations can run on service startup instead ([Databases](../database/schema.md#databases)) |

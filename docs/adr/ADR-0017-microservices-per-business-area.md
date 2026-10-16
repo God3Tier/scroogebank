@@ -80,7 +80,7 @@ Accounts are split out of `client-profile-management-service` into account-servi
 ### Positive
 
 - Clear bounded contexts and ownership.
-- Independent scaling (2–6 Fargate tasks per service) and failure isolation.
+- Independent scaling (1–6 Fargate tasks per service) and failure isolation.
 - Contracts between services are explicit (OpenAPI for REST, `.proto` for gRPC).
 
 ### Negative / Trade-offs
