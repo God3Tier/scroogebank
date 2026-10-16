@@ -28,6 +28,7 @@ a decision it governs.
 - [ADR-0025](ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) — Extends ADR-0005: mandatory MFA, managed login with PKCE (S256) from a public app client, client-credentials service tokens, Cognito triggers for login auditing, and sign-outs reported by the frontend to user-service (audit call first) for logout auditing.
 - [ADR-0041](ADR-0041-client-identity-documents-and-manual-verification.md) — Identity documents (JPEG, PNG or PDF, up to 5 MB) are uploaded through client-service, encrypted with the client's data key and stored in a private SSE-KMS bucket; uploading never verifies; documents are optional for Verify, which records who verified, when and which documents, and records and shows a verification without one as such; no request is sent to the client.
 - [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) — Import transactions from a self-hosted external SFTP server with a scheduled VPC-attached Lambda written in Go (extending ADR-0017's exception), JSON files, a ready-file protocol, idempotent inserts, rejected unsupported and unparseable files, and retries with a circuit breaker on the connection.
+- [ADR-0046](ADR-0046-human-deploy-access-mfa-role.md) — Operators deploy as the hand-made role `crm-infra-admin` (administrator, MFA required, 4-hour sessions), assumed from IAM users in `crm-deployers` whose keys can reach nothing else; Identity Center is impossible in this member account, and Terraform cannot hold a role that its teardowns would destroy.
 
 ## Superseded decisions
 

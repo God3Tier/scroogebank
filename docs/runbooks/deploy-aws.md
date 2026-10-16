@@ -1,21 +1,80 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
 > **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.
-> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md).
+> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access).
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
 
 ## Before you start
 
 - **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for `scripts/db-run-sql.sh`.
-- **AWS access.** Terraform and the scripts use the AWS CLI's credentials. Without them, Terraform fails with "No valid credential sources found".
-  - **Preferred for every human operator:** use temporary credentials from AWS IAM Identity Center. Enable it for a standalone account if necessary, assign a deployment permission set approved by the account owner, then run `aws configure sso --profile crm` and `aws sso login --profile crm`. Do not create a long-lived IAM-user access key merely for this deployment.
-  - If a course-managed account supplies another temporary role or credential process, follow that process and select its named CLI profile. Any fallback that requires a long-lived access key needs an explicit security review, MFA, the narrowest workable permissions, an expiry/removal plan, and must never use root credentials.
-  - Select the profile in each new terminal with `export AWS_PROFILE=crm` (Git Bash), `set AWS_PROFILE=crm` (cmd, with no spaces or quotes) or `$env:AWS_PROFILE="crm"` (PowerShell, whose `set` does not set environment variables). To select it in every new terminal instead, run `setx AWS_PROFILE crm` once, then restart VS Code or open a new terminal window.
-  - Check it with `aws sts get-caller-identity`, without `--profile`. If that fails but `--profile crm` works, the profile is not selected in this terminal, and Terraform will fail the same way.
+- **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
 - **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
 - **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 335 a month left running at one task per service and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 100 a month (ADR-0042 "Cost Impact").
+
+## AWS access
+
+Everyone deploys as the IAM role `crm-infra-admin`, which accepts only sign-ins with MFA and gives temporary credentials for up to 4 hours. Your own IAM user, in the group `crm-deployers`, can do nothing else: its access key alone cannot reach any resource. The account owner creates the role, the group and your user by hand in the IAM console, outside Terraform, so tearing down any stack leaves them in place. [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) explains why: IAM Identity Center is not available in this account.
+
+You get your user name, a temporary password, the account ID and the sign-in URL (`https://<ACCOUNT_ID>.signin.aws.amazon.com/console`) from the account owner.
+
+### Set up the CLI (once)
+
+1. Sign in at the URL and set a new password (if prompted).
+2. Register MFA: your user name (top right) → **Security credentials** → **Assign MFA device** → authenticator app.
+3. **(IMPT!)** Sign out and sign in again with a code: you can create an access key only while signed in with MFA.
+4. On the same page, under **Access keys**, choose **Create access key** → **Command Line Interface**. Never commit the key or paste it anywhere, AI tools included.
+5. Copy your MFA device's **Identifier** from the MFA section, such as `arn:aws:iam::<ACCOUNT_ID>:mfa/<device-name>`.
+6. Store the key in its own profile. Enter the key ID, the secret, `ap-southeast-1` and `json` when asked:
+
+   ```sh
+   aws configure --profile crm-user
+   ```
+
+7. Create the profile that takes the role. Set your two values in the first lines, then paste the rest as it is: the account ID is read from your MFA device's ARN. `ME` names you in CloudTrail, since everyone uses the same role: letters, digits and `_+=,.@-` only, **no spaces**. `duration_seconds` cannot exceed the role's 4 hours.
+
+   ```sh
+   MFA_ARN='arn:aws:iam::<ACCOUNT_ID>:mfa/<device-name>'   # the Identifier from step 5 - set it yourself
+   ME='<your-name>' # Set it yourself
+   ACCOUNT_ID=$(cut -d: -f5 <<<"$MFA_ARN")
+   aws configure set role_arn "arn:aws:iam::$ACCOUNT_ID:role/crm-infra-admin" --profile crm
+   aws configure set source_profile crm-user --profile crm
+   aws configure set mfa_serial "$MFA_ARN" --profile crm
+   aws configure set duration_seconds 14400 --profile crm
+   aws configure set role_session_name "$ME" --profile crm
+   aws configure set region ap-southeast-1 --profile crm
+   ```
+
+8. Test it: `aws sts get-caller-identity --profile crm` asks for an MFA code, then prints an ARN containing `assumed-role/crm-infra-admin/<your-name>`.
+
+`crm-user` is who you are, and can only take the role; `crm` is the role you act as. Only ever use `crm`.
+
+### Start each session
+
+In the terminal you deploy from, Git Bash:
+
+```sh
+unset AWS_PROFILE
+aws sts get-caller-identity --profile crm      # asks for your MFA code
+eval "$(aws configure export-credentials --profile crm --format env)"
+```
+
+or PowerShell:
+
+```powershell
+Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue
+aws sts get-caller-identity --profile crm
+aws configure export-credentials --profile crm --format powershell | Invoke-Expression
+```
+
+Then run every step of this runbook in that terminal. After 4 hours the credentials expire: run the three lines again. A Terraform apply that is cut off by the expiry stops part way, and its state is saved; start a new session and run it again.
+
+Terraform cannot ask for an MFA code, so it gets the session's credentials from the last line instead of the `crm` profile.
+
+- **Do not set `AWS_PROFILE`.** With it set, Terraform may try the `crm` profile itself and fail. If you ran `setx AWS_PROFILE crm` before, remove it with `reg delete HKCU\Environment /v AWS_PROFILE /f` and open a new terminal.
+- **If the MFA prompt hangs or never appears in Git Bash**, run that line in PowerShell, or as `winpty aws sts get-caller-identity --profile crm`. The session is cached for both, so the `eval` line then works in Git Bash.
+- If `aws configure export-credentials` is not recognised, update the AWS CLI.
 
 ## 1. Bootstrap the account (once per account)
 
@@ -386,6 +445,9 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 
 | Symptom | Cause and fix |
 |---|---|
+| `ExpiredToken` or "The security token included in the request is expired" | The 4-hour session is over. Start a new one ([AWS access](#aws-access)) and run the step again |
+| `AccessDenied` calling `AssumeRole` | A wrong or reused MFA code, a wrong `mfa_serial`, or your user is not in `crm-deployers`. Check the profile with `aws configure list --profile crm` |
+| Terraform says "No valid credential sources found", or mentions MFA or a token provider | The session's credentials are not in this terminal, or `AWS_PROFILE` is set. Run the session lines in this terminal ([AWS access](#aws-access)) |
 | `No positional arguments are expected` or `Too many command line arguments` from Terraform | Windows PowerShell split an option at its first dot (`-backend-config=env/prod` and `.s3.tfbackend`). Quote the option, `"-backend-config=env/prod.s3.tfbackend"`, or use Git Bash |
 | `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine` (steps 2 and 4) | Docker Desktop is not running. Start it, wait for "Engine running" (`docker info` then succeeds), and run the step again. If it is running, switch it to Linux containers |
 | `InstanceQuotaExceeded: ... free plan accounts` or `FreeTierRestrictionError` on an RDS instance | The account is on the AWS Free plan, which this stack does not support: upgrade it to the paid plan and apply again |
