@@ -321,30 +321,34 @@ resource "aws_wafv2_web_acl" "this" {
   }
 }
 
-# CloudFront-scoped WAF resources, including their log group, live in
-# us-east-1. Headers that can carry credentials are redacted before logging.
-resource "aws_cloudwatch_log_group" "waf" {
-  count             = local.enable_waf ? 1 : 0
-  provider          = aws.us_east_1
-  name              = "aws-waf-logs-${local.name}"
-  retention_in_days = local.log_retention_days
-}
-
-resource "aws_wafv2_web_acl_logging_configuration" "this" {
-  count                   = local.enable_waf ? 1 : 0
-  provider                = aws.us_east_1
-  resource_arn            = aws_wafv2_web_acl.this[0].arn
-  log_destination_configs = [aws_cloudwatch_log_group.waf[0].arn]
-
-  redacted_fields {
-    single_header {
-      name = "authorization"
-    }
-  }
-
-  redacted_fields {
-    single_header {
-      name = "cookie"
-    }
-  }
-}
+# Disabled: the account's service control policy denies logs:CreateLogGroup
+# in us-east-1, so WAF request logging is commented out until the SCP allows
+# it. The web ACL itself is unaffected.
+#
+# # CloudFront-scoped WAF resources, including their log group, live in
+# # us-east-1. Headers that can carry credentials are redacted before logging.
+# resource "aws_cloudwatch_log_group" "waf" {
+#   count             = local.enable_waf ? 1 : 0
+#   provider          = aws.us_east_1
+#   name              = "aws-waf-logs-${local.name}"
+#   retention_in_days = local.log_retention_days
+# }
+#
+# resource "aws_wafv2_web_acl_logging_configuration" "this" {
+#   count                   = local.enable_waf ? 1 : 0
+#   provider                = aws.us_east_1
+#   resource_arn            = aws_wafv2_web_acl.this[0].arn
+#   log_destination_configs = [aws_cloudwatch_log_group.waf[0].arn]
+#
+#   redacted_fields {
+#     single_header {
+#       name = "authorization"
+#     }
+#   }
+#
+#   redacted_fields {
+#     single_header {
+#       name = "cookie"
+#     }
+#   }
+# }

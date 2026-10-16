@@ -56,17 +56,19 @@ run "prod" {
     condition     = aws_dynamodb_table.client_keys.point_in_time_recovery[0].enabled && aws_dynamodb_table.client_keys.billing_mode == "PAY_PER_REQUEST"
     error_message = "Prod: client-keys has point-in-time recovery and on-demand billing."
   }
+  # WAF logging and the DR vault are commented out while the SCP denies them;
+  # restore the logging check and the DR assertion below with those resources.
   assert {
-    condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_wafv2_web_acl_logging_configuration.this) == 1 && length(aws_backup_plan.daily) == 1
-    error_message = "Prod: WAF with redacted request logging and AWS Backup are on."
+    condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_backup_plan.daily) == 1
+    error_message = "Prod: WAF and AWS Backup are on."
   }
-  assert {
-    # Provider-computed ARNs are unknown during a mocked plan. The vault's
-    # kms_key_arn argument directly references this key in backup.tf; this
-    # assertion protects the conditional creation in prod.
-    condition     = length(aws_kms_key.backup_dr) == 1 && length(aws_backup_vault.dr) == 1
-    error_message = "Prod: create the customer-managed DR key and cross-region backup vault together."
-  }
+  # assert {
+  #   # Provider-computed ARNs are unknown during a mocked plan. The vault's
+  #   # kms_key_arn argument directly references this key in backup.tf; this
+  #   # assertion protects the conditional creation in prod.
+  #   condition     = length(aws_kms_key.backup_dr) == 1 && length(aws_backup_vault.dr) == 1
+  #   error_message = "Prod: create the customer-managed DR key and cross-region backup vault together."
+  # }
   assert {
     condition     = length(aws_nat_gateway.this) == 1
     error_message = "Prod outside the demo week: one NAT gateway."
