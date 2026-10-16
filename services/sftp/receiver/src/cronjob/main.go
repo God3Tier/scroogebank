@@ -49,7 +49,7 @@ func run(once bool) error {
 		return cfg, nil
 	})
 
-	secrets, err := loadSecrets(ctx, func() (secretReader, error) {
+	secrets, err := loadSecrets(ctx, func() (SecretReader, error) {
 		cfg, err := awsConfig()
 		if err != nil {
 			return nil, err

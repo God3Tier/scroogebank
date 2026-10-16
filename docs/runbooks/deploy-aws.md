@@ -50,7 +50,7 @@ The CRM stack deploys this file as the Cognito triggers that audit every login a
 Build the images now, before any AWS resource exists; step 4 only pushes them. Docker Desktop must be running. The Go images compile the sqlboiler ORM code in your working tree, which is git-ignored, so regenerate it from each service's current schema first; a stale copy fails the build with `undefined: orm.…`. Each run starts a throwaway PostgreSQL in Docker. Git for Windows has no `make`: install it once with `winget install ezwinports.make`, then open a new terminal.
 
 ```sh
-for s in account-service auditor client-profile-management-service; do make -C services/$s sqlboiler; done
+for s in account-service auditor client-profile-management-service sftp; do make -C services/$s sqlboiler; done
 ```
 
 Give every image the same tag, and use a new tag each time (the repositories' tags are immutable), for example the commit SHA:
@@ -64,9 +64,8 @@ build event-alert-service services/event-alert-service/Dockerfile .
 build auditor             services/auditor/Dockerfile             .
 build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
 build account-service     services/account-service/Dockerfile     services/account-service
+build transaction-service services/sftp/receiver/Dockerfile       services/sftp/receiver
 ```
-
-transaction-service has no production image yet (INF-05). Until it does, its service cannot start and transaction reads fail; everything else works.
 
 ## 3. Create the CRM stack, stopped
 
@@ -100,7 +99,7 @@ repo() { printf '%s' "$REPOS" | python -c "import json,sys; print(json.load(sys.
 aws ecr get-login-password | docker login --username AWS --password-stdin "$(repo auditor | cut -d/ -f1)"
 
 push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
-for s in user-service dashboard-service event-alert-service auditor client-service account-service; do push "$s"; done
+for s in user-service dashboard-service event-alert-service auditor client-service account-service transaction-service; do push "$s"; done
 ```
 
 ## 5. Start the stack and set up the databases
@@ -150,7 +149,7 @@ cd -
 
 ## 7. Check it works
 
-1. **Services:** in the ECS console, every service reaches its desired count. Alternatively run `aws ecs describe-services --cluster <ecs_cluster> --services user-service client-service account-service auditor dashboard-service event-alert-service`. A service stuck restarting shows why in its log group (`/ecs/<stack>-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 5's schema is missing.
+1. **Services:** in the ECS console, every service reaches its desired count. Alternatively run `aws ecs describe-services --cluster <ecs_cluster> --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service`. A service stuck restarting shows why in its log group (`/ecs/<stack>-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 5's schema is missing.
 2. **Sign in:** open `terraform output app_url` (from crm stack directory). user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
@@ -270,4 +269,4 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | That service's tasks started before the service they call was registered in Service Connect. Restart the calling service (`aws ecs update-service ... --force-new-deployment`), as at the end of step 5 |
 | The auditor cannot log in | Step 5's `audit-logins.sql` has not run, or the auditor started before it |
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
-| Transaction reads return 502 | transaction-service has no image yet (INF-05) |
+| Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why: a database error usually means step 5's `init.sql` is missing. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 8) |

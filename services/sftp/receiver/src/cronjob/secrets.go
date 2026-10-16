@@ -27,14 +27,14 @@ type secrets struct {
 	ingestClientID, ingestClientSecret string
 }
 
-type secretReader interface {
+type SecretReader interface {
 	GetSecretValue(context.Context, *secretsmanager.GetSecretValueInput, ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
 // loadSecrets reads the secrets the environment names. It calls newReader only
 // when at least one is named.
-func loadSecrets(ctx context.Context, newReader func() (secretReader, error)) (secrets, error) {
-	var reader secretReader
+func loadSecrets(ctx context.Context, newReader func() (SecretReader, error)) (secrets, error) {
+	var reader SecretReader
 	// read returns "" when env is unset.
 	read := func(env string) (string, error) {
 		id := os.Getenv(env)

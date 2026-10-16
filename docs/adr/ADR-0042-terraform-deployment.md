@@ -86,7 +86,6 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - Target groups use HTTPS for the Go services, which serve TLS in production, and HTTP for the Java services, which do not. The security model's "self-signed TLS between the ALB and tasks" is therefore not met for the Java services yet.
 9. **Not deployed yet, each a task in `docs/feature-plans/infrastructure_plan.md`:**
    - the transaction-ingest Lambda (`enable_ingest_lambda`, off): since INF-04 the receiver's poller runs as a Lambda function and reads its secrets from Secrets Manager at start, but it has not run in AWS yet. A deployment turns it on with the zip from `make lambda` and the sftp-server stack's address and host key fingerprint ([runbook](../runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda) §8);
-   - the image for transaction-service: the receiver's Dockerfile is a development image;
    - the health monitor: it is not runnable yet;
    - the alert worker, its schedule, AgentCore in Tokyo and Bedrock access: EDA-D1-02 (Azeez);
    - the GitHub deploy role (`enable_github_deploy_role`, off) and any CI checks on Terraform: deployments are run by hand for now.
@@ -174,3 +173,5 @@ Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessi
 - 2026-10-16: amended while Proposed, as decided by the decision owner, after INF-04 gave the receiver a Lambda handler:
   - **Decision 9:** the transaction-ingest Lambda is still off by default, but no longer because the code cannot run on Lambda. The receiver's poller now runs as a Lambda function, reads its database login, SSH private key and Cognito client secret from Secrets Manager at start, and verifies transactions-db against the RDS CA bundle packaged in its zip (`DB_SSLROOTCERT`). It waits for a deployment to turn it on and for INF-02 to test it.
   - **Decision 10:** Lambda's asynchronous retries of the scheduled run are off (`maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300`).
+- 2026-10-16: amended while Proposed, as decided by the decision owner, after INF-05 gave transaction-service a production image:
+  - **Decision 9:** transaction-service leaves the not-deployed list. INF-05 made the receiver's Dockerfile build it by default, as a distroless image like account-service's; the development image is its `tools` target. The runbook builds and pushes it with the other images.

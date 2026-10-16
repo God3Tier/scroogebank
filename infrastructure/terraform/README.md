@@ -66,7 +66,6 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 
 | Part | Why it doesn't work | Waiting for |
 |---|---|---|
-| transaction-service | It is the SFTP receiver's read API (`services/sftp/receiver/src/serverd`). It has no production image, so it cannot start, and transaction reads return 502 | INF-05: a production Dockerfile for the receiver |
 | event-alert-service | It runs, but nothing creates alerts, so it has none to show | INF-06: the alert worker |
 | SFTP server | It writes files, but nothing collects them until the ingest Lambda is turned on | INF-04: turn on the ingest Lambda ([runbook §8](../../docs/runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda)) |
 | Database logins | Most services sign in as their database's master user, and schemas are applied by hand | INF-03: db-migrate tasks |

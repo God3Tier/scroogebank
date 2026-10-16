@@ -43,8 +43,15 @@ tools-build:
 db-up:
 	$(COMPOSE) -f $(COMPOSE_FILE) up -d --wait db
 
-sqlboiler: db-up tools-build
-	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools run --rm go-tools sqlboiler psql --config sqlboiler.toml --output src/internal/repository/orm --pkgname orm
+## Generate the ORM from receiver/data/init.sql in a throwaway database, as make
+## test does, so a local database with an older schema cannot make it stale. The
+## transaction-service image compiles it (docs/runbooks/deploy-aws.md step 2).
+sqlboiler: tools-build
+	@set -e; \
+	$(COMPOSE) -f $(COMPOSE_FILE) --profile test up -d --wait test-db; \
+	trap '$(COMPOSE) -f $(COMPOSE_FILE) --profile test rm -sf test-db >/dev/null 2>&1 || true' EXIT; \
+	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools --profile test run --rm -e PSQL_HOST=test-db \
+		go-tools sqlboiler psql --config sqlboiler.toml --output src/internal/repository/orm --pkgname orm --wipe
 
 mocks: tools-build
 	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools run --rm go-tools mockery --config .mockery.yaml

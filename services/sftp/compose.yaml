@@ -46,6 +46,7 @@ services:
     build:
       context: ./receiver
       dockerfile: Dockerfile
+      target: tools
     working_dir: /workspace
     volumes:
       - ./receiver:/workspace
@@ -108,7 +109,9 @@ services:
         max-file: "3"
 
   receiver-api:
-    build: ./receiver
+    build:
+      context: ./receiver
+      target: tools
     working_dir: /workspace
     volumes:
       - ./receiver:/workspace
