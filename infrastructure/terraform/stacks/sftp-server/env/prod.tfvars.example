@@ -1,0 +1,10 @@
+# Copy to prod.tfvars (git-ignored). Values come from the CRM stack's outputs
+# (terraform -chdir=../crm output).
+
+environment = "prod"
+
+allowed_cidrs         = ["203.0.113.10/32"] # nat_public_ips, each as /32
+crm_ingest_public_key = "ssh-ed25519 AAAA... "  # sftp_client_public_key
+
+# producer_image  = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:<tag>"
+# crm_account_ids = ["synthetic-account-uuid-1", "synthetic-account-uuid-2"]

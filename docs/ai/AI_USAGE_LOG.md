@@ -1,5 +1,27 @@
 # AI usage log
 
+## 2026-10-16 — Terraform review and repair
+
+- Human owner: Neo Jia Wen.
+- Tool: OpenAI Codex.
+- Use: inspect current remote branches; repair a committed ADR-index merge
+  conflict; preserve and mark the abandoned Free-plan design as superseded;
+  add reproducible Terraform provider locks; replace long-lived administrator
+  access-key guidance with temporary-credential guidance; correct cross-region
+  RDS backup encryption; restrict production OAuth callbacks and direct browser
+  auth flows; add CloudTrail/frontend TLS controls, CloudTrail versioning and
+  redacted WAF request logging; synchronize cost and resource documentation.
+- Human verification required: review the new Sydney KMS-key cost and policy,
+  approve the proposed ADRs, run Checkov in CI, inspect a saved real-account
+  staging plan, and complete INF-02 before any production apply.
+- Data: repository content and synthetic configuration only. No AWS credentials,
+  secrets, real client data or live AWS resources were used.
+- Verification: Terraform 1.16.6 formatting and validation passed for bootstrap,
+  CRM and SFTP roots; 2 bootstrap and 6 CRM mocked-provider tests passed.
+  Docker was unavailable and the configured secondary Python package index was
+  unreachable, so Checkov did not run; no live plan/apply or cost evidence is
+  claimed.
+
 ## 2026-09-27 — EDA-D1-01 AgentCore Web Search spike
 
 - Human owner: Azeez

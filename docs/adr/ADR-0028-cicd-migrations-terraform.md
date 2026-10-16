@@ -36,7 +36,15 @@ NFR 10 asks the team to demonstrate CI/CD; NFR 11 asks for infrastructure define
 ### Infrastructure as code
 
 - **Terraform (chosen):** one reusable module per pattern (service, database), one stack per legal entity ([ADR-0026](ADR-0026-one-stack-per-legal-entity.md)).
-- **CloudFormation or CDK:** AWS-only, with less team familiarity.
+  - One configuration spans every region the design uses, through provider aliases: ap-southeast-1 for the stack, us-east-1 for CloudFront's WAF, ap-southeast-2 for the backup copies and Tokyo for x-factor 1's web search.
+  - The `tls` provider generates the project CA ([ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 7) without extra code.
+  - `terraform destroy` removes staging, including buckets that still hold objects.
+  - Cons: the team must keep its state remote, locked and protected, and a failed apply leaves partial changes to fix forward.
+- **CloudFormation or CDK:** AWS-only, with the state kept by AWS and a failed update rolled back automatically.
+  - Cons: a stack belongs to one region and its exports cannot be read from another, so the multi-region parts need StackSets or workarounds.
+  - Generating the CA needs a custom-resource Lambda.
+  - Deleting a bucket that still holds objects fails, which slows staging teardown.
+  - The team is less familiar with it.
 
 ## Decision
 
@@ -53,7 +61,7 @@ NFR 10 asks the team to demonstrate CI/CD; NFR 11 asks for infrastructure define
    Promotion follows `dev → staging → main` (`project_plan.md` §5).
 2. **AWS access** from CI only through an OIDC-federated IAM role with least privilege.
 3. **db-migrate:** one ECS task definition per service, using Flyway (Java) or golang-migrate (Go), against only that service's database, run before the service deploys. The Go services' SQL files become versioned migrations. Whether staging and prod run migrations as tasks or on startup is still open ([open item 8](../architecture/open-items.md#8-migrations-on-startup-or-as-a-task)).
-4. **Terraform** defines all infrastructure. State is kept remotely with locking and encryption (for example an S3 backend). The exact backend is chosen when the infrastructure work starts.
+4. **Terraform** defines all infrastructure. State is kept remotely with locking and encryption. [ADR-0042](ADR-0042-terraform-deployment.md) (Proposed) chooses the backend: a versioned, encrypted S3 bucket with native locking.
 
 ## Rationale
 

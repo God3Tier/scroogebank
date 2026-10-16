@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (git-ignored).
+
+# Home region
+aws_region = "ap-southeast-1"
+
+budget_emails = ["crm-budget@example.test"]
+
+# The first day the project could spend on this account; crm-total counts
+# everything from here against the USD 300 limit.
+budget_start_date = "2026-09-01"
