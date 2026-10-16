@@ -85,9 +85,10 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# EC2 refuses an apostrophe in a security group description.
 resource "aws_security_group" "sftp" {
   name        = local.name
-  description = "SFTP from the CRM's NAT gateway addresses only"
+  description = "SFTP from the CRM NAT gateway addresses only"
   vpc_id      = aws_vpc.this.id
 }
 
