@@ -262,11 +262,10 @@ resource "aws_cloudtrail" "account" {
 }
 
 # ------------------------------------------------------------- GuardDuty
-# Core detection (ADR-0027 decision 5).
-
-resource "aws_guardduty_detector" "this" {
-  enable = true
-}
+# Not managed here. ADR-0027 decision 5 needs GuardDuty core detection, but the
+# account already has a detector, and GuardDuty allows one per account per
+# Region, so creating another fails. The existing detector provides the
+# detection (ADR-0042 revision of 2026-10-16).
 
 # --------------------------------------------------------------- budgets
 # ADR-0029: alerts at 50, 70, 85, 95 and 100% of the USD 300 hard limit, and a

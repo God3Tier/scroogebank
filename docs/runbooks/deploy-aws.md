@@ -31,6 +31,8 @@ terraform output state_bucket    # Output is used in step 3
 
 This stack keeps its state in a local `terraform.tfstate` (git-ignored). Keep that file; if it is lost, `terraform import` the bucket again before the next apply.
 
+Bootstrap creates no GuardDuty detector: the account already has one, and a second fails. The crm stack also leaves out the cross-Region backup copy and WAF request logging, which the account's service control policy refuses. The [Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account) lists what each omission means.
+
 **Budget alerts.** AWS Budgets e-mails `budget_emails` directly; there is no subscription to confirm.
 
 - `crm-total` counts all spending since `budget_start_date` against the USD 300 project limit. It e-mails when actual cost passes 50, 70, 85, 95 and 100%, and when the forecast passes 100%.
@@ -357,7 +359,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `No positional arguments are expected` or `Too many command line arguments` from Terraform | Windows PowerShell split an option at its first dot (`-backend-config=env/prod` and `.s3.tfbackend`). Quote the option, `"-backend-config=env/prod.s3.tfbackend"`, or use Git Bash |
 | `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine` (steps 2 and 4) | Docker Desktop is not running. Start it, wait for "Engine running" (`docker info` then succeeds), and run the step again. If it is running, switch it to Linux containers |
 | `InstanceQuotaExceeded: ... free plan accounts` or `FreeTierRestrictionError` on an RDS instance | The account is on the AWS Free plan, which this stack does not support: upgrade it to the paid plan and apply again |
-| `SubscriptionRequiredException` creating the GuardDuty detector (bootstrap) | The account is still being activated, after it was opened or upgraded to the paid plan: wait up to 24 hours and apply again |
+| `AccessDeniedException` with "explicit deny in a service control policy" on `CreateBackupVault` or `CreateLogGroup` | The DR vault or WAF logging was uncommented, and the account still refuses it. Comment it out again ([Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account)) |
 | `a secret with this name is already scheduled for deletion` | A destroy ran without the `deletion_protection=false` apply before it, so the secrets got a 7-day recovery window. Hard delete them as in [Tear down](#tear-down), then apply again |
 | A service's tasks stop with `CannotPullContainerError: ... not found` | `image_tag` in `env/prod.tfvars` is not a tag you pushed (the example's `replace-with-the-pushed-tag`, for instance), or that service's image was never pushed (step 4). Push it, set the tag and apply again. A failed deployment rolls back to the previous one, which keeps failing if it had the same problem, until the next apply |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
