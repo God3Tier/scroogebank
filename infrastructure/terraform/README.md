@@ -59,7 +59,7 @@ The CRM for one legal entity and environment:
 Stands in for the bank's core banking system, Feature 3's external server. It has its own VPC and contains:
 
 - a `t4g.micro` EC2 instance running OpenSSH, with a fixed Elastic IP;
-- one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key;
+- one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key. Terraform generates the host key, or takes one you were given from `host_key_file` ([runbook §8.1](../../docs/runbooks/deploy-aws.md#81-create-the-sftp-server));
 - an ECR repository for the producer container, which writes a synthetic transaction file every 5 minutes once `producer_image` is set.
 
 ### Deployed but not working yet
@@ -92,6 +92,6 @@ terraform validate
 terraform test      # plans each mode against mocked providers; no AWS account needed
 ```
 
-`bootstrap/` has its own `terraform test` for the budget alerts.
+`bootstrap/` has its own `terraform test` for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
 
 Real `*.tfvars` and `*.s3.tfbackend` files are git-ignored; copy the `.example` files next to them.

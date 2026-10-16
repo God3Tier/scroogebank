@@ -174,6 +174,7 @@ The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-tran
    | `environment` | `"prod"`, as the crm stack |
    | `allowed_cidrs` | The crm output `nat_public_ips`, each as a `/32`. Port 22 accepts only these addresses |
    | `crm_ingest_public_key` | The crm output `sftp_client_public_key`. The private half is in Secrets Manager, for the Lambda |
+   | `host_key_file` | Optional. Set it only if you were given a host key for the server; otherwise Terraform generates one. Save the key in the git-ignored `secrets/` folder at the repository root, and give its path relative to `stacks/sftp-server`, such as `"../../../../secrets/sftp_host_key"`. It must be an unencrypted OpenSSH private key (its first line is `-----BEGIN OPENSSH PRIVATE KEY-----`) |
    | `producer_image` | Leave unset for now (8.2) |
    | `crm_account_ids` | Leave unset for now (8.2) |
 
@@ -183,16 +184,17 @@ The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-tran
    cd infrastructure/terraform/stacks
    NAT=$(terraform -chdir=crm output -json nat_public_ips | python -c "import json,sys; print(', '.join(f'\"{ip}/32\"' for ip in json.load(sys.stdin)))")
    KEY=$(terraform -chdir=crm output -raw sftp_client_public_key | tr -d '\r\n')
-   cat > sftp-server/env/prod.tfvars <<EOF
-   environment           = "prod"
-   allowed_cidrs         = [$NAT]
-   crm_ingest_public_key = "$KEY"
-   EOF
+   printf '%s\n' \
+     'environment           = "prod"' \
+     "allowed_cidrs         = [$NAT]" \
+     "crm_ingest_public_key = \"$KEY\"" > sftp-server/env/prod.tfvars
    cat sftp-server/env/prod.tfvars
    cd -
    ```
 
-   Read a single output with `-raw`. Plain `terraform output` prints a value that ends in a newline as `<<EOT`, with the value on the lines below.
+   Read a single output with `-raw`. Plain `terraform output` prints a value that ends in a newline as `<<EOT`, with the value on the lines below. The snippet overwrites the file, so add any `host_key_file` line after running it.
+
+   These snippets write files with `printf`, not a here-document (`<<EOF`): copied with this list's indentation, a here-document's closing `EOF` is indented too, and the shell waits for it at a `>` prompt.
 
 3. **Apply:**
 
@@ -216,18 +218,27 @@ The producer is the bank's file generator. It needs the ECR repository that 8.1 
    aws ecr get-login-password | docker login --username AWS --password-stdin "${URL%%/*}"
    docker build --platform linux/arm64 -t "$URL:$PTAG" services/sftp/producer
    docker push "$URL:$PTAG"
+   # Take note of p
    ```
 
-2. Add to `sftp-server/env/prod.tfvars`:
+2. Once the push has succeeded, add the image to `sftp-server/env/prod.tfvars`. Run this in the same terminal, as it uses step 1's `URL` and `PTAG`, and first delete any older `producer_image` line: Terraform refuses an attribute set twice.
+
+   ```sh
+   printf '%s\n' "producer_image = \"$URL:$PTAG\"" >> infrastructure/terraform/stacks/sftp-server/env/prod.tfvars
+   tail -1 infrastructure/terraform/stacks/sftp-server/env/prod.tfvars
+   ```
+
+   The line looks like `producer_image = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:6f606ec"`. In a new terminal `URL` and `PTAG` are empty: set `URL` as in step 1, then list the tags already pushed with `aws ecr list-images --repository-name "${URL#*/}" --query 'imageIds[].imageTag' --output text`.
+
+   Optionally, add the accounts the producer's transactions belong to:
 
    ```hcl
-   producer_image  = "<producer_repository_url>:<tag>"
    crm_account_ids = ["<account UUID>", "<account UUID>"]
    ```
 
    `crm_account_ids` are the accounts the producer's transactions belong to. It is optional because the accounts do not exist until someone creates them in the deployed app, after the first apply. Left empty, the producer uses random `ACC-000123` references, which the import stores as `Unmatched` ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)), and no agent sees them. For a demo, create a few accounts in the app first and list their IDs. The producer reads no CRM database, so it cannot find them itself.
 
-3. Apply sftp-server again. Changing either value replaces the instance (its startup script changes). The host key comes from Terraform state, so its fingerprint stays the same.
+3. Apply sftp-server again. Changing either value replaces the instance (its startup script changes). The host key stays the same, so its fingerprint does too.
 
 ### 8.3 Turn on the ingest Lambda
 
@@ -243,12 +254,13 @@ transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ing
 
    ```sh
    cd infrastructure/terraform/stacks
-   cat >> crm/env/prod.tfvars <<EOF
-   enable_ingest_lambda      = true
-   ingest_lambda_zip         = "../../../../services/sftp/receiver/dist/transaction-ingest.zip"
-   sftp_server_address       = "$(terraform -chdir=sftp-server output -raw sftp_server_address)"
-   sftp_host_key_fingerprint = "$(terraform -chdir=sftp-server output -raw sftp_host_key_fingerprint)"
-   EOF
+   ADDR=$(terraform -chdir=sftp-server output -raw sftp_server_address)
+   FP=$(terraform -chdir=sftp-server output -raw sftp_host_key_fingerprint)
+   printf '%s\n' \
+     'enable_ingest_lambda      = true' \
+     'ingest_lambda_zip         = "../../../../services/sftp/receiver/dist/transaction-ingest.zip"' \
+     "sftp_server_address       = \"$ADDR\"" \
+     "sftp_host_key_fingerprint = \"$FP\"" >> crm/env/prod.tfvars
    cd -
    ```
 
@@ -258,8 +270,10 @@ transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ing
 
    ```sh
    aws lambda invoke --function-name <stack>-transaction-ingest out.json && cat out.json
-   aws logs tail /aws/lambda/<stack>-transaction-ingest --since 10m
+   MSYS_NO_PATHCONV=1 aws logs tail /aws/lambda/<stack>-transaction-ingest --since 10m
    ```
+
+   `<stack>` is `crm-<legal_entity>-<environment>`, `crm-sg-prod` by default. `MSYS_NO_PATHCONV=1` stops Git Bash from turning the log group's leading `/` into `C:/Program Files/Git/`, which AWS rejects; other shells ignore it.
 
    A successful run writes `null`; a failed one writes an `errorMessage`, which the log explains. Files move from the SFTP server's `reports/` to `processed/` or `rejected/`, and the import's audit events reach the auditor.
 
@@ -269,12 +283,16 @@ To rebuild after a code change, run `make lambda` and apply the crm stack again:
 
 - **The run fails at init:** the log names the secret or variable it could not read.
 - **`connect to SFTP server` times out:** `allowed_cidrs` does not hold every crm `nat_public_ips` address, or the NAT gateway is down because the crm stack is stopped. `high_availability = true` adds a second NAT address: after turning it on, rerun the 8.1 snippet and apply sftp-server again, or runs in the second AZ time out.
-- **`host key fingerprint mismatch`:** the sftp-server stack was destroyed and created again, with a new host key. Repeat 8.3 step 2 and apply crm.
+- **`host key fingerprint mismatch`:** the server's host key changed, and crm still pins the old one. The key changes when:
+  - the sftp-server stack is destroyed and created again without `host_key_file`, which generates a new key;
+  - `host_key_file` is set, changed or removed. Terraform then replaces the instance, because the key is installed only at first boot. The address stays the same.
+
+  Repeat 8.3 step 2 and apply crm.
 - **To check the fingerprint on the server:** port 22 accepts only the NAT addresses, so `ssh-keyscan` from your machine cannot reach it. Use Session Manager instead; the `SHA256:…` it prints must equal the `sftp_host_key_fingerprint` output:
 
   ```sh
   aws ssm start-session --target "$(terraform -chdir=infrastructure/terraform/stacks/sftp-server output -raw instance_id)"
-  sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+  sudo ssh-keygen -lf "$(sudo sshd -T | awk '$1 == "hostkey" {print $2; exit}').pub"   # the key sshd uses, whatever its type
   ```
 
 ## Between sessions
@@ -351,4 +369,5 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `No outputs found` from the sftp-server stack | Its apply has not finished. Run it again and fix the error it reports |
 | `Attribute redefined` in `crm/env/prod.tfvars` | Step 8.3's snippet appends; delete the older lines it repeats |
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
+| `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
 | Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why: a database error usually means step 5's `init.sql` is missing. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 8) |

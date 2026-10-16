@@ -5,7 +5,7 @@ output "sftp_server_address" {
 
 output "sftp_host_key_fingerprint" {
   description = "The CRM stack's sftp_host_key_fingerprint."
-  value       = tls_private_key.host.public_key_fingerprint_sha256
+  value       = data.tls_public_key.host.public_key_fingerprint_sha256
 }
 
 output "producer_repository_url" {
