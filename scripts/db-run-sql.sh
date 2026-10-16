@@ -27,7 +27,15 @@ for arg in "$@"; do
 done
 [[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 2; }
 
-py=$(command -v python3 || command -v python)
+# Pick the first interpreter that really runs; the Windows Store stubs for python/python3 exist but fail.
+py=
+for candidate in python3 python py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
+    py=$candidate
+    break
+  fi
+done
+[[ -n "$py" ]] || { echo "no working Python found (tried python3, python, py)" >&2; exit 2; }
 
 # Everything the run needs, from the stack's outputs and the SQL file.
 plan=$(terraform -chdir="$crm_dir" output -json | "$py" -c '
