@@ -94,7 +94,7 @@ module "user_service" {
     protocol          = "HTTP"
     health_check_path = "/actuator/health"
     rules = [
-      { priority = 10, paths = ["/api/accounts/*/transactions"] },
+      { priority = 10, paths = ["/api/accounts/*/transactions", "/api/transactions"] },
       { priority = 20, paths = ["/api/users", "/api/users/*", "/api/activities", "/api/activities/*"] },
       { priority = 21, paths = ["/api/corrupted-logs", "/api/corrupted-logs/*"] },
     ]
