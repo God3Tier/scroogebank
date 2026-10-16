@@ -1,6 +1,7 @@
 package client
 
 import (
+	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	orm "client-profile-management-service/src/internal/repository/orm"
 	"context"
@@ -9,7 +10,9 @@ import (
 )
 
 // UpdateClientInformation re-encrypts the personal fields with the client's
-// existing data key and recomputes the email and phone blind indexes.
+// existing data key and recomputes the email and phone blind indexes. Taking
+// another client's email or phone is refused with ErrDuplicateClient, as on
+// create.
 func (r clientRepository) UpdateClientInformation(ctx context.Context, clientID string, client models.Client) error {
 	existingClient, err := r.findClient(ctx, clientID)
 	if err != nil {
@@ -30,6 +33,9 @@ func (r clientRepository) UpdateClientInformation(ctx context.Context, clientID 
 	existingClient.PhoneNumberHash = indexes.phone
 
 	_, err = existingClient.Update(ctx, r.db, profileColumns)
+	if isContactTaken(err) {
+		return clienterrors.ErrDuplicateClient
+	}
 	return err
 }
 

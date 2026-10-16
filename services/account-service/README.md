@@ -6,7 +6,7 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access |
+| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted |
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |

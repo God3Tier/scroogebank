@@ -545,6 +545,7 @@ module "event_alert_service" {
   environment = {
     EVENT_ALERT_DB_URL            = "jdbc:postgresql://${module.db["alerts"].address}:5432/${module.db["alerts"].db_name}?sslmode=require"
     COGNITO_ISSUER_URI            = local.cognito_issuer
+    COGNITO_APP_CLIENT_ID         = aws_cognito_user_pool_client.web.id
     ALERT_MODE                    = "API"
     ALERT_AUDIT_PUBLISHER_ENABLED = "true"
     AUDIT_QUEUE_URL               = aws_sqs_queue.audit.url
