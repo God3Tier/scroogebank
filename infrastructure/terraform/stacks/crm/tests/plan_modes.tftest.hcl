@@ -1,5 +1,5 @@
 # Plans the stack against mocked providers (no AWS account needed) and checks
-# what free_plan, high_availability, running and environment change
+# what high_availability, running, environment and deletion_protection change
 # (ADR-0042, ADR-0029). Run with: terraform init -backend=false && terraform test
 
 mock_provider "aws" {
@@ -41,61 +41,13 @@ variables {
   running                 = true
 }
 
-run "free_plan_stays_inside_the_plan_limits" {
+run "prod" {
   command = plan
 
-  variables {
-    free_plan         = true
-    high_availability = true # must be ignored on the Free plan
-  }
-
-  # The two settings a Free plan account refuses (FreeTierRestrictionError).
   assert {
-    condition     = alltrue([for db in module.db : db.backup_retention_days == 1])
-    error_message = "Free plan: RDS backup retention (the PITR window) must be 1 day."
+    condition     = length(module.db) == 6 && alltrue([for db in module.db : db.instance_class == "db.t4g.micro"])
+    error_message = "Prod: six micro RDS instances, one per service (ADR-0023)."
   }
-  assert {
-    condition     = alltrue([for db in module.db : db.instance_class == "db.t4g.micro"])
-    error_message = "Free plan: RDS must use a micro instance class."
-  }
-
-  assert {
-    condition     = alltrue([for db in module.db : db.multi_az == false])
-    error_message = "Free plan: no Multi-AZ standbys, even with high_availability."
-  }
-  assert {
-    condition     = alltrue([for db in module.db : db.max_allocated_storage == 0])
-    error_message = "Free plan: storage auto scaling must be off."
-  }
-  assert {
-    condition     = aws_dynamodb_table.client_keys.point_in_time_recovery[0].enabled == false
-    error_message = "Free plan: DynamoDB point-in-time recovery must be off."
-  }
-  assert {
-    condition     = aws_dynamodb_table.client_keys.billing_mode == "PROVISIONED" && aws_dynamodb_table.client_keys.read_capacity == 5
-    error_message = "Free plan: client-keys must use provisioned 5/5 capacity."
-  }
-  assert {
-    condition     = length(aws_nat_gateway.this) == 1
-    error_message = "Free plan: one NAT gateway."
-  }
-  assert {
-    condition     = length(aws_wafv2_web_acl.this) == 0 && length(aws_backup_plan.daily) == 0
-    error_message = "Free plan: no WAF and no AWS Backup."
-  }
-  assert {
-    condition     = output.free_plan_settings.tasks_per_service == "1-2" && output.free_plan_settings.log_retention_days == 7
-    error_message = "Free plan: 1 to 2 tasks per service and 7-day logs."
-  }
-}
-
-run "paid_plan_prod" {
-  command = plan
-
-  variables {
-    free_plan = false
-  }
-
   assert {
     condition     = alltrue([for db in module.db : db.backup_retention_days == 7 && db.multi_az == false && db.max_allocated_storage == 100])
     error_message = "Prod: 7 days of backups, single-AZ outside the demo week, storage auto scaling."
@@ -113,8 +65,8 @@ run "paid_plan_prod" {
     error_message = "Prod outside the demo week: one NAT gateway."
   }
   assert {
-    condition     = output.free_plan_settings.tasks_per_service == "2-6"
-    error_message = "Prod: 2 to 6 tasks per service."
+    condition     = local.min_tasks == 2 && local.max_tasks == 6 && local.log_retention_days == 30
+    error_message = "Prod: 2 to 6 tasks per service and 30-day logs."
   }
   assert {
     condition     = !local.db_settings.skip_final_snapshot && alltrue([for s in aws_secretsmanager_secret.service_tls : s.recovery_window_in_days == 7])
@@ -126,7 +78,6 @@ run "high_availability_week" {
   command = plan
 
   variables {
-    free_plan         = false
     high_availability = true
   }
 
@@ -148,7 +99,7 @@ run "stopped_between_sessions" {
   }
 
   assert {
-    condition     = output.free_plan_settings.tasks_per_service == "0-0"
+    condition     = local.min_tasks == 0 && local.max_tasks == 0
     error_message = "Stopped: every service scales to 0."
   }
   assert {
@@ -178,7 +129,7 @@ run "staging" {
   }
   assert {
     condition     = alltrue([for db in module.db : db.backup_retention_days == 7])
-    error_message = "Staging on a paid plan keeps 7 days of backups."
+    error_message = "Staging keeps 7 days of RDS backups."
   }
 }
 

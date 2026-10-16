@@ -119,8 +119,8 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 # ------------------------------------------------------------ CloudTrail
-# One management-events trail is free (ADR-0027 decision 5). On a paid plan
-# it also records data events on the audit anchor buckets (ADR-0022).
+# One management-events trail is free (ADR-0027 decision 5). It also records
+# data events on the audit anchor buckets (ADR-0022).
 
 resource "aws_s3_bucket" "trail" {
   bucket        = "crm-cloudtrail-${local.account_id}"
@@ -218,23 +218,20 @@ resource "aws_cloudtrail" "account" {
     }
   }
 
-  dynamic "advanced_event_selector" {
-    for_each = var.free_plan ? [] : [1]
-    content {
-      name = "Audit anchor objects"
-      field_selector {
-        field  = "eventCategory"
-        equals = ["Data"]
-      }
-      field_selector {
-        field  = "resources.type"
-        equals = ["AWS::S3::Object"]
-      }
-      # Every CRM stack names its anchor bucket crm-audit-anchor-<entity>-...
-      field_selector {
-        field       = "resources.ARN"
-        starts_with = ["arn:${data.aws_partition.current.partition}:s3:::crm-audit-anchor-"]
-      }
+  advanced_event_selector {
+    name = "Audit anchor objects"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+    # Every CRM stack names its anchor bucket crm-audit-anchor-<entity>-...
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = ["arn:${data.aws_partition.current.partition}:s3:::crm-audit-anchor-"]
     }
   }
 
@@ -242,11 +239,9 @@ resource "aws_cloudtrail" "account" {
 }
 
 # ------------------------------------------------------------- GuardDuty
-# Core detection (ADR-0027 decision 5). Its 30-day free trial is a paid-plan
-# offer, so the Free plan leaves it off (ADR-0042).
+# Core detection (ADR-0027 decision 5).
 
 resource "aws_guardduty_detector" "this" {
-  count  = var.free_plan ? 0 : 1
   enable = true
 }
 
@@ -255,8 +250,8 @@ resource "aws_guardduty_detector" "this" {
 # separate one for Bedrock.
 #
 # Both count cost before credits. By default AWS Budgets subtracts credits,
-# so on a Free plan account, or any account whose credits cover the bill, the
-# cost stays near 0 and no alert would ever fire.
+# so on an account whose credits cover the bill, the cost stays near 0 and no
+# alert would ever fire.
 
 resource "aws_budgets_budget" "total" {
   name         = "crm-total"

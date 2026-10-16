@@ -27,31 +27,18 @@ locals {
     ManagedBy   = "terraform"
   }
 
-  # ------------------------------------------------------------------------
-  # Free plan (ADR-0042). An AWS Free account plan refuses some settings
-  # outright (FreeTierRestrictionError): RDS instance classes above micro, and
-  # automated backup retention above 1 day. The other changes keep spending
-  # within the plan's credits; none of them changes how the services behave.
-  # ------------------------------------------------------------------------
-  free_plan = var.free_plan
-
-  # The high-availability demo week (ADR-0029), never on the Free plan.
-  high_availability = var.high_availability && !local.free_plan
+  # The high-availability demo week (ADR-0029).
+  high_availability = var.high_availability
 
   db_settings = {
-    instance_class        = "db.t4g.micro"            # micro on both plans (ADR-0023)
-    allocated_storage     = 20                        # the free-tier storage size
-    max_allocated_storage = local.free_plan ? 0 : 100 # 0 turns storage auto scaling off
-    backup_retention_days = local.free_plan ? 1 : 7   # point-in-time recovery window; 1 day is the Free plan's maximum
+    instance_class        = "db.t4g.micro" # ADR-0023
+    allocated_storage     = 20             # the smallest gp3 volume RDS allows
+    max_allocated_storage = 100            # storage auto scaling limit
+    backup_retention_days = 7              # the point-in-time recovery window
     multi_az              = local.high_availability
     deletion_protection   = local.deletion_protection
     skip_final_snapshot   = !local.deletion_protection
   }
-
-  # DynamoDB: provisioned 5/5 stays inside the always-free 25 RCU/WCU;
-  # point-in-time recovery is billed per GB, so it is off on the Free plan.
-  dynamodb_billing_mode = local.free_plan ? "PROVISIONED" : "PAY_PER_REQUEST"
-  dynamodb_pitr         = !local.free_plan
 
   # One Elastic IP per NAT gateway, kept even while the stack is stopped so the
   # SFTP server's allow-list never changes. The NAT gateways themselves (about
@@ -59,14 +46,14 @@ locals {
   nat_eip_count     = local.high_availability ? 2 : 1
   nat_gateway_count = var.running ? local.nat_eip_count : 0
 
-  enable_waf    = local.is_prod && !local.free_plan # ADR-0029: no WAF in staging
-  enable_backup = local.is_prod && !local.free_plan # AWS Backup with the cross-region copy
+  enable_waf    = local.is_prod # ADR-0029: no WAF in staging
+  enable_backup = local.is_prod # AWS Backup with the cross-region copy
 
-  log_retention_days = local.free_plan ? 7 : 30
+  log_retention_days = 30
 
   # Tasks per service. The stop model scales to 0 between sessions.
-  min_tasks = var.running ? (local.free_plan ? 1 : 2) : 0
-  max_tasks = var.running ? (local.free_plan ? 2 : 6) : 0
+  min_tasks = var.running ? 2 : 0
+  max_tasks = var.running ? 6 : 0
 
   use_fargate_spot = coalesce(var.use_fargate_spot, var.environment == "staging")
 

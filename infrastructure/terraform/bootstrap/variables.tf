@@ -4,12 +4,6 @@ variable "aws_region" {
   default     = "ap-southeast-1"
 }
 
-variable "free_plan" {
-  description = "The account is on the AWS Free account plan (ADR-0042): no GuardDuty and no CloudTrail data events."
-  type        = bool
-  default     = false
-}
-
 variable "state_bucket_name" {
   description = "Name of the Terraform state bucket. Defaults to crm-tfstate-<account id>."
   type        = string

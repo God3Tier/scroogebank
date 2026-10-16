@@ -84,11 +84,7 @@ resource "aws_secretsmanager_secret_version" "audit_login" {
 resource "aws_dynamodb_table" "client_keys" {
   name         = "${local.name}-client-keys"
   hash_key     = "client_id"
-  billing_mode = local.dynamodb_billing_mode
-
-  # Inside the always-free 25 RCU / 25 WCU on the Free plan.
-  read_capacity  = local.dynamodb_billing_mode == "PROVISIONED" ? 5 : null
-  write_capacity = local.dynamodb_billing_mode == "PROVISIONED" ? 5 : null
+  billing_mode = "PAY_PER_REQUEST"
 
   deletion_protection_enabled = local.deletion_protection
 
@@ -98,9 +94,9 @@ resource "aws_dynamodb_table" "client_keys" {
   }
 
   # Losing this table makes all client data unreadable (ADR-0030), so it has
-  # point-in-time recovery and the AWS Backup plan except on the Free plan.
+  # point-in-time recovery and, in prod, the AWS Backup plan.
   point_in_time_recovery {
-    enabled = local.dynamodb_pitr
+    enabled = true
   }
 
   server_side_encryption {

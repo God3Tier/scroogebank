@@ -5,8 +5,6 @@
 legal_entity = "sg"
 environment  = "staging"
 
-free_plan = false
-
 # Leave false; start a test with -var running=true.
 running = false
 

@@ -15,7 +15,7 @@ variable "engine_version" {
 }
 
 variable "instance_class" {
-  description = "Instance class. AWS Free plan accounts may only use micro classes."
+  description = "Instance class."
   type        = string
   default     = "db.t4g.micro"
 }

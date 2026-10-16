@@ -3,7 +3,6 @@
 # Home region
 aws_region = "ap-southeast-1"
 
-free_plan     = false
 budget_emails = ["crm-budget@example.test"]
 
 # The first day the project could spend on this account; crm-total counts

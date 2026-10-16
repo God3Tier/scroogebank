@@ -1,6 +1,6 @@
 # Target architecture: system overview
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -21,7 +21,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
 | [Environments and cost](../cost/budget.md) | dev, staging and prod; rough monthly cost; budget levers |
 | [Decision log](decision-log.md) | Every major decision: chosen, not chosen and why, with its ADR |
 | [Open items](open-items.md) | Decisions still needed from the team, with owners |
-| [ADR index](../adr/README.md) | ADR-0017 to ADR-0039 record these decisions; the index gives each one's status |
+| [ADR index](../adr/README.md) | ADR-0017 to ADR-0041 record these decisions; the index gives each one's status |
 
 ## Summary
 
@@ -104,7 +104,7 @@ Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Acce
 | **transaction-service** | F3: private transaction query API. user-service serves the public route and calls it only after account-service confirms the caller is an admin or owns the account ([ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md), [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). Today the SFTP receiver's private endpoint plays this part. | Go, ECS |
 | **transaction-ingest** | F3: separate ingestion worker. Connects to the external SFTP server over SSH, reads ready files, validates and imports them, and moves each file to `processed/` or `rejected/`. | Go, AWS Lambda (VPC-attached), invoked by EventBridge Scheduler |
 | **event-alert-service** (x-factor 1) | Market-news alerts. `api` mode serves `/api/alerts` to agents: list and view alerts, record a decision (`INFORM_CLIENT`, `MONITOR` or `DISMISS`) and give feedback; admins can read but not decide. The `worker` task, started every 4 hours, selects widely held instruments, calls the Tokyo web search with public terms, matches and scores, writes a shared summary from public data with Bedrock in Singapore, and routes alerts to assigned agents. | Java 25, ECS service + scheduled ECS task |
-| **dashboard-service** (x-factor 2) | Business dashboard for admins (bank-wide, per agent) and agents (own book). Stateless: fans out to aggregate endpoints on user-, client-, account- and transaction-service with the caller's JWT; 3-minute per-caller cache. | Java 25, ECS |
+| **dashboard-service** (x-factor 2) | Business dashboard for admins (bank-wide, per agent) and agents (own book). Stateless: fans out to aggregate endpoints on user-, client- and account-service with the caller's JWT, and gets transaction totals through user-service ([ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md)); 3-minute per-caller cache. | Java 25, ECS |
 | **client-health-monitor-service** (x-factor 3) | Task API for relationship follow-up tasks. A daily scheduled analysis task (08:00 SGT) runs the deterministic rules engine (recurring-credit interruption, activity decline, sustained net outflow) and uses Bedrock only for wording, with a template fallback. | Java 25, ECS service + scheduled ECS task |
 | **auditor** | Consumes audit events from SQS, appends them to the hash chain, and serves audit reads over internal gRPC. | Go, ECS |
 | **chain-verify** | Daily hash-chain verification; writes the chain head to S3 Object Lock. Built from the auditor codebase and image. | Go, ECS scheduled task |
@@ -252,4 +252,4 @@ Recorded in [ADR-0018](../adr/ADR-0018-ecs-fargate-compute.md) (Proposed).
   - **WAF:** `nfr-notes.md` says the system has no WAF; this design puts AWS WAF on CloudFront.
   - **Message broker:** `nfr-notes.md` already records that the auditor reads from SQS ([ADR-0004](../adr/ADR-0004-auditor-kafka-to-sqs-migration.md)); this design extends that with a per-service outbox and one shared queue ([ADR-0020](../adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)).
 - Accepted ADRs it builds on: [ADR-0004](../adr/ADR-0004-auditor-kafka-to-sqs-migration.md) (auditor on SQS) and [ADR-0005](../adr/ADR-0005-cognito-security-across-features-1-and-2.md) (shared Cognito security). The new ADRs extend them; they do not supersede them.
-- Feature branches with their own ADRs for the x-factors (`feat/event-driven-alerts` ADR-0004 to ADR-0016, `feat/business-dashboard` ADR-0001 to ADR-0004) differ in places; see [open item 4](open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture). Those branches reuse ADR numbers already taken on `dev`, so their ADRs need renumbering when merged.
+- The event-driven alerts feature's own ADRs (ADR-0004 to ADR-0016 on that feature line) are merged into `docs/adr/` with their original numbers, so ADR-0004, ADR-0005 and ADR-0006 each name two records; the [ADR index](../adr/README.md) explains this under "Numbering note". Where they differ from this design, see [open item 4](open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture). The first business-dashboard branch's ADR-0001, ADR-0003 and ADR-0004 were not carried over: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) replaces them, and its ADR-0002 became [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md).

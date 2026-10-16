@@ -26,6 +26,8 @@ Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: 
 
 Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) changed to match, so ADR-0006 and the `initial-lookback: 4h` setting stay as they are), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore; the model receives only public data, so this is a choice about residency and cost, not privacy); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
 
+**Dashboard part settled (2026-10-14).** The first dashboard branch's ADR-0003 was not carried over: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) replaces it, and dashboard-service on `dev` sends `DASHBOARD_VIEW` events straight to the audit queue. Still open: the alerts ADR-0008 and ADR-0010 points (on `dev`, the alert service defaults to the global-inference model through Bedrock in us-east-1, with AI off by default) and the health-monitor deployment decisions.
+
 ## 5. SFTP file format and schedule
 
 File naming, CSV or JSON, header and field layout, and how often files are produced, agreed between the ingestion worker's owner and the SFTP server's owner.
@@ -75,7 +77,7 @@ The auditor code on `dev` differs from [Audit integrity and GDPR](../security/se
 - The auditor's database role has only `INSERT` and `SELECT` on `audit_log`.
 - Each run checks the latest S3 Object Lock anchor and writes a new one.
 
-This settles (a) to (d) and the findings table's columns. The implementation is on `task/base-features/audit-hash-chain`, and the anchor on `task/base-features/audit-chain-anchor`.
+This settles (a) to (d) and the findings table's columns. Both are now on `dev`: the hash chain and run-once chain-verify (PR #87) and the S3 Object Lock anchor (PR #88).
 
 Still open, from (e): which operations admins have on findings (read only, or also create and delete). Until that is decided, `dev`'s `GET`, `POST` and `DELETE` stay. Owner: the auditor's owner.
 

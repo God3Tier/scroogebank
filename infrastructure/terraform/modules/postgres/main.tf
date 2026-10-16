@@ -1,6 +1,5 @@
 # One RDS for PostgreSQL instance for one service (ADR-0023 decision 1).
-# The stack passes in sizes and backup settings; free-plan limits are applied
-# there (ADR-0042), not here.
+# The stack passes in sizes and backup settings.
 
 terraform {
   required_version = ">= 1.10.0"

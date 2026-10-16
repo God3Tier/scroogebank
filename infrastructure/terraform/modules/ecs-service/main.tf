@@ -64,7 +64,9 @@ locals {
     image      = var.tls.mode == "java" ? var.image : "public.ecr.aws/docker/library/alpine:3.20"
     user       = "0"
     entryPoint = ["sh", "-c"]
-    command    = [var.tls.mode == "java" ? local.tls_script_java : local.tls_script_go]
+    # A Windows checkout (core.autocrlf) gives this file CRLF line endings,
+    # and sh fails on the carriage returns ("set: illegal option -").
+    command = [replace(var.tls.mode == "java" ? local.tls_script_java : local.tls_script_go, "\r", "")]
     environment = [
       { name = "CRM_CA_PEM", value = var.tls.ca_pem },
       { name = "RDS_CA_URL", value = "https://truststore.pki.rds.amazonaws.com/${data.aws_region.current.region}/${data.aws_region.current.region}-bundle.pem" },

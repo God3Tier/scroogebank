@@ -3,9 +3,6 @@
 legal_entity = "sg"
 environment  = "prod"
 
-# true when the AWS account is on the Free account plan (ADR-0042).
-free_plan = false
-
 # true only in the high-availability demo week (ADR-0029).
 high_availability = false
 
