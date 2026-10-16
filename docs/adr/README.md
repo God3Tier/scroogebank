@@ -57,7 +57,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0014](ADR-0014-alert-observability-cost-and-kill-switches.md) - Add redacted metrics, hard quotas, budget alarms, and independent ingestion/model kill switches.
 - [ADR-0015](ADR-0015-deterministic-alert-materiality-scoring.md) - Use versioned fixed-decimal exposure and materiality rules that fail closed on unusable valuations.
 - [ADR-0016](ADR-0016-holdings-derived-search-universe.md) - Derive bounded public search terms from sufficiently common client holdings inside Singapore without exporting portfolio facts.
-- [ADR-0018](ADR-0018-ecs-fargate-compute.md) — Run all services and scheduled tasks on ECS Fargate across two AZs with 2–6 tasks per service, rejecting EKS on cost and effort.
+- [ADR-0018](ADR-0018-ecs-fargate-compute.md) — Run all services and scheduled tasks on ECS Fargate across two AZs with 1–6 tasks per service, rejecting EKS on cost and effort.
 - [ADR-0019](ADR-0019-edge-entry-chain.md) — Enter through CloudFront with WAF, then API Gateway HTTP API (JWT check, throttling), a VPC Link and a private internal ALB.
 - [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md) — One RDS PostgreSQL instance per service with a Multi-AZ standby, AWS Backup with a cross-region copy, and no cache tier.
 - [ADR-0026](ADR-0026-one-stack-per-legal-entity.md) — Segregate data by deploying one full Terraform stack per legal entity; only Singapore is deployed.

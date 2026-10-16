@@ -1,6 +1,6 @@
 # Database design (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-13.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -20,12 +20,12 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 | `health-db` | client-health-monitor-service (API and analysis task) | Activity projection, analysis runs and watermarks, signals and evidence, tasks and status history, explanation records, outbox |
 
 - **One RDS for PostgreSQL instance per service**, physically separate. Each service also keeps its **outbox table** in its own database. dashboard-service has no database ([X-factor 2: business dashboard](../architecture/x-factors.md#x-factor-2-business-dashboard)).
-- **Instance size:** `db.t4g.micro` (2 vCPU burstable, 1 GiB memory), gp3 storage with storage auto-scaling. Each instance serves only one service's tasks (about 2–6 tasks × a pool of 10 connections).
+- **Instance size:** `db.t4g.micro` (2 vCPU burstable, 1 GiB memory), gp3 storage with storage auto-scaling. Each instance serves only one service's tasks (about 1–6 tasks × a pool of 10 connections).
 - **Multi-AZ standby for every database (NFR 2, 9).** A synchronously replicated standby in the other AZ's isolated subnet; automatic failover, typically within one to two minutes. Services reconnect to the same endpoint.
 - **No cross-service data access.** A service's security group and credentials reach only its own instance. Cross-service data is fetched through the owning service's API. The accounts-to-clients foreign key in today's `V1_init.sql` cannot cross databases; it is replaced by an API check when accounts are created, and by client-service refusing to delete a client who still has open accounts. Both checks forward the caller's token and fail closed ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)).
 - **Soft deletes in clients-db and accounts-db** ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)). Deleting a client or account sets `deleted_at` and keeps the row; every API treats a deleted row as missing. "Open accounts" above means accounts that are not deleted, including accounts whose status is `closed`. Email, phone number and one-account-per-type are unique only among rows that are not deleted (partial unique indexes).
 - **Encryption:** KMS at rest; TLS required on every database connection (`rds.force_ssl`).
-- **Backups:** RDS automated backups with point-in-time recovery (RPO of minutes), plus a daily AWS Backup plan with a copy to ap-southeast-2 ([Why AWS Backup is included when RDS already has backups](#why-aws-backup-is-included-when-rds-already-has-backups)). The client-keys table has DynamoDB point-in-time recovery and is in the same AWS Backup plan: losing it would make all client data unreadable.
+- **Backups:** RDS automated backups with point-in-time recovery (RPO of minutes), plus a daily AWS Backup plan with a copy to ap-southeast-2 ([Why AWS Backup is included when RDS already has backups](#why-aws-backup-is-included-when-rds-already-has-backups)). The copy is not deployed, and may never be ([The cross-region copy is not deployed](#the-cross-region-copy-is-not-deployed)). The client-keys table has DynamoDB point-in-time recovery and is in the same AWS Backup plan: losing it would make all client data unreadable.
 - **Consistency model (NFR 4):** strong (ACID) inside one service's database; eventual for the audit log (seconds behind) and for data that crosses services, such as imported transactions (per ingestion run).
 - **Dashboard indexes** ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)). The business dashboard's figures are computed in each owning database by date: `clients(created_at)`, `accounts(opening_date)` and `transactions(transaction_date)` are indexed for it. No tables or columns are added.
 - **No cache tier.** Database indexes, CloudFront caching of static files and in-process caching (Cognito signing keys, reference data) are enough at project scale. The spec asks for caching only "if needed" (NFR 1).
@@ -68,3 +68,16 @@ Each RDS instance has built-in automated backups with point-in-time recovery ins
 - **Protected backups:** Backup Vault Lock stops anyone deleting or shortening the retention of recovery points, which supports the tamper-resistance argument for audit data.
 
 Cost is small: roughly USD 1–3/month for snapshot storage and cross-region transfer at this size. If the team decides cross-region recovery is out of scope, AWS Backup can be removed and RDS point-in-time recovery used alone; the ADR must then state that recovery from a regional outage is not supported.
+
+### The cross-region copy is not deployed
+
+The team's AWS account refuses the ap-southeast-2 vault: its service control policy denies `backup:CreateBackupVault` there. The vault, its KMS key, its Vault Lock and the copy are left out of the Terraform ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 11). The policy is set by the organisation that manages the account, not by the team, and it may never be lifted.
+
+Until it is, the deployed databases have:
+
+- RDS point-in-time recovery, as above;
+- the daily AWS Backup plan, defined in code, with recovery points in ap-southeast-1 only;
+- no Vault Lock, so the recovery points are not protected from deletion;
+- no recovery from the loss of ap-southeast-1.
+
+If the policy is never lifted, [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md#deployment-status) must be superseded with a statement that recovery from a regional outage is not supported, unless another way to keep it is found.

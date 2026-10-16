@@ -18,7 +18,7 @@ The diagram shows the full design; the demo-week-only parts are not marked on it
 
 | Item | Normal running | High-availability demo week (pro rata) |
 |---|---|---|
-| Fargate, 8 services × 2–2.25 tasks (0.25–0.5 vCPU, 1 GB each) + scheduled jobs | 325–365 | same |
+| Fargate, 8 services × 1–1.25 tasks (0.25–0.5 vCPU, 1 GB each) + scheduled jobs | 165–205 | same |
 | RDS, 7 × `db.t4g.micro` | 140–155 (single-AZ) | 280–310 (Multi-AZ) |
 | ALB | ~20–25 | same |
 | NAT gateway(s) + public IPv4 | ~45–50 (one) | ~90–100 (two) |

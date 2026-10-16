@@ -1,6 +1,6 @@
 # Security model (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -48,7 +48,7 @@ Recorded in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredd
 
 chain-verify is built from the auditor's code and container image (hence its place in the auditor column), but it runs as its own scheduled ECS task:
 
-- **One run per day.** The auditor runs 2–6 copies; a timer inside it would run the check in every copy.
+- **One run per day.** The auditor runs 1–6 copies; a timer inside it would run the check in every copy.
 - **Reliable schedule.** EventBridge fires on a fixed schedule. A timer inside the auditor restarts on every deployment and scaling event.
 - **No load on the live service.** A full-chain scan does not compete with event consumption and gRPC reads.
 - **Least privilege.** Only chain-verify's role can write to the anchor bucket, so a compromised auditor cannot forge an anchor to match a rewritten chain.

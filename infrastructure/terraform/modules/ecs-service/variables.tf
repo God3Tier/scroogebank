@@ -163,7 +163,7 @@ variable "load_balancer" {
 variable "min_tasks" {
   description = "Minimum tasks; 0 while the stack is stopped."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "max_tasks" {

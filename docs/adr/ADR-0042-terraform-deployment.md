@@ -4,7 +4,7 @@
 - Decision date/time: 2026-10-14 21:38 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
-- Feature/branch: `task/infrastructure/terraform`; decisions 9 and 10 amended on `task/transaction-integration/ingest-lambda`
+- Feature/branch: `task/infrastructure/terraform`; decisions 1, 3, 9 and 10 amended and decision 11 added on `task/transaction-integration/ingest-lambda`
 - Related issue/PR: TBD
 - Supersedes: on acceptance, [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 5 in part (the `appProtocol: grpc` on the auditor's port; decision 7 below)
 - Superseded by: N/A
@@ -50,7 +50,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
 ## Decision
 
 1. **Layout.** Everything is under `infrastructure/terraform/`:
-   - `bootstrap/` holds account-wide resources, applied once per account with local state: the state bucket, CloudTrail, GuardDuty, AWS Budgets and, behind a flag, the GitHub OIDC provider.
+   - `bootstrap/` holds account-wide resources, applied once per account with local state: the state bucket, CloudTrail, AWS Budgets and, behind a flag, the GitHub OIDC provider. It creates no GuardDuty detector, because the account already has one (decision 11).
    - `modules/postgres` and `modules/ecs-service` are one module per pattern (ADR-0028).
    - `stacks/crm` is one stack per legal entity and environment ([ADR-0026](ADR-0026-one-stack-per-legal-entity.md)), with state at `crm/<entity>/<environment>.tfstate`.
    - `stacks/sftp-server` is the external bank's SFTP server, in its own stack ([ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1).
@@ -62,10 +62,11 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    | RDS | `db.t4g.micro` ([ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md)), 20 GiB of gp3 that grows to 100 GiB, 7 days of point-in-time recovery |
    | RDS Multi-AZ | Only in the demo week ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)) |
    | DynamoDB `client-keys` | On-demand, point-in-time recovery on |
-   | AWS Backup with a cross-region copy | Prod only; the Sydney vault uses a customer-managed KMS key so encrypted RDS recovery-point copies do not fall back to the incompatible `aws/backup` key |
-   | WAF | Prod only (ADR-0029) |
-   | GuardDuty, CloudTrail data events on the anchor buckets | On |
-   | Tasks per service | 2–6 while running, 0 while stopped |
+   | AWS Backup | Prod only, in Singapore. The cross-region copy is left out (decision 11) |
+   | WAF | Prod only (ADR-0029), without request logging (decision 11) |
+   | GuardDuty | On, through the account's existing detector (decision 11) |
+   | CloudTrail data events on the anchor buckets | On |
+   | Tasks per service | 1–6 while running, 0 while stopped ([ADR-0018](ADR-0018-ecs-fargate-compute.md)) |
    | Log retention | 30 days |
    | SFTP server instance | `t4g.micro` |
 
@@ -96,7 +97,13 @@ Building the stack also showed that the code on `dev` needs more from the deploy
     - transaction-service, which checks no token, accepts connections from user-service only.
     - Lambda does not retry a failed transaction-ingest run, and drops a run throttled for more than 5 minutes behind a long one: the next scheduled run picks the files up, and retries would count toward ADR-0024's circuit breaker;
     - the budget alerts count cost before credits, which AWS Budgets subtracts by default, so they fire even when credits cover the bill. `crm-total` is one yearly budget from the project's start date, because ADR-0029's USD 300 is a limit for the whole project, not for each month;
-    - the Sydney backup vault uses a dedicated customer-managed KMS key because RDS recovery points are not independently encrypted by AWS Backup and cannot use the destination vault's default `aws/backup` key for the cross-region copy.
+    - the Sydney backup vault, when restored (decision 11), uses a dedicated customer-managed KMS key because RDS recovery points are not independently encrypted by AWS Backup and cannot use the destination vault's default `aws/backup` key for the cross-region copy.
+11. **Left out because of the account.** The account the stack is deployed to already has, or refuses, three parts of the design:
+    - **GuardDuty detector:** the account already has one, and GuardDuty allows one per account per Region, so `bootstrap/` does not create one. The existing detector provides ADR-0027 decision 5's threat detection. It is outside Terraform, so the team neither changes nor destroys it.
+    - **Cross-region backup copy:** the account's service control policy denies `backup:CreateBackupVault` in ap-southeast-2. The Sydney KMS key, the Sydney vault, its Vault Lock and the backup plan's copy are commented out in `stacks/crm/backup.tf`, with their test assertion.
+    - **WAF request logging:** the service control policy denies `logs:CreateLogGroup` in us-east-1, where CloudFront's WAF and its log group must be. The log group and the web ACL's logging configuration are commented out in `stacks/crm/edge.tf`. The web ACL itself is deployed.
+
+    The commented-out code stays, to restore when the policy allows it.
 
 ## Rationale
 
@@ -116,6 +123,9 @@ Requiring the paid plan keeps one configuration, the one the accepted ADRs descr
 - Until db-migrate exists, schemas are applied by hand, and most services use their database's master user.
 - Starting a session takes longer: the NAT gateway is recreated (about 2–3 minutes) and the RDS instances start (several minutes).
 - The CA and service private keys are in the Terraform state.
+- Without the cross-region copy (decision 11), backups exist only in ap-southeast-1, and no Vault Lock protects them. [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md)'s recovery by rebuilding in ap-southeast-2, and the restore rehearsal it plans, cannot be done until the policy allows the vault.
+- Without WAF request logging (decision 11), nothing records which requests WAF blocked, or why; only WAF's CloudWatch metrics and sampled requests remain.
+- The GuardDuty detector is not in the code, so a new account needs one enabled by hand.
 - ADR-0021 decision 5 and the architecture pages that repeat it (data-flow "Audit read decisions", system-overview "Parts of the architecture not shown on the diagram") need updating when this ADR is accepted.
 
 ## Security & Privacy Impact
@@ -134,13 +144,13 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 | NAT gateway | ~43 | 0 (Elastic IP ~4) |
 | Internal ALB | ~20 | ~20 |
 | 6 × RDS `db.t4g.micro`, single-AZ | ~125 | ~17 (storage) |
-| Fargate, 7 services × 2 tasks | ~220 | 0 |
+| Fargate, 7 services × 1 task | ~110 | 0 |
 | WAF | ~10 | ~10 |
 | GuardDuty, AWS Backup, CloudTrail data events | ~5 | ~5 |
 | KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~21 | ~11 |
-| **Total** | **~446** | **~66** |
+| **Total** | **~336** | **~66** |
 
-Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 110 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
+The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
 ## Operational Impact
 
@@ -175,3 +185,8 @@ Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessi
   - **Decision 10:** Lambda's asynchronous retries of the scheduled run are off (`maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 300`).
 - 2026-10-16: amended while Proposed, as decided by the decision owner, after INF-05 gave transaction-service a production image:
   - **Decision 9:** transaction-service leaves the not-deployed list. INF-05 made the receiver's Dockerfile build it by default, as a distroless image like account-service's; the development image is its `tools` target. The runbook builds and pushes it with the other images.
+- 2026-10-16: amended while Proposed, as decided by the decision owner, after the first applies to the team's account:
+  - **Decision 11 (new):** the GuardDuty detector, the cross-region backup copy and WAF request logging are left out, because the account already has a detector and its service control policy denies the other two.
+  - **Decisions 1, 3 and 10:** changed to match.
+- 2026-10-16: amended while Proposed, as decided by the decision owner, to cut Fargate cost:
+  - **Decision 3:** services run 1–6 tasks while running instead of 2–6, with [ADR-0018](ADR-0018-ecs-fargate-compute.md) amended to match. Cost Impact changed to match.

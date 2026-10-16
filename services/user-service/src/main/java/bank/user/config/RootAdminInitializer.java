@@ -16,9 +16,10 @@ import java.util.UUID;
  * Seeds the non-deletable root admin on first startup, in both the IdP and the
  * local `users` table.
  *
- * This runs once per task, and the service runs two of them (desired_count = 2
- * in the ecs-service module), so on a fresh database both replicas reach the
- * existsByEmail check before either has written anything and both proceed.
+ * This runs once per task, and the service can run several (auto scaling goes
+ * up to 6 in the ecs-service module, and a deployment overlaps old and new
+ * tasks), so on a fresh database two replicas can reach the existsByEmail
+ * check before either has written anything and both proceed.
  * That is fine and expected: createUser adopts an existing IdP user, and the
  * losing replica's insert is rejected by the unique constraint on email and
  * swallowed below. Whichever task gets there second simply finds the work

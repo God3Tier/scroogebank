@@ -59,7 +59,8 @@ public class CognitoIdentityProviderClient implements IdentityProviderClient {
             // outcome and neither is an error:
             //
             //  - Two replicas ran the same bootstrap concurrently
-            //    (desired_count = 2) and the other one won this call.
+            //    (the service can run several tasks) and the other one won
+            //    this call.
             //  - An earlier attempt died between this call and the local row
             //    being committed, leaving the user in the pool but not in the
             //    database. That state does not recover on its own: every

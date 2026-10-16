@@ -1,7 +1,8 @@
 # AWS Backup (ADR-0023 decision 3): one daily plan that selects every
-# resource tagged Backup=daily (the RDS instances and the client-keys table)
-# and copies each recovery point to a locked vault in the DR region. Prod
-# only; staging relies on RDS point-in-time recovery.
+# resource tagged Backup=daily (the RDS instances and the client-keys table).
+# It is meant to copy each recovery point to a locked vault in the DR region,
+# but that copy is disabled below. Prod only; staging relies on RDS
+# point-in-time recovery.
 
 resource "aws_backup_vault" "primary" {
   count       = local.enable_backup ? 1 : 0

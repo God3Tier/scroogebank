@@ -51,8 +51,9 @@ locals {
 
   log_retention_days = 30
 
-  # Tasks per service. The stop model scales to 0 between sessions.
-  min_tasks = var.running ? 2 : 0
+  # Tasks per service. One task keeps Fargate cost down; auto scaling adds
+  # more under load. The stop model scales to 0 between sessions.
+  min_tasks = var.running ? 1 : 0
   max_tasks = var.running ? 6 : 0
 
   use_fargate_spot = coalesce(var.use_fargate_spot, var.environment == "staging")
