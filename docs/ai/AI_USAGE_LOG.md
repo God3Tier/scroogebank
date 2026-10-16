@@ -13,7 +13,7 @@
   `bootstrap` zip with the RDS CA bundle; in Terraform, point `DB_SSLROOTCERT`
   at that bundle and turn off Lambda's own retries of the scheduled run; update
   the receiver README, the runbook, the Terraform README and the
-  infrastructure plan.
+  infrastructure plan; amend ADR-0042 decisions 9 and 10 to match.
 - Human verification required: review the code; run `make test` and
   `make lambda` with Docker; apply to a test account (INF-02) and check one
   invocation imports files and audits them.
