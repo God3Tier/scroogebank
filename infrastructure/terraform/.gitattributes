@@ -1,0 +1,4 @@
+# The SFTP server's user data runs on Linux, so it must keep LF line endings
+# even on a Windows checkout with core.autocrlf.
+*.tftpl text eol=lf
+*.sh text eol=lf

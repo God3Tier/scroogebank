@@ -38,9 +38,10 @@ Thumbs.db
 *.tfstate.*
 crash.log
 crash.*.log
-.terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
+*.s3.tfbackend
+!*.s3.tfbackend.example
 
 ### Docker ###
 *.log

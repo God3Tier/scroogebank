@@ -1,4 +1,33 @@
-# Event-Driven Alerts Resource Register
+# AWS Resource Register
+
+## Platform Terraform resources
+
+Status: defined in Terraform and validated with mocked providers; no successful
+live apply or deployed ARN is claimed. Human owner: Neo Jia Wen. The exact
+resource inventory and observed charges must be added from Terraform state and
+Cost Explorer after INF-02's approved test-account apply.
+
+| Resource group | Environment / region | Owner | Purpose and expected cost | Shutdown / cleanup |
+|---|---|---|---|---|
+| Bootstrap state S3 bucket | Account-wide / Singapore | Neo Jia Wen | Encrypted, versioned Terraform state and native lock files; low storage cost | Preserve until every dependent stack is destroyed; empty versions before final bootstrap teardown |
+| CloudTrail bucket and multi-Region trail | Account-wide | Neo Jia Wen | Management events and audit-anchor data events; included in the managed-services estimate | Lifecycle expires logs after the configured retention; destroy bootstrap last |
+| GuardDuty detector and AWS Budgets | Account-wide | Neo Jia Wen | Threat detection plus USD 300 and Bedrock budget alerts; GuardDuty is billable after any trial | Disable/destroy only at final account cleanup; budgets must exist before application resources |
+| VPC, subnets, route tables, endpoints, NAT gateway(s), Elastic IP(s) | Per CRM environment / Singapore | Neo Jia Wen | Private application/database tiers; NAT and public IPv4 are major cost items | `running=false` removes NAT gateways but retains their Elastic IPs; destroy staging after its test |
+| CloudFront, frontend S3, WAF and WAF logs | Per CRM environment; CloudFront/WAF in Virginia | Neo Jia Wen | HTTPS SPA/API edge, managed WAF rules and redacted request logs | WAF exists only in prod; frontend bucket is emptied by destroy |
+| API Gateway, VPC Link and internal ALB | Per CRM environment / Singapore | Neo Jia Wen | JWT-checked public API into private ECS services; ALB has an idle cost even while stopped | Destroy staging; prod ALB remains until the prod stack is destroyed |
+| Cognito user pool, clients, groups, domain and trigger Lambda | Per CRM environment / Singapore | Neo Jia Wen | Managed login, required MFA, service identity and auth-event auditing | Scales per request; user-pool deletion protection is lifted only during deliberate teardown |
+| ECS cluster, Service Connect, task definitions/services and ECR repositories | Per CRM environment / Singapore | Neo Jia Wen | Seven API/worker images, 2–6 prod tasks while running; compute is a major running cost | `running=false` scales services to zero; ECR retains ten images per repository |
+| Six RDS PostgreSQL instances | Per CRM environment / Singapore | Neo Jia Wen | Service-owned databases; single-AZ normally and Multi-AZ only for the demo week | Stop between sessions; AWS restarts stopped instances after seven days, so stop them again |
+| DynamoDB client-keys and encrypted ID-document S3 bucket | Per CRM environment / Singapore | Neo Jia Wen | Envelope-encryption keys and encrypted synthetic identity documents | On-demand DynamoDB; deletion protection and bucket cleanup follow the teardown flag |
+| Audit SQS/DLQ and Object-Lock anchor bucket | Per CRM environment / Singapore | Neo Jia Wen | Durable audit delivery and tamper-evident daily anchors | Queues disappear with the stack; locked anchor versions require expiry or authorized governance bypass |
+| AWS Backup plan, primary vault, Sydney vault and Sydney KMS key | Prod / Singapore and Sydney | Neo Jia Wen | Daily database/key-table backups with encrypted cross-Region copies; dedicated DR key adds about USD 1 per active month | Not created in staging; remove recovery points and vault locks according to retention before teardown |
+| CloudWatch logs, metrics, alarms/dashboard and SNS | Per CRM environment, plus WAF logs in Virginia | Neo Jia Wen | 30-day operational logs and alert delivery; usage-based managed-service cost | Log groups follow stack teardown; confirm SNS subscriptions during deployment |
+| External SFTP VPC, EC2, EIP, ECR and host-key parameter | Separate prod simulation / Singapore | Neo Jia Wen with Feature 3 owner | Synthetic external-bank simulation; approximately USD 6–8/month while its `t4g.micro` runs | Stop between sessions and destroy before the CRM stack |
+
+The current paid-plan estimate and lifecycle assumptions are in
+[`budget.md`](budget.md). All entries use synthetic data only.
+
+## Event-Driven Alerts resources
 
 Status: planned resources only. No deployed ARN, cloud connection, or charge is
 claimed.

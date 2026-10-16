@@ -7,6 +7,9 @@ import bank.dashboard.dto.PanelStatus;
 import bank.dashboard.exception.UpstreamUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -127,5 +130,25 @@ class PanelAssemblerTest {
 
         assertThat(assembler.assemble(suppliers).keySet())
                 .containsExactly("first", "second", "third");
+    }
+
+    @Test
+    void panelCallsSeeTheCallersAuthentication() {
+        // The upstream adapters read the caller's token from the
+        // SecurityContext on the panel's own thread. Without propagation it is
+        // empty there and every panel fails, which is what happened on AWS.
+        Authentication caller = new TestingAuthenticationToken("admin-sub", "token", "ROLE_ADMIN");
+        SecurityContextHolder.getContext().setAuthentication(caller);
+        try {
+            Map<String, Supplier<Object>> suppliers = new LinkedHashMap<>();
+            suppliers.put("whoami", () -> SecurityContextHolder.getContext().getAuthentication());
+
+            Map<String, Panel> panels = assembler.assemble(suppliers);
+
+            assertThat(panels.get("whoami").status()).isEqualTo(PanelStatus.OK);
+            assertThat(panels.get("whoami").data()).isSameAs(caller);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 }

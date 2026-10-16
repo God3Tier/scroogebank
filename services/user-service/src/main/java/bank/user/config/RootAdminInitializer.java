@@ -5,7 +5,6 @@ import bank.user.domain.Role;
 import bank.user.domain.User;
 import bank.user.identity.IdentityProviderClient;
 import bank.user.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.CommandLineRunner;
@@ -29,15 +28,26 @@ import java.util.UUID;
  * not handled here becomes a crash loop rather than a failed request.
  */
 @Component
-@RequiredArgsConstructor
 public class RootAdminInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final IdentityProviderClient identityProviderClient;
     private final AuditEventPublisher auditEventPublisher;
-
-    @Value("${root-admin.email}")
     private final String rootAdminEmail;
+
+    // Explicit constructor: Lombok does not copy @Value onto the generated
+    // constructor parameter, so Spring found no String bean and the task crash-looped.
+    public RootAdminInitializer(
+            UserRepository userRepository,
+            IdentityProviderClient identityProviderClient,
+            AuditEventPublisher auditEventPublisher,
+            @Value("${root-admin.email}") String rootAdminEmail
+    ) {
+        this.userRepository = userRepository;
+        this.identityProviderClient = identityProviderClient;
+        this.auditEventPublisher = auditEventPublisher;
+        this.rootAdminEmail = rootAdminEmail;
+    }
 
     @Override
     public void run(String... args) {
