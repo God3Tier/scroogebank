@@ -218,7 +218,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
   bucket=crm-tfstate-$(aws sts get-caller-identity --query Account --output text)   # or your state_bucket_name
   aws s3api delete-objects --bucket "$bucket" --delete "$(aws s3api list-object-versions --bucket "$bucket" \
     --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}, Quiet: `true`}' --output json)"
-  terraform destroy
+  terraform destroy # If this fails, manually empty bucket in AWS Console S3
   ```
 
   `delete-objects` takes at most 1,000 versions per call. Old versions expire after 90 days, so the bucket rarely holds that many.
