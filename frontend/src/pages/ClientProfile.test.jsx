@@ -3,10 +3,12 @@ import { useAuth } from 'react-oidc-context'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createAccount } from '../api/accounts.js'
 import { fetchDocument, getClient, listDocuments, uploadDocument, verifyClient } from '../api/clients.js'
 import ClientProfile from './ClientProfile.jsx'
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
+vi.mock('../api/accounts.js', () => ({ createAccount: vi.fn() }))
 vi.mock('../api/clients.js', () => ({
   getClient: vi.fn(),
   listDocuments: vi.fn(),
@@ -53,6 +55,14 @@ function renderPage() {
       </Routes>
     </MemoryRouter>,
   )
+}
+
+async function fillAccountForm() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Open account' }))
+  fireEvent.change(screen.getByLabelText(/^Account Type/), { target: { value: 'SAVINGS' } })
+  fireEvent.change(screen.getByLabelText(/^Initial Deposit/), { target: { value: '250.50' } })
+  fireEvent.change(screen.getByLabelText(/^Currency/), { target: { value: 'sgd' } })
+  fireEvent.change(screen.getByLabelText(/^Branch ID/), { target: { value: 'SG-001' } })
 }
 
 async function openDocument() {
@@ -187,6 +197,36 @@ describe('client page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Upload' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Only JPEG, PNG or PDF files')
+  })
+
+  it('opens an account for the client and says so', async () => {
+    createAccount.mockResolvedValue({ account_id: 'acct-0001', status: 'Account created successfully' })
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Savings account opened. Account ID: acct-0001')
+    expect(createAccount).toHaveBeenCalledWith({
+      client_id: CLIENT_ID,
+      account_type: 'SAVINGS',
+      status: 'ACTIVE',
+      initial_deposit: 250.5,
+      currency: 'SGD',
+      branch_id: 'SG-001',
+    })
+    expect(screen.queryByLabelText(/^Account Type/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the form open and explains when the client already has that type of account', async () => {
+    createAccount.mockRejectedValue(Object.assign(new Error('Request failed (409)'), { status: 409 }))
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already has an account of this type')
+    expect(screen.getByLabelText(/^Branch ID/)).toHaveValue('SG-001')
   })
 
   it('says so when the client is already verified', async () => {

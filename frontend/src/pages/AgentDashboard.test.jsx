@@ -126,7 +126,7 @@ describe('the dashboard figures and client list', () => {
 
   it("lists the agent's clients from client-service", async () => {
     renderOnly()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
 
     expect(await screen.findByText('Synthetic Client')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
@@ -137,7 +137,7 @@ describe('the dashboard figures and client list', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     deleteClient.mockRejectedValue(Object.assign(new Error('client still has accounts'), { status: 409 }))
     renderOnly()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
 
@@ -148,7 +148,7 @@ describe('the dashboard figures and client list', () => {
   it('does not delete when the agent cancels', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderOnly()
-    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
 

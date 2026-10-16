@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link, useParams } from 'react-router-dom'
 
+import { createAccount } from '../api/accounts.js'
 import { fetchDocument, getClient, listDocuments, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
 
@@ -48,6 +49,32 @@ function updateProblem(error) {
   if (error.status === 409) return 'Another client already has this email or phone number.'
   return 'The changes could not be saved. Try again.'
 }
+
+// account-service answers a validation failure with a bare "bad input", so
+// a 400 cannot say which field was wrong.
+function openAccountProblem(error) {
+  if (error.status === 400) return 'Check the account details and try again.'
+  if (error.status === 404) return 'This client is no longer available.'
+  if (error.status === 409) return 'This client already has an account of this type.'
+  if (error.status === 503) return 'The client could not be checked just now. Try again shortly.'
+  return 'The account could not be opened. Try again.'
+}
+
+// The types account-service accepts.
+const ACCOUNT_TYPES = [
+  ['CHECKING', 'Checking'],
+  ['SAVINGS', 'Savings'],
+  ['CREDIT', 'Credit'],
+  ['LOAN', 'Loan'],
+  ['INVESTMENT', 'Investment'],
+]
+
+// account-service also accepts INACTIVE and CLOSED, but a new account is
+// not opened dormant or closed.
+const OPENING_STATUSES = [
+  ['ACTIVE', 'Active'],
+  ['PENDING', 'Pending'],
+]
 
 const EDITABLE_FIELDS = [
   ['first_name', 'First Name:', 'text', 50],
@@ -111,6 +138,74 @@ function ProfileEditor({ client, onSaved, onCancel }) {
   )
 }
 
+// Opens a bank account for the client. account-service sets the opening date
+// and makes the client's owner the account's owner.
+function AccountOpener({ clientId, onOpened, onCancel }) {
+  const [form, setForm] = useState({ account_type: '', status: 'ACTIVE', initial_deposit: '', currency: 'SGD', branch_id: '' })
+  const [saving, setSaving] = useState({ busy: false, error: '' })
+
+  const setField = (name) => (event) => setForm((current) => ({ ...current, [name]: event.target.value }))
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setSaving({ busy: true, error: '' })
+    let opened
+    try {
+      opened = await createAccount({
+        ...form,
+        client_id: clientId,
+        initial_deposit: Number(form.initial_deposit),
+        currency: form.currency.toUpperCase(),
+        branch_id: form.branch_id.trim(),
+      })
+    } catch (error) {
+      setSaving({ busy: false, error: openAccountProblem(error) })
+      return
+    }
+    setSaving({ busy: false, error: '' })
+    onOpened(form.account_type, opened.account_id)
+  }
+
+  return (
+    <form className="form-grid" onSubmit={handleSubmit}>
+      <label>Account Type:
+        <select required value={form.account_type} onChange={setField('account_type')}>
+          <option value="">Select Account Type</option>
+          {ACCOUNT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <label>Status:
+        <select required value={form.status} onChange={setField('status')}>
+          {OPENING_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <label>Initial Deposit:
+        <input type="number" required min="0" step="0.01" value={form.initial_deposit} onChange={setField('initial_deposit')} />
+      </label>
+      <label>Currency:
+        <input
+          type="text"
+          required
+          minLength={3}
+          maxLength={3}
+          pattern="[A-Za-z]{3}"
+          title="A 3-letter ISO currency code, such as SGD"
+          value={form.currency}
+          onChange={setField('currency')}
+        />
+      </label>
+      <label>Branch ID:
+        <input type="text" required maxLength={50} value={form.branch_id} onChange={setField('branch_id')} />
+      </label>
+      {saving.error && <p className="form-error form-grid__full" role="alert">{saving.error}</p>}
+      <div className="form-actions">
+        <button type="submit" disabled={saving.busy}>{saving.busy ? 'Opening…' : 'Open account'}</button>
+        <button type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  )
+}
+
 function ClientProfile() {
   const { clientId } = useParams()
   // A new client starts from a fresh page, with nothing checked.
@@ -132,6 +227,8 @@ function ClientProfileView({ clientId }) {
   const [previewError, setPreviewError] = useState('')
   const [editing, setEditing] = useState(false)
   const [editMessage, setEditMessage] = useState('')
+  const [openingAccount, setOpeningAccount] = useState(false)
+  const [accountMessage, setAccountMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -172,6 +269,12 @@ function ClientProfileView({ clientId }) {
     } catch {
       setEditMessage('The changes were saved, but the page could not be refreshed. Reload the page.')
     }
+  }
+
+  function handleAccountOpened(accountType, accountId) {
+    const typeLabel = Object.fromEntries(ACCOUNT_TYPES)[accountType]
+    setOpeningAccount(false)
+    setAccountMessage(`${typeLabel} account opened. Account ID: ${accountId}`)
   }
 
   async function handleUpload(event) {
@@ -287,7 +390,7 @@ function ClientProfileView({ clientId }) {
         <div className="client-header__text">
           <h1>{client.first_name} {client.last_name}</h1>
           <p>{client.email}</p>
-          <p><Link to={`/agent/client/${encodeURIComponent(clientId)}/transactions`}>View transactions</Link></p>
+          <p><Link to={`/agent/client/${encodeURIComponent(clientId)}/transactions`}>View accounts and transactions</Link></p>
         </div>
         <div className="client-header__badges">
           <span className={`status-badge ${verified ? 'status-badge--verified' : 'status-badge--attention'}`}>
@@ -322,6 +425,24 @@ function ClientProfileView({ clientId }) {
               </div>
             ))}
           </dl>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="accounts-title">
+        <div className="document-preview__header">
+          <h2 id="accounts-title">Accounts</h2>
+          {!openingAccount && (
+            <button type="button" onClick={() => { setAccountMessage(''); setOpeningAccount(true) }}>Open account</button>
+          )}
+        </div>
+        {accountMessage && <p className="success-message" role="status">{accountMessage}</p>}
+        {openingAccount ? (
+          <AccountOpener clientId={clientId} onOpened={handleAccountOpened} onCancel={() => setOpeningAccount(false)} />
+        ) : (
+          <p className="section-note">
+            Open a bank account for this client. To see the accounts they hold,
+            use <Link to={`/agent/client/${encodeURIComponent(clientId)}/transactions`}>View accounts and transactions</Link>.
+          </p>
         )}
       </section>
 
