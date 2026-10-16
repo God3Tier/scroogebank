@@ -4,7 +4,7 @@ SFTP_KEY_FILE ?= $(shell sed -n 's/^SFTP_KEY_FILE=//p' .env)
 SFTP_KEY_PATH := $(abspath $(SFTP_KEY_FILE))
 SFTP_HOST_KEY_FINGERPRINT ?= $(shell sed -n 's/^SFTP_HOST_KEY_FINGERPRINT=//p' .env)
 
-.PHONY: test producer-test compose-check build up down tools-build deps db-up sqlboiler mocks generate poller poller-once fault
+.PHONY: test producer-test compose-check build up down tools-build deps db-up sqlboiler mocks generate poller poller-once fault lambda
 
 compose-check:
 	$(COMPOSE) -f $(COMPOSE_FILE) config --quiet
@@ -73,6 +73,16 @@ poller-once: tools-build
 		-e SFTP_PRIVATE_KEY_PATH=/run/secrets/sftp-client-key \
 		-e SFTP_HOST_KEY_FINGERPRINT="$(SFTP_HOST_KEY_FINGERPRINT)" \
 		go-tools go run ./src/cronjob -once
+
+## Build the transaction-ingest Lambda function's zip, receiver/dist/transaction-ingest.zip
+## (ADR-0024 decision 7): the poller as bootstrap for provided.al2023 on arm64,
+## and the RDS CA bundle that DB_SSLROOTCERT names. It is zipped in the
+## container so bootstrap keeps its execute permission. Set the crm stack's
+## ingest_lambda_zip to that file.
+RDS_CA_URL ?= https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+
+lambda: tools-build
+	$(COMPOSE) -f $(COMPOSE_FILE) --profile tools run --rm --no-deps 		-e GOOS=linux -e GOARCH=arm64 -e CGO_ENABLED=0 		go-tools sh -c 'set -e; rm -rf dist && mkdir -p dist; 			go build -tags lambda.norpc -trimpath -o dist/bootstrap ./src/cronjob; 			curl -fsSL -o dist/rds-ca.pem "$(RDS_CA_URL)"; 			cd dist && zip -q -X transaction-ingest.zip bootstrap rds-ca.pem'
 
 ## Run the producer's tests: they need only Go, so they run in the image's
 ## build stage, with no volume to mount.

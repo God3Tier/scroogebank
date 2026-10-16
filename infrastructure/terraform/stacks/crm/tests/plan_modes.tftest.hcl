@@ -175,6 +175,14 @@ run "lambdas_enabled" {
     condition     = aws_scheduler_schedule.ingest[0].schedule_expression == "rate(5 minutes)"
     error_message = "Ingest runs every 5 minutes."
   }
+  assert {
+    condition     = aws_lambda_function_event_invoke_config.ingest[0].maximum_retry_attempts == 0
+    error_message = "Lambda does not retry a failed ingest run; the next scheduled run does."
+  }
+  assert {
+    condition     = aws_lambda_function.ingest[0].environment[0].variables["DB_SSLROOTCERT"] == "/var/task/rds-ca.pem"
+    error_message = "Ingest verifies transactions-db against the RDS CA in its zip."
+  }
 }
 
 run "teardown_ready" {

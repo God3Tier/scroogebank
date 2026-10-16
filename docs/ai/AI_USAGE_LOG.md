@@ -1,5 +1,30 @@
 # AI usage log
 
+## 2026-10-16 — INF-04 transaction-ingest Lambda
+
+- Human owner: Neo Jia Wen; the Feature 3 owner (Joseph Yau) confirms the
+  runtime (ADR-0024 decision 7) on the pull request.
+- Tool: Claude Code (Anthropic).
+- Use: run the SFTP receiver's poller as the Lambda function ADR-0024 describes:
+  a Lambda mode in `src/cronjob` that builds the poller once per execution
+  environment and polls once per invocation; read the database login, SSH
+  private key and Cognito client secret from Secrets Manager at init; quote the
+  database login in the connection string; add `make lambda` to build the arm64
+  `bootstrap` zip with the RDS CA bundle; in Terraform, point `DB_SSLROOTCERT`
+  at that bundle and turn off Lambda's own retries of the scheduled run; update
+  the receiver README, the runbook, the Terraform README and the
+  infrastructure plan.
+- Human verification required: review the code; run `make test` and
+  `make lambda` with Docker; apply to a test account (INF-02) and check one
+  invocation imports files and audits them.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used.
+- Verification: `go vet` and the cronjob, accounts and poller tests passed
+  locally, and the arm64 `bootstrap` cross-compiled; the database-backed SQS
+  relay tests were not run (no database or Docker). Terraform validate and 6
+  CRM mocked-provider tests passed. `make lambda` was not run (Docker was not
+  running).
+
 ## 2026-10-16 — Terraform review and repair
 
 - Human owner: Neo Jia Wen.

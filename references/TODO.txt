@@ -1,0 +1,450 @@
+Architecture docs vs code: what is left to reconcile
+====================================================
+
+Recorded 2026-10-12 against dev at 5c469e1 (after PR #83, the activity
+feed); updated 2026-10-13 against dev at aeecc94 (after PR #96) and
+2026-10-14 against dev at 85256ff (after PR #100). Compares the ADRs and the
+target-architecture docs (docs/architecture, docs/security, docs/database)
+with the code on dev.
+
+Docs corrected to fit the code (merged in PR #84): the alert worker runs
+every 4 hours; client-service encrypts the 11 personal fields; account-service
+is Go; ADR-0024 (Go runtime, JSON files in reports/, rejected rows in the
+FILE_PROCESSED event, no ingestion_file table, no .sha256 checksum file);
+ADR-0031 (the alert model sees public data only); NFR 3 (no /api/v1 prefix).
+
+Infrastructure is not built yet, so the AWS side of ADR-0018, 0019, 0023,
+0026, 0027 (alarms, GuardDuty, CloudTrail, Budgets) and 0029 is left out
+here. Log those needs as requirements when infrastructure work starts.
+chain-verify's are already listed in services/auditor/README.md (task and
+schedule, a database login per role, the anchor bucket and its IAM, alarms).
+
+Items marked [ADR first] change code under a Proposed ADR: accept the ADR
+(owner Neo Jia Wen) with the feature owner before building it
+(project_plan.md: no design choice hidden in code).
+
+
+Suggested order
+---------------
+
+1. A1  CI for the Go services and the frontend           (done, PR #85)
+2. A2  Audit hash chain and chain-verify                  (done, PR #87 and #88)
+3. A3  Cognito triggers for login and password-reset auditing
+                                                           (done, PR #89 and #90)
+4. A4  Frontend sign-in through Cognito                   (done, PR #93 and #94)
+5. A5  Client identity documents and verification       (done, PR #95 and #96)
+6. A6  Transaction import gaps          (b-e done, PR #97 to #100; a waits
+                                          on the Lambda or ECS decision)
+7. A7  Alerts worker runner and image    (done, PR #103)
+8. A8  Activity feed panels              (built, not yet committed)
+9. A9-A11 as each owner gets to them
+
+
+A. Code to change to fit the ADRs
+---------------------------------
+
+A1. CI (ADR-0028, Proposed; cheap, and protects everything below)
+    (a and b DONE: merged to dev in PR #85, 2026-10-12)
+    CI ran only `mvn verify` (the 4 Java modules), buf lint/breaking, and
+    two auditor packages (src/serverd/queue, src/internal/repository/audit).
+    a. Go test jobs for client-profile-management-service, account-service,
+       the SFTP receiver and producer, and the whole auditor: gofmt, each
+       service's own `make test` from a clean checkout, then go vet. Fixed on
+       the way: account-service's TestGetAccount (failing since the split);
+       make test now generates mocks (client-profile, account-service) and
+       the ORM (SFTP); SQLBoiler no longer generates its own ORM tests (they
+       need dropdb/pg_dump); the receiver moved to mockery v3 with objx in
+       go.mod; 10 files gofmt-ed. Replaces Azeez's two-package auditor job.
+    b. Frontend job: npm ci, lint, test and build on Node 24.11.0.
+    c. Later: image build and ECR scan, CodeQL, dependency scanning,
+       terraform plan with checkov, migration task, deploy and smoke tests.
+       The auditor's Dockerfile builds from the generated ORM, which is
+       git-ignored, so an image job must generate it first (make sqlboiler)
+       or the Dockerfile must.
+
+A2. Audit hash chain (ADR-0022, Accepted 2026-10-12)
+    (ADR-0022 amended and accepted in PR #86, including the anchor and
+    ANCHOR_MISMATCH. a-f DONE: merged to dev in PR #87, 2026-10-13.
+    g DONE: merged to dev in PR #88. Left: the anchor bucket, task, schedule,
+    logins and alarms, which wait for infrastructure (see the auditor README).)
+    Code owner: the auditor's owner (Hayyun). The spec requires
+    tamper-resistant audit logs, and the current chain is not.
+    Also fixed: the payload was hashed as received but stored as jsonb, so
+    nearly every row would have failed verification; the writer's
+    SELECT ... FOR UPDATE needed UPDATE privilege (now an advisory lock).
+    a. The hash leaves out parent_hash and event_id
+       (services/auditor/src/internal/repository/audit/store_audit_chain.go:57).
+       Someone with database access can edit a row, recompute its hash and
+       update the next row's parent_hash; the next row's own hash does not
+       change, so verification passes. Hash every field, including event_id
+       and parent_hash, with an unambiguous encoding (fields are joined with
+       no separator today).
+    b. Verification skips the newest row and never compares a row's
+       recomputed hash with its own stored hash
+       (src/internal/service/audit/verify_chain.go:30). Check every row.
+    c. audit_log.timestamp is TIMESTAMP, not TIMESTAMPTZ in UTC
+       (data/schema.sql).
+    d. chain-verify cannot be built: src/cronjob/main.go is `package cronjob`,
+       not `package main`, and the Dockerfile builds only src/serverd. It
+       also runs internal timers (@every 24h, @every 1h). Make it a binary in
+       the auditor image that runs once and exits, for EventBridge.
+    e. On a mismatch it deletes the row and re-links the chain
+       (src/internal/repository/audit/remove_audit_log.go). Record a finding
+       instead and leave the chain as it is. Which operations admins have on
+       findings is open item 13 (C2); it need not block a-d.
+    f. Give the auditor a database role with only INSERT and SELECT on
+       audit_log.
+    g. Write the chain head to an S3 Object Lock bucket (needs infra;
+       LocalStack locally). Done: each run checks the newest anchor and
+       writes a new one, locked in governance mode for 7 days.
+    Changing the hash format invalidates existing chains. Nothing is
+    deployed, so only local databases need recreating (make db-reset).
+    Still open from ADR-0022: decision 5 (encrypted audit payloads for
+    erasure) waits on open items 11 and 21 (C4).
+
+A3. Cognito triggers (ADR-0020 decision 4, Accepted; ADR-0025 decision 5;
+    ADR-0040, Accepted 2026-10-13)
+    DONE: merged to dev on 2026-10-13. PR #89 holds ADR-0040 and the
+    docs it touches; its first commit said Python and its second
+    reworked it for Java. PR #90 holds services/cognito-triggers (a
+    module of the root Maven build) and the auditor accepting
+    COGNITO_TRIGGERS.
+    a. Done: one plain Java 25 Lambda for PostAuthentication and
+       PostConfirmation; LOGIN and PASSWORD_RESET (ConfirmForgotPassword
+       only) as source_service COGNITO_TRIGGERS, event_type AUTHENTICATION.
+    b. Done: 3-second send budget, never throws, AUDIT_SEND_FAILED with
+       the full event, and bank.cognito.Replay (make replay).
+    c. Done: runtime decided in ADR-0040. Built in Python first, then
+       switched to Java once measured: Java 0.5 s cold at 1,769 MB, 0.9 s
+       at 1,024 MB, about 4 s at 256 MB; Python about 1.6x faster, not
+       worth a third language. No SnapStart.
+    Left:
+      - The infrastructure (function, user pool triggers, IAM, queue
+        policy, alarms, replay role), listed in services/cognito-triggers/
+        README.md. Once deployed, measure the real cold start (REPORT
+        line: Init Duration plus Duration); if it is over about 1.5 s,
+        SnapStart is the fallback, under a new ADR (alias, weekly
+        keep-warm ping, client created during init).
+      - The auditor owner to confirm the COGNITO_TRIGGERS validation.
+      - Spec check (2026-10-13): Feature 1's audit list (registration,
+        login, logout, password changes, account creation and updates,
+        role changes, deactivation) does not ask for failed logins, and
+        neither does the Q&A. Open: "user registration" may mean an
+        admin creating the user (user-service audits it) or the user's
+        first sign-in setting a password and MFA, which the triggers
+        record only as LOGIN. Ask the teaching team if it matters.
+      - Optional: Q&A LCC11 suggests retrying a failed log 3 times. The
+        3-second budget allows 2 to 5 attempts; cap it at 3 if wanted.
+
+A4. Frontend sign-in and logout auditing (ADR-0005 Accepted; ADR-0025
+    decisions 2 and 5, Accepted 2026-10-13; open item 20 resolved)
+    DONE: merged to dev on 2026-10-13. PR #93 accepts ADR-0025 and updates
+    the docs it touches; PR #94 holds the frontend (task F1-AUTH-01 in
+    docs/feature-plans/feature-2_plan.md).
+    Found on the way: no branch ever had the react-oidc-context sign-in
+    the ADR said feat/frontend had, so it was built new rather than ported.
+    a. Done: Cognito managed login, authorization-code flow with PKCE
+       (S256), through oidc-client-ts 3.5.0 and react-oidc-context 3.3.1;
+       Cognito returns to /auth/callback. Pages need a signed-in user and
+       the matching Cognito group (the client page accepts both roles). The
+       seed-password login, authApi.js and the seed passwords are gone.
+    b. Done: api/alerts.js sends the session's token (authorizationHeader()
+       in src/auth/session.js) instead of reading localStorage.
+    c. Done: src/auth/config.test.js checks code_challenge_method=S256 and
+       that the challenge is the SHA-256 of the verifier; it fails if
+       disablePKCE is set.
+    d. Done: sign-out reports the logout first (POST /api/users/me/logout,
+       audited as LOGOUT), then revokes the refresh token at /oauth2/revoke,
+       then ends the Cognito session at /logout; each step runs even if the
+       one before fails or takes over 5 seconds.
+    Left:
+      - Not run end to end against Cognito. Needs frontend/.env
+        (VITE_COGNITO_AUTHORITY, _CLIENT_ID, _DOMAIN) and the shared app
+        client set up as the frontend README's "App client settings" says
+        (public, code grant only, openid and email, revocation on,
+        http://localhost:5173/auth/callback and http://localhost:5173/).
+        Then check: /oauth2/authorize carries code_challenge with S256;
+        sign-out shows /api/users/me/logout (204), /oauth2/revoke (200) and
+        the /logout redirect; audit_log gets a LOGOUT row; the next sign-in
+        asks for the password and MFA.
+      - Whether the browser may call /oauth2/revoke cross-origin (CORS). If
+        not, use Cognito's RevokeToken API instead (X-Amz-Target
+        AWSCognitoIdentityProviderService.RevokeToken, {Token, ClientId}).
+      - Infra, logged as requirements: each deployed origin's callback and
+        sign-out URLs on the app client; the app client in Terraform.
+      - Optional tidy-ups: if the user pool's discovery document lists
+        revocation_endpoint, use the library's revokeTokens() and derive the
+        domain from it (dropping VITE_COGNITO_DOMAIN); the returnTo check in
+        landingPathFor guards a case no link can reach.
+      - Not in scope: src/api/transactionApi.js is unused, sends no token
+        and calls paths no service serves. (clientApi.js was replaced by
+        api/clients.js in PR #96.)
+
+A5. Client identity documents and verification (ADR-0041, Accepted
+    2026-10-13; open item 19 resolved)
+    DONE: merged to dev on 2026-10-13. PR #95 accepts ADR-0041, amended
+    before it merged to make documents optional, and updates the docs it
+    touches; PR #96 holds client-service and the frontend (task F2-VER-01
+    in docs/feature-plans/feature-2_plan.md).
+    Changed from the original plan:
+      - Uploads go through client-service, not a presigned URL, so each file
+        is checked before it is stored, sealed with the client's own data
+        key, and erased with it.
+      - Documents are optional for Verify. The spec's endpoint has no body,
+        and the requirements Q&A does not expect an upload (CPM06) or NRIC
+        in the project (CPM03); it only needs agents to be able to mark a
+        client verified (CPM23).
+      - No request is sent to the client: the agent collects the document.
+        SES stays deferred.
+    a. Done: POST and GET /api/clients/{id}/documents, and
+       GET .../documents/{documentId}. JPEG, PNG or PDF up to 5 MB, the type
+       taken from the bytes, no file names kept. Each file is sealed with the
+       client's data key (AES-256-GCM) and stored in the
+       CLIENT_DOCUMENTS_BUCKET bucket, whose SSE-KMS adds a second layer.
+       client_documents holds metadata only. Nothing changes or deletes a
+       document.
+    b. Done: Verify takes optional document_ids. In one transaction that
+       locks the client it sets VERIFIED, verified_by_agent_id, verified_at
+       and verified_with_documents, and marks the named documents as
+       evidence; 409 if already verified. A verification without a document
+       has verified_with_documents false and "without_document": true in its
+       audit event; otherwise the event carries the document IDs.
+    c. Done: the frontend page /clients/:clientId. A document must be opened
+       before it can be ticked; the confirmation matches what was checked;
+       "Verify without a document" when none is ticked; a verified client
+       shows who, when and on how many documents, or a "Without a document"
+       badge. Create Client Profile now creates the client and opens its
+       page. api/clients.js replaces clientApi.js. No new libraries.
+    d. Done on the way: client updates write only the profile fields (they
+       could undo a verification or a delete that committed in between);
+       GET /api/clients/{id} returns created_at and updated_at (always zero
+       before).
+    Left:
+      - Not run end to end against Cognito, and the page not yet looked at
+        in a browser. Locally: make db-reset, then make run in
+        client-profile-management-service (its LocalStack now has S3) and
+        npm run dev. Sign in as an agent, create a client, upload a synthetic
+        PNG, view it, tick it and verify; verify a second client without a
+        document. Then check that the object in LocalStack is not a readable
+        PNG, and that the audit_outbox rows carry document_ids or
+        "without_document": true.
+      - Joseph Yau, as client-service's owner, to confirm he agrees with the
+        implementation (ADR-0041 asked him to on the PR).
+      - Infra, logged as requirements (ADR-0041 decision 9 and the
+        client-service README): the bucket (Block Public Access, its own KMS
+        key with S3 Bucket Keys, a policy limited to client-service's role and
+        the S3 gateway endpoint), that role's IAM, a WAF exception for
+        POST /api/clients/*/documents only (the Core rule set blocks bodies
+        over 8 KB), and S3 error alarms. client-service refuses to start
+        without CLIENT_DOCUMENTS_BUCKET, so the bucket must exist before it
+        is deployed.
+      - Styling: no Stitch MCP was connected, so the page uses the existing
+        Institutional Precision tokens and components. Redo it from the
+        Stitch project "Scrooge Global Bank CRM" if wanted.
+      - A client list endpoint: the Agent Dashboard's "Manage Client
+        Profiles" list is still seed data, so a client's page is reached only
+        by creating the client.
+      - Open item 22 (Feature 2 owner): removing a document uploaded by
+        mistake, and whether editing a verified client resets the
+        verification.
+      - Erasure must also delete the client's documents (C4).
+    Owner: Feature 2 owner (Joseph Yau).
+
+A6. Transaction import (ADR-0024, Accepted 2026-10-14)
+    (Review fixes DONE: merged to dev on 2026-10-13. PR #91 holds the
+    ADR-0024, ADR-0019 and ADR-0020 amendments; PR #92 the code: each
+    failure audited once per episode with occurred_at, so a repeat outage
+    is no longer dropped as a duplicate; a re-sent transaction moves only a
+    Pending status forward; a poll starts no file with under a minute left;
+    DB_SSLMODE and DB_SSLROOTCERT; the Lambda requirements in the receiver
+    README.)
+    b-e DONE: merged to dev on 2026-10-14. PR #97 amends and accepts
+    ADR-0024 (decision 3: retries within a run, the circuit breaker across
+    runs in memory; decision 4: unsupported files rejected, .tmp skipped),
+    makes ADR-0017's Feature 3 runtime Go, and adds tasks F3-ING-02 to
+    F3-ING-05 to docs/feature-plans/feature-3_plan.md. PR #98 holds b and c,
+    PR #99 d, PR #100 e.
+    a. (NOT DONE) A run-once Lambda handler: a Go binary on provided.al2023 doing what
+       one `-once` run of services/sftp/receiver/src/cronjob does today.
+       At init, read the SSH private key and COGNITO_INGEST_CLIENT_SECRET
+       from Secrets Manager (the poller reads a key file and environment
+       variables today), and build the Poller once, so failure episodes
+       and the circuit breaker carry across warm invocations. See "Running
+       as a Lambda function" in services/sftp/receiver/README.md. Task
+       F3-ING-05, deferred.
+       Open (2026-10-14): Lambda or an ECS scheduled task. ADR-0024 keeps
+       Lambda; an ECS task (Option C) needs no handler and matches
+       chain-verify, the alert worker and health analysis, but every run is
+       a new process: episodes and the breaker would be lost each run, so
+       an outage would be audited on every poll, and overlapping runs need
+       an advisory lock. Switching means amending decisions 3 and 5.
+       If Lambda: set the async retry attempts to 0 (a retry would collide
+       with the 5-minute schedule under reserved concurrency 1).
+    b. Done: a file that is not a JSON array of transactions gets
+       FILE_FORMAT_INVALID and moves to rejected/, only once its event is
+       saved or sent (rejectFile in receiver/src/cronjob/poller/file.go).
+    c. Done: any extension other than .json is rejected the same way;
+       .tmp uploads and directories are skipped.
+    d. Done: up to 3 attempts per poll, waiting 2 s then 4 s plus jitter;
+       no retry on a bad key, a host-key mismatch or a refused login. The
+       circuit opens for 15 minutes after 3 polls in a row fail. A poll is
+       capped at 10 minutes and closes its connection when its context
+       ends. Hand-rolled breaker (poller/breaker.go), no new dependency.
+    e. Done: make fault KIND=corrupt|partial|all-invalid|unsupported|resend
+       publishes one fault file; make test also runs the producer's tests
+       (a test stage in its Dockerfile). services/sftp/README.md has the
+       demo steps.
+    Left:
+      - Not run end to end. Locally: make poller with AUDIT_QUEUE_URL set
+        to the auditor's queue, then make fault for each kind, stop and
+        start the sftp container, and try a wrong
+        SFTP_HOST_KEY_FINGERPRINT; check rejected/ and the audit events
+        (steps in services/sftp/README.md).
+      - Check that Joseph Yau's confirmation of decision 7 (Go) is
+        recorded on PR #97, as ADR-0024 asks.
+      - F3-ING-02 to F3-ING-04 in the Feature 3 plan still say Planned;
+        mark them done.
+      - Known limit, documented in the receiver README: a file whose name
+        already exists in processed/ or rejected/ cannot be moved there
+        (OpenSSH refuses), so it stays with one SYSTEM_EXCEPTION.
+    Owner: Neo Jia Wen (review: Joseph Yau, Feature 3).
+
+A7. Alerts worker (ADR-0031 and ADR-0007, both Proposed; ADR-0007's owner
+    is Azeez)
+    (a and b BUILT 2026-10-14 on task/event-driven-alerts/worker-runner, not
+    yet committed. Task EDA-D1-06 in docs/feature-plans/
+    event-driven-alerts_plan.md.)
+    a. Done: WorkerRunner (event-alert-service src/main/java/bank/alert/
+       worker) calls runScheduledWindow once in WORKER mode and logs one line
+       of counts and codes; the process exits 1 if the window failed. A
+       worker starts no web server (WorkerMode) and no timers
+       (SchedulingConfiguration); the API process keeps the audit publisher
+       and retention. Tests show each mode starts with the other off, as
+       ADR-0007 asks.
+    b. Done: services/event-alert-service/Dockerfile, non-root, one image
+       for both modes; run locally in both modes.
+    Found on the way, for the owners:
+      - A worker run only stores search results. Nothing calls
+        SourceResultProcessor, so no alert is made (EDA-D2-06's
+        source-to-alert work).
+      - No AgentCore client: with ingestion on, every run fails with
+        PROVIDER_NOT_CONFIGURED (EDA-D1-02, needs infra).
+      - OutboundControlService keeps the monthly quotas, the budget stop and
+        disables in memory, so each worker run starts them again; only the
+        cap of 4 searches per run holds. Keep them in alerts-db (a migration,
+        Hayyun's area) before ingestion or the model is enabled.
+      - Two overlapping runs with different window ends both search.
+      - Micrometer metrics are not exported from the worker.
+    Left: commit and PR; Azeez's review as scheduled-worker owner; infra
+    (a schedule every 4 hours, an alarm on a non-zero exit), logged in the
+    service README.
+    Owners: Azeez, Hayyun.
+
+A8. Activity feed panels (ADR-0021, Accepted)
+    (BUILT 2026-10-14 on task/base-features/activity-panels, not yet
+    committed. Task F1-ACT-01 in docs/feature-plans/feature-2_plan.md.)
+    The dashboards' "Recent Activities" panels read GET /api/activities.
+    a. Done: frontend/src/components/ActivityFeed.jsx on both dashboards,
+       the call in src/api/activities.js with authorizationHeader(). The
+       panel never sends the caller's identity; agents see no names, admins
+       see who acted and can select a name to see only that user. Period
+       filter (24 hours, 7 or 30 days, fixed when chosen), 10 per page with
+       Load more on the cursor, "Activity is temporarily unavailable" with
+       Try again on 503, and a slow reply for a replaced filter is dropped.
+    b. Done: src/components/activityText.js describes each event from its
+       payload, by record ID only (no client names, ADR-0030): client
+       created, updated, deleted, verified (with N documents, or a "Without
+       a document" badge), document uploaded, account opened or closed,
+       user created, renamed, role changed, disabled, password reset, tamper
+       findings, and a user's own Cognito password reset. Open client links
+       where the client still exists.
+    c. Done: Vite sends /api/activities to user-service (8081).
+    d. Design: new Stitch screen "Admin Dashboard" (Recent Activities card)
+       in "Scrooge Global Bank CRM". The agent screen's generation timed
+       out and is not in the project; the agent panel reuses the same card.
+    Found on the way, for the owners:
+      - client-service's audit event for POST /api/clients carries no
+        client_id (it is read from the request body, which has none), so
+        "created a client profile" shows no ID and cannot open the client.
+        Adding the new ID would need the handler to note it, as it does for
+        document IDs (Joseph Yau, client-service).
+      - account-service records the account ID in the payload's client_id
+        on DELETE /api/accounts/:accountId; the panel reads it as an account.
+      - An actor user-service does not know shows as "Unknown user".
+    Left:
+      - Commit and PR; frontend owner's review.
+      - Not run end to end: needs user-service with AUDITOR_GRPC_TARGET, the
+        auditor's gRPC server and Cognito sign-in. Then check an agent sees
+        only their own changes, an admin everyone's, and that stopping the
+        auditor shows the unavailable message.
+      - Infra, logged as a requirement: the deployed API routes
+        /api/activities to user-service, as it does /api/users.
+
+A9. Before the first deploy
+    a. JSON logs with PII masking and a request ID across calls (ADR-0027).
+       No service has this configured.
+    b. Versioned migrations for the Go services: golang-migrate (ADR-0028,
+       open item 8). client-profile, account-service and the receiver use
+       V1_init.sql; the auditor's data/schema.sql drops its tables.
+
+A10. Later, when a caller needs them
+    a. Cognito client-credentials tokens with an audit/read scope on the
+       auditor (ADR-0021 decision 6). No background caller exists yet.
+    b. gobreaker in Go callers of the auditor (ADR-0021 decision 8). No Go
+       caller exists yet.
+
+A11. Housekeeping
+    a. The auditor's go.mod still lists modules only SQLBoiler's generated
+       tests used (viper, vala and their dependencies), which no-tests
+       turned off; the other Go services likely too. Run go mod tidy with
+       the ORM and mocks generated: without the mocks it also drops objx,
+       which they need.
+
+
+B. Being built by their owners (not a reconciliation fix)
+---------------------------------------------------------
+
+B1. client-health-monitor-service (ADR-0034, Proposed): only the contracts
+    and the task domain exist (8 classes). No API, rules engine, analysis
+    task, health-db, Bedrock call, template fallback or Dockerfile.
+    Owners: Garvit (RH-SF00-04), Swayam (RH-SF05-07).
+
+
+C. Needs a decision first, then code or docs follow
+---------------------------------------------------
+
+C1. (DECIDED 2026-10-12) No .sha256 checksum file for the import. The
+    .tmp-then-rename marks a file ready, SSH checks the data in transit, and
+    a truncated or damaged file fails to parse and is rejected. Removed from
+    ADR-0024, data-flow.md and open item 5. Still open under item 5: whether
+    files carry a control record (record count and amount total) to catch
+    damage that still parses.
+
+C2. Tamper findings (open item 13): whether admins can only read findings
+    or also create and delete them. The columns are settled by ADR-0022 as
+    amended (row id and reason, each problem recorded once).
+    Owner: the auditor's owner. Until then, dev's REST pass-through stays.
+
+C3. Alert model region (open item 4): event-alert-service defaults to
+    global.openai.gpt-5.6-luna through Bedrock in us-east-1
+    (src/main/resources/application.yml:66-75); ADR-0031 proposes Bedrock
+    in Singapore. The model sees public data only, so this is a choice about
+    residency and cost. Owners: Azeez, Hayyun.
+
+C4. Erasure (open item 21): retention period, who requests erasure, and
+    whether it deletes rows, the data key, or both. Then build it, clearing
+    the email and phone blind indexes too (ADR-0030 decision 5), and
+    deleting the client's identity documents in S3 and their
+    client_documents rows (ADR-0041 decision 7).
+    Owners: Feature 2 owner and the security owner.
+
+C5. Audit sender check (open item 18): whether the auditor checks each
+    message's SQS SenderId against source_service. Owner: auditor's owner.
+
+C6. Client ID check at import (open item 9): Feature 3 owner confirms that
+    none is needed.
+
+C7. Proposed ADRs the items above wait on: ADR-0027 (A9a), ADR-0028
+    (A1c, A9b; A1a-b was built under it), ADR-0031 (A7, C3), ADR-0007 (A7;
+    a-b built under it), ADR-0034 (B1).
+    ADR-0024 (A6) was accepted on 2026-10-14 in PR #97.

@@ -154,7 +154,7 @@ cd -
 2. **Sign in:** open `terraform output app_url` (from crm stack directory). user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
-## 8. The external SFTP server (optional until the ingest Lambda exists)
+## 8. The external SFTP server and the ingest Lambda
 
 ```sh
 cd infrastructure/terraform/stacks/sftp-server
@@ -166,7 +166,39 @@ terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars
 ```
 
-Push the producer, built for the instance's arm64 CPU (`docker build --platform linux/arm64 -t <producer_repository_url>:<tag> services/sftp/producer`, then `docker push`), set `producer_image`, and apply again. Copy `sftp_server_address` and `sftp_host_key_fingerprint` into the crm stack's tfvars; they are used once `enable_ingest_lambda` is turned on (INF-04).
+Push the producer, built for the instance's arm64 CPU (`docker build --platform linux/arm64 -t <producer_repository_url>:<tag> services/sftp/producer`, then `docker push`), set `producer_image`, and apply again.
+
+Then turn on transaction-ingest, the Lambda function that imports the files ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md), INF-04):
+
+1. Build its zip. Docker must be running:
+
+   ```sh
+   make -C services/sftp lambda   # services/sftp/receiver/dist/transaction-ingest.zip
+   ```
+
+2. In the crm stack's `env/prod.tfvars`, set:
+
+   ```hcl
+   enable_ingest_lambda      = true
+   ingest_lambda_zip         = "../../../../services/sftp/receiver/dist/transaction-ingest.zip"
+   sftp_server_address       = "<sftp-server stack's sftp_server_address>"
+   sftp_host_key_fingerprint = "<sftp-server stack's sftp_host_key_fingerprint>"
+   ```
+
+   The path is relative to `stacks/crm`. A plan fails if any of the four is missing.
+3. Apply the crm stack again.
+4. Run it once without waiting for the schedule, and read its log:
+
+   ```sh
+   aws lambda invoke --function-name <stack>-transaction-ingest out.json && cat out.json
+   aws logs tail /aws/lambda/<stack>-transaction-ingest --since 10m
+   ```
+
+   A successful run writes `null`; a failed one writes an `errorMessage`, which the log explains. Files move from the SFTP server's `reports/` to `processed/` or `rejected/`, and the import's audit events reach the auditor.
+
+If the run fails at init, the log names the secret or variable it could not read. A `connect to SFTP server` timeout usually means the SFTP server's `allowed_cidrs` does not hold the crm stack's `nat_public_ips`, or the NAT gateway is down because the stack is stopped. A `host key fingerprint mismatch` means the sftp-server stack was recreated: copy its new fingerprint and apply the crm stack again.
+
+To rebuild after a code change, run `make lambda` and apply the crm stack again: the zip's hash changes, so Terraform updates the function.
 
 ## Between sessions
 
