@@ -120,3 +120,15 @@ Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-d
 ## 22. Identity documents: wrong uploads and re-verification
 
 [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) keeps every uploaded document, because a document can become a verification's evidence, and leaves a verified client verified after any later edit. The Feature 2 owner must decide: (a) whether an agent or admin may remove a document uploaded by mistake (for example another client's) while it is not yet a verification's evidence, and how that is audited; (b) whether changing a verified client's identity details (name, date of birth) sets the client back to unverified, so the new details are checked against a document.
+
+## 23. Admin writes to client data
+
+The code lets admins update, delete and verify any client, and upload its documents: `RequireClientOwner` lets every admin through, as [ADR-0005](../adr/ADR-0005-cognito-security-across-features-1-and-2.md) decision 4, [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) and the [Feature 2 plan](../feature-plans/feature-2_plan.md) describe. The requirements Q&A says admins only read client data: "Admin have read only access to client info" (UM04); "Admin dont have write access on client related activities. Admin can't create new client account, update profile etc." (UM18); "Only Agent hand all client related activities. Admin has read access of it." (CPM31). The Feature 2 owner must decide whether to make admins read-only in client-service and account-service, and record it in an ADR that amends ADR-0005 and ADR-0041.
+
+## 24. Client reassignment
+
+When an agent is disabled, deleted or leaves, an admin assigns their clients to another agent (Q&A UM07, UM15, UM17). Nothing implements this: a client's `created_by_agent_id` never changes, and account-service copies it as each account's `owner_agent_id` ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). The Feature 1 and Feature 2 owners must decide the endpoint, who may call it (the Q&A gives it to admins, which item 23 must allow), how the account copies are updated with it, and how it is audited.
+
+## 25. Business dashboard panels not served yet
+
+The business dashboard mockup showed panels that dashboard-service does not serve: most active clients by transaction value, ingestion freshness (when transactions were last imported), clients without an account, rejected verifications, and failed or long-pending transactions with their clients. The frontend hides them until they exist. Each needs a contract change to [`docs/api/dashboard-api.yaml`](../api/dashboard-api.yaml) and, where it names clients, a decision on how the transaction rows are joined to client names without moving personal data out of client-service ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md)). The business dashboard owner must decide which are worth building.

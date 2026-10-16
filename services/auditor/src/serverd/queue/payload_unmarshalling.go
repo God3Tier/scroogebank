@@ -104,14 +104,17 @@ var userAuditActions = map[string]map[string]bool{
 	},
 	// An account's transactions, read through user-service.
 	"ACCOUNT": {"READ": true},
+	// Every account's transactions, read by an admin (ADR-0043).
+	"TRANSACTION": {"READ": true},
 	// The auditor's corrupted-log table, managed through user-service.
 	"CORRUPTED_AUDIT_LOG": {"CREATE": true, "READ": true, "DELETE": true},
 }
 
 // userAuditNeedsResourceID reports whether a successful event must name the
-// resource it acted on. Reading the corrupted-log list names none.
+// resource it acted on. Reading the corrupted-log list or the transaction list
+// names none.
 func userAuditNeedsResourceID(resourceType, action string) bool {
-	return !(resourceType == "CORRUPTED_AUDIT_LOG" && action == "READ")
+	return action != "READ" || (resourceType != "CORRUPTED_AUDIT_LOG" && resourceType != "TRANSACTION")
 }
 
 // dashboardViewActions are the dashboard's endpoints, one action each.
