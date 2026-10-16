@@ -2,17 +2,21 @@ package main
 
 import (
 	corruptedlog "auditor/src/internal/controller/corrupted_log"
+	"auditor/src/internal/security"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func newHandler(corruptedLogs corruptedlog.Controller) http.Handler {
+// newHandler serves /health to anyone, and the corrupted-log endpoints only
+// to an admin's access token, which user-service forwards (ADR-0021).
+func newHandler(corruptedLogs corruptedlog.Controller, verifier security.Verifier) http.Handler {
 	router := gin.New()
 	router.GET("/health", healthHandler)
-	router.GET("/api/corrupted-logs", adaptHandler(corruptedLogs.GetCorruptedAuditLog, ""))
-	router.POST("/api/corrupted-logs", adaptHandler(corruptedLogs.InsertCorruptedAuditLog, ""))
-	router.DELETE("/api/corrupted-logs/:id", adaptHandler(corruptedLogs.DeleteCorruptedAuditLog, "id"))
+	api := router.Group("/api", security.AdminOnly(verifier))
+	api.GET("/corrupted-logs", adaptHandler(corruptedLogs.GetCorruptedAuditLog, ""))
+	api.POST("/corrupted-logs", adaptHandler(corruptedLogs.InsertCorruptedAuditLog, ""))
+	api.DELETE("/corrupted-logs/:id", adaptHandler(corruptedLogs.DeleteCorruptedAuditLog, "id"))
 	return router
 }
 

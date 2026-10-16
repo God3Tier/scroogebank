@@ -34,7 +34,7 @@ func TestGetClientProfile(t *testing.T) {
 			if test.callRepo {
 				repo.On("GetClientProfile", ctx, test.clientID).Return(test.result, test.repoErr).Once()
 			}
-			got, err := NewClientService(repo).GetClientProfile(ctx, test.clientID)
+			got, err := NewClientService(repo, nil).GetClientProfile(ctx, test.clientID)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return

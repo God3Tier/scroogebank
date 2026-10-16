@@ -93,7 +93,7 @@ func (c *Consumer) handle(ctx context.Context, msg types.Message) {
 		EventType:     event.EventType,
 		Action:        event.Action,
 		SourceService: models.ServiceType(event.SourceService),
-		ActorId:       event.ActorId,
+		ActorID:       event.ActorID,
 		Payload:       string(event.Payload),
 	}
 

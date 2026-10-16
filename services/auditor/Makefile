@@ -1,3 +1,6 @@
+# pg_isready checks over TCP (-h 127.0.0.1): on first start the postgres
+# image runs a setup server on the Unix socket only, then restarts, so a
+# socket check can pass just before that restart.
 DB_USER      := postgres
 DB_PASS      := postgres
 DB_NAME      := myapp
@@ -8,7 +11,10 @@ GRPC_PORT    ?= :9091
 
 SCHEMA_FILE  := data/schema.sql
 ORM_DIR      := src/internal/repository/orm
-PROTO_SRC    := proto/audit_request.proto
+# The gRPC contract is shared with its callers in the repository's proto/
+# directory (ADR-0021).
+PROTO_DIR    := $(abspath $(CURDIR)/../../proto)
+PROTO_SRC    := audit/v1/audit.proto
 PROTO_OUT    := src
 
 COMPOSE := docker compose -f compose.yaml
@@ -20,10 +26,23 @@ TOOLS_RUN    := docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) $(TOOLS_IM
 DOCKER_BUILD_PROGRESS ?= plain
 
 MOCKERY_ARGS ?=
+# Callers' tokens are checked against this user pool and app client (ADR-0021).
+COGNITO_ISSUER_URI ?=
+COGNITO_APP_CLIENT_ID ?=
+# make run's SQS is the LocalStack container in compose.yaml. LocalStack checks
+# no credentials, so the key is a placeholder, not a secret.
+AWS_REGION       ?= us-east-1
+AWS_ENDPOINT_URL ?= http://localhost:4566
+AUDIT_QUEUE_URL  ?= http://localhost:4566/000000000000/audit-insert
+AUDIT_DLQ_URL    ?= http://localhost:4566/000000000000/audit-insert-dlq
+# chain-verify's anchor bucket, created in LocalStack by
+# localstack/init-anchor-bucket.sh (ADR-0022).
+CHAIN_ANCHOR_BUCKET ?= chain-anchors
+LOCALSTACK_KEY   := test
 
 .PHONY: \
 	db-up db-down db-logs db-reset load-schema psql \
-	run down \
+	run chain-verify down \
 	tools-image mockery proto \
 	test-db-up test-db-down generate-orm sqlboiler \
 	test test-clean all
@@ -34,22 +53,30 @@ MOCKERY_ARGS ?=
 # compose.yaml
 # ============================================================
 
-## Start PostgreSQL, Kafka, load the database schema if missing, and run Auditor
-run:
-	$(COMPOSE) up -d postgres kafka
-	@until $(COMPOSE) exec -T postgres pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done
-	@until $(COMPOSE) exec -T kafka kafka-topics --bootstrap-server localhost:29092 --list >/dev/null 2>&1; do sleep 2; done
+## Start PostgreSQL and LocalStack (SQS), load the database schema if missing,
+## generate the gRPC code, and run the Auditor
+run: proto
+	$(COMPOSE) up -d postgres localstack
+	@until $(COMPOSE) exec -T postgres pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done
+	@until $(COMPOSE) exec -T localstack awslocal sqs get-queue-url --queue-name audit-insert >/dev/null 2>&1; do sleep 2; done
 	@if ! $(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -tAc "SELECT to_regclass('public.audit_log') IS NOT NULL" | grep -qx t; then \
 		echo "Loading Auditor database schema..."; \
 		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
 	fi
-	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) KAFKABROKERS=localhost:9092 HANDLER_IP=localhost:9092 go run ./src/serverd
+	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(LOCALSTACK_KEY) AWS_SECRET_ACCESS_KEY=$(LOCALSTACK_KEY) AUDIT_QUEUE_URL=$(AUDIT_QUEUE_URL) AUDIT_DLQ_URL=$(AUDIT_DLQ_URL) go run ./src/serverd
+
+## Check the local audit chain once, as the daily chain-verify task does:
+## record any problem in corrupted_audit_log, and anchor the head in
+## LocalStack's S3 (ADR-0022). Needs the database and LocalStack from make run,
+## and the ORM (make sqlboiler). Exits 2 when it records a new finding.
+chain-verify:
+	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(LOCALSTACK_KEY) AWS_SECRET_ACCESS_KEY=$(LOCALSTACK_KEY) CHAIN_ANCHOR_BUCKET=$(CHAIN_ANCHOR_BUCKET) go run ./src/chainverify
 
 db-up:
 	$(COMPOSE) up -d postgres
 	@echo "Waiting for PostgreSQL..."
 	@until $(COMPOSE) exec -T postgres \
-		pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
+		pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
 		sleep 1; \
 	done
 	@echo "PostgreSQL is ready."
@@ -93,17 +120,20 @@ tools-image:
 		-t $(TOOLS_IMAGE) \
 		.
 
+## Regenerate the mocks (git-ignored) from scratch. Old mocks are removed first:
+## one left over from a removed method would stop mockery loading the package.
+## Needs the gRPC code and the ORM (make proto, make sqlboiler).
 mockery: tools-image
-	$(TOOLS_RUN) mockery $(MOCKERY_ARGS)
+	$(TOOLS_RUN) sh -c 'find src -name mocks.go -delete && mockery $(MOCKERY_ARGS)'
 
-proto:
-	mkdir -p $(PROTO_OUT)
-	protoc \
-		--go_out=$(PROTO_OUT) \
-		--go_opt=module=auditor/src \
-		--go-grpc_out=$(PROTO_OUT) \
-		--go-grpc_opt=module=auditor/src \
-		$(PROTO_SRC)
+## Generate the gRPC code into src/gen (git-ignored) from the shared contract.
+## Runs in the tools image, so protoc need not be installed locally.
+proto: tools-image
+	docker run --rm --platform linux/amd64 $(TOOLS_MOUNT) -v "$(PROTO_DIR)":/proto:ro $(TOOLS_IMAGE) \
+		protoc -I /proto -I /usr/include \
+			--go_out=$(PROTO_OUT) --go_opt=module=auditor/src \
+			--go-grpc_out=$(PROTO_OUT) --go-grpc_opt=module=auditor/src \
+			/proto/$(PROTO_SRC)
 
 
 # ============================================================
@@ -120,7 +150,7 @@ test-db-up:
 
 	@echo "Waiting for test PostgreSQL..."
 	@until $(TEST_COMPOSE) exec -T postgres \
-		pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
+		pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do \
 		sleep 1; \
 	done
 
@@ -167,12 +197,15 @@ sqlboiler:
 # Tests
 # ============================================================
 
+## Stops at the first failed step, so a failed generation is reported as such.
 test:
-	@trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
+	@set -e; trap '$(TEST_COMPOSE) down -v --remove-orphans' EXIT; \
 	echo "========================================"; \
 	echo "Starting integration test environment"; \
 	echo "========================================"; \
+	$(MAKE) proto; \
 	$(MAKE) generate-orm; \
+	$(MAKE) mockery; \
 	echo ""; \
 	echo "========================================"; \
 	echo "Running Go tests"; \

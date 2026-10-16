@@ -21,7 +21,7 @@ func buildEvent(t *testing.T, eventType, action, sourceService string, payload a
 		EventType:     eventType,
 		Action:        action,
 		SourceService: sourceService,
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       payloadBytes,
 	}
 }
@@ -76,6 +76,120 @@ func TestValidatePayload_ValidCRUD_UserManagementService(t *testing.T) {
 	}
 }
 
+func TestValidatePayload_UserManagementRoleChange(t *testing.T) {
+	event := buildEvent(t, "CRUD", "ROLE_CHANGE", string(models.UserManagementServiceType), ValidUserAuditPayload{
+		ResourceType: "USER",
+		ResourceID:   "8f0c6f1e-2b9a-4c11-9d3e-5a7b1c2d3e4f",
+		Endpoint:     "/api/users/{id}/role",
+		HTTPMethod:   "PATCH",
+		StatusCode:   200,
+		DateTime:     time.Now().Format(time.RFC3339Nano),
+		UserRole:     "ADMIN",
+	})
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected role change event from UserManagement service to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_UserManagementLogout(t *testing.T) {
+	event := buildEvent(t, "CRUD", "LOGOUT", string(models.UserManagementServiceType), ValidUserAuditPayload{
+		ResourceType: "USER",
+		ResourceID:   "8f0c6f1e-2b9a-4c11-9d3e-5a7b1c2d3e4f",
+		Endpoint:     "/api/users/me/logout",
+		HTTPMethod:   "POST",
+		StatusCode:   204,
+		DateTime:     time.Now().Format(time.RFC3339Nano),
+		UserRole:     "AGENT",
+	})
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected logout event from UserManagement service to pass, got error: %v", err)
+	}
+}
+
+func userOperation(resourceType, resourceID, endpoint, method string, status int) ValidUserAuditPayload {
+	return ValidUserAuditPayload{
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Endpoint:     endpoint,
+		HTTPMethod:   method,
+		StatusCode:   status,
+		DateTime:     time.Now().Format(time.RFC3339Nano),
+	}
+}
+
+func TestValidatePayload_UserManagementOtherResources(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		action  string
+		payload ValidUserAuditPayload
+	}{
+		{"corrupted-log list read has no resource id", "READ",
+			userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "GET", 200)},
+		{"corrupted-log create", "CREATE",
+			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs", "POST", 201)},
+		{"corrupted-log delete", "DELETE",
+			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs/{id}", "DELETE", 200)},
+		{"account transactions read", "READ",
+			userOperation("ACCOUNT", id, "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"transaction list read has no resource id", "READ",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", tt.action, string(models.UserManagementServiceType), tt.payload)
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected %s on %s to pass, got error: %v", tt.action, tt.payload.ResourceType, err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_UserManagementRejectsInvalidOperations(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		action  string
+		payload ValidUserAuditPayload
+	}{
+		{"unknown resource type", "READ",
+			userOperation("CLIENT", id, "/api/clients/{id}", "GET", 200)},
+		{"users cannot be deleted", "DELETE",
+			userOperation("USER", id, "/api/users/{id}", "DELETE", 204)},
+		{"corrupted logs have no role change", "ROLE_CHANGE",
+			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs/{id}", "PATCH", 200)},
+		{"successful corrupted-log create needs a resource id", "CREATE",
+			userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "POST", 201)},
+		{"successful user read needs a resource id", "READ",
+			userOperation("USER", "", "/api/users/{id}", "GET", 200)},
+		{"transactions are only read", "DELETE",
+			userOperation("TRANSACTION", id, "/api/transactions", "DELETE", 200)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", tt.action, string(models.UserManagementServiceType), tt.payload)
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s on %s to be rejected, got nil", tt.action, tt.payload.ResourceType)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_UserManagementFailedCreateNeedsNoResourceID(t *testing.T) {
+	event := buildEvent(t, "CRUD", "CREATE", string(models.UserManagementServiceType),
+		userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "POST", 400))
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected a failed create without a resource id to pass, got error: %v", err)
+	}
+}
+
 func TestValidatePayload_ValidTransaction_FileCompleted(t *testing.T) {
 	now := time.Now()
 	event := buildEvent(t, "TRANSACTION_INGESTION", "FILE_PROCESSING_COMPLETED", string(models.TransactionServiceType), ValidFileCompletedPayload{
@@ -121,6 +235,173 @@ func TestValidatePayload_ValidTransaction_ProcessingErrors(t *testing.T) {
 	}
 }
 
+func dashboardView() ValidDashboardViewPayload {
+	return ValidDashboardViewPayload{
+		Scope:       "AGENT",
+		WindowFrom:  "2026-09-01",
+		WindowTo:    "2026-09-30",
+		Panels:      map[string]string{"clients": "OK", "transactions": "UNAVAILABLE"},
+		ResultCount: 1,
+		CacheHit:    true,
+		DateTime:    time.Now().UTC().Format(time.RFC3339Nano),
+	}
+}
+
+func TestValidatePayload_ValidDashboardView(t *testing.T) {
+	for _, action := range []string{"VIEW_OVERVIEW", "VIEW_PORTFOLIO", "VIEW_TRANSACTIONS", "VIEW_ACTION_ITEMS"} {
+		t.Run(action, func(t *testing.T) {
+			event := buildEvent(t, "DASHBOARD_VIEW", action, string(models.DashboardServiceType), dashboardView())
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected dashboard %s to pass, got error: %v", action, err)
+			}
+		})
+	}
+
+	adminView := dashboardView()
+	adminView.Scope = "ADMIN"
+	event := buildEvent(t, "DASHBOARD_VIEW", "VIEW_AGENT_PERFORMANCE", string(models.DashboardServiceType), adminView)
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected an admin's per-agent view to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_DashboardRejectsInvalidEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		action    string
+		actor     string
+		change    func(*ValidDashboardViewPayload)
+	}{
+		{name: "wrong event type", eventType: "CRUD", action: "VIEW_OVERVIEW", actor: "a1"},
+		{name: "unknown action", eventType: "DASHBOARD_VIEW", action: "EXPORT", actor: "a1"},
+		{name: "missing actor", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: " "},
+		{name: "unknown scope", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.Scope = "SERVICE" }},
+		{name: "agent viewing the per-agent table", eventType: "DASHBOARD_VIEW", action: "VIEW_AGENT_PERFORMANCE", actor: "a1"},
+		{name: "window not a date", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.WindowFrom = "last month" }},
+		{name: "window ends before it starts", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.WindowFrom, p.WindowTo = p.WindowTo, p.WindowFrom }},
+		{name: "no panels", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.Panels, p.ResultCount = nil, 0 }},
+		{name: "more results than panels", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.ResultCount = 3 }},
+		{name: "missing datetime", eventType: "DASHBOARD_VIEW", action: "VIEW_OVERVIEW", actor: "a1",
+			change: func(p *ValidDashboardViewPayload) { p.DateTime = "" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := dashboardView()
+			if tt.change != nil {
+				tt.change(&payload)
+			}
+			event := buildEvent(t, tt.eventType, tt.action, string(models.DashboardServiceType), payload)
+			event.ActorID = tt.actor
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s to be rejected, got nil", tt.name)
+			}
+		})
+	}
+}
+
+// cognitoLogin is a message exactly as services/cognito-triggers sends it for
+// its sample login event (src/test/resources/events/post-authentication.json;
+// AuditMessageTest checks the same text).
+const cognitoLogin = `{"event_id":"evt-1","event_type":"AUTHENTICATION","action":"LOGIN",` +
+	`"source_service":"COGNITO_TRIGGERS","actor_id":"4a1b2c3d-0000-4000-8000-000000000001",` +
+	`"payload":{"user_pool_id":"ap-southeast-1_Example01","trigger_source":"PostAuthentication_Authentication",` +
+	`"datetime":"2026-10-13T05:54:00.123Z","app_client_id":"example0app0client0id0001"}}`
+
+func authenticationPayload(triggerSource string) ValidAuthenticationPayload {
+	return ValidAuthenticationPayload{
+		UserPoolID:    "ap-southeast-1_Example01",
+		AppClientID:   "example0app0client0id0001",
+		TriggerSource: triggerSource,
+		DateTime:      "2026-10-13T05:54:00.123Z",
+	}
+}
+
+func TestValidatePayload_CognitoTriggersMessage(t *testing.T) {
+	var event ValidEvent
+	if err := json.Unmarshal([]byte(cognitoLogin), &event); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected the triggers' login message to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_ValidAuthentication(t *testing.T) {
+	tests := []struct {
+		action        string
+		triggerSource string
+	}{
+		{action: "LOGIN", triggerSource: "PostAuthentication_Authentication"},
+		{action: "PASSWORD_RESET", triggerSource: "PostConfirmation_ConfirmForgotPassword"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			event := buildEvent(t, "AUTHENTICATION", tt.action, string(models.CognitoTriggersServiceType),
+				authenticationPayload(tt.triggerSource))
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected %s to pass, got error: %v", tt.action, err)
+			}
+		})
+	}
+
+	withoutAppClient := authenticationPayload("PostAuthentication_Authentication")
+	withoutAppClient.AppClientID = ""
+	event := buildEvent(t, "AUTHENTICATION", "LOGIN", string(models.CognitoTriggersServiceType), withoutAppClient)
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected a login without an app client to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_AuthenticationRejectsInvalidEvents(t *testing.T) {
+	login := "PostAuthentication_Authentication"
+	tests := []struct {
+		name      string
+		eventType string
+		action    string
+		actor     string
+		change    func(*ValidAuthenticationPayload)
+	}{
+		{name: "wrong event type", eventType: "CRUD", action: "LOGIN", actor: "sub-1"},
+		{name: "unknown action", eventType: "AUTHENTICATION", action: "LOGOUT", actor: "sub-1"},
+		{name: "missing actor", eventType: "AUTHENTICATION", action: "LOGIN", actor: " "},
+		{name: "missing user pool", eventType: "AUTHENTICATION", action: "LOGIN", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.UserPoolID = "" }},
+		{name: "login from the password reset trigger", eventType: "AUTHENTICATION", action: "LOGIN", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.TriggerSource = "PostConfirmation_ConfirmForgotPassword" }},
+		{name: "password reset from a sign-up confirmation", eventType: "AUTHENTICATION", action: "PASSWORD_RESET", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.TriggerSource = "PostConfirmation_ConfirmSignUp" }},
+		{name: "missing datetime", eventType: "AUTHENTICATION", action: "LOGIN", actor: "sub-1",
+			change: func(p *ValidAuthenticationPayload) { p.DateTime = "" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := authenticationPayload(login)
+			if tt.change != nil {
+				tt.change(&payload)
+			}
+			event := buildEvent(t, tt.eventType, tt.action, string(models.CognitoTriggersServiceType), payload)
+			event.ActorID = tt.actor
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s to be rejected, got nil", tt.name)
+			}
+		})
+	}
+}
+
 func TestValidatePayload_UnknownSourceService(t *testing.T) {
 	event := buildEvent(t, "CRUD", "UPDATE", "NOT_A_REAL_SERVICE", ValidCRUDPayload{})
 
@@ -155,7 +436,7 @@ func TestValidatePayload_MalformedCRUDPayload(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: string(models.CRMServiceType),
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       json.RawMessage(`{"agent_id": 12345}`), // agent_id should be a string, not a number
 	}
 
@@ -169,12 +450,49 @@ func TestValidatePayload_MalformedFileCompletedPayload(t *testing.T) {
 		EventType:     "TRANSACTION_INGESTION",
 		Action:        "FILE_PROCESSING_COMPLETED",
 		SourceService: string(models.TransactionServiceType),
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       json.RawMessage(`{"records_processed": "not-a-number"}`),
 	}
 
 	if err := validatePayload(event); err == nil {
 		t.Error("expected error for malformed FileCompletedPayload (wrong field type), got nil")
+	}
+}
+
+func TestValidatePayload_ValidEventAlert(t *testing.T) {
+	event := buildEvent(t, "EVENT_ALERT", "GENERATED", string(models.EventAlertServiceType), ValidEventAlertPayload{
+		EventID:      "70000000-0000-4000-8000-000000000001",
+		EventVersion: 1,
+		OccurredAt:   time.Now().UTC(),
+		Data:         json.RawMessage(`{"alertId":"70000000-0000-4000-8000-000000000002"}`),
+	})
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected valid event-alert audit event to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_RejectsUnknownEventAlertAction(t *testing.T) {
+	event := buildEvent(t, "EVENT_ALERT", "CLIENT_DATA_EXPORTED", string(models.EventAlertServiceType), ValidEventAlertPayload{
+		EventID:      "70000000-0000-4000-8000-000000000001",
+		EventVersion: 1,
+		OccurredAt:   time.Now().UTC(),
+		Data:         json.RawMessage(`{}`),
+	})
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected unknown event-alert action to be rejected")
+	}
+}
+
+func TestValidatePayload_RejectsIncompleteEventAlertMetadata(t *testing.T) {
+	event := buildEvent(t, "EVENT_ALERT", "GENERATED", string(models.EventAlertServiceType), map[string]any{
+		"event_version": 1,
+		"data":          map[string]string{"alertId": "synthetic"},
+	})
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected missing event ID and occurrence time to be rejected")
 	}
 }
 

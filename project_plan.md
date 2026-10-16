@@ -1053,14 +1053,14 @@ The ingestion design (pull/push, batch/API/file, schedule, retries, idempotency,
 
 # 14. Features 4, 5 and 6 — Innovation Features
 
-**Status: NOT YET CONFIRMED.**
+**Status:** Feature 4 is confirmed as Dynamic Event-Driven Client Alerts. Features
+5 and 6 remain unconfirmed. Do not prematurely hard-code architecture around the
+unconfirmed features.
 
-Do not prematurely hard-code architecture around unconfirmed innovation features.
-
-Create placeholders:
+Canonical plans:
 
 ```text
-docs/feature-plans/innovation-a_plan.md
+docs/feature-plans/event-driven-alerts_plan.md
 docs/feature-plans/innovation-b_plan.md
 docs/feature-plans/innovation-c_plan.md
 ```
@@ -1069,6 +1069,9 @@ docs/feature-plans/innovation-c_plan.md
 
 ### Feature 4 — Innovation Feature A
 
+- Confirmed implementation: Dynamic Event-Driven Client Alerts.
+- Human feature owner: Azeez.
+- Delivery owners: Azeez for Search/AI/Platform; Hayyun for CRM/Domain/Experience and final integration.
 - Must integrate AI.
 - Must solve a concrete CRM/banking/user/operational problem.
 - Must justify why AI is appropriate and what business value it adds.

@@ -7,9 +7,12 @@ import (
 )
 
 type Repository interface {
-	InsertCorruptedLog(ctx context.Context, raw models.CorruptedAuditLog) error 
-	GetCorruptedLogs(ctx context.Context)( []models.CorruptedAuditLog, error)
-	DeleteCorruptedLog(ctx context.Context, uuid string) error 
+	InsertCorruptedLog(ctx context.Context, raw models.CorruptedAuditLog) error
+	// RecordFinding records a problem chain-verify found, once per row and
+	// reason, and reports whether it was new.
+	RecordFinding(ctx context.Context, finding models.ChainFinding) (bool, error)
+	GetCorruptedLogs(ctx context.Context) ([]models.CorruptedAuditLog, error)
+	DeleteCorruptedLog(ctx context.Context, uuid string) error
 }
 
 type impl struct {
@@ -18,6 +21,6 @@ type impl struct {
 
 func New(db *sql.DB) Repository {
 	return impl{
-		db, 
+		db,
 	}
 }

@@ -13,26 +13,37 @@ func (r clientRepository) GetClientProfile(ctx context.Context, clientID string)
 	if err != nil {
 		return models.Client{}, errors.ErrClientNotFound
 	}
+	return r.profileFrom(ctx, client)
+}
 
+// profileFrom decrypts a stored client with its own data key (ADR-0030).
+func (r clientRepository) profileFrom(ctx context.Context, client *orm.Client) (models.Client, error) {
 	// Convert string clientID to uuid
 	c, err := uuid.Parse(client.ClientID)
 	if err != nil {
 		return models.Client{}, err
 	}
-	return models.Client{
-		ClientID:           c,
-		FirstName:          client.FirstName,
-		LastName:           client.LastName,
-		DateOfBirth:        client.DateOfBirth,
-		Gender:             client.Gender,
-		Email:              client.Email,
-		PhoneNumber:        client.PhoneNumber,
-		Address:            client.Address,
-		City:               client.City,
-		State:              client.State,
-		Country:            client.Country,
-		PostalCode:         client.PostalCode,
-		VerificationStatus: client.VerificationStatus,
-		CreatedByAgentID:   client.CreatedByAgentID,
-	}, nil
+	key, err := r.protector.Key(ctx, client.ClientID)
+	if err != nil {
+		return models.Client{}, err
+	}
+	profile, err := decryptFrom(client, key)
+	if err != nil {
+		return models.Client{}, err
+	}
+	profile.ClientID = c
+	profile.VerificationStatus = client.VerificationStatus
+	profile.VerifiedByAgentID = client.VerifiedByAgentID.String
+	if client.VerifiedAt.Valid {
+		verifiedAt := client.VerifiedAt.Time
+		profile.VerifiedAt = &verifiedAt
+	}
+	if client.VerifiedWithDocuments.Valid {
+		withDocuments := client.VerifiedWithDocuments.Bool
+		profile.VerifiedWithDocuments = &withDocuments
+	}
+	profile.CreatedByAgentID = client.CreatedByAgentID
+	profile.CreatedAt = client.CreatedAt
+	profile.UpdatedAt = client.UpdatedAt
+	return profile, nil
 }

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"client-profile-management-service/src/internal/auditnote"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,10 +23,6 @@ const (
 	sourceService      = "CRM"
 	maxRequestBodySize = 1 << 20
 )
-
-type SQSAPI interface {
-	SendMessage(context.Context, *sqs.SendMessageInput, ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
-}
 
 type Event struct {
 	EventID       string          `json:"event_id"`
@@ -43,16 +39,22 @@ type EndpointPayload struct {
 	AttributeName string `json:"attribute_name"`
 	AgentID       string `json:"agent_id"`
 	ClientID      string `json:"client_id,omitempty"`
-	Endpoint      string `json:"endpoint"`
-	HTTPMethod    string `json:"http_method"`
-	StatusCode    int    `json:"status_code"`
-	DateTime      string `json:"datetime"`
+	// DocumentIDs names the identity documents the call uploaded, read or
+	// verified the client with; WithoutDocument marks a Verify call that named
+	// none (ADR-0041 decision 6).
+	DocumentIDs     []string `json:"document_ids,omitempty"`
+	WithoutDocument bool     `json:"without_document,omitempty"`
+	Endpoint        string   `json:"endpoint"`
+	HTTPMethod      string   `json:"http_method"`
+	StatusCode      int      `json:"status_code"`
+	DateTime        string   `json:"datetime"`
 }
 
-// AuditLogger sends one event to the Auditor queue after each protected CRM
-// endpoint finishes. Authentication middleware must run before this middleware
-// and place the verified Cognito subject in Gin's "agent_id" context value.
-func AuditLogger(client SQSAPI, queueURL string) gin.HandlerFunc {
+// AuditLogger saves one event to the outbox after each protected CRM endpoint
+// finishes; Relay sends it to the Auditor queue (ADR-0020). Authentication
+// middleware must run before this middleware and place the verified Cognito
+// subject in Gin's "agent_id" context value.
+func AuditLogger(outbox Outbox) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Preserve only the client ID from a JSON body before the controller reads
 		// it. The body is restored and never included in the audit event.
@@ -79,6 +81,12 @@ func AuditLogger(client SQSAPI, queueURL string) gin.HandlerFunc {
 			}
 		}
 
+		// Handlers add the document IDs they act on; a document's own route
+		// names it as well.
+		ctx, notes := auditnote.WithNotes(c.Request.Context())
+		c.Request = c.Request.WithContext(ctx)
+		auditnote.AddDocumentIDs(ctx, c.Param("documentId"))
+
 		c.Next()
 
 		actorID, ok := c.Get("agent_id")
@@ -99,13 +107,15 @@ func AuditLogger(client SQSAPI, queueURL string) gin.HandlerFunc {
 			return
 		}
 		payload, err := json.Marshal(EndpointPayload{
-			AttributeName: "endpoint_call",
-			AgentID:       actor,
-			ClientID:      clientID,
-			Endpoint:      c.FullPath(),
-			HTTPMethod:    c.Request.Method,
-			StatusCode:    c.Writer.Status(),
-			DateTime:      time.Now().UTC().Format(time.RFC3339Nano),
+			AttributeName:   "endpoint_call",
+			AgentID:         actor,
+			ClientID:        clientID,
+			DocumentIDs:     notes.DocumentIDs(),
+			WithoutDocument: notes.WithoutDocument(),
+			Endpoint:        c.FullPath(),
+			HTTPMethod:      c.Request.Method,
+			StatusCode:      c.Writer.Status(),
+			DateTime:        time.Now().UTC().Format(time.RFC3339Nano),
 		})
 		if err != nil {
 			log.Printf("audit event not sent: marshal payload: %v", err)
@@ -123,11 +133,12 @@ func AuditLogger(client SQSAPI, queueURL string) gin.HandlerFunc {
 			log.Printf("audit event not sent: marshal event: %v", err)
 			return
 		}
-		if _, err := client.SendMessage(c.Request.Context(), &sqs.SendMessageInput{
-			QueueUrl:    aws.String(queueURL),
-			MessageBody: aws.String(string(message)),
-		}); err != nil {
-			log.Printf("audit event send failed event_id=%s route=%s: %v", eventID, c.FullPath(), err)
+		// The endpoint's change has committed even if the caller has since gone
+		// away, so the save must not be cancelled with the request.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), saveTimeout)
+		defer cancel()
+		if err := outbox.Save(ctx, eventID, message); err != nil {
+			log.Printf("audit event not saved event_id=%s route=%s: %v", eventID, c.FullPath(), err)
 		}
 	}
 }

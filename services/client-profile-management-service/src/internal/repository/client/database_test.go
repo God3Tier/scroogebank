@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -9,9 +10,13 @@ import (
 	"time"
 	"uuid"
 
+	"client-profile-management-service/src/internal/documents/documentstest"
+	"client-profile-management-service/src/internal/encryption"
+	"client-profile-management-service/src/internal/encryption/encryptiontest"
 	"client-profile-management-service/src/internal/models"
 
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func openTestDB(t *testing.T) *sql.DB {
@@ -55,6 +60,51 @@ func envOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// newTestRepository returns a repository whose data keys and blind indexes
+// come from an in-memory protector, and whose documents are kept in memory
+// (see documentStore).
+func newTestRepository(t *testing.T) (*sql.DB, clientRepository, *encryptiontest.Protector) {
+	t.Helper()
+	db := openTestDB(t)
+	protector := encryptiontest.New()
+	return db, clientRepository{db: db, protector: protector, documents: documentstest.New()}, protector
+}
+
+// documentStore is the in-memory store newTestRepository gave repo.
+func documentStore(repo clientRepository) *documentstest.Store {
+	return repo.documents.(*documentstest.Store)
+}
+
+// clearContact removes any row with this ID, email or phone, which an
+// earlier test may have left behind.
+func clearContact(t *testing.T, db *sql.DB, id, email, phone string) {
+	t.Helper()
+	_, err := db.Exec(`DELETE FROM clients WHERE client_id = $1 OR email_hash = $2 OR phone_number_hash = $3`, id,
+		encryptiontest.Index(encryption.NormalizeEmail(email)), encryptiontest.Index(encryption.NormalizePhone(phone)))
+	require.NoError(t, err)
+}
+
+// seedClient stores a client through the repository, so its fields are
+// encrypted the way the service stores them.
+func seedClient(t *testing.T, db *sql.DB, repo clientRepository, id, email, phone string) models.Client {
+	t.Helper()
+	clearContact(t, db, id, email, phone)
+	var err error
+	profile := validRepositoryClient()
+	profile.ClientID, err = uuid.Parse(id)
+	require.NoError(t, err)
+	profile.Email, profile.PhoneNumber = email, phone
+	require.NoError(t, repo.CreateClient(context.Background(), profile))
+	return profile
+}
+
+// markDeleted soft-deletes a seeded client (ADR-0036).
+func markDeleted(t *testing.T, db *sql.DB, id string) {
+	t.Helper()
+	_, err := db.Exec(`UPDATE clients SET deleted_at = now() WHERE client_id = $1`, id)
+	require.NoError(t, err)
 }
 
 func validRepositoryClient() models.Client {

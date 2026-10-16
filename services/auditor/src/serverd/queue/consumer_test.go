@@ -77,7 +77,7 @@ func TestConsumer_Handle_SuccessfulStore_DeletesMessage(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "actor-1",
+		ActorID:       "actor-1",
 		Payload:       `{"agent_id":"AGT-1"}`,
 	}).Return(nil).Once()
 
@@ -92,6 +92,33 @@ func TestConsumer_Handle_SuccessfulStore_DeletesMessage(t *testing.T) {
 	assert.Empty(t, sqsClient.sentMessages, "a successfully stored event must not be sent to the DLQ")
 }
 
+func TestConsumer_Handle_EventAlertEnvelope_StoresAndDeletesMessage(t *testing.T) {
+	ctx := context.Background()
+	sqsClient := &fakeSQS{}
+	repo := audit.NewMockRepository(t)
+	payload := `{"event_id":"70000000-0000-4000-8000-000000000001","event_version":1,"occurred_at":"2026-09-30T00:00:00Z","data":{"alertId":"synthetic-alert"}}`
+
+	repo.On("StoreAuditChain", ctx, models.AuditLogInput{
+		EventID:       "70000000-0000-4000-8000-000000000001",
+		EventType:     "EVENT_ALERT",
+		Action:        "GENERATED",
+		SourceService: models.EventAlertServiceType,
+		ActorID:       "synthetic-agent",
+		Payload:       payload,
+	}).Return(nil).Once()
+
+	body := `{"event_id":"70000000-0000-4000-8000-000000000001","event_type":"EVENT_ALERT","action":"GENERATED","source_service":"EVENT_ALERT_SERVICE","actor_id":"synthetic-agent","payload":` + payload + `}`
+	consumer := NewConsumer(sqsClient, "queue-url", repo, NewRejecter(sqsClient, "dlq-url"))
+	consumer.handle(ctx, types.Message{
+		MessageId:     aws.String("alert-message-1"),
+		ReceiptHandle: aws.String("alert-receipt-1"),
+		Body:          aws.String(body),
+	})
+
+	assert.Equal(t, []string{"alert-receipt-1"}, sqsClient.deletedReceiptHandles)
+	assert.Empty(t, sqsClient.sentMessages)
+}
+
 func TestConsumer_Handle_StoreFails_LeavesMessageForRetry(t *testing.T) {
 	ctx := context.Background()
 	sqsClient := &fakeSQS{}
@@ -102,7 +129,7 @@ func TestConsumer_Handle_StoreFails_LeavesMessageForRetry(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "actor-1",
+		ActorID:       "actor-1",
 		Payload:       `{"agent_id":"AGT-1"}`,
 	}).Return(errors.New("db unavailable")).Once()
 
@@ -126,7 +153,7 @@ func TestConsumer_Handle_DuplicateEvent_DeletesWithoutRewriting(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: models.CRMServiceType,
-		ActorId:       "actor-1",
+		ActorID:       "actor-1",
 		Payload:       `{"agent_id":"AGT-1"}`,
 	}).Return(audit.DuplicateEventError).Once()
 

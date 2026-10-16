@@ -1,30 +1,30 @@
 package repository
 
 import (
-	"client-profile-management-service/src/internal/repository/account"
+	"client-profile-management-service/src/internal/documents"
+	"client-profile-management-service/src/internal/encryption"
 	"client-profile-management-service/src/internal/repository/client"
 	"database/sql"
 )
 
 type Registry interface {
-	GetAccountRepository() account.Repository
 	GetClientRepository() client.Repository
 }
 
 type impl struct {
-	db *sql.DB
+	db        *sql.DB
+	protector encryption.Protector
+	documents documents.Store
 }
 
-func New(db *sql.DB) Registry {
+func New(db *sql.DB, protector encryption.Protector, store documents.Store) Registry {
 	return impl{
 		db,
+		protector,
+		store,
 	}
 }
 
-func (i impl) GetAccountRepository() account.Repository {
-	return account.NewAccountRepository(i.db)
-}
-
 func (i impl) GetClientRepository() client.Repository {
-	return client.NewClientRepository(i.db)
+	return client.NewClientRepository(i.db, i.protector, i.documents)
 }

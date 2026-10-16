@@ -1,13 +1,12 @@
 package security
 
 import (
-	"bytes"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"regexp"
+
+	orm "client-profile-management-service/src/internal/repository/orm"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,7 +17,7 @@ var uuidPathPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 // from entering Feature 2 routes.
 func RequireCRMRole() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
+		principal, ok := PrincipalFromGin(c)
 		if !ok || (principal.Role != "ADMIN" && principal.Role != "AGENT") {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "ADMIN or AGENT role required"})
 			return
@@ -28,11 +27,15 @@ func RequireCRMRole() gin.HandlerFunc {
 }
 
 // RequireClientOwner limits agent access to their own client profiles. Admins
-// can access every profile. Missing and out-of-scope profiles both return 404
-// so callers cannot enumerate another agent's client IDs.
+// can access every profile. Missing, deleted and out-of-scope profiles all
+// return 404 so callers cannot enumerate another agent's client IDs.
+//
+// account-service relies on this rule: it forwards the caller's token to
+// GET /api/clients/{id} before creating an account, and treats 404 as "no
+// such client for this caller".
 func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
+		principal, ok := PrincipalFromGin(c)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
@@ -46,83 +49,17 @@ func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 			c.Next() // Let the controller return its normal malformed-ID response.
 			return
 		}
-		if !ownsClient(c, db, "SELECT created_by_agent_id FROM clients WHERE client_id = $1", clientID, principal.Subject) {
+		if !ownsClient(c, db, clientID, principal.Subject) {
 			return
 		}
 		c.Next()
 	}
 }
 
-// RequireClientBodyOwner applies the same rule to account creation, where the
-// target client ID is in the JSON body rather than the URL.
-func RequireClientBodyOwner(db *sql.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-			return
-		}
-		if principal.Role == "ADMIN" {
-			c.Next()
-			return
-		}
-
-		body, err := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
-			return
-		}
-		if len(body) > 1<<20 {
-			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
-			return
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(body))
-		var input struct {
-			ClientID string `json:"client_id"`
-		}
-		if json.Unmarshal(body, &input) != nil || !uuidPathPattern.MatchString(input.ClientID) {
-			c.Next() // The controller validates malformed or incomplete JSON.
-			return
-		}
-		if !ownsClient(c, db, "SELECT created_by_agent_id FROM clients WHERE client_id = $1", input.ClientID, principal.Subject) {
-			return
-		}
-		c.Next()
-	}
-}
-
-// RequireAccountOwner checks the owning client's agent before permitting an
-// account deletion.
-func RequireAccountOwner(db *sql.DB, parameter string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		principal, ok := principalFromGin(c)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
-			return
-		}
-		if principal.Role == "ADMIN" {
-			c.Next()
-			return
-		}
-		accountID := c.Param(parameter)
-		if !uuidPathPattern.MatchString(accountID) {
-			c.Next()
-			return
-		}
-		query := `SELECT c.created_by_agent_id
-			FROM accounts a JOIN clients c ON c.client_id = a.client_id
-			WHERE a.id = $1`
-		if !ownsClient(c, db, query, accountID, principal.Subject) {
-			return
-		}
-		c.Next()
-	}
-}
-
-func ownsClient(c *gin.Context, db *sql.DB, query, id, subject string) bool {
-	var owner string
-	err := db.QueryRowContext(c.Request.Context(), query, id).Scan(&owner)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && owner != subject) {
+// The generated finder skips deleted clients (ADR-0036).
+func ownsClient(c *gin.Context, db *sql.DB, clientID, subject string) bool {
+	client, err := orm.FindClient(c.Request.Context(), db, clientID, orm.ClientColumns.CreatedByAgentID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && client.CreatedByAgentID != subject) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 		return false
 	}
@@ -133,7 +70,7 @@ func ownsClient(c *gin.Context, db *sql.DB, query, id, subject string) bool {
 	return true
 }
 
-func principalFromGin(c *gin.Context) (Principal, bool) {
+func PrincipalFromGin(c *gin.Context) (Principal, bool) {
 	value, exists := c.Get("principal")
 	if !exists {
 		return Principal{}, false

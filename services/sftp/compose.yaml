@@ -1,19 +1,23 @@
 services:
+  # Transactions only. Clients and accounts live in their own services'
+  # databases; the poller links rows through account-service (ADR-0037).
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-crm}
+      POSTGRES_DB: ${POSTGRES_DB:-transactions}
       POSTGRES_USER: ${POSTGRES_USER:-crm}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # 5432 is client-profile-management-service's database, 5436 account-service's.
+      - "${POSTGRES_PORT:-5437}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-transactions.sql:ro
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-crm}"]
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-transactions}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,17 +26,18 @@ services:
     image: postgres:17-alpine
     profiles: ["test"]
     environment:
-      POSTGRES_DB: crm
+      POSTGRES_DB: transactions
       POSTGRES_USER: crm
       POSTGRES_PASSWORD: crm
     tmpfs:
       - /var/lib/postgresql/data
     volumes:
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-transactions.sql:ro
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crm -d crm"]
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U crm -d transactions"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -49,17 +54,26 @@ services:
       DB_PORT: 5432
       DB_USER: ${POSTGRES_USER:-crm}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
-      DB_NAME: ${POSTGRES_DB:-crm}
+      DB_NAME: ${POSTGRES_DB:-transactions}
       SFTP_ADDR: ${SFTP_ADDR:-sftp:22}
       SFTP_USER: ${SFTP_USER:-reportuser}
       SFTP_REMOTE_DIR: ${SFTP_REMOTE_DIR:-/reports}
       SFTP_POLL_INTERVAL: ${SFTP_POLL_INTERVAL:-30s}
+      # Linking imported rows to accounts (ADR-0037): account-service runs on
+      # the host, and the poller signs in with its own Cognito app client.
+      ACCOUNT_SERVICE_BASE_URL: ${ACCOUNT_SERVICE_BASE_URL:-http://host.docker.internal:8083}
+      COGNITO_TOKEN_URL: ${COGNITO_TOKEN_URL:-}
+      COGNITO_INGEST_CLIENT_ID: ${COGNITO_INGEST_CLIENT_ID:-}
+      COGNITO_INGEST_CLIENT_SECRET: ${COGNITO_INGEST_CLIENT_SECRET:-}
+      COGNITO_INGEST_SCOPE: ${COGNITO_INGEST_SCOPE:-crm-accounts/lookup}
       AWS_REGION: ${AWS_REGION:-}
       AUDIT_QUEUE_URL: ${AUDIT_QUEUE_URL:-}
       AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - backend
     profiles: ["tools"]
@@ -93,6 +107,33 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  receiver-api:
+    build: ./receiver
+    working_dir: /workspace
+    volumes:
+      - ./receiver:/workspace
+    command: ["go", "run", "./src/serverd"]
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-crm}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      DB_NAME: ${POSTGRES_DB:-transactions}
+      APP_ADDR: ":8080"
+    ports:
+      - "127.0.0.1:${TRANSACTION_API_PORT:-8082}:8080"
+    networks:
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   producer:
     build: ./producer
     volumes:
@@ -102,6 +143,7 @@ services:
       - OUTPUT_DIR=/output
       - SOURCE_FILE=/app/data/report.json
       - INTERVAL_SECONDS=${PUBLISH_INTERVAL_SECONDS:-300}
+      - CRM_ACCOUNT_IDS=${CRM_ACCOUNT_IDS:-}
     networks:
       - backend
     restart: unless-stopped

@@ -16,7 +16,7 @@ type ValidEvent struct {
 	EventType     string          `json:"event_type"`
 	Action        string          `json:"action"`
 	SourceService string          `json:"source_service"`
-	ActorId       string          `json:"actor_id"`
+	ActorID       string          `json:"actor_id"`
 	Payload       json.RawMessage `json:"payload"`
 }
 
@@ -30,7 +30,7 @@ type ValidCRUDPayload struct {
 }
 
 // ValidUserAuditPayload describes user-service endpoint activity. It records
-// the target user and operation metadata without copying names, email
+// the target resource and operation metadata without copying names, email
 // addresses, passwords, or request bodies into the audit chain.
 type ValidUserAuditPayload struct {
 	ResourceType string `json:"resource_type"`
@@ -64,6 +64,75 @@ type ProcessingErrorPayload struct {
 	Error    string `json:"error"`
 }
 
+// ValidDashboardViewPayload records one business dashboard view: who looked
+// is the actor, and the payload holds what they looked at. It carries the
+// scope, window and panel statuses only, never figures or client data
+// (ADR-0033).
+type ValidDashboardViewPayload struct {
+	Scope       string            `json:"scope"` // "ADMIN" | "AGENT"
+	WindowFrom  string            `json:"window_from"`
+	WindowTo    string            `json:"window_to"`
+	Panels      map[string]string `json:"panels"` // panel name to "OK" | "UNAVAILABLE"
+	ResultCount int               `json:"result_count"`
+	CacheHit    bool              `json:"cache_hit"`
+	DateTime    string            `json:"datetime"`
+}
+
+// ValidAuthenticationPayload records a login or a forgotten-password reset
+// that Cognito reported through its triggers; the actor is the user (ADR-0040).
+// It names the user pool and app client only, never the user's attributes.
+type ValidAuthenticationPayload struct {
+	UserPoolID    string `json:"user_pool_id"`
+	AppClientID   string `json:"app_client_id,omitempty"`
+	TriggerSource string `json:"trigger_source"`
+	DateTime      string `json:"datetime"`
+}
+
+// authenticationTriggers are the actions the Cognito triggers send, each with
+// the trigger source it must come from.
+var authenticationTriggers = map[string]string{
+	"LOGIN":          "PostAuthentication_Authentication",
+	"PASSWORD_RESET": "PostConfirmation_ConfirmForgotPassword",
+}
+
+// userAuditActions lists, for each resource type user-service reports, the
+// actions it may send about it.
+var userAuditActions = map[string]map[string]bool{
+	"USER": {
+		"CREATE": true, "READ": true, "UPDATE": true, "DISABLE": true,
+		"PASSWORD_RESET": true, "ROLE_CHANGE": true, "LOGOUT": true,
+	},
+	// An account's transactions, read through user-service.
+	"ACCOUNT": {"READ": true},
+	// Every account's transactions, read by an admin (ADR-0043).
+	"TRANSACTION": {"READ": true},
+	// The auditor's corrupted-log table, managed through user-service.
+	"CORRUPTED_AUDIT_LOG": {"CREATE": true, "READ": true, "DELETE": true},
+}
+
+// userAuditNeedsResourceID reports whether a successful event must name the
+// resource it acted on. Reading the corrupted-log list or the transaction list
+// names none.
+func userAuditNeedsResourceID(resourceType, action string) bool {
+	return action != "READ" || (resourceType != "CORRUPTED_AUDIT_LOG" && resourceType != "TRANSACTION")
+}
+
+// dashboardViewActions are the dashboard's endpoints, one action each.
+var dashboardViewActions = map[string]bool{
+	"VIEW_OVERVIEW":          true,
+	"VIEW_PORTFOLIO":         true,
+	"VIEW_TRANSACTIONS":      true,
+	"VIEW_ACTION_ITEMS":      true,
+	"VIEW_AGENT_PERFORMANCE": true,
+}
+
+type ValidEventAlertPayload struct {
+	EventID      string          `json:"event_id"`
+	EventVersion int             `json:"event_version"`
+	OccurredAt   time.Time       `json:"occurred_at"`
+	Data         json.RawMessage `json:"data"`
+}
+
 func validatePayload(envelope ValidEvent) error {
 	svc := models.ServiceType(envelope.SourceService)
 	if !svc.IsValid() {
@@ -90,6 +159,9 @@ func validatePayload(envelope ValidEvent) error {
 	case models.UserManagementServiceType:
 		return validateUserManagementPayload(envelope)
 
+	case models.DashboardServiceType:
+		return validateDashboardPayload(envelope)
+
 	case models.CRMServiceType:
 		var p ValidCRUDPayload
 		if err := json.Unmarshal(envelope.Payload, &p); err != nil {
@@ -97,16 +169,45 @@ func validatePayload(envelope ValidEvent) error {
 		}
 		return nil
 
+	case models.EventAlertServiceType:
+		return validateEventAlertPayload(envelope)
+
+	case models.CognitoTriggersServiceType:
+		return validateAuthenticationPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
+}
+
+func validateEventAlertPayload(envelope ValidEvent) error {
+	allowedActions := map[string]bool{
+		"CLASSIFICATION_RECORDED":     true,
+		"BRIEFING_GENERATED":          true,
+		"GENERATED":                   true,
+		"DECISION_RECORDED":           true,
+		"FEEDBACK_RECORDED":           true,
+		"OPERATIONAL_CONTROL_CHANGED": true,
+	}
+	if !allowedActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for EVENT_ALERT_SERVICE: %s", envelope.Action)
+	}
+
+	var payload ValidEventAlertPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid EventAlertPayload: %w", err)
+	}
+	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || len(payload.Data) == 0 {
+		return fmt.Errorf("invalid EventAlertPayload: required audit metadata is missing")
+	}
+	return nil
 }
 
 func validateUserManagementPayload(envelope ValidEvent) error {
 	if !models.UserManagementServiceType.IsValidAction(envelope.Action) || strings.EqualFold(envelope.Action, "CRUD") {
 		return fmt.Errorf("unrecognized action for USER_MANAGEMENT: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("USER_MANAGEMENT event requires actor_id")
 	}
 	var payload ValidUserAuditPayload
@@ -122,12 +223,78 @@ func validateUserManagementPayload(envelope ValidEvent) error {
 		}
 		return nil
 	}
-	if payload.ResourceType != "USER" || (payload.ResourceID == "" && payload.StatusCode < 400) || payload.Endpoint == "" ||
+	action := strings.ToUpper(envelope.Action)
+	actions, known := userAuditActions[payload.ResourceType]
+	if !known {
+		return fmt.Errorf("invalid UserAuditPayload resource_type: %q", payload.ResourceType)
+	}
+	if !actions[action] {
+		return fmt.Errorf("USER_MANAGEMENT is not permitted to send action %s for %s", envelope.Action, payload.ResourceType)
+	}
+	missingID := payload.ResourceID == "" && payload.StatusCode < 400 && userAuditNeedsResourceID(payload.ResourceType, action)
+	if missingID || payload.Endpoint == "" ||
 		payload.HTTPMethod == "" || payload.StatusCode < 100 || payload.StatusCode > 599 {
 		return fmt.Errorf("invalid UserAuditPayload: missing or invalid user operation fields")
 	}
 	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
 		return fmt.Errorf("invalid UserAuditPayload datetime: %w", err)
+	}
+	return nil
+}
+
+func validateAuthenticationPayload(envelope ValidEvent) error {
+	triggerSource, known := authenticationTriggers[envelope.Action]
+	if !known {
+		return fmt.Errorf("unrecognized action for COGNITO_TRIGGERS: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorID) == "" {
+		return fmt.Errorf("COGNITO_TRIGGERS event requires actor_id")
+	}
+	var payload ValidAuthenticationPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid AuthenticationPayload: %w", err)
+	}
+	if payload.UserPoolID == "" {
+		return fmt.Errorf("invalid AuthenticationPayload: missing user_pool_id")
+	}
+	if payload.TriggerSource != triggerSource {
+		return fmt.Errorf("%s must come from trigger source %s, not %q", envelope.Action, triggerSource, payload.TriggerSource)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
+		return fmt.Errorf("invalid AuthenticationPayload datetime: %w", err)
+	}
+	return nil
+}
+
+func validateDashboardPayload(envelope ValidEvent) error {
+	if !dashboardViewActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for DASHBOARD: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorID) == "" {
+		return fmt.Errorf("DASHBOARD event requires actor_id")
+	}
+	var payload ValidDashboardViewPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid DashboardViewPayload: %w", err)
+	}
+	if payload.Scope != "ADMIN" && payload.Scope != "AGENT" {
+		return fmt.Errorf("invalid DashboardViewPayload scope: %q", payload.Scope)
+	}
+	// The per-agent table is admin-only, so an agent-scoped view of it means
+	// the dashboard's own check failed.
+	if envelope.Action == "VIEW_AGENT_PERFORMANCE" && payload.Scope != "ADMIN" {
+		return fmt.Errorf("VIEW_AGENT_PERFORMANCE requires scope ADMIN")
+	}
+	from, fromErr := time.Parse(time.DateOnly, payload.WindowFrom)
+	to, toErr := time.Parse(time.DateOnly, payload.WindowTo)
+	if fromErr != nil || toErr != nil || to.Before(from) {
+		return fmt.Errorf("invalid DashboardViewPayload window: %q to %q", payload.WindowFrom, payload.WindowTo)
+	}
+	if len(payload.Panels) == 0 || payload.ResultCount < 0 || payload.ResultCount > len(payload.Panels) {
+		return fmt.Errorf("invalid DashboardViewPayload panels")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
+		return fmt.Errorf("invalid DashboardViewPayload datetime: %w", err)
 	}
 	return nil
 }

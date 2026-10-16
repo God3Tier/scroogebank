@@ -17,15 +17,26 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>3.5.16</spring-boot.version>
         <springdoc.version>2.8.17</springdoc.version>
+        <aws.sdk.version>2.55.6</aws.sdk.version>
     </properties>
 
     <modules>
         <module>services/user-service</module>
+        <module>services/event-alert-service</module>
         <module>services/client-health-monitor-service</module>
+        <module>services/dashboard-service</module>
+        <module>services/cognito-triggers</module>
     </modules>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

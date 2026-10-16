@@ -7,13 +7,23 @@ services:
       POSTGRES_DB: myapp
     ports:
       - "5433:5432"
-    volumes:
-      - ./data/test_init.sql:/docker-entrypoint-initdb.d/01-test_init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d myapp"]
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d myapp"]
       interval: 2s
       timeout: 5s
       retries: 3
+
+  # S3 with Object Lock for the anchor tests (src/internal/repository/anchor).
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: s3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
   tools:
     platform: linux/amd64
@@ -36,6 +46,9 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: myapp
+      CHAIN_ANCHOR_TEST_ENDPOINT: http://localstack:4566
     depends_on:
       postgres:
+        condition: service_healthy
+      localstack:
         condition: service_healthy

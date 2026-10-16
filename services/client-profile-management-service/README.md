@@ -1,31 +1,113 @@
 # Client Profile Management Service (Feature 2)
 
+Owns client profiles. Accounts moved to [`account-service`](../account-service/README.md), which has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)).
+
 ## Start locally
 
-The local service still verifies Cognito access tokens and sends a CRM audit event to the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
+The local service still verifies Cognito access tokens and records a CRM audit event for the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
 
 ```sh
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-The command starts PostgreSQL, initializes or migrates its schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
+The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)) and the identity documents bucket (see [Identity documents and verification](#identity-documents-and-verification)), initializes or migrates the schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`.
+Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (default `http://localhost:8083`). Run account-service alongside this service, or client deletion returns 503.
+
+Each service has its own database, including locally: this one on port 5432, account-service's on 5436 and the SFTP stack's transactions database on 5437 ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). For the SFTP transaction integration, run `make run` here and in `../account-service`, then start the receiver with `make -C ../sftp up`.
+
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`. A volume created before client data encryption holds plaintext clients and has no blind-index columns, so client endpoints fail until you run `make db-reset`. A volume created before identity documents has no `client_documents` table or `verified_*` columns, so every client endpoint fails until you run `make db-reset`. The same applies after the LocalStack container is recreated (`make run` recreates it when its settings change, as they did when S3 was added): its keys and documents are gone, so clients created before cannot be read.
 
 ## Cognito authorization
 
 Feature 1 provisions users in the shared Cognito user pool and assigns the `ADMIN` or `AGENT` group. This service validates the token's RS256 signature against the pool's JWKS, plus its issuer, app-client ID, expiration, and `token_use=access` claim. It rejects ID tokens and tokens without a supported group.
 
-The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles and create/delete accounts belonging to those profiles. Admins can access every client. The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
+The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles, and upload and view only their own clients' identity documents. Admins can access every client. The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
+
+account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `created_by_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
+
+## Listing clients
+
+`GET /api/clients?page&size` lists clients that are not deleted, newest first ([ADR-0043](../../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)). An agent gets only the clients they created; an admin gets every client. The scope comes from the verified token only, so there is no parameter that widens it. `page` starts at 0 and `size` is 1 to 100 (default 20); other values return 400. The response is `{content, page, size, totalElements, totalPages}`, the same shape as user-service's pages, and each entry has the fields of `GET /api/clients/{id}`. A client whose data key is gone (erased, [ADR-0030](../../docs/adr/ADR-0030-client-data-envelope-encryption.md)) is left out of the page but still counted in `totalElements`. The request is audited like the other client endpoints, with no client ID.
+
+## Business dashboard figures
+
+`GET /aggregates/clients/stats?from&to[&groupBy=agent]` and `GET /aggregates/clients/action-items[?staleDays]` serve the business dashboard's client figures and work queue. They take the caller's access token, forwarded by the dashboard, and scope by it: agents see their own clients, and per-agent rows are for admins only (403 otherwise). They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted clients are never counted; statuses are grouped upper-cased because clients verified before [ADR-0041](../../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md) hold `verified` and newer ones `VERIFIED` ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
+
+`GET /aggregates/clients/team-comparison?days=7|30|90` compares the caller's clients onboarded over the last 7, 30 or 90 days (ending today in Singapore) with the team median. The median is computed here so no other agent's figure leaves the service. The group is every agent with a client, not deleted, created in the last 12 months, and the median is withheld when fewer than 5 agents are in it. Other windows are refused, so medians over chosen windows cannot be compared to narrow down one agent's figure (ADR-0038).
+
+## Deleting a client
+
+`DELETE /api/clients/{id}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at` and keeps the row. From then on every endpoint treats the client as missing, for admins and agents alike: reads, updates, verification and a second delete all return 404. A deleted client's email and phone number can be used to onboard a new client. Nothing restores a deleted client, and deleting is not erasure of the client's personal data ([open item 21](../../docs/architecture/open-items.md#21-erasing-soft-deleted-client-data)).
+
+Accounts used to reference clients through a foreign key with `ON DELETE RESTRICT`. That key cannot cross databases, so the delete keeps the rule by calling `GET /api/accounts?clientId={id}` on account-service with the caller's token. account-service never lists deleted accounts, so only accounts that are not deleted block the delete, including accounts whose status is `closed`:
+
+| account-service answers | Response |
+|---|---|
+| An empty list | The client is deleted (200) |
+| One or more accounts | 409, and nothing is deleted |
+| Anything else, or no answer within 2 seconds | 503, and nothing is deleted |
+
+The check and the delete are not atomic, so an account created between them is left on a deleted client. ADR-0035 records this.
+
+Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboiler.toml` and `sqlboiler.docker.toml`, which makes every generated query skip them. All client queries, including the ownership check, go through the generated code; any hand-written SQL added later must add `deleted_at IS NULL` itself.
+
+## Identity documents and verification
+
+Agents verify clients manually ([ADR-0041](../../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md)): the agent may upload the client's identity document, checks it against the profile, and then verifies the client, naming the documents checked. Documents are optional, as the requirements Q&A does not expect an upload (CPM06), but a verification without one is recorded and shown as such. Uploading never changes the verification status. Use synthetic documents only, never a real NRIC.
+
+| Endpoint | Does |
+|---|---|
+| `POST /api/clients/{id}/documents` | Stores one document sent as the `multipart/form-data` field `file`: JPEG, PNG or PDF, at most 5 MB. 201 with the document's details; 400 without a file or with an empty one, 413 if it is larger, 415 for any other type. |
+| `GET /api/clients/{id}/documents` | Lists the client's documents, newest first: ID, type, size, uploader, time, and whether it was a verification's evidence. Never the content. |
+| `GET /api/clients/{id}/documents/{documentId}` | Returns one document with its stored type, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. |
+| `POST /api/clients/{id}/verify` | Takes an optional `{"document_ids": ["..."]}` naming the client's documents the agent checked. Sets `verification_status` to `VERIFIED`, records `verified_by_agent_id`, `verified_at` and `verified_with_documents` (all returned by `GET /api/clients/{id}`), and marks the named documents as the evidence. With no body or an empty list, the client is verified without a document: `verified_with_documents` is `false`. 400 with a document that is not the client's, 409 if the client is already verified. |
+
+All four follow the ownership rule in [Cognito authorization](#cognito-authorization): a missing, deleted or other agent's client gets 404.
+
+- The type is detected from the file's first bytes (`http.DetectContentType`), never from its name or the type the browser states. File names are not stored, because they may contain the client's name.
+- Each file is sealed with the client's data key (AES-256-GCM, bound to the client and the document ID) and stored in the bucket `CLIENT_DOCUMENTS_BUCKET` at `clients/{clientId}/{documentId}`; the bucket's default SSE-KMS key encrypts it again. Deleting the client's data key makes their documents unreadable too. The `client_documents` row holds only the details listed above.
+- The API never changes or deletes a document. Removing a document uploaded by mistake, and whether editing a verified client resets the verification, are [open item 22](../../docs/architecture/open-items.md#22-identity-documents-wrong-uploads-and-re-verification).
+- Verify locks the client's row, so two verifications cannot both succeed. Updating a client writes only the profile fields, so an update never undoes a verification.
+- A verification without a document is never hidden: `verified_with_documents` is `false`, its audit event carries `"without_document": true`, and the frontend says so. Documents uploaded after a verification are not part of it.
+- Clients verified before this change hold `verified` (lower case) and no `verified_*` values, so compare the status case-insensitively.
+
+`make run` creates the bucket `client-documents` in the LocalStack container (`localstack/init-client-keys.sh`) and sets `CLIENT_DOCUMENTS_BUCKET` and `AWS_ENDPOINT_URL_S3` for it. The service uses path-style addressing whenever `AWS_ENDPOINT_URL_S3` is set, and refuses to start without `CLIENT_DOCUMENTS_BUCKET`. `make test` runs the documents package's LocalStack test.
+
+Infrastructure requirements (ADR-0041 decision 9), for when the infrastructure is built:
+- a private bucket with Block Public Access, default encryption with its own customer-managed KMS key and S3 Bucket Keys, and a bucket policy that refuses every principal except this service's task role and every request not made through the S3 gateway endpoint;
+- this service's task role, and only it: `s3:PutObject` and `s3:GetObject` on `clients/*` in that bucket, and `kms:GenerateDataKey` and `kms:Decrypt` on the bucket's key;
+- a WAF exception for `POST /api/clients/*/documents` only: the Core rule set's `SizeRestrictions_BODY` rule (which blocks bodies over 8 KB) set to count, and a rule after it that blocks requests carrying that rule's label on every other path. API Gateway's 10 MB payload limit is above the 5 MB file limit;
+- alarms on S3 errors from this service.
+
+## Client data encryption
+
+Client personal data is encrypted in the application before it reaches the database ([ADR-0030](../../docs/adr/ADR-0030-client-data-envelope-encryption.md)), so a leaked dump or snapshot of the database is unreadable on its own.
+
+- **Encrypted:** the 11 personal fields: first and last name, date of birth, gender, email, phone number, address, city, state, country and postal code. Each is AES-256-GCM ciphertext, bound to its client and column, so it cannot be copied to another client or field. The client ID, owning agent, verification status and timestamps stay plaintext for lookups, ownership checks and the dashboard figures.
+- **One data key per client.** Creating a client calls KMS `GenerateDataKey` on the data key (`CLIENT_DATA_KEY_ID`) with the client ID as encryption context, and stores only the wrapped key in the DynamoDB table `CLIENT_KEYS_TABLE`, before the row is inserted. A stored key is never overwritten; if the insert fails, the new key is deleted. Reads unwrap the key with KMS `Decrypt` and keep it in memory for 5 minutes. Deleting a client is a soft delete and keeps its key.
+- **Uniqueness without plaintext.** `email_hash` and `phone_number_hash` are blind indexes: HMAC-SHA-256 from KMS `GenerateMac` with the shared HMAC key (`CLIENT_INDEX_KEY_ID`), which never leaves KMS. They are computed over the email trimmed and lowercased, and the phone number with spaces, hyphens, dots and brackets removed, so `Alice@Example.test` and `alice@example.test`, or `+65 6000-0101` and `+6560000101`, count as the same. No country code is assumed. Uniqueness counts only clients that are not deleted, so a deleted client's email and phone can be reused. The stored values are the ones entered.
+- **The database no longer checks field lengths**, because it stores ciphertext; the service's validation does.
+- The dashboard's action items include client names, so the service decrypts them for each row it returns.
+
+The three settings are required in every mode, and the service refuses to start without them. `make run` sets them for LocalStack: `client-keys`, `alias/client-data` and `alias/client-blind-index`, created by `localstack/init-client-keys.sh` in the container on port 4567. It also sets `AWS_ENDPOINT_URL_KMS` and `AWS_ENDPOINT_URL_DYNAMODB` to it; they take precedence over `AWS_ENDPOINT_URL`, so SQS can use the auditor's LocalStack on port 4566. `make test` runs the encryption package's LocalStack test.
+
+Infrastructure requirements, for when the infrastructure is built:
+- a symmetric customer-managed KMS key for data keys, with automatic rotation, and an `HMAC_256` KMS key with key usage `GENERATE_VERIFY_MAC` for the blind indexes;
+- a DynamoDB table with partition key `client_id` (string), point-in-time recovery, and the AWS Backup plan;
+- this service's task role, and only it: `kms:GenerateDataKey` and `kms:Decrypt` on the data key, conditioned on the `client_id` encryption context; `kms:GenerateMac` on the HMAC key; `dynamodb:PutItem`, `GetItem` and `DeleteItem` on the table, reached through the DynamoDB gateway endpoint;
+- alarms on KMS and DynamoDB errors from this service.
 
 ## Auditor SQS events
 
-The service sends one SQS message per completed client/account endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, and client ID when available. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint.
+The service records one audit event per completed client endpoint call. Each event records the event type (`CRUD`), normalized action (`CREATE`, `GET`, `UPDATE`, or `DELETE`), authenticated actor, route, HTTP method, status code, timestamp, client ID when available, and `document_ids` for identity documents: the document uploaded or viewed, or the documents Verify was given. Only values that are UUIDs are recorded. A Verify call that names no document carries `"without_document": true` instead. It does not copy request or response bodies into the audit event. Configure `AWS_REGION`, `AUDIT_QUEUE_URL`, and AWS credentials through the standard AWS SDK credential chain. For LocalStack, set `AWS_ENDPOINT_URL` to its endpoint. The audit events carry IDs only, never the client's personal data.
+
+**Delivery** ([ADR-0020](../../docs/adr/ADR-0020-audit-write-path-outbox-shared-sqs.md)). The audit middleware saves each event to the `audit_outbox` table in a transaction of its own, after the endpoint's change has committed. This is ADR-0020's exception for producers that build their events in request middleware, used because of the cost of moving event creation into the service layer. Every 2 seconds a relay goroutine (`src/serverd/sqs/outbox.go`) takes the oldest waiting events (up to 50, locked with `FOR UPDATE SKIP LOCKED` so replicas take different rows), sends each to SQS, and deletes it once SQS accepts it. An SQS or Auditor outage therefore delays events instead of losing them. Delivery is at least once: a task that dies between the send and the delete sends the event again, and the Auditor drops the repeat by `event_id`. Two gaps remain: a crash between the endpoint's commit and the outbox write loses that event, and an outbox write that fails is logged with its event ID and dropped. The outbox table is written with plain SQL, so `sqlboiler.toml` and `sqlboiler.docker.toml` leave it out of the generated ORM.
 
 Configure API Gateway with a JWT authorizer for the same Cognito issuer and app-client ID as an additional edge check. This service also validates every token itself, so direct service access does not bypass authentication.
 
 ## Production transport security
 
-Set `APP_ENV=production`, `APP_TLS_CERT_FILE`, and `APP_TLS_KEY_FILE` to serve HTTPS. Set `DB_SSLMODE=verify-full` and `DB_SSLROOTCERT` to verify PostgreSQL TLS. The service defaults to production security and refuses to start in production mode if these settings are missing; `make run` explicitly sets `APP_ENV=local`. If Cognito access tokens use resource-bound `aud` claims, also set `COGNITO_API_AUDIENCE` to the expected value. Local HTTP and `sslmode=disable` are intended only for local development.
+Set `APP_ENV=production`, `APP_TLS_CERT_FILE`, and `APP_TLS_KEY_FILE` to serve HTTPS. Set `DB_SSLMODE=verify-full` and `DB_SSLROOTCERT` to verify PostgreSQL TLS. `ACCOUNT_SERVICE_BASE_URL` must be `https://`, because client deletion forwards the caller's access token to it. The service defaults to production security and refuses to start in production mode if these settings are missing; `make run` explicitly sets `APP_ENV=local`. If Cognito access tokens use resource-bound `aud` claims, also set `COGNITO_API_AUDIENCE` to the expected value. Local HTTP and `sslmode=disable` are intended only for local development.
 
-RDS encryption-at-rest settings still require deployment infrastructure configuration. If an SQS send fails after an endpoint completes, the service reports the failure in its application log; the completed endpoint response is not changed retroactively.
+RDS encryption-at-rest settings still require deployment infrastructure configuration. If saving an audit event fails after an endpoint completes, the service reports the failure in its application log; the completed endpoint response is not changed retroactively.

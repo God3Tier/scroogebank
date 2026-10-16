@@ -34,5 +34,5 @@ func (c Controller) DeleteCorruptedAuditLog(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "Corrupted audit log deleted successfully"})
+	_ = json.NewEncoder(w).Encode(statusResponse{Status: "Corrupted audit log deleted successfully"})
 }

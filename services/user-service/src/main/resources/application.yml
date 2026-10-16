@@ -46,6 +46,20 @@ audit:
   sqs:
     queue-url: ${AUDIT_QUEUE_URL:}
 
+auditor:
+  base-url: ${AUDITOR_BASE_URL:http://localhost:8080}
+  # The auditor's internal gRPC endpoint (host:port via ECS Service Connect), read by the activity feed.
+  grpc-target: ${AUDITOR_GRPC_TARGET}
+  # PEM file of the CA that signed the auditor's certificate (ADR-0021). Empty
+  # means plaintext, for local development only.
+  grpc-tls-ca: ${AUDITOR_GRPC_TLS_CA:}
+
+account-service:
+  base-url: ${ACCOUNT_SERVICE_BASE_URL:http://localhost:8083}
+
+sftp-receiver:
+  base-url: ${SFTP_RECEIVER_BASE_URL:http://localhost:8082}
+
 root-admin:
   email: ${ROOT_ADMIN_EMAIL}
 

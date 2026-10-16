@@ -10,52 +10,60 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"client-profile-management-service/src/internal/auditnote"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type fakeSQS struct {
-	inputs []*sqs.SendMessageInput
-	calls  int
-	err    error
+type savedEvent struct {
+	id   string
+	body []byte
 }
 
-func (f *fakeSQS) SendMessage(_ context.Context, input *sqs.SendMessageInput, _ ...func(*sqs.Options)) (*sqs.SendMessageOutput, error) {
+type fakeOutbox struct {
+	saved []savedEvent
+	calls int
+	err   error
+	// ctxErr is the context's error when Save was last called.
+	ctxErr error
+}
+
+func (f *fakeOutbox) Save(ctx context.Context, eventID string, body []byte) error {
 	f.calls++
+	f.ctxErr = ctx.Err()
 	if f.err != nil {
-		return nil, f.err
+		return f.err
 	}
-	f.inputs = append(f.inputs, input)
-	return &sqs.SendMessageOutput{}, nil
+	f.saved = append(f.saved, savedEvent{id: eventID, body: body})
+	return nil
 }
 
-func setupAuditRouter(client SQSAPI, route string, method string, handler gin.HandlerFunc) *gin.Engine {
+func setupAuditRouter(outbox Outbox, route string, method string, handler gin.HandlerFunc) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set("agent_id", "verified-agent-subject")
 		c.Next()
 	})
-	router.Handle(method, route, AuditLogger(client, "audit-queue-url"), handler)
+	router.Handle(method, route, AuditLogger(outbox), handler)
 	return router
 }
 
-func decodeSentEvent(t *testing.T, input *sqs.SendMessageInput) (Event, EndpointPayload) {
+func decodeSavedEvent(t *testing.T, saved savedEvent) (Event, EndpointPayload) {
 	t.Helper()
 	var event Event
-	require.NoError(t, json.Unmarshal([]byte(aws.ToString(input.MessageBody)), &event))
+	require.NoError(t, json.Unmarshal(saved.body, &event))
 	var payload EndpointPayload
 	require.NoError(t, json.Unmarshal(event.Payload, &payload))
 	return event, payload
 }
 
-func TestAuditLogger_SendsEventAfterEndpointCompletes(t *testing.T) {
-	sqsClient := &fakeSQS{}
+func TestAuditLogger_SavesEventAfterEndpointCompletes(t *testing.T) {
+	outbox := &fakeOutbox{}
 	bodySeenByHandler := ""
-	router := setupAuditRouter(sqsClient, "/api/clients/:clientId", http.MethodPut, func(c *gin.Context) {
+	router := setupAuditRouter(outbox, "/api/clients/:clientId", http.MethodPut, func(c *gin.Context) {
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)
 		bodySeenByHandler = string(body)
@@ -69,11 +77,10 @@ func TestAuditLogger_SendsEventAfterEndpointCompletes(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, requestBody, bodySeenByHandler, "audit middleware must restore the body for the endpoint")
-	require.Len(t, sqsClient.inputs, 1, "one completed endpoint call should send one SQS event")
+	require.Len(t, outbox.saved, 1, "one completed endpoint call should save one audit event")
 
-	input := sqsClient.inputs[0]
-	assert.Equal(t, "audit-queue-url", aws.ToString(input.QueueUrl))
-	event, payload := decodeSentEvent(t, input)
+	event, payload := decodeSavedEvent(t, outbox.saved[0])
+	assert.Equal(t, event.EventID, outbox.saved[0].id, "the outbox row is keyed by the event's own ID")
 	assert.NotEmpty(t, event.EventID)
 	assert.Equal(t, eventType, event.EventType)
 	assert.Equal(t, "UPDATE", event.Action)
@@ -85,12 +92,12 @@ func TestAuditLogger_SendsEventAfterEndpointCompletes(t *testing.T) {
 	assert.Equal(t, http.MethodPut, payload.HTTPMethod)
 	assert.Equal(t, http.StatusOK, payload.StatusCode)
 	assert.NotEmpty(t, payload.DateTime)
-	assert.NotContains(t, aws.ToString(input.MessageBody), "private@example.test", "request PII must not be sent to the Auditor")
+	assert.NotContains(t, string(outbox.saved[0].body), "private@example.test", "request PII must not reach the Auditor")
 }
 
 func TestAuditLogger_ExtractsClientIDFromCreateRequest(t *testing.T) {
-	sqsClient := &fakeSQS{}
-	router := setupAuditRouter(sqsClient, "/api/accounts", http.MethodPost, func(c *gin.Context) {
+	outbox := &fakeOutbox{}
+	router := setupAuditRouter(outbox, "/api/accounts", http.MethodPost, func(c *gin.Context) {
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)
 		assert.Contains(t, string(body), `"client_id":"client-from-body"`)
@@ -102,17 +109,17 @@ func TestAuditLogger_ExtractsClientIDFromCreateRequest(t *testing.T) {
 	router.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusCreated, response.Code)
-	require.Len(t, sqsClient.inputs, 1)
-	event, payload := decodeSentEvent(t, sqsClient.inputs[0])
+	require.Len(t, outbox.saved, 1)
+	event, payload := decodeSavedEvent(t, outbox.saved[0])
 	assert.Equal(t, "CREATE", event.Action)
 	assert.Equal(t, "client-from-body", payload.ClientID)
 }
 
-func TestAuditLogger_DoesNotSendWithoutAuthenticatedAgentID(t *testing.T) {
+func TestAuditLogger_DoesNotSaveWithoutAuthenticatedAgentID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	sqsClient := &fakeSQS{}
+	outbox := &fakeOutbox{}
 	router := gin.New()
-	router.PUT("/api/clients/:clientId", AuditLogger(sqsClient, "audit-queue-url"), func(c *gin.Context) {
+	router.PUT("/api/clients/:clientId", AuditLogger(outbox), func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
 
@@ -120,14 +127,12 @@ func TestAuditLogger_DoesNotSendWithoutAuthenticatedAgentID(t *testing.T) {
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPut, "/api/clients/client-123", nil))
 
 	assert.Equal(t, http.StatusNoContent, response.Code)
-	assert.Equal(t, 1, sqsClient.calls, "middleware should attempt to send the audit event")
-	assert.Empty(t, sqsClient.inputs)
+	assert.Zero(t, outbox.calls, "an event without a verified actor must not be saved")
 }
 
-func TestAuditLogger_SendFailureDoesNotChangeCompletedResponse(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	sqsClient := &fakeSQS{err: errors.New("queue unavailable")}
-	router := setupAuditRouter(sqsClient, "/api/clients/:clientId", http.MethodDelete, func(c *gin.Context) {
+func TestAuditLogger_SaveFailureDoesNotChangeCompletedResponse(t *testing.T) {
+	outbox := &fakeOutbox{err: errors.New("database unavailable")}
+	router := setupAuditRouter(outbox, "/api/clients/:clientId", http.MethodDelete, func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
 
@@ -135,7 +140,23 @@ func TestAuditLogger_SendFailureDoesNotChangeCompletedResponse(t *testing.T) {
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/clients/client-123", nil))
 
 	assert.Equal(t, http.StatusNoContent, response.Code)
-	assert.Empty(t, sqsClient.inputs)
+	assert.Equal(t, 1, outbox.calls)
+	assert.Empty(t, outbox.saved)
+}
+
+func TestAuditLogger_SavesEvenIfTheCallerHasGoneAway(t *testing.T) {
+	outbox := &fakeOutbox{}
+	ctx, cancel := context.WithCancel(context.Background())
+	router := setupAuditRouter(outbox, "/api/clients/:clientId", http.MethodDelete, func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+		cancel() // the caller disconnects after the change has committed
+	})
+
+	request := httptest.NewRequest(http.MethodDelete, "/api/clients/client-123", nil).WithContext(ctx)
+	router.ServeHTTP(httptest.NewRecorder(), request)
+
+	require.Len(t, outbox.saved, 1)
+	assert.NoError(t, outbox.ctxErr, "the save must not inherit the request's cancellation")
 }
 
 func TestActionForRequest(t *testing.T) {
@@ -151,6 +172,8 @@ func TestActionForRequest(t *testing.T) {
 		{name: "update", method: http.MethodPut, route: "/api/clients/:clientId", want: "UPDATE", ok: true},
 		{name: "delete", method: http.MethodDelete, route: "/api/clients/:clientId", want: "DELETE", ok: true},
 		{name: "verify", method: http.MethodPost, route: "/api/clients/:clientId/verify", want: "UPDATE", ok: true},
+		{name: "upload a document", method: http.MethodPost, route: "/api/clients/:clientId/documents", want: "CREATE", ok: true},
+		{name: "view a document", method: http.MethodGet, route: "/api/clients/:clientId/documents/:documentId", want: "GET", ok: true},
 		{name: "unsupported method", method: http.MethodOptions, route: "/api/clients", ok: false},
 	}
 
@@ -159,6 +182,71 @@ func TestActionForRequest(t *testing.T) {
 			got, ok := actionForRequest(test.method, test.route)
 			assert.Equal(t, test.ok, ok)
 			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
+func TestAuditLogger_RecordsTheDocumentIDsOfTheCall(t *testing.T) {
+	const (
+		viewed  = "0199f1d2-0000-7000-8000-000000000001"
+		checked = "0199f1d2-0000-7000-8000-000000000002"
+	)
+	tests := map[string]struct {
+		route           string
+		method          string
+		path            string
+		handler         gin.HandlerFunc
+		want            []string
+		withoutDocument bool
+	}{
+		"a document's own route names it": {
+			route: "/api/clients/:clientId/documents/:documentId", method: http.MethodGet,
+			path:    "/api/clients/client-123/documents/" + viewed,
+			handler: func(c *gin.Context) { c.Status(http.StatusOK) },
+			want:    []string{viewed},
+		},
+		"a handler adds the IDs it acted on, and only UUIDs are kept": {
+			route: "/api/clients/:clientId/verify", method: http.MethodPost,
+			path: "/api/clients/client-123/verify",
+			handler: func(c *gin.Context) {
+				auditnote.AddDocumentIDs(c.Request.Context(), checked, "Alice Tan")
+				c.Status(http.StatusOK)
+			},
+			want: []string{checked},
+		},
+		"a verification that names no document says so": {
+			route: "/api/clients/:clientId/verify", method: http.MethodPost,
+			path: "/api/clients/client-123/verify",
+			handler: func(c *gin.Context) {
+				auditnote.MarkWithoutDocument(c.Request.Context())
+				c.Status(http.StatusOK)
+			},
+			withoutDocument: true,
+		},
+		"other calls name none": {
+			route: "/api/clients/:clientId", method: http.MethodGet,
+			path:    "/api/clients/client-123",
+			handler: func(c *gin.Context) { c.Status(http.StatusOK) },
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			outbox := &fakeOutbox{}
+			router := setupAuditRouter(outbox, test.route, test.method, test.handler)
+
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(test.method, test.path, nil))
+
+			require.Len(t, outbox.saved, 1)
+			_, payload := decodeSavedEvent(t, outbox.saved[0])
+			assert.Equal(t, test.want, payload.DocumentIDs)
+			assert.Equal(t, test.withoutDocument, payload.WithoutDocument)
+			if test.want == nil {
+				assert.NotContains(t, string(outbox.saved[0].body), "document_ids")
+			}
+			if !test.withoutDocument {
+				assert.NotContains(t, string(outbox.saved[0].body), "without_document")
+			}
+			assert.NotContains(t, string(outbox.saved[0].body), "Alice Tan")
 		})
 	}
 }

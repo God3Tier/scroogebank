@@ -58,12 +58,15 @@ func (c clientController) UpdateClientInformation(w http.ResponseWriter, r *http
 		Country:     cli.Country,
 		PostalCode:  cli.PostalCode,
 	}
-	
+
 	err = c.svc.UpdateClientInformation(ctx, client)
 	if err != nil {
 		switch {
 		case errors.Is(err, clientErr.ErrBadInput):
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		case errors.Is(err, clientErr.ErrClientNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
