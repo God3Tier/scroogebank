@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link, useParams } from 'react-router-dom'
 
-import { fetchDocument, getClient, listDocuments, uploadDocument, verifyClient } from '../api/clients.js'
+import { fetchDocument, getClient, listDocuments, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
 
 // One client's profile, identity documents and verification (ADR-0041). The
@@ -42,6 +42,75 @@ function verifyProblem(error) {
   return 'The client could not be verified. Try again.'
 }
 
+function updateProblem(error) {
+  if (error.status === 400) return `Check the details: ${error.message.replace(/^bad input:?\s*/i, '')}`
+  if (error.status === 404) return 'This client is no longer available.'
+  if (error.status === 409) return 'Another client already has this email or phone number.'
+  return 'The changes could not be saved. Try again.'
+}
+
+const EDITABLE_FIELDS = [
+  ['first_name', 'First Name:', 'text', 50],
+  ['last_name', 'Last Name:', 'text', 50],
+  ['date_of_birth', 'Date of Birth:', 'date'],
+  ['email', 'Email:', 'email', 255],
+  ['phone_number', 'Phone Number:', 'tel', 20],
+  ['address', 'Address:', 'text', 100],
+  ['city', 'City:', 'text', 50],
+  ['state', 'State:', 'text', 50],
+  ['country', 'Country:', 'text', 50],
+  ['postal_code', 'Postal Code:', 'text', 10],
+]
+
+// Edits the profile. client-service replaces every field, so the form sends
+// them all; verification state is not editable here.
+function ProfileEditor({ client, onSaved, onCancel }) {
+  const [form, setForm] = useState(() => ({
+    ...Object.fromEntries(EDITABLE_FIELDS.map(([name]) => [name, client[name] || ''])),
+    date_of_birth: String(client.date_of_birth || '').slice(0, 10),
+    gender: client.gender || '',
+  }))
+  const [saving, setSaving] = useState({ busy: false, error: '' })
+
+  const setField = (name) => (event) => setForm((current) => ({ ...current, [name]: event.target.value }))
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setSaving({ busy: true, error: '' })
+    try {
+      await updateClient(client.client_id, { ...form, date_of_birth: `${form.date_of_birth}T00:00:00Z` })
+    } catch (error) {
+      setSaving({ busy: false, error: updateProblem(error) })
+      return
+    }
+    setSaving({ busy: false, error: '' })
+    onSaved()
+  }
+
+  return (
+    <form className="form-grid" onSubmit={handleSubmit}>
+      {EDITABLE_FIELDS.map(([name, label, type, maxLength]) => (
+        <label key={name}>{label}
+          <input type={type} required maxLength={maxLength} value={form[name]} onChange={setField(name)} />
+        </label>
+      ))}
+      <label>Gender:
+        <select required value={form.gender} onChange={setField('gender')}>
+          <option value="">Select Gender</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+      {saving.error && <p className="form-error form-grid__full" role="alert">{saving.error}</p>}
+      <div className="form-actions">
+        <button type="submit" disabled={saving.busy}>{saving.busy ? 'Saving…' : 'Save changes'}</button>
+        <button type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  )
+}
+
 function ClientProfile() {
   const { clientId } = useParams()
   // A new client starts from a fresh page, with nothing checked.
@@ -61,6 +130,8 @@ function ClientProfileView({ clientId }) {
   const [verification, setVerification] = useState({ saving: false, error: '' })
   const [preview, setPreview] = useState(null)
   const [previewError, setPreviewError] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editMessage, setEditMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -91,6 +162,16 @@ function ClientProfileView({ clientId }) {
   function who(subject) {
     if (!subject) return 'an unknown user'
     return subject === ownSubject ? 'you' : `another user (${subject.slice(0, 8)}…)`
+  }
+
+  async function handleSaved() {
+    setEditing(false)
+    setEditMessage('Changes saved.')
+    try {
+      await reload()
+    } catch {
+      setEditMessage('The changes were saved, but the page could not be refreshed. Reload the page.')
+    }
   }
 
   async function handleUpload(event) {
@@ -206,6 +287,7 @@ function ClientProfileView({ clientId }) {
         <div className="client-header__text">
           <h1>{client.first_name} {client.last_name}</h1>
           <p>{client.email}</p>
+          <p><Link to={`/agent/client/${encodeURIComponent(clientId)}/transactions`}>View transactions</Link></p>
         </div>
         <div className="client-header__badges">
           <span className={`status-badge ${verified ? 'status-badge--verified' : 'status-badge--attention'}`}>
@@ -222,15 +304,25 @@ function ClientProfileView({ clientId }) {
       </header>
 
       <section className="card" aria-labelledby="profile-title">
-        <h2 id="profile-title">Profile</h2>
-        <dl className="profile-grid">
-          {profile.map(([label, value]) => (
-            <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value || '—'}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="document-preview__header">
+          <h2 id="profile-title">Profile</h2>
+          {!editing && (
+            <button type="button" onClick={() => { setEditMessage(''); setEditing(true) }}>Edit</button>
+          )}
+        </div>
+        {editMessage && <p className="success-message" role="status">{editMessage}</p>}
+        {editing ? (
+          <ProfileEditor client={client} onSaved={handleSaved} onCancel={() => setEditing(false)} />
+        ) : (
+          <dl className="profile-grid">
+            {profile.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value || '—'}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </section>
 
       <section className="card card-flush" aria-labelledby="documents-title">

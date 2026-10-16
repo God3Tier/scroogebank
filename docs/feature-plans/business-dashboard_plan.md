@@ -191,7 +191,7 @@ Owners marked TBC must be confirmed before more parallel work starts (`project_p
 | BD-T09 | Panels, per-agent table, accounts per client | TBC | — | `services/dashboard-service/{service,upstream}` | `task/business-dashboard/panels` | — | Done | 2026-10-09 |
 | BD-T10 | End-to-end checks and seed data | TBC | Joseph Yau | all five services | `task/business-dashboard/e2e` | Needs Cognito users for one admin and two agents | Planned | 2026-10-09 |
 | BD-T11 | Deployment | TBC | Platform | `infra/` | `task/business-dashboard/infra` | Blocked: no `infra/` | Blocked | 2026-10-09 |
-| BD-T12 | UI | TBC | Frontend | `frontend/src/pages`, `frontend/src/api/dashboard.*` | `task/business-dashboard/frontend` | Blocked: no `frontend/` on `dev`; cherry-pick the mockup commits | Blocked | 2026-10-09 |
+| BD-T12 | UI | TBC | Frontend | `frontend/src/pages`, `frontend/src/api/dashboard.*` | `task/frontend/real-data` | The mockup pages now read dashboard-service; panels it does not serve are hidden (open item 25) | Implemented; frontend tests, lint and build pass; not yet run against a deployed dashboard-service | 2026-10-16 |
 
 Merge path: `task/business-dashboard/<subtask>` → `feat/business-dashboard` → `dev`.
 

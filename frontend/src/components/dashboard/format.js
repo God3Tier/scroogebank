@@ -2,16 +2,23 @@
 
 const numberFormat = new Intl.NumberFormat('en-SG')
 
+// Shown for a figure the API left out: a rate with nothing to divide, or a
+// value summed only when every row shares one currency (ADR-0038).
+export const NO_FIGURE = '—'
+
+const missing = (value) => value === null || value === undefined || value === ''
+
 export function formatNumber(value) {
-  return numberFormat.format(value)
+  return missing(value) ? NO_FIGURE : numberFormat.format(value)
 }
 
 export function formatPercent(ratio) {
-  return `${(ratio * 100).toFixed(1)}%`
+  return missing(ratio) ? NO_FIGURE : `${(ratio * 100).toFixed(1)}%`
 }
 
 // Decimal strings from the API, shown in SGD. Compact for tiles, full in tables.
 export function formatSGD(decimal, { compact = false } = {}) {
+  if (missing(decimal)) return NO_FIGURE
   const value = Number(decimal)
   if (compact && value >= 1_000_000) return `SGD ${(value / 1_000_000).toFixed(2)}M`
   if (compact && value >= 10_000) return `SGD ${(value / 1_000).toFixed(1)}K`
@@ -20,6 +27,7 @@ export function formatSGD(decimal, { compact = false } = {}) {
 
 // Transaction values carry no currency column, so they stay unlabelled.
 export function formatValue(decimal, { compact = false } = {}) {
+  if (missing(decimal)) return NO_FIGURE
   const value = Number(decimal)
   if (compact && value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
   if (compact && value >= 10_000) return `${(value / 1_000).toFixed(1)}K`
@@ -46,5 +54,5 @@ export function formatAge(seconds) {
 
 // Turns { KEY: count } into chart rows, keeping the given key order.
 export function toRows(map, labels = {}) {
-  return Object.entries(map).map(([key, value]) => ({ key, name: labels[key] ?? key, value }))
+  return Object.entries(map ?? {}).map(([key, value]) => ({ key, name: labels[key] ?? key, value }))
 }
