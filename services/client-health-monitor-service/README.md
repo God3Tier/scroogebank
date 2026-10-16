@@ -2,13 +2,17 @@
 
 ## Current status
 
-RH-SF00 foundation only. This module currently contains the frozen
-`ClientHealthFinding V1` contract and the in-process `RelationshipTaskPort`
-used between the detection and task streams.
+The module contains the RH-SF00 `ClientHealthFinding V1` handoff, the RH-SF05
+Stage 1 task domain, and the provider-independent RH-SF01 transaction replay
+boundary.
+
+RH-SF01 currently validates the minimum matched transaction projection, follows
+bounded cursor pages, de-duplicates identical rows, rejects conflicting or
+out-of-window rows, and exposes a result only after every page succeeds.
 
 It is intentionally not a runnable application yet. No Lambda handler, Spring
-Boot API, database, Bedrock adapter, SQS producer, or deployment configuration
-has been selected or implemented.
+Boot API, database, Bedrock adapter, transaction HTTP adapter, or deployment
+configuration has been selected or implemented.
 
 ## Ownership boundary
 
@@ -38,6 +42,8 @@ Contract documentation and fixtures:
 
 ## Next implementation step
 
-After RH-SF00 merges into `feat/client-health-monitor`, Swayam can create
-`task/client-health-monitor/task-domain` from the updated feature branch and
-implement RH-SF05 against the frozen port and records.
+Feature 3 owners must review ADR-0044 and provide the dedicated authenticated,
+date-bounded replay endpoint, stable synthetic source fingerprint, and six
+months of reproducible synthetic history. RH-SF01 can then add the HTTP/service
+token adapter and provider contract fixtures without reading another service's
+database.

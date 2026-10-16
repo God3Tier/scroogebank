@@ -2,7 +2,7 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00 and RH-SF05 Stage 1 merged, RH-SF01 transaction intake/replay started
+- Status: In progress; SF00 and RH-SF05 Stage 1 merged, RH-SF01 consumer foundation implemented locally
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
@@ -477,7 +477,7 @@ Decisions:
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | In progress: intake/replay ADR accepted; consumer contract next | 2026-10-16 |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | In progress: consumer contract and bounded complete replay implemented locally; provider adapter/fixtures pending | 2026-10-16 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; future migration ownership | `task/client-health-monitor/activity-projection` | Planned | N/A |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; shared fixtures | `task/client-health-monitor/signal-rules` | Planned | N/A |
 | RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |

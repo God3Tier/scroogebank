@@ -355,3 +355,17 @@
 - Verification: synchronized `feat/client-health-monitor` through PR #111,
   reviewed ADR-0024, ADR-0025, ADR-0034, ADR-0037 and ADR-0043, and ran Git
   whitespace/diff checks.
+
+## 2026-10-16 — Client Health SF01 consumer foundation
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: implement provider-independent matched-transaction records, bounded
+  cursor replay, complete-run validation, de-duplication and failure-path tests.
+- Human verification required: review contract fields, replay limits and the
+  fail-closed behavior before committing; Feature 3 provider changes remain
+  separately owned.
+- Data: synthetic identifiers and transaction examples only. No credentials,
+  real client data, AWS calls or external services were used.
+- Verification: 27 client-health module tests passed with the local Java 24
+  compiler override; CI must repeat them on the required Java 25 toolchain.
