@@ -48,6 +48,22 @@ export function getClient(clientId) {
   return sendJson(clientPath(clientId))
 }
 
+// Clients newest first: an agent's own, or every client for an admin
+// (ADR-0043). Returns { content, page, size, totalElements, totalPages }.
+export function listClients({ page = 0, size = 20 } = {}) {
+  return sendJson(`/api/clients?page=${page}&size=${size}`)
+}
+
+// Sends every editable field; the profile is replaced, not merged.
+export function updateClient(clientId, client) {
+  return sendJson(clientPath(clientId), { method: 'PUT', body: client })
+}
+
+// A soft delete (ADR-0036). 409 while the client still has accounts.
+export function deleteClient(clientId) {
+  return sendJson(clientPath(clientId), { method: 'DELETE' })
+}
+
 // The client's documents, newest first, without their content.
 export function listDocuments(clientId) {
   return sendJson(`${clientPath(clientId)}/documents`)

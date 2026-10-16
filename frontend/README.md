@@ -121,22 +121,29 @@ Then open `/agent/alerts` for the decision workflow or `/admin/alerts` for the
 read-only oversight view. Synthetic mode uses only local example data and must
 remain disabled in deployed environments.
 
-## Business dashboard mockup (demo only)
+## Where each page's data comes from
 
-Mocks the business dashboard proposed on `feat/business-dashboard`.
+Every page reads the deployed services except Client Health Monitor, whose service is not built yet, and alerts in synthetic mode (above).
 
-- `/insights/admin`: bank-wide dashboard with KPI tiles, daily activity,
-  transaction health, ingestion freshness, portfolio composition, agent
-  performance and action items.
-- `/insights/agent`: one agent's own book with KPI tiles, action queue, team
-  comparison, portfolio and client transactions.
-- Data: synthetic, from `src/data/dashboard.js`. The window selector (7, 30,
-  90 days) changes the figures.
-- Styling: Stitch project "Scrooge Global Bank CRM" (design system:
-  Institutional Precision) — the same tokens the rest of the app uses.
-  Dashboard-specific styles are in `src/styles/dashboard.css`, chart colours
-  in `src/styles/chartTheme.js`.
-- Charts: Recharts.
+| Page | Data |
+|---|---|
+| `/agent` | My Clients and the client list from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit (on the client page) and Delete through client-service |
+| `/admin` | Admin and agent totals and lists from `GET /api/users`; Create Admin / Agent with `POST /api/users` (Cognito e-mails the temporary password); Disable with `PATCH /api/users/{id}/disable` (users are never deleted, and the root admin cannot be disabled); All Transactions from `GET /api/transactions`, 20 at a time |
+| `/clients/:id` | client-service: profile, edit, documents, verification |
+| `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions` |
+| `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)) |
+| `/agent/client-health` | Synthetic, from `src/data/clientHealthTasks.js` |
+
+Locally, `vite.config.js` sends each `/api` path to the service that owns it, in the same order as the deployed load balancer's rules.
+
+## Business dashboards
+
+`/insights/admin` is the bank-wide dashboard: KPI tiles, daily activity, transaction health, portfolio composition, agent performance and stale unverified clients. `/insights/agent` is one agent's own book: KPI tiles, stale unverified clients, team comparison, client verification, transactions and accounts. The window selector (7, 30 or 90 days, ending today in Singapore) reloads every panel.
+
+- Each panel shows its own state. An unavailable panel says why (`reason` in the response), and a request that fails marks only its panels as unavailable.
+- A figure the API leaves out, such as a rate with nothing to divide or a value in more than one currency, shows as "—".
+- The mockup also showed most active clients, ingestion freshness, clients without an account, rejected verifications and flagged transactions. dashboard-service does not serve these yet, so they are not shown ([open item 25](../docs/architecture/open-items.md#25-business-dashboard-panels-not-served-yet)).
+- Styling: Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision) — the same tokens the rest of the app uses. Dashboard-specific styles are in `src/styles/dashboard.css`, chart colours in `src/styles/chartTheme.js`. Charts: Recharts.
 
 ## Verification
 

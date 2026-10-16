@@ -14,6 +14,9 @@ func RegisterRoutes(router *gin.Engine, transactions repository.Transaction, sta
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 	router.GET("/api/accounts/:accountId/transactions", getTransactions(transactions))
+	// Every account's transactions; user-service lets only admins through
+	// (ADR-0043).
+	router.GET("/api/transactions", listTransactions(transactions))
 	// Like the route above, private and unauthenticated: user-service checks
 	// the caller and chooses the accounts first (ADR-0006, ADR-0039).
 	router.POST("/aggregates/transactions/stats", transactionStats(stats))

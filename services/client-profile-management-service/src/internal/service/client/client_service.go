@@ -20,6 +20,7 @@ type ClientService interface {
 	GetDocument(ctx context.Context, clientID, documentID string) (models.ClientDocument, []byte, error)
 	UpdateClientInformation(ctx context.Context, client models.Client) error
 	GetClientProfile(ctx context.Context, clientID string) (models.Client, error)
+	ListClients(ctx context.Context, caller models.Caller, page, size int) (models.ClientPage, error)
 	// DeleteClientProfile refuses while account-service still holds accounts
 	// for the client. It forwards the caller's Authorization header there.
 	DeleteClientProfile(ctx context.Context, clientID, authorization string) error

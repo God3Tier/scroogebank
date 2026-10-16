@@ -65,6 +65,7 @@ public class UserAuditInterceptor implements HandlerInterceptor {
         if ("/api/corrupted-logs".equals(uri) && "POST".equals(method)) return new Operation("CREATE", "CORRUPTED_AUDIT_LOG");
         if (uri.matches("/api/corrupted-logs/[^/]+") && "DELETE".equals(method)) return new Operation("DELETE", "CORRUPTED_AUDIT_LOG");
         if (uri.matches("/api/accounts/[^/]+/transactions") && "GET".equals(method)) return new Operation("READ", "ACCOUNT");
+        if ("/api/transactions".equals(uri) && "GET".equals(method)) return new Operation("READ", "TRANSACTION");
         return null;
     }
 

@@ -30,3 +30,13 @@ type Client struct {
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
 }
+
+// ClientPage is one page of GET /api/clients, in the same shape as
+// user-service's pages (ADR-0043).
+type ClientPage struct {
+	Content       []Client `json:"content"`
+	Page          int      `json:"page"`
+	Size          int      `json:"size"`
+	TotalElements int64    `json:"totalElements"`
+	TotalPages    int      `json:"totalPages"`
+}

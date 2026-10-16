@@ -1,0 +1,109 @@
+package routers
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"receiver/src/internal/models"
+	"receiver/src/internal/repository"
+	"receiver/src/internal/repository/orm"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+)
+
+func serveList(t *testing.T, repo repository.Transaction, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router, repo, nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/transactions"+query, nil))
+	return response
+}
+
+func rows(n int) orm.TransactionSlice {
+	start := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	slice := orm.TransactionSlice{}
+	for i := 0; i < n; i++ {
+		slice = append(slice, &orm.Transaction{
+			TransactionID:   "tx-" + string(rune('a'+i)),
+			TransactionDate: start.Add(-time.Duration(i) * time.Hour),
+			Status:          "Completed",
+		})
+	}
+	return slice
+}
+
+func TestListTransactions(t *testing.T) {
+	t.Run("asks for one row more than the page and returns no cursor on the last page", func(t *testing.T) {
+		repo := repository.NewMockTransaction(t)
+		repo.On("ListTransactions", mock.Anything, models.TransactionListQuery{Limit: defaultListSize + 1}).Return(rows(2), nil).Once()
+
+		response := serveList(t, repo, "")
+
+		require.Equal(t, http.StatusOK, response.Code)
+		var page struct {
+			Content    []map[string]any `json:"content"`
+			NextCursor *string          `json:"nextCursor"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+		assert.Len(t, page.Content, 2)
+		assert.Nil(t, page.NextCursor)
+	})
+
+	t.Run("trims the extra row and returns a cursor that resumes after the last row shown", func(t *testing.T) {
+		repo := repository.NewMockTransaction(t)
+		all := rows(3)
+		repo.On("ListTransactions", mock.Anything, models.TransactionListQuery{Status: "Pending", Limit: 3}).Return(all, nil).Once()
+
+		response := serveList(t, repo, "?size=2&status=Pending")
+
+		require.Equal(t, http.StatusOK, response.Code)
+		var page struct {
+			Content    []map[string]any `json:"content"`
+			NextCursor *string          `json:"nextCursor"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+		assert.Len(t, page.Content, 2)
+		require.NotNil(t, page.NextCursor)
+
+		next := repository.NewMockTransaction(t)
+		want := models.TransactionCursor{Date: all[1].TransactionDate, ID: all[1].TransactionID}
+		next.On("ListTransactions", mock.Anything, mock.MatchedBy(func(query models.TransactionListQuery) bool {
+			return query.After != nil && query.After.ID == want.ID && query.After.Date.Equal(want.Date)
+		})).Return(orm.TransactionSlice{}, nil).Once()
+		assert.Equal(t, http.StatusOK, serveList(t, next, "?cursor="+*page.NextCursor).Code)
+	})
+
+	t.Run("returns an internal error when the repository fails", func(t *testing.T) {
+		repo := repository.NewMockTransaction(t)
+		repo.On("ListTransactions", mock.Anything, mock.Anything).Return(nil, errors.New("database unavailable")).Once()
+
+		response := serveList(t, repo, "")
+
+		assert.Equal(t, http.StatusInternalServerError, response.Code)
+		assert.JSONEq(t, `{"error":"could not retrieve transactions"}`, response.Body.String())
+	})
+
+	for name, query := range map[string]string{
+		"a size that is text":       "?size=many",
+		"a zero size":               "?size=0",
+		"a size above the maximum":  "?size=101",
+		"an unknown status":         "?status=Settled",
+		"a cursor that is not ours": "?cursor=not-a-cursor",
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			// The mock fails the test if the repository is called.
+			response := serveList(t, repository.NewMockTransaction(t), query)
+
+			assert.Equal(t, http.StatusBadRequest, response.Code)
+		})
+	}
+}

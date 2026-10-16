@@ -134,6 +134,8 @@ func TestValidatePayload_UserManagementOtherResources(t *testing.T) {
 			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs/{id}", "DELETE", 200)},
 		{"account transactions read", "READ",
 			userOperation("ACCOUNT", id, "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"transaction list read has no resource id", "READ",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
 	}
 
 	for _, tt := range tests {
@@ -164,6 +166,8 @@ func TestValidatePayload_UserManagementRejectsInvalidOperations(t *testing.T) {
 			userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "POST", 201)},
 		{"successful user read needs a resource id", "READ",
 			userOperation("USER", "", "/api/users/{id}", "GET", 200)},
+		{"transactions are only read", "DELETE",
+			userOperation("TRANSACTION", id, "/api/transactions", "DELETE", 200)},
 	}
 
 	for _, tt := range tests {

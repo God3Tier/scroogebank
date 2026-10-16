@@ -18,6 +18,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.http.HttpMethod.GET;
+import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.OK;
 
@@ -67,6 +68,42 @@ class TransactionProxyTest {
 
         assertThat(response.getStatusCode()).isEqualTo(FORBIDDEN);
         assertThat(response.getBody().get("error").asText()).isEqualTo("forbidden");
+        server.verify();
+    }
+
+    @Test
+    void listsTransactionsFromTheReceiverWithTheGivenParametersAndNoToken() {
+        server.expect(requestTo("http://receiver/api/transactions?cursor=abc_-1&size=50&status=Pending"))
+                .andExpect(method(GET))
+                .andExpect(request -> assertThat(request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)).isFalse())
+                .andRespond(withSuccess("{\"content\":[],\"nextCursor\":null}", MediaType.APPLICATION_JSON));
+
+        var response = proxy.listTransactions("abc_-1", 50, "Pending");
+
+        assertThat(response.getStatusCode()).isEqualTo(OK);
+        assertThat(response.getBody().get("content").isArray()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void leavesOutParametersThatAreNotGiven() {
+        server.expect(requestTo("http://receiver/api/transactions"))
+                .andRespond(withSuccess("{\"content\":[],\"nextCursor\":null}", MediaType.APPLICATION_JSON));
+
+        proxy.listTransactions(null, null, null);
+
+        server.verify();
+    }
+
+    @Test
+    void encodesParametersSoTheyCannotAddOthers() {
+        server.expect(requestTo("http://receiver/api/transactions?status=Pending%26size%3D1000"))
+                .andRespond(withStatus(BAD_REQUEST)
+                        .contentType(MediaType.APPLICATION_JSON).body("{\"error\":\"bad status\"}"));
+
+        var response = proxy.listTransactions(null, null, "Pending&size=1000");
+
+        assertThat(response.getStatusCode()).isEqualTo(BAD_REQUEST);
         server.verify();
     }
 }

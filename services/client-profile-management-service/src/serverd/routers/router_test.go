@@ -87,6 +87,33 @@ func TestAggregatesMarkAdmins(t *testing.T) {
 	assert.Equal(t, []models.Caller{{Subject: "admin-1", Admin: true}}, aggregates.callers)
 }
 
+func TestClientListTakesTheCallerFromTheTokenOnly(t *testing.T) {
+	tests := map[string]struct {
+		principal  security.Principal
+		wantCaller models.Caller
+	}{
+		"an agent": {security.Principal{Subject: "agent-a", Role: "AGENT"}, models.Caller{Subject: "agent-a"}},
+		"an admin": {security.Principal{Subject: "admin-1", Role: "ADMIN"}, models.Caller{Subject: "admin-1", Admin: true}},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			clients := &recordingClients{}
+			noAudit := func(c *gin.Context) { c.Next() }
+			principal := test.principal
+			RegisterRoutes(router, clients, &recordingAggregates{}, nil, signedInAs(&principal), noAudit)
+			res := httptest.NewRecorder()
+
+			// Neither parameter exists in the API; they must change nothing.
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/clients?page=1&agentId=agent-b&admin=true", nil))
+
+			assert.Equal(t, http.StatusOK, res.Code)
+			assert.Equal(t, []models.Caller{test.wantCaller}, clients.callers)
+		})
+	}
+}
+
 func TestAggregatesRefuseCallersWithoutACRMRole(t *testing.T) {
 	tests := map[string]struct {
 		principal  *security.Principal
