@@ -13,7 +13,7 @@
 
 | Part | State |
 |---|---|
-| `services/dashboard-service` (Java 25, Spring Boot, no database) | Five endpoints, panel degradation, 3-minute per-caller cache, Cognito access-token check for the CRM app client, `DASHBOARD_VIEW` audit to SQS, adapters for all four upstreams, per-agent table. 102 tests pass |
+| `services/dashboard-service` (Java 25, Spring Boot, no database) | Five endpoints, panel degradation, 3-minute per-caller cache, Cognito access-token check for the CRM app client, `DASHBOARD_VIEW` audit to SQS, adapters for all four upstreams, per-agent table, startup warm-up of the upstream connections. 105 tests pass |
 | Auditor | Accepts `source_service: DASHBOARD` with `event_type: DASHBOARD_VIEW` and checks the payload |
 | client-service | `GET /aggregates/clients/stats`, `/aggregates/clients/action-items` and `/aggregates/clients/team-comparison`; index on `clients(created_at)` |
 | account-service | `GET /aggregates/accounts/stats` and `/aggregates/accounts/ids`; index on `accounts(opening_date)` |

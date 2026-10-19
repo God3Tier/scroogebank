@@ -18,6 +18,7 @@ Feature plan: [`docs/feature-plans/business-dashboard_plan.md`](../../docs/featu
 So the dashboard can read nothing the caller could not, and each service scopes its own answer: an agent sees only their own clients, accounts and matched transactions. No endpoint takes an agent ID.
 
 - **Panels degrade one at a time.** Upstream calls run in parallel (5 s each, 8 s in total). A failing or unconfigured upstream makes its panels `UNAVAILABLE` with a reason; the response is 200 unless every panel failed (503). An upstream that times out, answers with an error or cannot be reached is logged as a `WARN` naming the panel and the cause.
+- **Warm-up:** at startup, before the task takes traffic, the service calls each configured upstream's health endpoint once, without a token, and logs `Warm-up: <service> took N ms`. The first dashboard then does not pay the HTTP client, TLS and JSON first-use costs, which on Fargate made every call of the first page take 1.5 to 2 s. A down upstream is logged, never fatal.
 - **Cache:** each task caches each caller's response for 3 minutes. `generatedAt` says when the figures were computed. A response with an `upstream_timeout` or `upstream_error` panel is not cached, so the next request asks again.
 - **Audit:** every view, cache hits included, sends a `DASHBOARD_VIEW` event to the shared audit queue, best-effort. The auditor accepts `source_service: DASHBOARD`.
 - **Days** are Singapore days; "today" is the Singapore date.
