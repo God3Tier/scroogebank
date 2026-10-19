@@ -10,5 +10,6 @@ crm_ingest_public_key = "ssh-ed25519 AAAA... "  # sftp_client_public_key
 # repository root. Left unset, Terraform generates one.
 # host_key_file = "../../../../secrets/sftp_host_key"
 
-# producer_image  = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:<tag>"
-# crm_account_ids = ["synthetic-account-uuid-1", "synthetic-account-uuid-2"]
+# producer_image = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:<tag>"
+# The producer's accounts are not set here: scripts/sync-producer-accounts.sh
+# copies them from the CRM (ADR-0045).

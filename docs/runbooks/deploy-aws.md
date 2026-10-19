@@ -258,7 +258,6 @@ The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-tran
    | `crm_ingest_public_key` | The crm output `sftp_client_public_key`. The private half is in Secrets Manager, for the Lambda |
    | `host_key_file` | Optional. Set it only if you were given a host key for the server; otherwise Terraform generates one. Save the key in the git-ignored `secrets/` folder at the repository root, and give its path relative to `stacks/sftp-server`, such as `"../../../../secrets/sftp_host_key"`. It must be an unencrypted OpenSSH private key (its first line is `-----BEGIN OPENSSH PRIVATE KEY-----`) |
    | `producer_image` | Leave unset for now (8.2) |
-   | `crm_account_ids` | Leave unset for now (8.2) |
 
    This writes the file from the outputs:
 
@@ -312,15 +311,9 @@ The producer is the bank's file generator. It needs the ECR repository that 8.1 
 
    The line looks like `producer_image = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:6f606ec"`. In a new terminal `URL` and `PTAG` are empty: set `URL` as in step 1, then list the tags already pushed with `aws ecr list-images --repository-name "${URL#*/}" --query 'imageIds[].imageTag' --output text`.
 
-   Optionally, add the accounts the producer's transactions belong to:
+3. Apply sftp-server again. Changing `producer_image` replaces the instance (its startup script changes). The host key stays the same, so its fingerprint does too.
 
-   ```hcl
-   crm_account_ids = ["<account UUID>", "<account UUID>"]
-   ```
-
-   `crm_account_ids` are the accounts the producer's transactions belong to. It is optional because the accounts do not exist until someone creates them in the deployed app, after the first apply. Left empty, the producer uses random `ACC-000123` references, which the import stores as `Unmatched` ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)), and no agent sees them. For a demo, create a few accounts in the app first and list their IDs. The producer reads no CRM database, so it cannot find them itself.
-
-3. Apply sftp-server again. Changing either value replaces the instance (its startup script changes). The host key stays the same, so its fingerprint does too.
+The producer starts with an empty account list and publishes nothing until you give it the CRM's accounts (8.5).
 
 ### 8.3 Turn on the ingest Lambda
 
@@ -377,6 +370,21 @@ To rebuild after a code change, run `make lambda` and apply the crm stack again:
   aws ssm start-session --target "$(terraform -chdir=infrastructure/terraform/stacks/sftp-server output -raw instance_id)"
   sudo ssh-keygen -lf "$(sudo sshd -T | awk '$1 == "hostkey" {print $2; exit}').pub"   # the key sshd uses, whatever its type
   ```
+
+### 8.5 Give the producer the CRM's accounts
+
+The producer writes transactions only for the accounts in its list, and nothing while the list is empty ([ADR-0045](../adr/ADR-0045-producer-account-list-synced-from-crm.md)). It cannot read the CRM itself, so copy the accounts to it once some exist:
+
+1. Open at least one account in the deployed app: on a client's page, **Open account**.
+2. Run the sync. The crm stack must be running, because the script reads the accounts database through `scripts/db-run-sql.sh`:
+
+   ```sh
+   scripts/sync-producer-accounts.sh
+   ```
+
+   It prints how many accounts it synced: those neither closed nor deleted, at most the 100 most recently opened. The producer uses them from its next file, within `publish_interval_seconds` (5 minutes by default).
+
+Run it again after opening, closing or deleting accounts, and after the sftp-server stack replaces the instance, which starts with an empty list. Stopping the instance between sessions keeps the list. To see the list on the server, open a Session Manager shell (8.4) and run `cat /etc/producer/account-ids`; `sudo docker logs --tail 5 producer` says when a run published nothing.
 
 ## Between sessions
 
@@ -446,6 +454,8 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `AccessDeniedException` with "explicit deny in a service control policy" on `CreateBackupVault` or `CreateLogGroup` | The DR vault or WAF logging was uncommented, and the account still refuses it. Comment it out again ([Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account)) |
 | `a secret with this name is already scheduled for deletion` | A destroy ran without the `deletion_protection=false` apply before it, so the secrets got a 7-day recovery window. Hard delete them as in [Tear down](#tear-down), then apply again |
 | A service's tasks stop with `CannotPullContainerError: ... not found` | `image_tag` in `env/prod.tfvars` is not a tag you pushed (the example's `replace-with-the-pushed-tag`, for instance), or that service's image was never pushed (step 4). Push it, set the tag and apply again. A failed deployment rolls back to the previous one, which keeps failing if it had the same problem, until the next apply |
+| The producer writes no files; its log says `lists no CRM accounts` | Its account list is empty: the sync has not run since the instance was created, or the CRM has no open accounts. Open one and run `scripts/sync-producer-accounts.sh` (8.5) |
+| `sync-producer-accounts.sh` stops with `could not read the accounts query's output` | The query ran, but its log could not be fetched in time. The producer's list is unchanged; run the script again |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | client-service or account-service refuses to start | Production mode needs its TLS files and `verify-full` settings; check the `tls-init` log in the same task |
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | That service's tasks started before the service they call was registered in Service Connect. Restart the calling service (`aws ecs update-service ... --force-new-deployment`), as at the end of step 5 |

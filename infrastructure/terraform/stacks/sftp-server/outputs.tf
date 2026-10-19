@@ -13,6 +13,11 @@ output "producer_repository_url" {
   value       = aws_ecr_repository.producer.repository_url
 }
 
+output "producer_account_ids_file" {
+  description = "The producer's CRM account list on the instance, rewritten by scripts/sync-producer-accounts.sh."
+  value       = local.account_ids_file
+}
+
 output "instance_id" {
   description = "Stop the instance between sessions, or open a shell with Session Manager."
   value       = aws_instance.sftp.id
