@@ -144,11 +144,11 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 | NAT gateway | ~43 | 0 (Elastic IP ~4) |
 | Internal ALB | ~20 | ~20 |
 | 6 × RDS `db.t4g.micro`, single-AZ | ~125 | ~17 (storage) |
-| Fargate, 7 services × 1 task | ~110 | 0 |
+| Fargate, 7 services × 1 task | ~132 | 0 |
 | WAF | ~10 | ~10 |
 | GuardDuty, AWS Backup, CloudTrail data events | ~5 | ~5 |
 | KMS, Secrets Manager, CloudWatch, API Gateway, CloudFront, other | ~21 | ~11 |
-| **Total** | **~336** | **~66** |
+| **Total** | **~358** | **~66** |
 
 The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
@@ -190,3 +190,4 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
   - **Decisions 1, 3 and 10:** changed to match.
 - 2026-10-16: amended while Proposed, as decided by the decision owner, to cut Fargate cost:
   - **Decision 3:** services run 1–6 tasks while running instead of 2–6, with [ADR-0018](ADR-0018-ecs-fargate-compute.md) amended to match. Cost Impact changed to match.
+- 2026-10-19: Cost Impact updated, as decided by the decision owner: dashboard-service runs on 1 vCPU and 2 GB instead of 0.5 vCPU and 1 GB. On 0.5 vCPU, shared with its Service Connect proxy, the JVM took 34 s to start and 1.5–3.4 s for its first call to each upstream, so the first dashboard after a start timed out. About USD 22 a month more running 24/7, about USD 3 a month at two 10-hour sessions a week.

@@ -484,11 +484,14 @@ module "dashboard_service" {
   subnet_ids         = local.app_subnet_ids
   security_group_ids = [local.sg["dashboard"]]
   image              = local.image["dashboard-service"]
-  cpu                = 512
-  memory             = 1024
-  cpu_architecture   = var.cpu_architecture
-  port               = local.ports.dashboard
-  app_protocol       = "http"
+  # 1 vCPU, not 0.5: on 0.5, shared with the Service Connect proxy, the JVM
+  # took 34 s to start and 1.5-3.4 s for its first call to each upstream.
+  # Fargate pairs 1 vCPU with at least 2 GB.
+  cpu              = 1024
+  memory           = 2048
+  cpu_architecture = var.cpu_architecture
+  port             = local.ports.dashboard
+  app_protocol     = "http"
 
   environment = {
     OIDC_ISSUER_URI          = local.cognito_issuer

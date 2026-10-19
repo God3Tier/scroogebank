@@ -137,7 +137,7 @@ Panel failures are logged with the panel name and reason (debug for "not configu
 
 ## 14. Cost impact
 
-One ECS Fargate service, 1 task × 0.25 vCPU / 0.5 GB at minimum: roughly USD 9 a month while running, and USD 0 until infrastructure exists. No database or cache cluster. A few extra SQS messages per view and three indexes in existing databases.
+One ECS Fargate service, 1 task × 1 vCPU / 2 GB at minimum: roughly USD 45 a month running 24/7 (about USD 0.06 an hour; 0.5 vCPU was too slow to start, ADR-0042 Cost Impact), and USD 0 until infrastructure exists. No database or cache cluster. A few extra SQS messages per view and three indexes in existing databases.
 
 ## 15. Security and privacy
 
