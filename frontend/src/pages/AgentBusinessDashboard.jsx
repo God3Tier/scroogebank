@@ -35,6 +35,8 @@ function AgentBusinessDashboard() {
     actions: ['action-items', { ...period, staleDays: STALE_DAYS }],
   })
   const { overview, portfolio, transactions, actions } = responses
+  // The stat tiles all come from the overview.
+  const tilesLoading = overview === undefined
 
   const clients = panelData(overview?.panels?.clients)
   const accounts = panelData(overview?.panels?.accounts)
@@ -84,8 +86,9 @@ function AgentBusinessDashboard() {
       />
 
       <div className="stat-grid stat-grid-dense">
-        <StatCard label="My clients" value={formatNumber(clients?.total)} icon="groups" />
+        <StatCard loading={tilesLoading} label="My clients" value={formatNumber(clients?.total)} icon="groups" />
         <StatCard
+          loading={tilesLoading}
           label="Added in window"
           value={formatNumber(clients?.createdInWindow)}
           icon="person_add"
@@ -93,18 +96,21 @@ function AgentBusinessDashboard() {
           hint={hintFor('clientsOnboarded')}
         />
         <StatCard
+          loading={tilesLoading}
           label="Verified share"
           value={formatPercent(verifiedShare)}
           icon="verified_user"
           hint={hintFor('verifiedShare')}
         />
         <StatCard
+          loading={tilesLoading}
           label="My accounts"
           value={formatNumber(accounts?.total)}
           icon="account_balance"
           caption={accounts ? `+${formatNumber(accounts.openedInWindow)} opened` : undefined}
         />
         <StatCard
+          loading={tilesLoading}
           label="Booked initial deposits"
           value={formatSGD(accounts?.bookedInitialDeposits, { compact: true })}
           icon="savings"
