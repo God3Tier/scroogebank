@@ -50,4 +50,13 @@ public enum PanelReason {
     public String wireValue() {
         return wireValue;
     }
+
+    /**
+     * Whether the next request may succeed: the upstream was slow or broke.
+     * The other reasons describe the setup, the caller or the data, which
+     * asking again does not change.
+     */
+    public boolean isTransient() {
+        return this == UPSTREAM_TIMEOUT || this == UPSTREAM_ERROR;
+    }
 }

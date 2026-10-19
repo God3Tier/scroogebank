@@ -13,7 +13,7 @@
 
 | Part | State |
 |---|---|
-| `services/dashboard-service` (Java 25, Spring Boot, no database) | Five endpoints, panel degradation, 3-minute per-caller cache, Cognito access-token check for the CRM app client, `DASHBOARD_VIEW` audit to SQS, adapters for all four upstreams, per-agent table. 90 tests pass |
+| `services/dashboard-service` (Java 25, Spring Boot, no database) | Five endpoints, panel degradation, 3-minute per-caller cache, Cognito access-token check for the CRM app client, `DASHBOARD_VIEW` audit to SQS, adapters for all four upstreams, per-agent table. 98 tests pass |
 | Auditor | Accepts `source_service: DASHBOARD` with `event_type: DASHBOARD_VIEW` and checks the payload |
 | client-service | `GET /aggregates/clients/stats`, `/aggregates/clients/action-items` and `/aggregates/clients/team-comparison`; index on `clients(created_at)` |
 | account-service | `GET /aggregates/accounts/stats` and `/aggregates/accounts/ids`; index on `accounts(opening_date)` |
@@ -92,8 +92,8 @@ Shared: window of 7, 30 or 90 days or explicit dates, at most 365 days, in Singa
 
 ## 8. Relevant non-functional requirements
 
-- **Performance:** upstream calls run in parallel, 2 s each and 3 s in total; aggregation happens in Postgres on indexed columns.
-- **Availability:** one failing upstream costs one panel. No retries; the cache absorbs short blips.
+- **Performance:** upstream calls run in parallel, 5 s each and 8 s in total (raised from 2 s and 3 s, ADR-0033); aggregation happens in Postgres on indexed columns.
+- **Availability:** one failing upstream costs one panel. No retries. A response with a timed-out or failed panel is not cached, so the next refresh asks again rather than serving the failure for 3 minutes.
 - **Consistency:** up to 3 minutes stale, shown by `generatedAt`.
 
 ## 9. APIs, schema and jobs

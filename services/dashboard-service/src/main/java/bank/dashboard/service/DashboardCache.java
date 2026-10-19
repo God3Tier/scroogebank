@@ -5,6 +5,7 @@ import bank.dashboard.dto.DashboardResponse;
 import bank.dashboard.dto.DashboardWindow;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -26,6 +27,12 @@ import java.util.function.Supplier;
  * <p><strong>It is per task, not shared.</strong> Two replicas can answer from
  * entries up to one TTL apart. Acceptable for a management dashboard, and made
  * visible by {@code generatedAt} on every response rather than hidden.
+ *
+ * <p><strong>A transient failure is not kept.</strong> A response with a
+ * panel that timed out or failed expires at once, so the next request asks
+ * the upstreams again. Kept for the TTL, one slow call after a restart would
+ * look like an outage of the whole TTL. Requests waiting on the same
+ * computation still share its answer.
  */
 @Component
 public class DashboardCache {
@@ -33,8 +40,10 @@ public class DashboardCache {
     private final Cache<Key, DashboardResponse> cache;
 
     public DashboardCache(DashboardProperties properties) {
+        Duration ttl = Duration.ofSeconds(properties.cache().ttlSeconds());
         this.cache = Caffeine.newBuilder()
-                .expireAfterWrite(Duration.ofSeconds(properties.cache().ttlSeconds()))
+                .expireAfter(Expiry.creating((Key key, DashboardResponse response) ->
+                        response.hasTransientFailure() ? Duration.ZERO : ttl))
                 .maximumSize(properties.cache().maxEntries())
                 .build();
     }
