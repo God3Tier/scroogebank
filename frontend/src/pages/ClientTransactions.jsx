@@ -1,8 +1,32 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from 'react-oidc-context'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { listAccountTransactions, listAccounts } from '../api/accounts.js'
+import { listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
+import { ADMIN, inAnyGroup } from '../auth/roles.js'
+
+// account-service's four statuses. An agent may move an account of a verified
+// client to any of them, in any direction (ADR-0050).
+const ACCOUNT_STATUSES = [
+    ['ACTIVE', 'Active'],
+    ['INACTIVE', 'Inactive'],
+    ['PENDING', 'Pending'],
+    ['CLOSED', 'Closed'],
+]
+const STATUS_LABELS = Object.fromEntries(ACCOUNT_STATUSES)
+
+// Clients verified before ADR-0041 hold "verified" in lower case.
+function isVerified(client) {
+    return String(client?.verification_status || '').toUpperCase() === 'VERIFIED'
+}
+
+function statusChangeProblem(error) {
+    if (error.status === 403) return "This client isn't verified, so the status can't be changed."
+    if (error.status === 404) return 'This account is no longer available.'
+    if (error.status === 503) return 'The client could not be checked just now. Try again shortly.'
+    return 'The status could not be changed. Try again.'
+}
 
 function loadProblem(error) {
     // client-service answers 404 for another agent's client too.
@@ -23,12 +47,59 @@ async function loadClientTransactions(clientId) {
     return { client, accounts: accounts.map((account, i) => ({ ...account, transactions: transactions[i] })) }
 }
 
-function AccountTransactions({ account }) {
+// An account's status. The agent of a verified client can change it; an
+// unverified client's accounts stay as they are until the client is
+// verified, and admins do not manage client accounts (ADR-0050).
+function AccountStatus({ account, mode, onChanged }) {
+    const current = String(account.status).toUpperCase()
+    const [choice, setChoice] = useState(current)
+    const [saving, setSaving] = useState({ busy: false, error: '' })
+
+    async function handleSave(event) {
+        event.preventDefault()
+        setSaving({ busy: true, error: '' })
+        try {
+            await updateAccountStatus(account.id, choice)
+        } catch (error) {
+            setSaving({ busy: false, error: statusChangeProblem(error) })
+            return
+        }
+        setSaving({ busy: false, error: '' })
+        onChanged(account.id, choice)
+    }
+
+    return (
+        <div className="account-status">
+            <span>
+                Status: <span className={`badge badge-${current.toLowerCase()}`}>{STATUS_LABELS[current] || account.status}</span>
+            </span>
+            {mode === 'change' && (
+                <form className="account-status" onSubmit={handleSave}>
+                    <select
+                        aria-label={`New status for account ${account.id.slice(0, 8)}`}
+                        value={choice}
+                        onChange={(event) => setChoice(event.target.value)}
+                    >
+                        {ACCOUNT_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                    <button type="submit" disabled={saving.busy || choice === current}>
+                        {saving.busy ? 'Saving…' : 'Save status'}
+                    </button>
+                </form>
+            )}
+            {mode === 'unverified' && <span className="section-note">Verify this client to change account statuses.</span>}
+            {saving.error && <p className="form-error" role="alert">{saving.error}</p>}
+        </div>
+    )
+}
+
+function AccountTransactions({ account, statusMode, onStatusChanged }) {
     return (
         <section className="card card-flush">
             <h2>
                 {account.account_type} account <span className="mono" title={account.id}>{account.id.slice(0, 8)}</span>
             </h2>
+            <AccountStatus account={account} mode={statusMode} onChanged={onStatusChanged} />
             {account.transactions.length === 0 ? (
                 <p className="empty-state">No transactions found.</p>
             ) : (
@@ -66,6 +137,7 @@ function AccountTransactions({ account }) {
 function ClientTransactions() {
     const { clientId } = useParams()
     const navigate = useNavigate()
+    const auth = useAuth()
     const [state, setState] = useState({ clientId: null, error: '', data: null })
 
     useEffect(() => {
@@ -79,6 +151,18 @@ function ClientTransactions() {
 
     const loading = state.clientId !== clientId
     const client = state.data?.client
+    // Agents manage client accounts; admins only see them (requirements Q&A UM18).
+    const statusMode = inAnyGroup(auth.user, [ADMIN]) ? 'view' : isVerified(client) ? 'change' : 'unverified'
+
+    function handleStatusChanged(accountId, status) {
+        setState((current) => ({
+            ...current,
+            data: {
+                ...current.data,
+                accounts: current.data.accounts.map((account) => account.id === accountId ? { ...account, status } : account),
+            },
+        }))
+    }
 
     return (
         <div className="page">
@@ -114,7 +198,9 @@ function ClientTransactions() {
                             <p className="empty-state">This client has no accounts, so no transactions.</p>
                         </section>
                     ) : (
-                        state.data.accounts.map((account) => <AccountTransactions key={account.id} account={account} />)
+                        state.data.accounts.map((account) => (
+                            <AccountTransactions key={account.id} account={account} statusMode={statusMode} onStatusChanged={handleStatusChanged} />
+                        ))
                     )}
                 </>
             )}

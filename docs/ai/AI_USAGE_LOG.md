@@ -1,5 +1,50 @@
 # AI usage log
 
+## 2026-10-20 — Activity feed timeout, page names, dashboard budgets, accounts Pending until verified
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: four changes on four branches, all from `dev`.
+  - `task/base-features/auditor-channel-warm-up`: read the owner's
+    CloudWatch line for the activity feed failing on first load
+    (`DEADLINE_EXCEEDED`, about 1.8 s of the 2 s deadline spent
+    connecting) and make user-service connect to the auditor at startup.
+  - `task/frontend/page-names`: rename Agent/Admin Dashboard to
+    Agent/Admin Home, and Agent/Admin Insights to Agent/Admin Dashboard.
+  - `task/business-dashboard/longer-upstream-budgets`: raise
+    dashboard-service's budgets to 10 s per call and 15 s overall, which
+    the owner chose, and amend ADR-0033.
+  - `task/base-features/verified-clients-only-accounts`: draft ADR-0050.
+    A first version refused an agent's account for an unverified client.
+    Checking the specification and the requirements Q&A showed no such
+    rule, the Q&A's "doc submitted, account opened, account active"
+    workflow, and that admins do not manage client accounts (UM18). The
+    owner then chose: an unverified client's accounts open as Pending; after
+    verifying, the agent may make them Active; a new
+    `PATCH /api/accounts/{id}` lets the owning agent change a verified
+    client's account to any status, never an admin, audited with the status
+    before and after. Implemented in account-service and on the client and
+    accounts pages.
+- Human verification required: decide ADR-0050 and tell Joseph Yau
+  (Feature 2) and the frontend owner. In AWS, check that the activity feed
+  loads on the first visit after a deploy with no `DEADLINE_EXCEEDED`, that
+  the dashboards load after a restart with no `exceeded its budget`, and,
+  after deploying account-service and the frontend together, that an agent
+  can open only a Pending account for an unverified client, activate it
+  after verifying, change its status on the accounts page, and that an
+  admin's `PATCH` returns 403.
+- Data: repository content, the owner's local copies of the specification
+  and the requirements Q&A (read, not committed), and one CloudWatch log
+  line the owner pasted, with no client data. No secrets or real client
+  data were used.
+- Verification: user-service's 83 tests pass, dashboard-service's 105,
+  account-service's `make test` (including the new repository test against
+  PostgreSQL) and `go vet`, and the frontend's tests, lint and build on
+  both frontend branches. The new tests for the auditor channel, each
+  account-service rule (unverified, admin, the Pending exception) and each
+  frontend rule (the form's statuses, the page's control, the admin prompt)
+  fail without their change.
+
 ## 2026-10-20 — INF-03 least-privilege database logins, and stale statuses
 
 - Human owner: Neo Jia Wen.
