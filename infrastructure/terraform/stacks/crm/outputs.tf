@@ -2,7 +2,7 @@
 
 output "app_url" {
   description = "The CRM's address."
-  value       = "https://${aws_cloudfront_distribution.this.domain_name}"
+  value       = "https://${local.custom_domain ? local.app_host : aws_cloudfront_distribution.this.domain_name}"
 }
 
 output "frontend_build_env" {

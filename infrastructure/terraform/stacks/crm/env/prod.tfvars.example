@@ -21,11 +21,22 @@ image_tag = "replace-with-the-pushed-tag"
 root_admin_email = "you+crm-root@example.edu"
 alarm_email      = "you@example.edu"
 
+# The project account's domain (runbook "Register a domain"): the app is at
+# https://sg.itsag3t6.com and the internal ALB listens on HTTPS. Runbook
+# step 3 rewrites this line, and removes it in an account without this
+# domain's hosted zone, such as a personal one: the app then keeps its
+# *.cloudfront.net address and the ALB listens on HTTP inside the VPC.
+domain_name = "itsag3t6.com"
+
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).
 # The name is fixed, so set it before that stack exists; it refuses to plan
 # until this list has it. Runbook step 3 writes this line with your account ID.
 extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task"]
 
-# Fill these in after applying the sftp-server stack (runbook step 9).
+# Runbook step 9.3 writes these four lines once the sftp-server stack exists,
+# replacing older copies. Leave them out until then: the ingest Lambda needs
+# the SFTP server's address and host key, so the first apply cannot create it.
+# enable_ingest_lambda      = true
+# ingest_lambda_zip         = "../../../../services/sftp/receiver/dist/transaction-ingest.zip"
 # sftp_server_address       = "203.0.113.10:22"
 # sftp_host_key_fingerprint = "SHA256:..."

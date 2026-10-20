@@ -19,7 +19,8 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `running` | `false` between sessions: 0 tasks, schedules paused, no NAT gateway (ADR-0029, ADR-0042 decision 4) |
 | `high_availability` | The demo week: Multi-AZ standbys and a NAT gateway per AZ |
 | `enable_cognito_triggers` | The login and password-reset audit Lambda (ADR-0040); needs its zip. Keep `true`: `false` is for the mocked tests and leaves sign-ins unaudited |
-| `enable_ingest_lambda` | The transaction import Lambda (ADR-0024); off until the receiver has a handler |
+| `enable_ingest_lambda` | The transaction import Lambda (ADR-0024); needs its zip and the sftp-server stack's address and host key ([runbook §9.3](../../docs/runbooks/deploy-aws.md#93-turn-on-the-ingest-lambda)) |
+| `domain_name` | A domain registered in Route 53 ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)): the app at `sg.<domain>` and the internal ALB on HTTPS (ADR-0042 decision 8). Unset, the app keeps its `*.cloudfront.net` address and the ALB listens on HTTP inside the VPC. The project account's domain is `itsag3t6.com`; runbook step 3 sets it only in an account that has that domain's hosted zone, so other accounts deploy without one |
 | `deletion_protection` | Defaults to on for prod; apply with `false` before `terraform destroy` |
 | `enable_github_deploy_role` | The role a deploy workflow assumes; off while deployments are run by hand |
 
@@ -37,6 +38,8 @@ What every stack in the account shares:
 
 The GitHub OIDC provider (`enable_github_oidc`) is off until CI deploys. GuardDuty is not created here: the account already has a detector ([Left out of the account](#left-out-of-the-account)).
 
+Two account-wide things are made by hand, outside Terraform, so no destroy removes them: the deploy role `crm-infra-admin` (ADR-0046), and the domain with the Route 53 hosted zone that registering it creates ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)).
+
 ### `stacks/crm`
 
 The CRM for one legal entity and environment:
@@ -44,7 +47,7 @@ The CRM for one legal entity and environment:
 | Area | Deployed |
 |---|---|
 | Network | A VPC across 2 Availability Zones, with public, app and database subnets. One NAT gateway, removed while the stack is stopped; its Elastic IP stays. Gateway endpoints for S3 and DynamoDB |
-| Edge and API | CloudFront serves the frontend from a private bucket and forwards `/api/*` to an API Gateway HTTP API. API Gateway checks the Cognito token, then passes requests through a VPC Link to the internal ALB, which routes by path. In prod, WAF sits on CloudFront, without request logging |
+| Edge and API | CloudFront serves the frontend from a private bucket and forwards `/api/*` to an API Gateway HTTP API. API Gateway checks the Cognito token, then passes requests through a VPC Link to the internal ALB, which routes by path. In prod, WAF sits on CloudFront, without request logging. With `domain_name`: the app at `sg.<domain>` (`sg-staging.<domain>` for staging), ACM certificates for it (in us-east-1) and for `alb.sg.<domain>`, and HTTPS from API Gateway and the ingest Lambda to the ALB, with API Gateway checking the certificate's name |
 | Sign-in | A Cognito user pool with ADMIN and AGENT groups and managed login. The Cognito triggers Lambda, which audits logins and password resets |
 | Services | On ECS Fargate, 1 to 6 tasks each, and 0 while stopped: user-service, client-service, account-service, the auditor, chain-verify (daily at 03:00 SGT), transaction-service, and event-alert-service (its read API only). Also their ECR repositories, Service Connect, the project CA and the service certificates. dashboard-service runs in the same cluster but is deployed by `stacks/business-dashboard` |
 | Data | 6 RDS PostgreSQL instances: users, clients, accounts, transactions, audit and alerts. Each is `db.t4g.micro` with 20 GB of gp3 that can grow to 100 GB, and 7 days of point-in-time recovery. Also the `client-keys` DynamoDB table, the ID-documents bucket, 4 Singapore KMS keys and a psql console task for each database |
@@ -78,11 +81,8 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 | Part | Why it doesn't work | Waiting for |
 |---|---|---|
 | event-alert-service | It runs, but nothing creates alerts, so it has none to show | INF-06: the alert worker |
-| SFTP server | It writes files, but nothing collects them until the ingest Lambda is turned on | INF-04: turn on the ingest Lambda ([runbook §9](../../docs/runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda)) |
 | Database logins | Most services sign in as their database's master user, and schemas are applied by hand | INF-03: db-migrate tasks |
-| Internal ALB | It serves HTTP, not HTTPS, inside the VPC | [Open item 2](../../docs/architecture/open-items.md#2-domain-name): a domain name, so ACM can issue a certificate |
-| ALB to the Java services | user-service, dashboard-service and event-alert-service get plain HTTP | INF-08: TLS in those services |
-| CloudFront | It uses the default `*.cloudfront.net` address | [Open item 2](../../docs/architecture/open-items.md#2-domain-name): a domain name |
+| ALB to the Java services | user-service, dashboard-service and event-alert-service get plain HTTP from the ALB | INF-08: TLS in those services |
 
 ### Left out of the account
 
@@ -100,10 +100,9 @@ To restore one, uncomment it, and for the DR vault the prod assertion in `stacks
 
 | Part | Waiting for |
 |---|---|
-| transaction-ingest Lambda (`enable_ingest_lambda`), the SFTP receiver's poller (`services/sftp/receiver/src/cronjob`) | INF-04: the poller runs as a Lambda function and reads its secrets from Secrets Manager. Build its zip with `make lambda` in `services/sftp` and turn it on as [runbook §9](../../docs/runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda) says; it has not run in AWS yet (INF-02). Until then, no transactions reach transactions-db |
 | Alert worker, its 4-hourly schedule, AgentCore web search in Tokyo and Bedrock access | INF-06 (EDA-D1-02), blocked until the alerts ADRs are accepted |
 | Health monitor, its daily analysis task and health-db | INF-07: the service does not run yet |
-| GitHub deploy role (`enable_github_deploy_role`) and CI workflows | INF-09: deferred while deployments are run by hand |
+| GitHub deploy role (`enable_github_deploy_role`) and deploy workflows. `.github/workflows/ci.yml` builds and tests every pull request, but nothing pushes images or applies Terraform | INF-09: deferred while deployments are run by hand |
 | SES e-mail for client verification | [Open item 19](../../docs/architecture/open-items.md#19-client-verification-request-feature-2): agents check ID documents by hand for now |
 
 ## Checks

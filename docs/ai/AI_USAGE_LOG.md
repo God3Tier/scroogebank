@@ -1,5 +1,45 @@
 # AI usage log
 
+## 2026-10-20 — INF-13 custom domain and HTTPS internal ALB
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: check which code has no deployment and where the Terraform README was
+  out of date; explain the difference between HTTPS to the internal ALB and
+  INF-08's TLS in the Java services; add `domain_name` to the CRM stack (ACM
+  certificates for CloudFront and the internal ALB, DNS validation and host
+  records in a hand-registered Route 53 zone, the ALB on HTTPS 443 verified by
+  API Gateway, the ingest Lambda calling it by name, Cognito callbacks on the
+  custom domain); write its mocked plan tests; amend ADR-0042 decisions 8 and
+  9, resolve open item 2, and update the runbook, the Terraform README, the
+  system overview, the infrastructure plan and the resource register.
+  The runbook's step 3 sets `domain_name = "itsag3t6.com"` only in an account
+  that has that domain's hosted zone, so a personal account deploys without one.
+- Human verification required: decide ADR-0042; in the project account, apply
+  the CRM stack with `domain_name = "itsag3t6.com"`, then the
+  business-dashboard stack; check that both certificates are issued, the ALB
+  listens on HTTPS 443, the app signs in and loads at
+  `https://sg.itsag3t6.com`, and an ingest run reaches account-service; in a
+  personal account, check that step 3 writes no `domain_name` and the stack
+  deploys on HTTP and `*.cloudfront.net`.
+- Data: repository content and synthetic test values only. To see what was
+  deployed, the git-ignored local tfvars files, the bootstrap stack's local
+  state (resource types only) and the local Docker image list were read, with
+  account IDs and e-mail addresses masked in the output; an SSH public key was
+  shown. An AWS CLI call stopped at the MFA prompt, so no AWS API was called,
+  and no secrets or real client data were used. That the ingest Lambda imports
+  files in AWS is the owner's statement, not observed. Adding `domain_name` to
+  the git-ignored `crm/env/prod.tfvars`, a `terraform fmt -write=false` syntax
+  check printed that whole file unmasked: the operators' two e-mail addresses,
+  the account ID, and the SFTP server's address and host key fingerprint. It
+  holds no passwords or keys; nothing was copied elsewhere. The zone lookup's
+  JMESPath query was tested offline against sample responses.
+- Verification: `terraform fmt -check` is clean for the CRM stack;
+  `terraform validate` passes for the crm, business-dashboard and sftp-server
+  stacks; `terraform test` passes 7/7 in `stacks/crm` (the new `custom_domain`
+  run and a no-domain check in `prod`) and 3/3 in
+  `stacks/business-dashboard`. Nothing ran in AWS.
+
 ## 2026-10-20 — INF-12 business-dashboard stack
 
 - Human owner: Neo Jia Wen.

@@ -58,6 +58,7 @@ In the terminal you deploy from, Git Bash:
 unset AWS_PROFILE
 aws sts get-caller-identity --profile crm      # asks for your MFA code
 eval "$(aws configure export-credentials --profile crm --format env)"
+export AWS_REGION=ap-southeast-1               # the line above copies keys, not the profile's region
 ```
 
 or PowerShell:
@@ -66,15 +67,42 @@ or PowerShell:
 Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue
 aws sts get-caller-identity --profile crm
 aws configure export-credentials --profile crm --format powershell | Invoke-Expression
+$env:AWS_REGION = 'ap-southeast-1'
 ```
 
-Then run every step of this runbook in that terminal. After 4 hours the credentials expire: run the three lines again. A Terraform apply that is cut off by the expiry stops part way, and its state is saved; start a new session and run it again.
+Then run every step of this runbook in that terminal. After 4 hours the credentials expire: run the four lines again. While the `crm` profile's cached session is still valid, `aws sts get-caller-identity --profile crm` does not ask for a code, but the terminal's copy of the credentials can still have expired; the `export-credentials` line refreshes it. A Terraform apply that is cut off by the expiry stops part way, and its state is saved; start a new session and run it again.
 
 Terraform cannot ask for an MFA code, so it gets the session's credentials from the last line instead of the `crm` profile.
 
 - **Do not set `AWS_PROFILE`.** With it set, Terraform may try the `crm` profile itself and fail. If you ran `setx AWS_PROFILE crm` before, remove it with `reg delete HKCU\Environment /v AWS_PROFILE /f` and open a new terminal.
 - **If the MFA prompt hangs or never appears in Git Bash**, run that line in PowerShell, or as `winpty aws sts get-caller-identity --profile crm`. The session is cached for both, so the `eval` line then works in Git Bash.
 - If `aws configure export-credentials` is not recognised, update the AWS CLI.
+
+## Register a domain (once per account)
+
+**NOTE**: if using the project account, this section has already been manually set up for you. Proceed to step 1 - bootstrapping the account.
+
+The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). The domain is registered by hand, outside Terraform, like the `crm-infra-admin` role: destroying a stack, `bootstrap` included, never removes the domain or its zone, so every later deployment reuses them.
+
+**The project account already has `itsag3t6.com`**, registered until 21 July 2027, so skip the registration there. If **Route 53 → Hosted zones** has no `itsag3t6.com` (it was missing on 2026-10-20), create it once:
+
+1. **Route 53 → Hosted zones → Create hosted zone:** domain name `itsag3t6.com`, type **Public hosted zone**.
+2. Open the new zone and copy the four values of its **NS** record.
+3. **Route 53 → Registered domains → `itsag3t6.com` → Actions → Edit name servers:** replace the four name servers with those, and save.
+4. Wait until `nslookup -type=NS itsag3t6.com 8.8.8.8` lists the same four: usually minutes to an hour, at most about 48 hours. Until then, certificates do not validate.
+
+**IMPT**: Keep the zone between deployments: a new zone gets new name servers, and these steps would have to be repeated. Once it exists, step 3 finds it and sets `domain_name` itself, so the app is at `https://sg.itsag3t6.com`.
+
+**In any other account**, such as a personal one for testing, either deploy without a domain (step 3 then leaves `domain_name` out by itself), or register one of your own once, before step 1:
+
+1. In the Route 53 console, open **Domains → Registered domains → Register domains**, search for a name and check out. Choose a name that does not imitate a real bank or organisation, and leave out "bank": a new domain whose page is a bank-branded sign-in can be flagged as phishing.
+2. Register it for 1 year with **auto-renew off**, and keep privacy protection on.
+3. **Cost:** about USD 15 a year for a `.com`; the console shows each TLD's price, and some are cheaper. It is charged at once and not refunded. **AWS credits do not cover domain registration**, so it goes on the account's card. The hosted zone adds USD 0.50 a month.
+4. **Verify the registrant e-mail within 15 days.** Route 53 sends a link to the registrant contact's address; without it, the domain is suspended and certificates stop validating.
+
+Registration usually finishes within minutes, and Route 53 e-mails when it does. Route 53 also creates a public hosted zone with the same name and points the domain at it. Terraform finds that zone by name, so never delete it or create a second zone with the same name ([Troubleshooting](#troubleshooting)).
+
+Without a domain, the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
 
 ## 1. Bootstrap the account (once per account)
 
@@ -131,7 +159,7 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 
 ## 3. Create the CRM stack, stopped
 
-In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
+In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag, the domain (when this account has its zone) and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
 
 ```sh
 cd infrastructure/terraform/stacks/crm
@@ -142,10 +170,17 @@ sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/pro
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 sed -i '/^extra_audit_producer_role_arns *=/d' env/prod.tfvars   # replaces an older line
 printf '%s\n' "extra_audit_producer_role_arns = [\"arn:aws:iam::${ACCOUNT:?not signed in}:role/crm-sg-prod-dashboard-service-task\"]" >> env/prod.tfvars
-grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda|extra_audit_producer_role_arns)' env/prod.tfvars
+DOMAIN=$(aws route53 list-hosted-zones-by-name --dns-name itsag3t6.com \
+  --query 'HostedZones[?Name==`"itsag3t6.com."` && Config.PrivateZone==`false`].Name' --output text | sed 's/\.$//')
+sed -i '/^domain_name *=/d' env/prod.tfvars   # replaces an older line
+[ -z "$DOMAIN" ] || printf 'domain_name = "%s"\n' "$DOMAIN" >> env/prod.tfvars
+echo "domain: ${DOMAIN:-none, so the app uses its *.cloudfront.net address}"
+grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda|extra_audit_producer_role_arns|domain_name)' env/prod.tfvars
 ```
 
 The role's name starts with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack.
+
+`DOMAIN` is `itsag3t6.com` in the project account, which has that domain's public hosted zone. In an account without it, such as a personal one, `DOMAIN` is empty and no `domain_name` line is written, so the same commands deploy without a domain. To use a domain you registered yourself, replace the lookup with `DOMAIN=yourdomain.com`. If the `echo` line says `none` in the project account, the hosted zone is missing ([Register a domain](#register-a-domain-once-per-account)) or the lookup failed (check for an error above it). Fix that first, since the stack would otherwise deploy without the domain.
 
 **In a new account, check for an old `env/prod.tfvars`.** The `cp` line keeps an existing file, so one from an earlier deployment still has step 9.3's `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint` lines. Delete those four lines before the apply. They point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]").
 
@@ -159,11 +194,11 @@ terraform apply -var-file=env/prod.tfvars -var running=false
 cd -
 ```
 
-`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
+`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. With `domain_name`, the apply also requests two certificates, `sg.<domain>` (in us-east-1, for CloudFront) and `alb.sg.<domain>` (for the internal ALB), and waits for ACM to validate them through DNS, usually a few minutes. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
 
 **Staging (optional).** Staging is a second, separate copy of the stack for short promotion tests (ADR-0029): Fargate Spot, one Availability Zone, no WAF, no AWS Backup and no deletion protection. A test deployment does not need it, and running both doubles the cost.
 
-- To create it, repeat this step and step 4 with `env/staging.s3.tfbackend` and `env/staging.tfvars`, and use `staging.tfvars` in every later command for it.
+- To create it, repeat this step and step 4 with `env/staging.s3.tfbackend` and `env/staging.tfvars`, and use `staging.tfvars` in every later command for it. The same `domain_name` puts staging at `sg-staging.<domain>`, beside prod.
 - The backend file decides which stack's state this directory works on, and the scripts read that same state. To switch environments, run `terraform init -reconfigure -backend-config=env/<environment>.s3.tfbackend` first.
 - Never apply one environment's tfvars while the directory is initialised on the other's backend: Terraform would try to turn that stack into the other one.
 
@@ -260,7 +295,7 @@ cd -
    ```
 
    A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 6's schema is missing.
-2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
+2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
 ## 9. The external SFTP server and the ingest Lambda
@@ -480,6 +515,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 
   A hard-deleted secret cannot be restored. The databases' master secrets (`rds!db-...`) are deleted with their instances and never conflict.
 - **Starting over** gives a new user pool and empty databases, so you can change `root_admin_email` then.
+- **The domain and its hosted zone stay** ([Register a domain](#register-a-domain-once-per-account)): they are outside Terraform, so destroying `bootstrap` leaves them too. The certificates and DNS records go with the crm stack. The zone costs USD 0.50 a month while it exists; delete it only when you give up the domain, since a later deployment would then need a new zone and the domain's name servers changed to it.
 - **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). Before destroying, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), or wait 7 days.
 - **Destroy `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
 
@@ -498,6 +534,8 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Symptom | Cause and fix |
 |---|---|
 | `ExpiredToken` or "The security token included in the request is expired" | The 4-hour session is over. Start a new one ([AWS access](#aws-access)) and run the step again |
+| `NoRegion: You must specify a region`, then `password is empty` from `docker login` (step 5) | The terminal has the session's keys but no region: the `export-credentials` line does not copy the profile's region. Run `export AWS_REGION=ap-southeast-1` (PowerShell: `$env:AWS_REGION = 'ap-southeast-1'`), as in [Start each session](#start-each-session), and run the login line again |
+| `docker push` says `denied: Your authorization token has expired` | The `docker login` line failed (look above it for `NoRegion` or `ExpiredToken`), so Docker used its stored ECR login, which expires after 12 hours. Fix that error and run the login line again; it must print `Login Succeeded` |
 | `AccessDenied` calling `AssumeRole` | A wrong or reused MFA code, a wrong `mfa_serial`, or your user is not in `crm-deployers`. Check the profile with `aws configure list --profile crm` |
 | Terraform says "No valid credential sources found", or mentions MFA or a token provider | The session's credentials are not in this terminal, or `AWS_PROFILE` is set. Run the session lines in this terminal ([AWS access](#aws-access)) |
 | `No positional arguments are expected` or `Too many command line arguments` from Terraform | Windows PowerShell split an option at its first dot (`-backend-config=env/prod` and `.s3.tfbackend`). Quote the option, `"-backend-config=env/prod.s3.tfbackend"`, or use Git Bash |
@@ -518,6 +556,11 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | The business-dashboard plan stops with `The audit queue does not allow arn:aws:iam::…-dashboard-service-task` | The CRM stack's `extra_audit_producer_role_arns` is missing that ARN. Add it to `crm/env/prod.tfvars`, apply the CRM stack, then the business-dashboard stack (steps 3 and 4) |
 | The business-dashboard plan fails to read the remote state (`Unable to find remote state`), or says the object has no attribute `dashboard_inputs` | The CRM stack it points at has not been applied, or was applied from code older than ADR-0047. Apply the CRM stack first, and check that `state_bucket`, `legal_entity` and `environment` in `business-dashboard/env/prod.tfvars` match the CRM stack's |
 | `RepositoryNotEmptyException` destroying the business-dashboard stack | Its repository still has `force_delete` off. Apply the CRM stack with `-var deletion_protection=false`, apply the business-dashboard stack, then destroy it ([Tear down](#tear-down)) |
+| The crm plan stops with `no matching Route 53 Hosted Zone found` | `domain_name` is not a hosted zone in this account: a typo, a registration that has not finished, or a deleted zone. `aws route53 list-hosted-zones-by-name --dns-name <domain>` lists it. To recreate a deleted zone, create a public zone with the same name, then set the domain's name servers to the zone's four NS values (Route 53 → Registered domains → the domain → **Edit name servers**) |
+| The crm plan stops with `multiple Route 53 Hosted Zone matched` | Two zones have the domain's name. Keep the one whose NS values match the domain's name servers (Route 53 → Registered domains) and delete the other |
+| The crm apply waits a long time on `aws_acm_certificate_validation` | ACM cannot see the validation records: the domain's name servers do not point at this zone (it was recreated), or the domain is suspended because the registrant e-mail was not verified ([Register a domain](#register-a-domain-once-per-account)). Fix that; the apply carries on, or times out after 75 minutes and can be run again |
+| `CNAMEAlreadyExists` creating the CloudFront distribution | Another distribution already answers on `sg.<domain>`, usually one from a crm stack that was not destroyed. Destroy that stack, or remove the name from that distribution, and apply again |
+| `AccessDenied` from ACM in us-east-1 | The account refuses certificates in us-east-1, which CloudFront requires. Remove `domain_name` from `crm/env/prod.tfvars` and apply: the app keeps its `*.cloudfront.net` address, and the internal ALB goes back to HTTP |
 | `Attribute redefined` in `crm/env/prod.tfvars` or `sftp-server/env/prod.tfvars` | A variable is set twice, usually by a line added by hand or by an older copy of the runbook's snippets, which appended without removing the old line. Delete the older line. The snippets in 9.2 and 9.3 now replace their lines themselves |
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
