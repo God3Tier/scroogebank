@@ -58,6 +58,7 @@ In the terminal you deploy from, Git Bash:
 unset AWS_PROFILE
 aws sts get-caller-identity --profile crm      # asks for your MFA code
 eval "$(aws configure export-credentials --profile crm --format env)"
+export AWS_REGION=ap-southeast-1               # the line above copies keys, not the profile's region
 ```
 
 or PowerShell:
@@ -66,9 +67,10 @@ or PowerShell:
 Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue
 aws sts get-caller-identity --profile crm
 aws configure export-credentials --profile crm --format powershell | Invoke-Expression
+$env:AWS_REGION = 'ap-southeast-1'
 ```
 
-Then run every step of this runbook in that terminal. After 4 hours the credentials expire: run the three lines again. A Terraform apply that is cut off by the expiry stops part way, and its state is saved; start a new session and run it again.
+Then run every step of this runbook in that terminal. After 4 hours the credentials expire: run the four lines again. While the `crm` profile's cached session is still valid, `aws sts get-caller-identity --profile crm` does not ask for a code, but the terminal's copy of the credentials can still have expired; the `export-credentials` line refreshes it. A Terraform apply that is cut off by the expiry stops part way, and its state is saved; start a new session and run it again.
 
 Terraform cannot ask for an MFA code, so it gets the session's credentials from the last line instead of the `crm` profile.
 
@@ -532,6 +534,8 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Symptom | Cause and fix |
 |---|---|
 | `ExpiredToken` or "The security token included in the request is expired" | The 4-hour session is over. Start a new one ([AWS access](#aws-access)) and run the step again |
+| `NoRegion: You must specify a region`, then `password is empty` from `docker login` (step 5) | The terminal has the session's keys but no region: the `export-credentials` line does not copy the profile's region. Run `export AWS_REGION=ap-southeast-1` (PowerShell: `$env:AWS_REGION = 'ap-southeast-1'`), as in [Start each session](#start-each-session), and run the login line again |
+| `docker push` says `denied: Your authorization token has expired` | The `docker login` line failed (look above it for `NoRegion` or `ExpiredToken`), so Docker used its stored ECR login, which expires after 12 hours. Fix that error and run the login line again; it must print `Login Succeeded` |
 | `AccessDenied` calling `AssumeRole` | A wrong or reused MFA code, a wrong `mfa_serial`, or your user is not in `crm-deployers`. Check the profile with `aws configure list --profile crm` |
 | Terraform says "No valid credential sources found", or mentions MFA or a token provider | The session's credentials are not in this terminal, or `AWS_PROFILE` is set. Run the session lines in this terminal ([AWS access](#aws-access)) |
 | `No positional arguments are expected` or `Too many command line arguments` from Terraform | Windows PowerShell split an option at its first dot (`-backend-config=env/prod` and `.s3.tfbackend`). Quote the option, `"-backend-config=env/prod.s3.tfbackend"`, or use Git Bash |
