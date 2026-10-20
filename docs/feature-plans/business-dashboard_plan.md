@@ -5,8 +5,8 @@
 - Subtask branch prefix: `task/business-dashboard/<subtask>`
 - Status: **In progress.** Service, audit, roster and aggregate endpoints are built and unit-tested; end-to-end checks, deployment and UI are not done.
 - Primary developer: **TBC** (must be named before tasks are confirmed; see §20)
-- Plan last updated: 2026-10-09
-- Decisions: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (topology, cache, audit), [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) (metric definitions), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (aggregate endpoints). ADR-0033 and ADR-0038 are Accepted; ADR-0039 is Proposed.
+- Plan last updated: 2026-10-20 (deployment: BD-T11)
+- Decisions: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (topology, cache, audit), [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) (metric definitions), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (aggregate endpoints), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (its own Terraform stack). ADR-0033 and ADR-0038 are Accepted; ADR-0039 and ADR-0047 are Proposed.
 - Contracts: [`docs/api/dashboard-api.yaml`](../api/dashboard-api.yaml) (what the dashboard serves), [`docs/api/dashboard-aggregates.yaml`](../api/dashboard-aggregates.yaml) (what the owning services serve it).
 
 ## 0. Where things stand (2026-10-09)
@@ -20,7 +20,7 @@
 | user-service | `GET /aggregates/transactions/stats`, in front of the receiver |
 | SFTP receiver | Private `POST /aggregates/transactions/stats`; index on `transactions(transaction_date)` |
 | End-to-end checks with real tokens | Not run |
-| Deployment | Not possible yet: there is no `infra/` |
+| Deployment | Defined in Terraform as its own stack, `infrastructure/terraform/stacks/business-dashboard` (ADR-0047, 2026-10-20); plan-tested with mocked providers, not yet applied to AWS |
 | UI | Not possible yet: there is no `frontend/` on `dev`. `task/frontend-building` holds one of the three mockup commits (`851f737`); `task/business-dashboard/frontend-mockup` holds all three on an old base and must not be merged |
 
 What changed on `dev` since the first branch, and how this plan follows it:
@@ -160,9 +160,9 @@ One ECS Fargate service, 1 task × 1 vCPU / 2 GB at minimum: roughly USD 45 a mo
 
 **Still to do:** end-to-end with real tokens (agent A sees only A's figures; admin sees all; one service stopped degrades one panel; the auditor stores the view), a seeded dataset with at least three agents whose figures differ, and a performance check once deployed.
 
-**Deployment** (once `infra/` exists): ship the services with their new endpoints first (additive, safe without the dashboard), then dashboard-service with Service Connect to user-, client- and account-service and `sqs:SendMessage` on `audit-insert`, then the API Gateway route `/api/dashboard/*`. API Gateway must not route `/aggregates/*`. Configuration is in `services/dashboard-service/README.md`.
+**Deployment:** `infrastructure/terraform/stacks/business-dashboard` ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)), applied after the CRM stack ([runbook](../runbooks/deploy-aws.md) step 3). The CRM stack ships the services with their new endpoints (additive, safe without the dashboard); the dashboard stack then adds dashboard-service with Service Connect to user-, client- and account-service, `sqs:SendMessage` on `audit-insert`, and the ALB rule for `/api/dashboard/*` behind API Gateway's shared `/api` route. API Gateway must not route `/aggregates/*`. Configuration is in `services/dashboard-service/README.md`.
 
-**Rollback:** remove the `/api/dashboard` route or scale the service to zero; nothing depends on it. The `/aggregates` endpoints and indexes can stay.
+**Rollback:** scale the service to zero or destroy the business-dashboard stack; no other service calls it. The agent home page's transactions panel and the Insights pages then show the panel as unavailable. The `/aggregates` endpoints and indexes can stay.
 
 ## 17. ADRs
 
@@ -190,7 +190,7 @@ Owners marked TBC must be confirmed before more parallel work starts (`project_p
 | BD-T08 | Transaction aggregates | TBC | Joseph Yau (review) | `services/sftp/receiver/src/{internal,serverd}`, `data/init.sql`; `services/user-service/.../TransactionStats*` | `task/business-dashboard/transaction-stats` | Feature 3 receiver; user-service | Done; review pending | 2026-10-09 |
 | BD-T09 | Panels, per-agent table, accounts per client | TBC | — | `services/dashboard-service/{service,upstream}` | `task/business-dashboard/panels` | — | Done | 2026-10-09 |
 | BD-T10 | End-to-end checks and seed data | TBC | Joseph Yau | all five services | `task/business-dashboard/e2e` | Needs Cognito users for one admin and two agents | Planned | 2026-10-09 |
-| BD-T11 | Deployment | TBC | Platform | `infra/` | `task/business-dashboard/infra` | Blocked: no `infra/` | Blocked | 2026-10-09 |
+| BD-T11 | Deployment: its own Terraform stack (ADR-0047) | TBC | Platform (Neo Jia Wen) | `infrastructure/terraform/stacks/business-dashboard/**`, the CRM stack's `dashboard_inputs` output, `docs/runbooks/deploy-aws.md` | `task/infrastructure/business-dashboard-stack` | The CRM stack, applied first | Written; validated and plan-tested with mocked providers; not yet applied to AWS | 2026-10-20 |
 | BD-T12 | UI | TBC | Frontend | `frontend/src/pages`, `frontend/src/api/dashboard.*` | `task/frontend/real-data` | The mockup pages now read dashboard-service; panels it does not serve are hidden (open item 25) | Implemented; frontend tests, lint and build pass; not yet run against a deployed dashboard-service | 2026-10-16 |
 
 Merge path: `task/business-dashboard/<subtask>` → `feat/business-dashboard` → `dev`.
