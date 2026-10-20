@@ -16,10 +16,10 @@ image_tag = "replace-with-the-pushed-tag"
 root_admin_email = "you+crm-root-staging@example.edu"
 alarm_email      = "you@example.edu"
 
-# The domain you registered in Route 53 (runbook "Register a domain"):
-# staging is then at https://sg-staging.<domain>, beside prod's
-# https://sg.<domain>.
-# domain_name = "example.com"
+# The project account's domain (runbook "Register a domain"): staging is at
+# https://sg-staging.itsag3t6.com, beside prod's https://sg.itsag3t6.com.
+# Delete this line in an account without this domain's hosted zone.
+domain_name = "itsag3t6.com"
 
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).
 # Put in your account ID.

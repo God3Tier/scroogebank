@@ -21,11 +21,12 @@ image_tag = "replace-with-the-pushed-tag"
 root_admin_email = "you+crm-root@example.edu"
 alarm_email      = "you@example.edu"
 
-# The domain you registered in Route 53 (runbook "Register a domain"): the
-# app is then at https://sg.<domain> and the internal ALB listens on HTTPS.
-# Runbook step 3 writes this line. Without it, the app keeps its
-# *.cloudfront.net address.
-# domain_name = "example.com"
+# The project account's domain (runbook "Register a domain"): the app is at
+# https://sg.itsag3t6.com and the internal ALB listens on HTTPS. Runbook
+# step 3 rewrites this line, and removes it in an account without this
+# domain's hosted zone, such as a personal one: the app then keeps its
+# *.cloudfront.net address and the ALB listens on HTTP inside the VPC.
+domain_name = "itsag3t6.com"
 
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).
 # The name is fixed, so set it before that stack exists; it refuses to plan

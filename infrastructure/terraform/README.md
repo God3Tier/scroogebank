@@ -20,7 +20,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `high_availability` | The demo week: Multi-AZ standbys and a NAT gateway per AZ |
 | `enable_cognito_triggers` | The login and password-reset audit Lambda (ADR-0040); needs its zip. Keep `true`: `false` is for the mocked tests and leaves sign-ins unaudited |
 | `enable_ingest_lambda` | The transaction import Lambda (ADR-0024); needs its zip and the sftp-server stack's address and host key ([runbook §9.3](../../docs/runbooks/deploy-aws.md#93-turn-on-the-ingest-lambda)) |
-| `domain_name` | A domain registered in Route 53 ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)): the app at `sg.<domain>` and the internal ALB on HTTPS (ADR-0042 decision 8). Unset, the app keeps its `*.cloudfront.net` address and the ALB listens on HTTP inside the VPC |
+| `domain_name` | A domain registered in Route 53 ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)): the app at `sg.<domain>` and the internal ALB on HTTPS (ADR-0042 decision 8). Unset, the app keeps its `*.cloudfront.net` address and the ALB listens on HTTP inside the VPC. The project account's domain is `itsag3t6.com`; runbook step 3 sets it only in an account that has that domain's hosted zone, so other accounts deploy without one |
 | `deletion_protection` | Defaults to on for prod; apply with `false` before `terraform destroy` |
 | `enable_github_deploy_role` | The role a deploy workflow assumes; off while deployments are run by hand |
 

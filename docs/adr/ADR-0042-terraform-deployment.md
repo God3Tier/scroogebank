@@ -90,7 +90,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
      - gives the internal ALB an ACM certificate for `alb.<app host>`, and listens on HTTPS 443 with `ELBSecurityPolicy-TLS13-1-2-2021-06`. API Gateway verifies that name on the VPC Link connection, and the ingest Lambda calls the ALB by it;
      - validates both certificates through DNS records in the zone, and keeps the `*.cloudfront.net` origin in Cognito's callback URLs, so both addresses sign in.
 
-     The ALB's name is a public record that resolves to its private addresses in the app subnets, which nothing outside the VPC can reach. A private hosted zone would cost another USD 0.50 a month and protect nothing more. Without `domain_name`, the ALB listens on HTTP 80 inside the VPC and the app uses the default CloudFront name, which the mocked tests and an account without a domain still use.
+     The ALB's name is a public record that resolves to its private addresses in the app subnets, which nothing outside the VPC can reach. A private hosted zone would cost another USD 0.50 a month and protect nothing more. Without `domain_name`, the ALB listens on HTTP 80 inside the VPC and the app uses the default CloudFront name, which the mocked tests and an account without a domain still use. The project account's domain is `itsag3t6.com`; the runbook sets `domain_name` only in an account that has its hosted zone, so a personal test account deploys without one.
    - Target groups use HTTPS for the Go services, which serve TLS in production, and HTTP for the Java services, which do not. The security model's "self-signed TLS between the ALB and tasks" is therefore not met for the Java services yet.
 9. **Not deployed yet, each a task in `docs/feature-plans/infrastructure_plan.md`:**
    - the health monitor: it is not runnable yet;
@@ -159,7 +159,7 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 
 The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
-The domain adds about USD 15 a year for a `.com`, charged at registration and not covered by AWS credits, and USD 0.50 a month for its hosted zone, running or stopped. The ACM certificates are free.
+The project account's domain, `itsag3t6.com`, is already paid until July 2027, so the custom domain adds only its hosted zone: USD 0.50 a month, running or stopped. A domain registered for another account costs about USD 15 a year for a `.com`, which AWS credits do not cover. The ACM certificates are free.
 
 ## Operational Impact
 

@@ -78,7 +78,20 @@ Terraform cannot ask for an MFA code, so it gets the session's credentials from 
 
 ## Register a domain (once per account)
 
-The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). You register the domain by hand, outside Terraform, like the `crm-infra-admin` role. Do it once, before step 1: destroying a stack, `bootstrap` included, never removes the domain or its zone, so every later deployment reuses them.
+**NOTE**: if using the project account, this section has already been manually set up for you. Proceed to step 1 - bootstrapping the account.
+
+The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). The domain is registered by hand, outside Terraform, like the `crm-infra-admin` role: destroying a stack, `bootstrap` included, never removes the domain or its zone, so every later deployment reuses them.
+
+**The project account already has `itsag3t6.com`**, registered until 21 July 2027, so skip the registration there. If **Route 53 → Hosted zones** has no `itsag3t6.com` (it was missing on 2026-10-20), create it once:
+
+1. **Route 53 → Hosted zones → Create hosted zone:** domain name `itsag3t6.com`, type **Public hosted zone**.
+2. Open the new zone and copy the four values of its **NS** record.
+3. **Route 53 → Registered domains → `itsag3t6.com` → Actions → Edit name servers:** replace the four name servers with those, and save.
+4. Wait until `nslookup -type=NS itsag3t6.com 8.8.8.8` lists the same four: usually minutes to an hour, at most about 48 hours. Until then, certificates do not validate.
+
+**IMPT**: Keep the zone between deployments: a new zone gets new name servers, and these steps would have to be repeated. Once it exists, step 3 finds it and sets `domain_name` itself, so the app is at `https://sg.itsag3t6.com`.
+
+**In any other account**, such as a personal one for testing, either deploy without a domain (step 3 then leaves `domain_name` out by itself), or register one of your own once, before step 1:
 
 1. In the Route 53 console, open **Domains → Registered domains → Register domains**, search for a name and check out. Choose a name that does not imitate a real bank or organisation, and leave out "bank": a new domain whose page is a bank-branded sign-in can be flagged as phishing.
 2. Register it for 1 year with **auto-renew off**, and keep privacy protection on.
@@ -87,7 +100,7 @@ The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>`
 
 Registration usually finishes within minutes, and Route 53 e-mails when it does. Route 53 also creates a public hosted zone with the same name and points the domain at it. Terraform finds that zone by name, so never delete it or create a second zone with the same name ([Troubleshooting](#troubleshooting)).
 
-Without a domain, leave `domain_name` out in step 3: the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
+Without a domain, the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
 
 ## 1. Bootstrap the account (once per account)
 
@@ -144,11 +157,10 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 
 ## 3. Create the CRM stack, stopped
 
-In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag, your domain and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
+In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag, the domain (when this account has its zone) and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
 
 ```sh
 cd infrastructure/terraform/stacks/crm
-DOMAIN='<your-domain>'   # the one you registered (Register a domain), such as example.com - set it yourself
 STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
@@ -156,12 +168,17 @@ sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/pro
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 sed -i '/^extra_audit_producer_role_arns *=/d' env/prod.tfvars   # replaces an older line
 printf '%s\n' "extra_audit_producer_role_arns = [\"arn:aws:iam::${ACCOUNT:?not signed in}:role/crm-sg-prod-dashboard-service-task\"]" >> env/prod.tfvars
+DOMAIN=$(aws route53 list-hosted-zones-by-name --dns-name itsag3t6.com \
+  --query 'HostedZones[?Name==`"itsag3t6.com."` && Config.PrivateZone==`false`].Name' --output text | sed 's/\.$//')
 sed -i '/^domain_name *=/d' env/prod.tfvars   # replaces an older line
-printf 'domain_name = "%s"\n' "${DOMAIN:?set DOMAIN}" >> env/prod.tfvars
+[ -z "$DOMAIN" ] || printf 'domain_name = "%s"\n' "$DOMAIN" >> env/prod.tfvars
+echo "domain: ${DOMAIN:-none, so the app uses its *.cloudfront.net address}"
 grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda|extra_audit_producer_role_arns|domain_name)' env/prod.tfvars
 ```
 
-The role's name starts with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack. Without a domain, skip the `DOMAIN` line and the two `domain_name` lines.
+The role's name starts with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack.
+
+`DOMAIN` is `itsag3t6.com` in the project account, which has that domain's public hosted zone. In an account without it, such as a personal one, `DOMAIN` is empty and no `domain_name` line is written, so the same commands deploy without a domain. To use a domain you registered yourself, replace the lookup with `DOMAIN=yourdomain.com`. If the `echo` line says `none` in the project account, the hosted zone is missing ([Register a domain](#register-a-domain-once-per-account)) or the lookup failed (check for an error above it). Fix that first, since the stack would otherwise deploy without the domain.
 
 **In a new account, check for an old `env/prod.tfvars`.** The `cp` line keeps an existing file, so one from an earlier deployment still has step 9.3's `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint` lines. Delete those four lines before the apply. They point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]").
 
