@@ -6,17 +6,19 @@
 - Owners: Azeez (search, AI, scheduled worker, operations) and Hayyun (domain, migrations), as in section 19.1 of the feature plan
 - Related decisions: [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) and [ADR-0007](../adr/ADR-0007-alert-service-runtime-boundary.md), both Proposed
 
+**Update 2026-10-20:** gaps 3 and 4 are fixed on `task/event-driven-alerts/persist-controls` (migration V3, `JdbcOutboundControlStore`, `PostgresIngestionRunLock`; ADR-0014 amendment). Gaps 1, 2 and 5 remain.
+
 None of these gaps is a risk today. Ingestion and the model are off by default, and nothing is deployed. Each one blocks switching part of the feature on. EDA-D1-06 fixes none of them; each needs a choice its owner should make.
 
 | # | Gap | Blocks | Owner |
 |---|---|---|---|
 | 1 | A worker run never creates alerts | Any alert from real news | Hayyun and Azeez (EDA-D2-06) |
 | 2 | No AgentCore search client | Any search | Azeez (EDA-D1-02, needs AWS) |
-| 3 | Monthly controls reset in every worker run | Enabling ingestion or the model for the worker | Azeez, with a migration from Hayyun |
-| 4 | Two runs at once both search | Nothing; a cost and tidiness risk | Azeez |
+| 3 | ~~Monthly controls reset in every worker run~~ **Fixed 2026-10-20** | Nothing | Azeez, with a migration from Hayyun |
+| 4 | ~~Two runs at once both search~~ **Fixed 2026-10-20** | Nothing | Azeez |
 | 5 | Worker metrics are not exported | ADR-0031's run metrics | Azeez (EDA-D1-05, needs AWS) |
 
-Suggested order: fix 3 before ingestion is enabled, 2 when AWS access exists, then 1. Gap 4 is small and can be fixed at any time. Gap 5 comes with the CloudWatch work.
+Suggested order: 2 when AWS access exists, then 1. Gap 5 comes with the CloudWatch work. Gaps 3 and 4 are done.
 
 ## 1. A worker run never creates alerts
 
@@ -55,6 +57,8 @@ Record the fan-out choice in the feature plan, or in an ADR if it changes the da
 
 ## 3. Monthly controls reset in every worker run
 
+**Fixed 2026-10-20.** Usage and disabled state now live in alerts-db (`outbound_usage`, `outbound_control`, migration V3) behind `OutboundControlStore`. Reservations are atomic, so the API and every worker run share one count. The text below records the gap as found.
+
 **What happens.** [`OutboundControlService`](../../services/event-alert-service/src/main/java/bank/alert/operations/OutboundControlService.java) keeps its state in fields in memory:
 
 - the search count, against the quota of 1,000 a month;
@@ -84,6 +88,8 @@ ADR-0031 decision 5 asks for a search cap, kill switches and budget control. Tod
 [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) faces the same trade-off for the SFTP import: a process that runs once and exits loses whatever it kept in memory.
 
 ## 4. Two runs at once both search
+
+**Fixed 2026-10-20.** `IngestionCoordinator` holds a PostgreSQL session advisory lock (`PostgresIngestionRunLock`) for the whole run. A run that cannot take it ends as `ALREADY_RUNNING` before reserving quota or searching, for scheduled runs, manual runs and replays alike. The text below records the gap as found.
 
 **What happens.**
 
