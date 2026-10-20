@@ -176,7 +176,8 @@ public class IngestionCoordinator {
                 SourceResult source = new SourceResult(
                         UUID.randomUUID(), run.getId(), result.providerResultId(), url.value(), url.sha256(),
                         result.title(), url.host(), result.publishedAt(), result.retrievedAt(),
-                        result.contentHash(), result.retrievedAt().plus(properties.retention()));
+                        result.contentHash(), result.retrievedAt().plus(properties.retention()),
+                        result.snippet());
                 try {
                     sourceResults.saveAndFlush(source);
                     accepted++;

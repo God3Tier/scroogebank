@@ -6,21 +6,23 @@
 - Owners: Azeez (search, AI, scheduled worker, operations) and Hayyun (domain, migrations), as in section 19.1 of the feature plan
 - Related decisions: [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) and [ADR-0007](../adr/ADR-0007-alert-service-runtime-boundary.md), both Proposed
 
-**Update 2026-10-20:** gaps 3 and 4 are fixed on `task/event-driven-alerts/persist-controls` (migration V3, `JdbcOutboundControlStore`, `PostgresIngestionRunLock`; ADR-0014 amendment). Gaps 1, 2 and 5 remain.
+**Update 2026-10-20:** gaps 3 and 4 are fixed (migration V3, `JdbcOutboundControlStore`, `PostgresIngestionRunLock`; ADR-0014 amendment). Gaps 1, 2 and 5 are built and tested against fakes and a local database ([ADR-0049](../adr/ADR-0049-alert-source-to-alert-pipeline.md)); what is still unproven is the real AWS service, below. The operator replay adapter, listed with these, is built too.
 
 None of these gaps is a risk today. Ingestion and the model are off by default, and nothing is deployed. Each one blocks switching part of the feature on. EDA-D1-06 fixes none of them; each needs a choice its owner should make.
 
 | # | Gap | Blocks | Owner |
 |---|---|---|---|
-| 1 | A worker run never creates alerts | Any alert from real news | Hayyun and Azeez (EDA-D2-06) |
-| 2 | No AgentCore search client | Any search | Azeez (EDA-D1-02, needs AWS) |
+| 1 | ~~A worker run never creates alerts~~ **Built 2026-10-20**, needs a live run with the real model | Nothing | Hayyun and Azeez (EDA-D2-06) |
+| 2 | ~~No AgentCore search client~~ **Built 2026-10-20** against a fake gateway; the real gateway is unproven | The live smoke test | Azeez (EDA-D1-02, needs AWS) |
 | 3 | ~~Monthly controls reset in every worker run~~ **Fixed 2026-10-20** | Nothing | Azeez, with a migration from Hayyun |
 | 4 | ~~Two runs at once both search~~ **Fixed 2026-10-20** | Nothing | Azeez |
-| 5 | Worker metrics are not exported | ADR-0031's run metrics | Azeez (EDA-D1-05, needs AWS) |
+| 5 | ~~Worker metrics are not exported~~ **Built 2026-10-20**, off by default; needs a CloudWatch check | Nothing | Azeez (EDA-D1-05, needs AWS) |
 
-Suggested order: 2 when AWS access exists, then 1. Gap 5 comes with the CloudWatch work. Gaps 3 and 4 are done.
+All five are built. What remains is proving them on AWS: the AgentCore call (gap 2), the Bedrock model end to end (gap 1), and the CloudWatch export (gap 5).
 
 ## 1. A worker run never creates alerts
+
+**Built 2026-10-20 ([ADR-0049](../adr/ADR-0049-alert-source-to-alert-pipeline.md)).** The search contract carries a snippet, stored as a bounded excerpt on the source (migration V4). `SourcePipeline` matches stored sources to instruments deterministically (`InstrumentMatcher`), classifies each once, and `SourceResultProcessor.processForAgents` creates alerts for every agent whose clients hold an affected instrument, with severity from a fixed table. The worker runs it after each window. A source the model cannot handle yet stays pending. It has run end to end only with a fixture model on PostgreSQL. The text below records the gap as found.
 
 **What happens.** A worker run searches, then saves each result as a `source_result` row: URL, title, domain and publication time. It stops there. Nothing calls [`SourceResultProcessor.process`](../../services/event-alert-service/src/main/java/bank/alert/processing/SourceResultProcessor.java), the step that classifies a result, writes the briefing and creates alerts.
 
@@ -46,6 +48,8 @@ Suggested order: 2 when AWS access exists, then 1. Gap 5 comes with the CloudWat
 Record the fan-out choice in the feature plan, or in an ADR if it changes the data boundary.
 
 ## 2. No AgentCore search client
+
+**Built 2026-10-20.** `HttpAgentCoreGatewayClient` makes the IAM-signed MCP call the spike makes, and `alert.ingestion.agentcore.gateway-url` switches it on. It has run only against a fake gateway, so the real response shape is unconfirmed. The text below records the gap as found.
 
 **What happens.** [`AgentCoreGatewayClient`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/AgentCoreGatewayClient.java) is an interface with no implementation, so `AgentCoreSearchProvider` is never created. In its place, [`SearchProviderConfiguration`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/SearchProviderConfiguration.java) supplies a provider that throws `PROVIDER_NOT_CONFIGURED`.
 
@@ -114,6 +118,8 @@ The service README tells operators not to do the second.
 **Suggested fix.** Hold a Postgres advisory lock, `pg_try_advisory_lock`, for the whole run. If the lock is taken, end the run as `ALREADY_RUNNING`.
 
 ## 5. Worker metrics are not exported
+
+**Built 2026-10-20.** `micrometer-registry-cloudwatch2` exports on exit when `ALERT_CLOUDWATCH_METRICS_ENABLED` is true (off by default; it bills per metric). The text below records the gap as found.
 
 **What happens.** `OperationalMetrics` records Micrometer gauges and counters, such as `alert.outbound.reservations` and `alert.outbound.monthly.searches`. No registry sends them anywhere:
 

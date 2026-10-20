@@ -57,6 +57,17 @@ public class SyntheticHoldingsProvider implements HoldingsProvider {
         return new HoldingsReadResult(1, request.asOf(), positions, unavailable);
     }
 
+    @Override
+    public List<String> assignedAgentsHolding(Set<String> instrumentIds) {
+        return fixtureLoader.loadDefault().positions().stream()
+                .filter(position -> position.quantity().signum() > 0)
+                .filter(position -> instrumentIds.contains(position.instrumentId()))
+                .map(SyntheticHoldingFixture.Position::assignedAgentSubject)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
     private static HoldingSnapshot toSnapshot(
             SyntheticHoldingFixture.Position position,
             ValuationFreshness freshness) {

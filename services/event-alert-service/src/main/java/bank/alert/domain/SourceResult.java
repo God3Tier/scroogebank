@@ -50,6 +50,12 @@ public class SourceResult {
 
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
+    @Column(length = 1000)
+    private String excerpt;
+    @Column(name = "processed_at")
+    private Instant processedAt;
+    @Column(name = "processing_outcome", length = 40)
+    private String processingOutcome;
 
     protected SourceResult() {
     }
@@ -70,6 +76,23 @@ public class SourceResult {
         this.expiresAt = Objects.requireNonNull(expiresAt);
     }
 
+    public SourceResult(UUID id, UUID searchRunId, String providerResultId, String canonicalUrl,
+            String canonicalUrlHash, String title, String sourceDomain, Instant publishedAt,
+            Instant retrievedAt, String contentHash, Instant expiresAt, String excerpt) {
+        this(id, searchRunId, providerResultId, canonicalUrl, canonicalUrlHash, title, sourceDomain,
+                publishedAt, retrievedAt, contentHash, expiresAt);
+        if (excerpt != null && excerpt.length() > 1000) {
+            throw new IllegalArgumentException("excerpt exceeds 1000 characters");
+        }
+        this.excerpt = excerpt == null || excerpt.isBlank() ? null : excerpt;
+    }
+
+    /** Records the pipeline's definitive outcome; the source is not processed again. */
+    public void markProcessed(String outcome, Instant at) {
+        this.processingOutcome = Objects.requireNonNull(outcome);
+        this.processedAt = Objects.requireNonNull(at);
+    }
+
     public UUID getId() { return id; }
     public UUID getSearchRunId() { return searchRunId; }
     public String getProviderResultId() { return providerResultId; }
@@ -81,4 +104,7 @@ public class SourceResult {
     public Instant getRetrievedAt() { return retrievedAt; }
     public String getContentHash() { return contentHash; }
     public Instant getExpiresAt() { return expiresAt; }
+    public String getExcerpt() { return excerpt; }
+    public Instant getProcessedAt() { return processedAt; }
+    public String getProcessingOutcome() { return processingOutcome; }
 }

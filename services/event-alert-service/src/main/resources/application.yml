@@ -55,6 +55,11 @@ alert:
     # Only public ticker/issuer/sector terms leave the private boundary.
     minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.05}
     minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
+    agentcore:
+      # The Tokyo Gateway URL (ADR-0031). Empty means no client: searches fail
+      # cleanly as PROVIDER_NOT_CONFIGURED. Credentials come from the task role.
+      gateway-url: ${ALERT_AGENTCORE_GATEWAY_URL:}
+      region: ${ALERT_AGENTCORE_REGION:ap-northeast-1}
     approved-domains:
       - mas.gov.sg
       - sgx.com
@@ -88,7 +93,27 @@ alert:
     max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
     monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}
 
+  pipeline:
+    # Sources turned into alerts per worker run; each can cost two model calls.
+    max-sources-per-run: ${ALERT_PIPELINE_MAX_SOURCES_PER_RUN:50}
+  metrics:
+    cloudwatch:
+      # Off by default: every distinct metric and tag combination is a billed
+      # custom metric. The worker exports its last values as it exits.
+      enabled: ${ALERT_CLOUDWATCH_METRICS_ENABLED:false}
+  worker:
+    # Set only on a one-off operator replay task (ADR-0049); all four are then required.
+    replay:
+      from: ${ALERT_WORKER_REPLAY_FROM:}
+      to: ${ALERT_WORKER_REPLAY_TO:}
+      operator: ${ALERT_WORKER_REPLAY_OPERATOR:}
+      correlation-id: ${ALERT_WORKER_REPLAY_CORRELATION_ID:}
+
 management:
+  cloudwatch:
+    metrics:
+      export:
+        namespace: ${ALERT_CLOUDWATCH_NAMESPACE:CRM/EventAlerts}
   endpoints:
     web:
       exposure:

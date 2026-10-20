@@ -120,6 +120,15 @@ public class OutboundControlService {
         return store.usage(currentMonth());
     }
 
+    /**
+     * Reads the shared monthly usage into the gauges. The run-once worker calls this
+     * before its metrics are exported, so a run that reserved nothing still reports
+     * the stored month, not zero.
+     */
+    public synchronized void publishUsageMetrics() {
+        updateUsageMetrics();
+    }
+
     private ReservationResult denied(OutboundCapability capability, String code, long remaining) {
         metrics.reservation(capability, code);
         return ReservationResult.denied(code, remaining);

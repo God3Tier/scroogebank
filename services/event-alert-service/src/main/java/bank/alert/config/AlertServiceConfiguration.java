@@ -12,7 +12,10 @@ import java.time.Clock;
         IngestionProperties.class,
         AiProperties.class,
         BedrockAiProperties.class,
-        OperationalProperties.class
+        OperationalProperties.class,
+        ReplayProperties.class,
+        AgentCoreProperties.class,
+        PipelineProperties.class
 })
 public class AlertServiceConfiguration {
 

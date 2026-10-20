@@ -21,8 +21,7 @@ watermark only after the complete run succeeds. Retrying a partially persisted
 failed window derives its final result count from durable rows, preserving
 idempotent replay accounting. Historical replay is restricted to `WORKER` mode,
 cannot extend into the future or exceed the configured lookback span, and never
-moves the scheduler watermark. The replay method remains an internal boundary
-until an authenticated, audited operator adapter is integrated. `IngestionJob`
+moves the scheduler watermark. The replay is started by an operator as described below. `IngestionJob`
 can run only in `WORKER` mode. Supplying the IAM-authenticated AgentCore Gateway client remains
 blocked on the approved infrastructure task; the application does not create or
 contact AWS resources by itself.
@@ -113,16 +112,38 @@ cannot take more than the quota. Each run also holds a PostgreSQL advisory lock
 for its whole duration; a run that cannot take it ends as `ALREADY_RUNNING`
 without searching or using quota, whether it is scheduled, manual or a replay.
 
+After each window the worker runs a source-to-alert pipeline ([ADR-0049](../../docs/adr/ADR-0049-alert-source-to-alert-pipeline.md)).
+It takes the oldest stored sources not yet finished (at most
+`ALERT_PIPELINE_MAX_SOURCES_PER_RUN`, default 50), matches each to the
+instrument master by exact ticker, issuer or sector name, classifies it once, and
+creates the alerts for every agent whose clients hold an affected instrument.
+Severity comes from a fixed table by event type. It does nothing while
+`ALERT_AI_ENABLED=false`, and a source the model cannot handle yet stays pending
+for the next run. The run exits 1 if a source errors. Its summary line is
+`worker pipeline examined=… processed=… no_match=… alerts_created=… deferred=… errors=…`.
+
+`ALERT_AGENTCORE_GATEWAY_URL` (and `ALERT_AGENTCORE_REGION`, default
+`ap-northeast-1`) switch on the IAM-signed Gateway client; the credentials come
+from the task role. With no URL the search fails cleanly as
+`PROVIDER_NOT_CONFIGURED`.
+
+An operator replays a past window by starting a one-off worker task with
+`ALERT_WORKER_REPLAY_FROM`, `ALERT_WORKER_REPLAY_TO`, `ALERT_WORKER_REPLAY_OPERATOR`
+and `ALERT_WORKER_REPLAY_CORRELATION_ID`. All four are required; the worker writes
+an `alert.replay-requested` audit event before it searches, and refuses if it
+cannot. A replay never moves the scheduler watermark.
+
+`ALERT_CLOUDWATCH_METRICS_ENABLED=true` exports the metrics to CloudWatch as the
+worker exits (namespace `ALERT_CLOUDWATCH_NAMESPACE`, default `CRM/EventAlerts`).
+It is off by default because every distinct metric and tag combination is billed.
+
 Not done yet (details, owners and suggested fixes in
 [`docs/feature-plans/event-driven-alerts_gaps.md`](../../docs/feature-plans/event-driven-alerts_gaps.md)):
 
-- A run stores search results only. Nothing turns them into alerts yet:
-  `SourceResultProcessor` (classification, briefing, alert generation) has no
-  caller.
-- There is no AgentCore client, so with `ALERT_INGESTION_ENABLED=true` every run
-  fails with `PROVIDER_NOT_CONFIGURED`.
-- Micrometer metrics are not exported from the short-lived worker. Until
-  CloudWatch is set up, the log line is the record of each run.
+- The AgentCore client has only run against a fake gateway, and the pipeline
+  only with a fixture model, so the real service's response shape and the real
+  model's behaviour are unproven. The smoke test in the operations runbook
+  settles both.
 
 Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
 every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database

@@ -74,6 +74,18 @@ This needs no AgentCore client. With ingestion on and no client, a run fails cle
 
 Do not turn `ai_enabled` on until the AI benchmark gates pass and the Bedrock policy has been tried on a real account (ADR-0048 validation).
 
+## Smoke test the whole path on AWS
+
+Do this once the CRM stack is running and the worker stack is applied (see [Deploy the worker](#deploy-the-worker)). It needs a Tokyo AgentCore Gateway: create it with the [search spike](../../scripts/event-driven-alerts/search-spike/README.md) (`provision`) and keep its URL and ARN. Each step turns one more switch on, so a failure points at one cause.
+
+1. **Search only.** In `env/prod.tfvars` set `ingestion_enabled = true`, `agentcore_gateway_url` and `agentcore_gateway_arn`; apply; start one run (`run_once_command`). The log line should say `status=SUCCEEDED` with `accepted` above zero. If it says `PROVIDER_ACCESS_DENIED`, the task role cannot invoke the gateway; if `PROVIDER_TOOL_NOT_FOUND` or `INVALID_PROVIDER_RESPONSE`, the real gateway's shape differs from the fake the client was tested against: fix `HttpAgentCoreGatewayClient` and add the case to its test.
+2. **Add the model.** Set `ai_enabled = true`, apply, and run again. The line `worker pipeline examined=… alerts_created=…` should show sources processed. Look in alerts-db (`scripts/db-run-sql.sh alerts`): `SELECT processing_outcome, count(*) FROM source_result GROUP BY 1;` and `SELECT assigned_agent_subject, count(*) FROM alert GROUP BY 1;`. `deferred=1` means the model call was refused: check the Bedrock permission and the model access in the account.
+3. **Replay.** Use `replay_command` with a window inside the last four hours. The audit event `alert.replay-requested` appears in `audit_outbox`, and `search_run` has a row for that window while `processing_watermark` is unchanged.
+4. **Metrics (optional).** Set `cloudwatch_metrics_enabled = true`, apply, run once, and look for the `CRM/EventAlerts` namespace in CloudWatch. Turn it off again unless you want the charts: each metric and tag combination bills.
+5. **Switch back off.** Set `ingestion_enabled`, `ai_enabled` and `cloudwatch_metrics_enabled` to `false` and apply, so the schedule stops spending between sessions.
+
+The synthetic holdings (`syn-agent-001`, `syn-agent-002`, instrument `SYN-SGX-001`) are named `SYN1` and "Synthetic Issuer One", so real news will not match them. To see an alert from real search results, add a real instrument to the `instrument` table whose ticker or issuer name appears in the news, and holdings for it to the synthetic fixture.
+
 ## Inspect health and consumption
 
 Inspect application health and these low-cardinality Micrometer series:
