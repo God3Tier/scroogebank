@@ -1,5 +1,28 @@
 # AI usage log
 
+## 2026-10-20 — INF-14 redeploy on start for Service Connect
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: find why a new stack's services needed a restart after their first
+  start (AWS gives a task the Service Connect names that existed when its
+  service's latest deployment was made, and scaling up makes no new
+  deployment); show that creating called services first cannot fix it,
+  because client-service and account-service call each other; recommend
+  redeploying each service when its minimum task count changes, which the
+  owner chose; add the trigger and a module test; amend ADR-0042 decision 4,
+  and document in the runbook that every stack must be created stopped.
+- Human verification required: decide ADR-0042; create a new stack stopped,
+  start it, and check that no log group shows `UnknownHostException`
+  without a restart.
+- Data: repository content and the AWS ECS developer guide only. Nothing ran
+  in AWS, and no secrets or real client data were used.
+- Verification: `terraform fmt -check` is clean for the modules;
+  `terraform validate` passes for the crm and business-dashboard stacks;
+  `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 7/7 in `modules/ecs-service`, and the new
+  module test fails when the trigger is removed.
+
 ## 2026-10-20 — INF-03 db-migrate init container
 
 - Human owner: Neo Jia Wen.

@@ -73,6 +73,10 @@ Building the stack also showed that the code on `dev` needs more from the deploy
 
    The tests in `stacks/crm/tests/` plan the stack against mocked providers and check these values.
 4. **Stop model.** `running = false` scales every service to 0 tasks, pauses the schedules and **removes the NAT gateways**. Their Elastic IPs are separate resources and stay allocated, so a recreated NAT gateway gets the same address and the SFTP server's allow-list never changes. This refines ADR-0029, which kept the NAT gateway up for that reason. `scripts/aws-session.sh` stops and starts the RDS instances and the SFTP server's instance. `high_availability = true` is the demo week: Multi-AZ standbys and a NAT gateway per AZ ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)).
+   - **Starting or stopping redeploys every service, for Service Connect.** A task can call another service through Service Connect only if that service existed when its own service's latest deployment was made, and scaling up makes no new deployment.
+     - A new stack creates its services together, so their first deployments can miss each other. client-service and account-service call each other, so no order of creation avoids that.
+     - A change in a service's minimum task count redeploys it (the provider's `triggers`, with `force_new_deployment`). On a start this happens at 0 tasks, before auto scaling starts any, so every task gets every name.
+     - **Every stack is therefore created stopped** (`running = false`), as the runbook does. Its first start then redeploys every service once all of them exist, which replaces the runbook's restart of every service after that start.
 5. **Certificates and trust.** Terraform's `tls` provider creates the project CA (ADR-0021 decision 7) and a certificate for each service in `stacks/crm` that serves TLS: user-service, client-service, account-service and the auditor, named for their Service Connect aliases, and event-alert-service, named for itself because only the internal ALB calls it. dashboard-service's certificate is self-signed in its own stack ([ADR-0047](ADR-0047-business-dashboard-terraform-stack.md)), so the CA's private key never leaves the CRM stack. The certificates and keys are kept in Secrets Manager. In each task, a `tls-init` container writes `/tls`:
    - `ca.pem`: the project CA;
    - `rds-ca.pem`: the RDS CA bundle for the region;
@@ -131,6 +135,8 @@ Requiring the paid plan keeps one configuration, the one the accepted ADRs descr
 - Every deployment is billed. The account must be on the paid plan, and the stack must be stopped between sessions to stay within the USD 300 limit (see Cost Impact).
 - Most services use their database's master user until INF-03.
 - Starting a session takes longer: the NAT gateway is recreated (about 2–3 minutes) and the RDS instances start (several minutes).
+- Every start and stop redeploys every service (decision 4). Plans show each service updating in place, and a stop briefly starts one new task per service before scaling it to 0.
+- A stack created with `running = true` starts its tasks on deployments that can miss other services' names (decision 4). Its callers fail with `UnknownHostException` until they are redeployed.
 - The CA and service private keys are in the Terraform state.
 - Without the cross-region copy (decision 11), backups exist only in ap-southeast-1, and no Vault Lock protects them. [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md)'s recovery by rebuilding in ap-southeast-2, and the restore rehearsal it plans, cannot be done until the policy allows the vault.
 - Without WAF request logging (decision 11), nothing records which requests WAF blocked, or why; only WAF's CloudWatch metrics and sampled requests remain.
@@ -175,6 +181,7 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - bootstrap, and registering the domain by hand;
 - building and pushing images and the Lambda zip;
 - the apply order (crm, then business-dashboard, then sftp-server, then crm again);
+- creating each stack stopped, so the first start lets the services call each other (decision 4);
 - the frontend upload;
 - starting and stopping sessions;
 - teardown.
@@ -187,9 +194,11 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - `terraform test` in `stacks/crm`: seven runs plan the stack against mocked providers and check prod, the custom domain, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
 - `terraform test` in `modules/ecs-service`:
   - two runs check that a Java service serving TLS gets its certificate files, Spring Boot's TLS settings, a TCP Service Connect port and HTTPS health checks, and that one that does not stays on HTTP;
-  - three check the db-migrate container ([ADR-0028](ADR-0028-cicd-migrations-terraform.md)).
+  - three check the db-migrate container ([ADR-0028](ADR-0028-cicd-migrations-terraform.md));
+  - two check that a change in the minimum task count redeploys the service (decision 4).
 - `terraform test` in `stacks/business-dashboard`: see [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md).
 - The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks, all over HTTPS.
+- The first start of a new stack, created stopped, must leave every service able to call the others with no restart: no `UnknownHostException` in any log group.
 
 ## References
 
@@ -222,3 +231,6 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - 2026-10-20: amended while Proposed, as decided by the decision owner (INF-03).
   - **Decision 6:** the auditor's db-migrate container creates the auditor's and chain-verify's logins ([ADR-0028](ADR-0028-cicd-migrations-terraform.md) decision 3), and the runbook no longer applies any SQL by hand.
   - Consequences, Operational Impact and Validation changed to match.
+- 2026-10-20: amended while Proposed, as decided by the decision owner:
+  - **Decision 4:** starting or stopping the stack redeploys every service, so every task gets every Service Connect name, and every stack is created stopped. This replaces the runbook's restart of every service after a new stack's first start.
+  - Consequences, Operational Impact and Validation changed to match. Cost Impact is unchanged: a stop's extra tasks run for seconds.

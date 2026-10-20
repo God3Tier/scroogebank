@@ -197,7 +197,17 @@ terraform apply -var-file=env/prod.tfvars -var running=false
 cd -
 ```
 
-`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. With `domain_name`, the apply also requests two certificates, `sg.<domain>` (in us-east-1, for CloudFront) and `alb.sg.<domain>` (for the internal ALB), and waits for ACM to validate them through DNS, usually a few minutes. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
+`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet.
+
+**Always create a stack stopped, as here, never with `running=true`.** The services can call each other only because of it:
+- A task can call another service through Service Connect only if that service existed when its own service's latest deployment was made.
+- This apply creates the services together, so their first deployments can miss each other. client-service and account-service call each other, so no order of creation avoids that.
+- Starting the stack (step 6) redeploys every service before any of its tasks start, once all of them exist, so the tasks get every name (ADR-0042 decision 4).
+- A stack whose first apply had `running=true` starts its tasks on those first deployments instead. Its services then fail with `UnknownHostException` until they are redeployed ([Troubleshooting](#troubleshooting)).
+
+The business-dashboard stack follows this stack's `running`, so step 4 creates it stopped too.
+
+With `domain_name`, the apply also requests two certificates, `sg.<domain>` (in us-east-1, for CloudFront) and `alb.sg.<domain>` (for the internal ALB), and waits for ACM to validate them through DNS, usually a few minutes. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
 
 **Staging (optional).** Staging is a second, separate copy of the stack for short promotion tests (ADR-0029): Fargate Spot, one Availability Zone, no WAF, no AWS Backup and no deletion protection. A test deployment does not need it, and running both doubles the cost.
 
@@ -253,18 +263,7 @@ The databases need nothing by hand:
 - user-service and event-alert-service run Flyway on startup.
 - The other services' tasks run their `db-migrate` container first, which applies their database's migrations. For the auditor, it also creates the auditor's and chain-verify's own logins (ADR-0022 decision 2), whose passwords stay in Secrets Manager.
 
-**On a new stack, restart every service once the apply finishes**, for Service Connect:
-- a task can call only the Service Connect names that existed when the task started;
-- on a new stack, a service can start before the services it calls are registered;
-- it then fails with `UnknownHostException: auditor` or a similar error until it restarts.
-
-```sh
-# Stop gap measure for now: A sturdier long-term fix would be to make Terraform create the called services before the services that call them, or to restart services automatically after the first start
-cluster=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)
-for s in user-service client-service account-service auditor dashboard-service event-alert-service; do
-  aws ecs update-service --cluster "$cluster" --service "$s" --force-new-deployment --query 'service.serviceName' --output text
-done
-```
+**No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
 Apart from the auditor and chain-verify, the services log in as their database's master user until INF-03.
 
@@ -477,6 +476,7 @@ terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-f
 
 - Stopping scales every service to 0, pauses the schedules, removes the NAT gateway (its Elastic IP stays) and stops the databases and the SFTP server.
 - The business-dashboard stack reads `running` from the CRM stack's state, so apply it after the CRM stack every time. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
+- Starting and stopping each redeploy every service, for Service Connect (step 3), so each plan shows every `aws_ecs_service` updating in place. A stop briefly starts one new task per service, which the scale to 0 stops within seconds.
 - Starting takes several minutes, mostly the databases.
 - RDS starts a stopped instance again after 7 days, so stop it again after a longer break.
 - For the high-availability demo week, add `-var high_availability=true`.
@@ -544,7 +544,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `sync-producer-accounts.sh` stops with `could not read the accounts query's output` | The query ran, but its log could not be fetched in time. The producer's list is unchanged; run the script again |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |
-| A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | That service's tasks started before the service they call was registered in Service Connect. Restart the calling service (`aws ecs update-service ... --force-new-deployment`), as at the end of step 6 |
+| A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | The calling service's latest deployment was made before the service it calls existed. Either the stack's first apply had `running=true` instead of creating it stopped (step 3), or the called service was created or replaced since the stack last started. Redeploy the calling service: `aws ecs update-service --cluster "$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)" --service <service> --force-new-deployment`. The next stop and start also fixes it |
 | client-service, account-service, transaction-service or the auditor never starts its app; its `db-migrate/…` log stream says `Migration checksum mismatch` | A migration file was edited after it was applied. Restore the file, put the change in the next version ([Schema migrations](../database/migrations.md)), then build and push db-migrate with a new tag and apply crm |
 | The same, with `Found non-empty schema(s) "public" but no schema history table` | The database's schema was applied by hand, before db-migrate existed. Tear the stack down and create it again |
 | The same, with `No value provided for placeholder` (auditor only) | Its task definition lacks the login password secrets. Apply crm from current code |

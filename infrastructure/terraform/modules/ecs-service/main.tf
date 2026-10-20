@@ -358,6 +358,21 @@ resource "aws_ecs_service" "this" {
 
   tags = var.tags
 
+  # A task can call another service through Service Connect only if that
+  # service existed when its own service's latest deployment was made, and
+  # scaling up makes no new deployment. A new stack's services are created
+  # together while stopped, so their first deployments can miss each other;
+  # client-service and account-service call each other, so no creation order
+  # fixes that. Starting or stopping the stack changes min_tasks, which
+  # redeploys the service. On a start, that happens at 0 tasks, before the
+  # auto scaling target (which refers to this service) starts any, so every
+  # task gets every name. This relies on stacks being created stopped
+  # (ADR-0042 decision 4).
+  force_new_deployment = true
+  triggers = {
+    min_tasks = tostring(var.min_tasks)
+  }
+
   # Application Auto Scaling owns the task count; the stop model changes its
   # minimum and maximum instead (ADR-0029).
   lifecycle {
