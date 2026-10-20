@@ -92,7 +92,7 @@ Shared: window of 7, 30 or 90 days or explicit dates, at most 365 days, in Singa
 
 ## 8. Relevant non-functional requirements
 
-- **Performance:** upstream calls run in parallel, 5 s each and 8 s in total (raised from 2 s and 3 s, ADR-0033); aggregation happens in Postgres on indexed columns.
+- **Performance:** upstream calls run in parallel, 10 s each and 15 s in total (raised from 2 s and 3 s, then from 5 s and 8 s, ADR-0033), under API Gateway's 29 s integration timeout; aggregation happens in Postgres on indexed columns.
 - **Availability:** one failing upstream costs one panel. No retries. A response with a timed-out or failed panel is not cached, so the next refresh asks again rather than serving the failure for 3 minutes.
 - **Consistency:** up to 3 minutes stale, shown by `generatedAt`.
 
@@ -192,6 +192,7 @@ Owners marked TBC must be confirmed before more parallel work starts (`project_p
 | BD-T10 | End-to-end checks and seed data | TBC | Joseph Yau | all five services | `task/business-dashboard/e2e` | Needs Cognito users for one admin and two agents | Planned | 2026-10-09 |
 | BD-T11 | Deployment: its own Terraform stack (ADR-0047) | TBC | Platform (Neo Jia Wen) | `infrastructure/terraform/stacks/business-dashboard/**`, the CRM stack's `dashboard_inputs` output, `docs/runbooks/deploy-aws.md` | `task/infrastructure/business-dashboard-stack` | The CRM stack, applied first | Written; validated and plan-tested with mocked providers. Applied to AWS, where dashboard-service runs (confirmed 2026-10-20) | 2026-10-20 |
 | BD-T12 | UI | TBC | Frontend | `frontend/src/pages`, `frontend/src/api/dashboard.*` | `task/frontend/real-data` | The mockup pages now read dashboard-service; panels it does not serve are hidden (open item 25) | Implemented; frontend tests, lint and build pass; not yet run against a deployed dashboard-service | 2026-10-16 |
+| BD-T13 | Longer upstream budgets: 10 s per call and 15 s overall, from 5 s and 8 s (ADR-0033, amended 2026-10-20) | Neo Jia Wen | — | `services/dashboard-service/src/main/resources/application.yml`, README, ADR-0033 | `task/business-dashboard/longer-upstream-budgets` | Must stay under API Gateway's 29 s integration timeout | Implemented; dashboard-service tests pass; not yet checked in AWS | 2026-10-20 |
 
 Merge path: `task/business-dashboard/<subtask>` → `feat/business-dashboard` → `dev`.
 

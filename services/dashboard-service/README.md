@@ -17,7 +17,7 @@ Feature plan: [`docs/feature-plans/business-dashboard_plan.md`](../../docs/featu
 
 So the dashboard can read nothing the caller could not, and each service scopes its own answer: an agent sees only their own clients, accounts and matched transactions. No endpoint takes an agent ID.
 
-- **Panels degrade one at a time.** Upstream calls run in parallel (5 s each, 8 s in total). A failing or unconfigured upstream makes its panels `UNAVAILABLE` with a reason; the response is 200 unless every panel failed (503). An upstream that times out, answers with an error or cannot be reached is logged as a `WARN` naming the panel and the cause.
+- **Panels degrade one at a time.** Upstream calls run in parallel (10 s each, 15 s in total). A failing or unconfigured upstream makes its panels `UNAVAILABLE` with a reason; the response is 200 unless every panel failed (503). An upstream that times out, answers with an error or cannot be reached is logged as a `WARN` naming the panel and the cause.
 - **Warm-up:** at startup, before the task takes traffic, the service calls each configured upstream's health endpoint once, without a token, and logs `Warm-up: <service> took N ms`. The first dashboard then does not pay the HTTP client, TLS and JSON first-use costs, which on Fargate made every call of the first page take 1.5 to 2 s. A down upstream is logged, never fatal.
 - **Cache:** each task caches each caller's response for 3 minutes. `generatedAt` says when the figures were computed. A response with an `upstream_timeout` or `upstream_error` panel is not cached, so the next request asks again.
 - **Audit:** every view, cache hits included, sends a `DASHBOARD_VIEW` event to the shared audit queue, best-effort. The auditor accepts `source_service: DASHBOARD`.
@@ -64,8 +64,8 @@ Tunables in `application.yml`:
 | `dashboard.window.max-days` | 365 | Bounds what one request asks an upstream to aggregate |
 | `dashboard.cache.ttl-seconds` | 180 | Per-task cache lifetime (ADR-0033) |
 | `dashboard.cache.max-entries` | 1000 | A starting value, not a measured one |
-| `dashboard.upstream.per-call-timeout-ms` | 5000 | Per-upstream budget; 2000 timed out on Fargate after restarts (ADR-0033) |
-| `dashboard.upstream.overall-budget-ms` | 8000 | Whole-request budget |
+| `dashboard.upstream.per-call-timeout-ms` | 10000 | Per-upstream budget; 2000 timed out on Fargate after restarts, and 5000 was raised again for cold upstreams (ADR-0033) |
+| `dashboard.upstream.overall-budget-ms` | 15000 | Whole-request budget. Keep it under API Gateway's 29 s integration timeout, or the caller gets the gateway's error instead of a partial dashboard |
 
 ## Port
 
