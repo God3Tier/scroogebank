@@ -36,6 +36,7 @@ func TestCreateAccount(t *testing.T) {
 	tests := map[string]struct {
 		caller    models.Caller
 		client    clients.Client
+		pending   bool
 		lookupErr error
 		repoErr   error
 		wantErr   error
@@ -47,19 +48,25 @@ func TestCreateAccount(t *testing.T) {
 		"fails closed when the client service is down": {
 			caller: agent, lookupErr: accounterrors.ErrClientServiceUnavailable, wantErr: accounterrors.ErrClientServiceUnavailable,
 		},
-		"refuses an agent an unverified client":           {caller: agent, client: unverified, wantErr: accounterrors.ErrClientNotVerified},
-		"lets an admin open one for an unverified client": {caller: admin, client: unverified, callRepo: true},
+		// An unverified client's accounts open as pending (ADR-0050).
+		"refuses an agent an active account for an unverified client":   {caller: agent, client: unverified, wantErr: accounterrors.ErrClientNotVerified},
+		"lets an agent open a pending account for an unverified client": {caller: agent, client: unverified, pending: true, callRepo: true},
+		"lets an admin open one for an unverified client":               {caller: admin, client: unverified, callRepo: true},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			in, want := input, stored
+			if test.pending {
+				in.Status, want.Status = models.AccountStatusPending, models.AccountStatusPending
+			}
 			directory := clients.NewMockDirectory(t)
 			directory.On("Lookup", ctx, input.ClientID.String(), authorization).Return(test.client, test.lookupErr).Once()
 			repo := repomock.NewMockRepository(t)
 			if test.callRepo {
-				repo.On("CreateAccount", ctx, stored).Return(test.repoErr).Once()
+				repo.On("CreateAccount", ctx, want).Return(test.repoErr).Once()
 			}
 
-			err := NewAccountService(repo, directory).CreateAccount(ctx, input, test.caller, authorization)
+			err := NewAccountService(repo, directory).CreateAccount(ctx, in, test.caller, authorization)
 
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)

@@ -39,7 +39,7 @@ func (c *accountController) CreateAccount(w http.ResponseWriter, r *http.Request
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		case errors.Is(err, accounts.ErrClientNotVerified):
-			http.Error(w, err.Error(), http.StatusForbidden)
+			http.Error(w, "an unverified client's account can only be opened as pending", http.StatusForbidden)
 			return
 		case errors.Is(err, accounts.ErrClientServiceUnavailable):
 			http.Error(w, "client service unavailable", http.StatusServiceUnavailable)

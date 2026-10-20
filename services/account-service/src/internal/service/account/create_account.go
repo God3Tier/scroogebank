@@ -14,9 +14,10 @@ func (s *accountService) CreateAccount(ctx context.Context, account models.Creat
 	if err != nil {
 		return err
 	}
-	// Agents open accounts only for verified clients; admins may open one
-	// for any client they can see (ADR-0050).
-	if !caller.Admin && !client.Verified {
+	// An unverified client's new accounts are pending until the agent
+	// verifies the client and activates them (ADR-0050). Admins do not manage
+	// client accounts; what they may still do here is open item 23.
+	if !caller.Admin && !client.Verified && account.Status != models.AccountStatusPending {
 		return accounterrors.ErrClientNotVerified
 	}
 	// The client's owner, not the caller: an admin opening an account for an
