@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -34,13 +35,15 @@ public class IngestionCoordinator {
     private final ProcessingWatermarkRepository watermarks;
     private final IngestionRunFinalizer finalizer;
     private final OutboundControlService outboundControls;
+    private final IngestionRunLock runLock;
     private final Clock clock;
 
     public IngestionCoordinator(IngestionProperties properties, PublicSearchProvider provider,
             GroupedQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
             PublicUrlCanonicalizer canonicalizer, SearchRunRepository searchRuns,
             SourceResultRepository sourceResults, ProcessingWatermarkRepository watermarks,
-            IngestionRunFinalizer finalizer, OutboundControlService outboundControls, Clock clock) {
+            IngestionRunFinalizer finalizer, OutboundControlService outboundControls,
+            IngestionRunLock runLock, Clock clock) {
         this.properties = properties;
         this.provider = provider;
         this.queryBuilder = queryBuilder;
@@ -51,6 +54,7 @@ public class IngestionCoordinator {
         this.watermarks = watermarks;
         this.finalizer = finalizer;
         this.outboundControls = outboundControls;
+        this.runLock = runLock;
         this.clock = clock;
     }
 
@@ -75,6 +79,20 @@ public class IngestionCoordinator {
         if (!windowFrom.isBefore(windowTo)) {
             throw new IllegalArgumentException("ingestion window start must precede its end");
         }
+        // Windows that start at different times have different search_run rows, so
+        // only this lock keeps two runs, scheduled or manual, from both searching.
+        Optional<IngestionRunLock.Hold> hold = runLock.tryAcquire();
+        if (hold.isEmpty()) {
+            return new IngestionOutcome(IngestionStatus.ALREADY_RUNNING, null, windowFrom, windowTo,
+                    0, 0, 0, 0, null);
+        }
+        try (IngestionRunLock.Hold ignored = hold.get()) {
+            return executeLocked(windowFrom, windowTo, catalogue, advanceWatermark);
+        }
+    }
+
+    private IngestionOutcome executeLocked(Instant windowFrom, Instant windowTo,
+            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark) {
         List<String> queries = queryBuilder.build(catalogue, properties.maxQueriesPerRun());
         if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 

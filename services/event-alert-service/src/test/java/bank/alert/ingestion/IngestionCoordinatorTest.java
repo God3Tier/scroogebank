@@ -44,6 +44,8 @@ class IngestionCoordinatorTest {
     @Mock ProcessingWatermarkRepository watermarks;
     @Mock IngestionRunFinalizer finalizer;
     @Mock OutboundControlService outboundControls;
+    @Mock IngestionRunLock runLock;
+    @Mock IngestionRunLock.Hold lockHold;
 
     private IngestionCoordinator coordinator;
 
@@ -55,6 +57,60 @@ class IngestionCoordinatorTest {
         lenient().when(searchRuns.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(outboundControls.reserveSearches(any(Integer.class)))
                 .thenReturn(ReservationResult.allowed(999));
+        lenient().when(runLock.tryAcquire()).thenReturn(Optional.of(lockHold));
+    }
+
+    @Test
+    void doesNotSearchWhenAnotherRunHoldsTheLock() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        verify(outboundControls, never()).reserveSearches(any(Integer.class));
+        verify(provider, never()).search(any());
+        verify(searchRuns, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void doesNotReplayWhileAnotherRunHoldsTheLock() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+
+        IngestionOutcome outcome = coordinator.replay(
+                NOW.minus(Duration.ofHours(2)), NOW.minus(Duration.ofHours(1)), CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        verify(provider, never()).search(any());
+    }
+
+    @Test
+    void releasesTheLockAfterASuccessfulRun() {
+        when(sourceResults.existsByCanonicalUrlHash(any())).thenReturn(false);
+        when(sourceResults.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(provider.search(any())).thenReturn(List.of(result("r1", "https://www.sgx.com/news/1")));
+
+        coordinator.run(NOW, CATALOGUE);
+
+        verify(lockHold).close();
+    }
+
+    @Test
+    void releasesTheLockWhenTheRunFails() {
+        when(provider.search(any())).thenThrow(new IllegalStateException("provider down"));
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.FAILED);
+        verify(lockHold).close();
+    }
+
+    @Test
+    void releasesTheLockWhenTheRunThrows() {
+        when(searchRuns.saveAndFlush(any())).thenThrow(new IllegalStateException("db down"));
+
+        assertThatThrownBy(() -> coordinator.run(NOW, CATALOGUE))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lockHold).close();
     }
 
     @Test
@@ -190,7 +246,7 @@ class IngestionCoordinatorTest {
                 List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
         return new IngestionCoordinator(properties, provider, new GroupedQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,
-                watermarks, finalizer, outboundControls, Clock.fixed(NOW, ZoneOffset.UTC));
+                watermarks, finalizer, outboundControls, runLock, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static PublicSearchResult result(String id, String url) {

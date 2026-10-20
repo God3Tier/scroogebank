@@ -32,6 +32,8 @@ alert/public_event mutations 1--* audit_outbox
 | `alert_decision` | Immutable agent decision, actor subject, prior/new state, resulting alert version, note, idempotency key, and time. Unique actor/idempotency key. |
 | `alert_feedback` | Agent quality rating/reason/comment, actor, observed alert version, idempotency key, and time. Unique actor/idempotency key. |
 | `processing_watermark` | Last successful provider window with overlap and optimistic version. |
+| `outbound_usage` | Search count, model tokens and estimated cost per UTC month, shared by the API and every worker run. |
+| `outbound_control` | The disabled reason for each outbound capability (`INGESTION`, `MODEL`), if any. |
 | `audit_outbox` | Event ID/type/version, redacted JSON payload, attempt/lease state, acknowledgement, and created time. Unique event ID. |
 
 ## Data types and controls
