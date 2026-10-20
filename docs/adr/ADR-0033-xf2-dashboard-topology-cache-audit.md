@@ -103,7 +103,7 @@ One small ECS service. No database or cache cluster.
 ## Operational Impact
 
 - Fan-out latency and error metrics.
-- Per-call (5 s) and overall (8 s) timeouts, with each panel resolved on its own and no retries, so a down service shows a partial dashboard rather than an error. Raised from 2 s and 3 s on 2026-10-19.
+- Per-call (10 s) and overall (15 s) timeouts, with each panel resolved on its own and no retries, so a down service shows a partial dashboard rather than an error. Raised from 2 s and 3 s on 2026-10-19, then from 5 s and 8 s on 2026-10-20. The overall timeout stays under API Gateway's 29 s integration timeout.
 - An upstream that answers with an error or cannot be reached is logged as a warning with its cause; expected unavailability (not deployed, refused, mixed currencies, unsupported window) stays at debug.
 - The cache TTL is in configuration.
 
@@ -126,3 +126,4 @@ One small ECS service. No database or cache cluster.
 - 2026-10-19: amended by the decision owner after the first AWS test deployment, where panels exceeded the 2 s budget while their upstreams answered in milliseconds, mostly just after a restart. Each failure was then cached for the full 3 minutes, and upstream errors left nothing in the log at the default level.
   - **Decision 3:** a result with a timed-out or failed panel is not cached. Results whose panels are unavailable for reasons a retry does not change are still cached.
   - **Operational Impact:** timeouts raised to 5 s per call and 8 s overall; upstream errors logged as warnings with their cause.
+- 2026-10-20: amended by the decision owner. **Operational Impact:** timeouts raised again, to 10 s per call and 15 s overall, to give upstreams more room just after a restart. The overall timeout stays under API Gateway's 29 s integration timeout, so a slow dashboard still answers with a partial result rather than the gateway's timeout error. The cost is that a failing panel now takes up to 15 s, not 8 s, to show as unavailable.
