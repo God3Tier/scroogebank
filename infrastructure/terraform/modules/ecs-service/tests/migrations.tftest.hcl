@@ -74,6 +74,29 @@ run "with_migrations" {
   }
 }
 
+run "migration_settings" {
+  command = plan
+
+  variables {
+    migrations = {
+      image       = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/db-migrate:abc1234"
+      location    = "users"
+      url         = "jdbc:postgresql://users.example.internal:5432/users?sslmode=verify-full&sslrootcert=/tls/rds-ca.pem"
+      secrets     = {}
+      environment = { FLYWAY_SQL_MIGRATION_SEPARATOR = "__" }
+    }
+  }
+
+  assert {
+    condition = (
+      contains(jsondecode(aws_ecs_task_definition.this.container_definitions)[1].environment, { name = "FLYWAY_SQL_MIGRATION_SEPARATOR", value = "__" }) &&
+      contains(jsondecode(aws_ecs_task_definition.this.container_definitions)[1].environment, { name = "FLYWAY_LOCATIONS", value = "filesystem:/flyway/sql/users" }) &&
+      length([for e in jsondecode(aws_ecs_task_definition.this.container_definitions)[2].environment : e if startswith(e.name, "FLYWAY_")]) == 0
+    )
+    error_message = "db-migrate gets its other Flyway settings, such as a Java service's separator, and the app does not."
+  }
+}
+
 run "migrations_need_tls" {
   command = plan
 

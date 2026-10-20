@@ -132,12 +132,13 @@ variable "tls" {
 }
 
 variable "migrations" {
-  description = "Run Flyway from the db-migrate image in a db-migrate container before the app starts, on every task start (ADR-0028 decision 3). location is the database's directory under /flyway/sql in the image; url is the JDBC URL; secrets (name => valueFrom) holds FLYWAY_USER, FLYWAY_PASSWORD and any FLYWAY_PLACEHOLDERS_*, given to this container only, with their ARNs in secret_arns. Needs tls, which writes the RDS CA it connects with."
+  description = "Run Flyway from the db-migrate image in a db-migrate container before the app starts, on every task start (ADR-0028 decision 3). location is the database's directory under /flyway/sql in the image; url is the JDBC URL; secrets (name => valueFrom) holds FLYWAY_USER, FLYWAY_PASSWORD and any FLYWAY_PLACEHOLDERS_*, given to this container only, with their ARNs in secret_arns; environment holds any other Flyway setting for this container. Needs tls, which writes the RDS CA it connects with."
   type = object({
-    image    = string
-    location = string
-    url      = string
-    secrets  = map(string)
+    image       = string
+    location    = string
+    url         = string
+    secrets     = map(string)
+    environment = optional(map(string), {})
   })
   default = null
 

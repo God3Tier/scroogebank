@@ -13,6 +13,16 @@ output "container_names" {
   value       = [for c in concat(local.init_container, local.migrate_container, [local.app_container]) : c.name]
 }
 
+output "app_environment" {
+  description = "The app container's environment as the caller set it, without the TLS settings this module adds."
+  value       = var.environment
+}
+
+output "app_secrets" {
+  description = "The app container's secrets (name => valueFrom), without the db-migrate container's."
+  value       = var.secrets
+}
+
 output "task_role_arn" {
   description = "The application's role."
   value       = aws_iam_role.task.arn

@@ -100,17 +100,18 @@ locals {
     }
   }] : []
 
-  # Applies the database's migrations as its master user (ADR-0028 decision
-  # 3). Only this container gets the master credentials; Flyway's lock keeps
-  # several tasks starting at once from migrating twice.
+  # Applies the database's migrations as its master user, then gives the app
+  # its own login without schema rights (ADR-0028 decision 3). Only this
+  # container gets the master credentials; Flyway's lock keeps several tasks
+  # starting at once from migrating twice.
   migrate_container = var.migrations == null ? [] : [{
     name      = "db-migrate"
     essential = false
     image     = var.migrations.image
-    environment = [
-      { name = "FLYWAY_URL", value = var.migrations.url },
-      { name = "FLYWAY_LOCATIONS", value = "filesystem:/flyway/sql/${var.migrations.location}" },
-    ]
+    environment = [for k, v in merge(var.migrations.environment, {
+      FLYWAY_URL       = var.migrations.url
+      FLYWAY_LOCATIONS = "filesystem:/flyway/sql/${var.migrations.location}"
+    }) : { name = k, value = v }]
     secrets     = [for k, v in var.migrations.secrets : { name = k, valueFrom = v }]
     mountPoints = [{ sourceVolume = "tls", containerPath = "/tls", readOnly = true }]
     dependsOn   = [{ containerName = "tls-init", condition = "SUCCESS" }]

@@ -38,6 +38,40 @@ mock_provider "aws" {
 mock_provider "random" {}
 mock_provider "tls" {}
 
+# Known ARNs for the services' login secrets, which a plan leaves unknown, so
+# the runs can check which secret each service reads. override_during needs
+# Terraform 1.11 or later.
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["user_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/user_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["client_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["account_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/account_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["transaction_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/transaction_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["transaction_ingest"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/transaction_ingest" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["event_alert_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/event_alert_service" }
+}
+
 variables {
   environment             = "prod"
   root_admin_email        = "root.admin@example.test"
@@ -104,15 +138,37 @@ run "prod" {
     error_message = "dashboard-service calls user-service over HTTPS."
   }
   assert {
-    condition = (
-      alltrue([for m in [module.client_service, module.account_service, module.transaction_service, module.auditor] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"]) &&
-      !contains(module.user_service.container_names, "db-migrate") && !contains(module.event_alert_service.container_names, "db-migrate")
-    )
-    error_message = "The Go services' tasks migrate their databases before starting; the Java services run Flyway themselves (ADR-0028 decision 3)."
+    condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])
+    error_message = "Every service with a database migrates it before starting (ADR-0028 decision 3)."
   }
   assert {
-    condition     = join(",", sort(keys(local.migrations["audit"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD,FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD,FLYWAY_USER" && length(local.migrations["clients"].secrets) == 2
-    error_message = "Only audit-db's db-migrate gets the auditor's and chain-verify's passwords, for the logins it creates."
+    condition = (
+      local.migrations["users"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
+      local.migrations["alerts"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
+      length(local.migrations["clients"].environment) == 0 &&
+      alltrue([for m in [module.user_service, module.event_alert_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
+    )
+    error_message = "db-migrate reads the Java services' V<n>__ file names, and their own Flyway is off in AWS."
+  }
+  assert {
+    condition = (
+      join(",", sort(keys(local.migrations["audit"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD,FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD,FLYWAY_USER" &&
+      join(",", sort(keys(local.migrations["transactions"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD,FLYWAY_USER" &&
+      alltrue([for db in ["users", "clients", "accounts", "alerts"] : join(",", sort(keys(local.migrations[db].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_APP_LOGIN,FLYWAY_PLACEHOLDERS_APP_PASSWORD,FLYWAY_USER"])
+    )
+    error_message = "Each database's db-migrate gets the passwords of the logins it creates, and only those."
+  }
+  assert {
+    condition = alltrue([
+      for login, m in {
+        user_service        = module.user_service
+        client_service      = module.client_service
+        account_service     = module.account_service
+        transaction_service = module.transaction_service
+        event_alert_service = module.event_alert_service
+      } : alltrue([for v in values(m.app_secrets) : startswith(v, "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/${login}:")])
+    ])
+    error_message = "Each service connects with its own login, never its database's master user (ADR-0028 decision 3)."
   }
   assert {
     condition     = contains(keys(aws_ecr_repository.this), "db-migrate")
@@ -262,6 +318,10 @@ run "lambdas_enabled" {
   assert {
     condition     = aws_lambda_function.ingest[0].environment[0].variables["DB_SSLROOTCERT"] == "/var/task/rds-ca.pem"
     error_message = "Ingest verifies transactions-db against the RDS CA in its zip."
+  }
+  assert {
+    condition     = aws_lambda_function.ingest[0].environment[0].variables["DB_SECRET_ARN"] == "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/transaction_ingest"
+    error_message = "Ingest connects with its own login, not transactions-db's master user (ADR-0028 decision 3)."
   }
 }
 
