@@ -73,16 +73,16 @@ Building the stack also showed that the code on `dev` needs more from the deploy
 
    The tests in `stacks/crm/tests/` plan the stack against mocked providers and check these values.
 4. **Stop model.** `running = false` scales every service to 0 tasks, pauses the schedules and **removes the NAT gateways**. Their Elastic IPs are separate resources and stay allocated, so a recreated NAT gateway gets the same address and the SFTP server's allow-list never changes. This refines ADR-0029, which kept the NAT gateway up for that reason. `scripts/aws-session.sh` stops and starts the RDS instances and the SFTP server's instance. `high_availability = true` is the demo week: Multi-AZ standbys and a NAT gateway per AZ ([ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md)).
-5. **Certificates and trust.** Terraform's `tls` provider creates the project CA (ADR-0021 decision 7) and a certificate for each service that serves TLS: client-service, account-service and the auditor, named for their Service Connect aliases. The certificates and keys are kept in Secrets Manager. In each task, a `tls-init` container writes `/tls`:
+5. **Certificates and trust.** Terraform's `tls` provider creates the project CA (ADR-0021 decision 7) and a certificate for each service in `stacks/crm` that serves TLS: user-service, client-service, account-service and the auditor, named for their Service Connect aliases, and event-alert-service, named for itself because only the internal ALB calls it. dashboard-service's certificate is self-signed in its own stack ([ADR-0047](ADR-0047-business-dashboard-terraform-stack.md)), so the CA's private key never leaves the CRM stack. The certificates and keys are kept in Secrets Manager. In each task, a `tls-init` container writes `/tls`:
    - `ca.pem`: the project CA;
    - `rds-ca.pem`: the RDS CA bundle for the region;
    - `ca-bundle.pem`: public roots plus both CAs, which Go reads through `SSL_CERT_FILE`;
    - `cert.pem` and `key.pem`: the service's own certificate;
    - for Java services, a JVM truststore that adds the project CA.
 
-   The private keys are also in the Terraform state, so only administrators may read the state bucket.
+   Go services read the certificate and key through their own settings. For a Java service, the `ecs-service` module sets Spring Boot's `SERVER_SSL_CERTIFICATE` and `SERVER_SSL_CERTIFICATEPRIVATEKEY`, so the services need no code change and still serve plain HTTP locally. The private keys are also in the Terraform state, so only administrators may read the state bucket.
 6. **Database logins.** The auditor and chain-verify log in as `auditor_app` and `chain_verify`, holding the roles `auditor_service` and `auditor_chain_verify` (ADR-0022 decision 2). Terraform generates their passwords; the logins are created once by hand (runbook) until the db-migrate task exists. Every other service connects as its instance's RDS-managed master user until then. This is a temporary deviation from ADR-0028 decision 3 (no schema rights for application users, [open item 8](../architecture/open-items.md#8-migrations-on-startup-or-as-a-task)).
-7. **Service Connect proxies TLS ports as TCP.** The auditor's gRPC and HTTPS ports, client-service and account-service have no `appProtocol`. Their TLS is end to end (ADR-0021 decision 7), so Envoy cannot read gRPC or HTTP inside it, and `appProtocol: grpc` (ADR-0021 decision 5) would break the connection. Envoy balances connections, and the server's `MaxConnectionAge` makes callers reconnect, as decision 7 already says. Plain-HTTP services (user-service, transaction-service) keep `appProtocol: http`.
+7. **Service Connect proxies TLS ports as TCP.** The auditor's gRPC and HTTPS ports, user-service, client-service and account-service have no `appProtocol`. Their TLS is end to end (ADR-0021 decision 7), so Envoy cannot read gRPC or HTTP inside it, and `appProtocol: grpc` (ADR-0021 decision 5) would break the connection. Envoy balances connections, and the server's `MaxConnectionAge` makes callers reconnect, as decision 7 already says. transaction-service, the only plain-HTTP service on Service Connect, keeps `appProtocol: http`.
 8. **Internal ALB.**
    - **Custom domain and HTTPS** ([ADR-0019](ADR-0019-edge-entry-chain.md) decision 5, [open item 2](../architecture/open-items.md#2-domain-name)). The domain is registered by hand in Route 53, which creates its public hosted zone. Both stay outside Terraform, like the deploy role (ADR-0046), so no destroy removes them. With `domain_name` set, `stacks/crm`:
      - finds the zone by name;
@@ -91,7 +91,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
      - validates both certificates through DNS records in the zone, and keeps the `*.cloudfront.net` origin in Cognito's callback URLs, so both addresses sign in.
 
      The ALB's name is a public record that resolves to its private addresses in the app subnets, which nothing outside the VPC can reach. A private hosted zone would cost another USD 0.50 a month and protect nothing more. Without `domain_name`, the ALB listens on HTTP 80 inside the VPC and the app uses the default CloudFront name, which the mocked tests and an account without a domain still use. The project account's domain is `itsag3t6.com`; the runbook sets `domain_name` only in an account that has its hosted zone, so a personal test account deploys without one.
-   - Target groups use HTTPS for the Go services, which serve TLS in production, and HTTP for the Java services, which do not. The security model's "self-signed TLS between the ALB and tasks" is therefore not met for the Java services yet.
+   - **HTTPS to every target** (INF-08). All five target groups, and their health checks, use HTTPS, which meets the security model's "self-signed TLS between the ALB and tasks". The ALB encrypts to its targets but does not check their certificates, so a certificate's name and issuer matter only to Service Connect callers, such as dashboard-service calling user-service.
 9. **Not deployed yet, each a task in `docs/feature-plans/infrastructure_plan.md`:**
    - the health monitor: it is not runnable yet;
    - the alert worker, its schedule, AgentCore in Tokyo and Bedrock access: EDA-D1-02 (Azeez);
@@ -140,6 +140,8 @@ Requiring the paid plan keeps one configuration, the one the accepted ADRs descr
 - The state bucket holds private keys, so access to it must stay restricted to administrators.
 - Every task role and the queue, anchor and documents bucket policies follow least privilege.
 - With a domain, API Gateway and the ingest Lambda reach the internal ALB over TLS 1.2 or 1.3, and API Gateway checks the certificate's name. Without one, the ALB's plain HTTP inside the VPC is reachable only from the VPC Link and the ingest Lambda.
+- The ALB reaches every service over TLS, with or without a domain. It does not check the services' certificates; the security groups, which admit only the ALB and named callers, keep anything else from answering in their place.
+- user-service still calls transaction-service over plain HTTP inside the VPC, through Service Connect; that call does not pass the ALB.
 - The ALB's DNS name is public and shows its private addresses, but gives no route to them.
 
 ## Cost Impact
@@ -158,6 +160,8 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 | **Total** | **~358** | **~66** |
 
 The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
+
+Each service certificate's secret costs USD 0.40 a month, running or stopped. The three added for user-service, event-alert-service and dashboard-service add USD 1.20 a month (INF-08).
 
 The project account's domain, `itsag3t6.com`, is already paid until July 2027, so the custom domain adds only its hosted zone: USD 0.50 a month, running or stopped. A domain registered for another account costs about USD 15 a year for a `.com`, which AWS credits do not cover. The ACM certificates are free.
 
@@ -178,8 +182,9 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 
 - `terraform validate` on all four stacks.
 - `terraform test` in `stacks/crm`: seven runs plan the stack against mocked providers and check prod, the custom domain, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
+- `terraform test` in `modules/ecs-service`: two runs check that a Java service serving TLS gets its certificate files, Spring Boot's TLS settings, a TCP Service Connect port and HTTPS health checks, and that one that does not stays on HTTP.
 - `terraform test` in `stacks/business-dashboard`: see [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md).
-- The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks.
+- The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks, all over HTTPS.
 
 ## References
 
@@ -205,3 +210,7 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - 2026-10-20: amended while Proposed, as decided by the decision owner, which resolves open item 2:
   - **Decision 8:** a domain registered by hand in Route 53. With `domain_name` set, the app is served at `sg.<domain>` and the internal ALB listens on HTTPS with an ACM certificate that API Gateway verifies. This replaces the `internal_alb_certificate_arn` and `internal_alb_server_name` variables. Security & Privacy Impact, Cost Impact, Operational Impact and Validation changed to match.
   - **Decision 9:** the transaction-ingest Lambda leaves the not-deployed list. Runbook §9.3 turns it on, and it imports the SFTP server's files into transactions-db in AWS, as the decision owner confirmed on 2026-10-20.
+- 2026-10-20: amended while Proposed, as decided by the decision owner (INF-08):
+  - **Decision 5:** user-service and event-alert-service get project-CA certificates, and dashboard-service a self-signed one in its own stack. Java services serve them through Spring Boot's `server.ssl` settings.
+  - **Decision 7:** user-service's port becomes TCP on Service Connect; only transaction-service keeps `appProtocol: http`.
+  - **Decision 8:** every target group uses HTTPS, which closes the gap with the security model. Security & Privacy Impact, Cost Impact and Validation changed to match.

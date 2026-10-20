@@ -1,5 +1,41 @@
 # AI usage log
 
+## 2026-10-20 — INF-08 HTTPS from the internal ALB to the Java services
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: list which services the internal ALB reaches and over what; compare
+  where dashboard-service's certificate could come from (the owner chose a
+  self-signed one in its own stack over one issued by the CRM's CA); make the
+  `ecs-service` module's Java `tls-init` script write the service's
+  certificate and set Spring Boot's `SERVER_SSL_CERTIFICATE` and
+  `SERVER_SSL_CERTIFICATEPRIVATEKEY`; give user-service and event-alert-service
+  project-CA certificates and the dashboard a self-signed one; switch the three
+  target groups to HTTPS and user-service's Service Connect port to TCP; write
+  the module's first plan test and extend the stacks' tests; amend ADR-0042
+  decisions 5, 7 and 8 and ADR-0047, and update the runbook, the Terraform
+  README, the infrastructure plan and the resource register.
+- Human verification required: decide ADR-0042 and ADR-0047; apply the CRM
+  stack, then the business-dashboard stack (after `terraform init` there, for
+  the new `tls` provider); check that all five target groups use HTTPS and are
+  healthy, the users, alerts and dashboard pages load, and the dashboard's
+  user-service panels work, which proves the dashboard checks user-service's
+  certificate.
+- Data: repository content and synthetic test values only. A throwaway EC key
+  and self-signed certificate were made in the session's scratch folder for
+  the local checks. Nothing ran in AWS, and no secrets or real client data
+  were used.
+- Verification: `terraform fmt -check` is clean for the tracked files;
+  `terraform validate` passes for the module and the crm, business-dashboard
+  and sftp-server stacks; `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 2/2 in `modules/ecs-service`. Spring Boot
+  3.5.16 read the `EC PRIVATE KEY` format Terraform writes and served TLS 1.3
+  from those two variables: a locally built dashboard-service jar, and the
+  existing dashboard-service image after the module's Java `tls-init` script
+  ran in it as root, with the app then running as a non-root user. Both
+  answered `UP` on HTTPS with the certificate's name checked, and 400 on plain
+  HTTP.
+
 ## 2026-10-20 — INF-13 custom domain and HTTPS internal ALB
 
 - Human owner: Neo Jia Wen.
