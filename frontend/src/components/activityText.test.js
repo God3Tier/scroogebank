@@ -62,9 +62,20 @@ describe('describing client and account changes', () => {
     }))).toMatchObject({ text: 'uploaded an identity document', note: null, clientId: CLIENT_ID })
   })
 
-  it("names the account, not a client, when an account is closed", () => {
+  it("names the account, not a client, when an account is deleted", () => {
     expect(describeActivity(crm('DELETE', 'DELETE', '/api/accounts/:accountId', { client_id: 'account-0001' }))).toMatchObject({
-      text: 'closed an account',
+      text: 'deleted an account',
+      record: { label: 'Account', id: 'account-0001' },
+      clientId: null,
+    })
+  })
+
+  it("describes an account's status change with its values before and after", () => {
+    expect(describeActivity(crm('UPDATE', 'PATCH', '/api/accounts/:accountId', {
+      client_id: 'account-0001', attribute_name: 'status', before_value: 'PENDING', after_value: 'ACTIVE',
+    }))).toMatchObject({
+      text: "changed an account's status",
+      note: 'from Pending to Active',
       record: { label: 'Account', id: 'account-0001' },
       clientId: null,
     })

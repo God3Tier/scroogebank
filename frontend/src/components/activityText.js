@@ -21,8 +21,19 @@ const CRM_ROUTES = {
   'POST /api/clients/:clientId/verify': { text: 'verified a client', icon: 'verified_user', tone: 'verify', record: 'Client', opens: true, evidence: true },
   'POST /api/clients/:clientId/documents': { text: 'uploaded an identity document', icon: 'upload_file', tone: 'change', record: 'Client', opens: true },
   'POST /api/accounts': { text: 'opened an account', icon: 'account_balance', tone: 'create', record: 'Client', opens: true },
-  // account-service records the account's ID in client_id on this route.
-  'DELETE /api/accounts/:accountId': { text: 'closed an account', icon: 'do_not_disturb_on', tone: 'remove', record: 'Account' },
+  // account-service records the account's ID in client_id on its account
+  // routes. Deleting is not closing: Closed is a status (ADR-0036, ADR-0050).
+  'DELETE /api/accounts/:accountId': { text: 'deleted an account', icon: 'do_not_disturb_on', tone: 'remove', record: 'Account' },
+  'PATCH /api/accounts/:accountId': { text: "changed an account's status", icon: 'sync_alt', tone: 'change', record: 'Account', change: true },
+}
+
+const STATUS_NAMES = { ACTIVE: 'Active', INACTIVE: 'Inactive', PENDING: 'Pending', CLOSED: 'Closed' }
+
+// "from Pending to Active", from the values before and after a change.
+function changeNote(details) {
+  const name = (value) => STATUS_NAMES[String(value).toUpperCase()] || value
+  if (!details.before_value || !details.after_value) return null
+  return `from ${name(details.before_value)} to ${name(details.after_value)}`
 }
 
 const GENERIC = {
@@ -54,7 +65,7 @@ function describeCrm(verb, details) {
   return activity({
     ...route,
     record: id ? { label: route.record, id } : null,
-    note: documents ? `with ${documents} ${documents === 1 ? 'document' : 'documents'}` : null,
+    note: route.change ? changeNote(details) : documents ? `with ${documents} ${documents === 1 ? 'document' : 'documents'}` : null,
     badge: route.evidence && details.without_document ? 'Without a document' : null,
     clientId: route.opens ? id : null,
   })

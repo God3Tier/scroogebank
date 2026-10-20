@@ -550,7 +550,8 @@ textarea:focus {
   color: var(--on-surface-variant);
 }
 
-.badge-completed {
+.badge-completed,
+.badge-active {
   background: rgba(0, 107, 94, 0.1);
   color: var(--secondary);
 }
@@ -851,6 +852,27 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: var(--stack-sm);
+}
+
+/* After a verification: make the client's Pending accounts Active (ADR-0050). */
+.activation-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-sm);
+  margin-top: var(--stack-md);
+}
+
+.activation-prompt .verify-actions {
+  gap: var(--stack-sm);
+}
+
+/* An account's status and, for an agent, the control to change it. */
+.account-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--stack-sm);
+  padding: 0 var(--stack-md) var(--stack-md);
 }
 
 .verify-done > p:first-child {
