@@ -9,7 +9,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `stacks/business-dashboard/` | dashboard-service (X-factor 2), inside one CRM stack's network and cluster; reads that stack's `dashboard_inputs` output (ADR-0047) | `business-dashboard/<entity>/<environment>.tfstate` |
 | `stacks/sftp-server/` | The simulated core banking SFTP server, an external system with its own stack (ADR-0024) | `sftp-server/<environment>.tfstate` |
 | `modules/postgres/` | One RDS PostgreSQL instance for one service (ADR-0023) | |
-| `modules/ecs-service/` | One Fargate service or scheduled task, with its roles, logs, Service Connect, ALB rules, auto scaling and TLS files | |
+| `modules/ecs-service/` | One Fargate service or scheduled task, with its roles, logs, Service Connect, ALB rules, auto scaling, TLS files and database migrations | |
 | `sql/` | One-time SQL the runbook runs | |
 
 ## Switches
@@ -49,7 +49,7 @@ The CRM for one legal entity and environment:
 | Network | A VPC across 2 Availability Zones, with public, app and database subnets. One NAT gateway, removed while the stack is stopped; its Elastic IP stays. Gateway endpoints for S3 and DynamoDB |
 | Edge and API | CloudFront serves the frontend from a private bucket and forwards `/api/*` to an API Gateway HTTP API. API Gateway checks the Cognito token, then passes requests through a VPC Link to the internal ALB, which routes by path and reaches every service over HTTPS. In prod, WAF sits on CloudFront, without request logging. With `domain_name`: the app at `sg.<domain>` (`sg-staging.<domain>` for staging), ACM certificates for it (in us-east-1) and for `alb.sg.<domain>`, and HTTPS from API Gateway and the ingest Lambda to the ALB, with API Gateway checking the certificate's name |
 | Sign-in | A Cognito user pool with ADMIN and AGENT groups and managed login. The Cognito triggers Lambda, which audits logins and password resets |
-| Services | On ECS Fargate, 1 to 6 tasks each, and 0 while stopped: user-service, client-service, account-service, the auditor, chain-verify (daily at 03:00 SGT), transaction-service, and event-alert-service (its read API only). Also their ECR repositories, Service Connect, the project CA and the service certificates. dashboard-service runs in the same cluster but is deployed by `stacks/business-dashboard` |
+| Services | On ECS Fargate, 1 to 6 tasks each, and 0 while stopped: user-service, client-service, account-service, the auditor, chain-verify (daily at 03:00 SGT), transaction-service, and event-alert-service (its read API only). Also their ECR repositories, Service Connect, the project CA and the service certificates. Before client-service, account-service, transaction-service and the auditor start, their `db-migrate` container applies their database's migrations with Flyway (`../db-migrate/`, ADR-0028 decision 3). dashboard-service runs in the same cluster but is deployed by `stacks/business-dashboard` |
 | Data | 6 RDS PostgreSQL instances: users, clients, accounts, transactions, audit and alerts. Each is `db.t4g.micro` with 20 GB of gp3 that can grow to 100 GB, and 7 days of point-in-time recovery. Also the `client-keys` DynamoDB table, the ID-documents bucket, 4 Singapore KMS keys and a psql console task for each database |
 | Audit | The SQS queue and its dead-letter queue. The Object Lock bucket for chain-verify's anchors |
 | Backups | Prod only: a daily AWS Backup of the databases and `client-keys`, kept for 7 days in a Singapore vault. There is no copy in another Region |
@@ -82,7 +82,7 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 | Part | Why it doesn't work | Waiting for |
 |---|---|---|
 | event-alert-service | It runs, but nothing creates alerts, so it has none to show | INF-06: the alert worker |
-| Database logins | Most services sign in as their database's master user, and schemas are applied by hand | INF-03: db-migrate tasks |
+| Database logins | Apart from the auditor and chain-verify, the services sign in as their database's master user | INF-03: logins without schema rights |
 
 ### Left out of the account
 
@@ -114,6 +114,6 @@ terraform validate
 terraform test      # plans each mode against mocked providers; no AWS account needed
 ```
 
-`stacks/business-dashboard/` runs the same way; its test stands in for the CRM stack's state, and checks the rules on the CRM's groups and that the plan fails while the audit queue does not allow its role. `modules/ecs-service/` has its own for how a Java service serves TLS, `bootstrap/` one for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
+`stacks/business-dashboard/` runs the same way; its test stands in for the CRM stack's state, and checks the rules on the CRM's groups and that the plan fails while the audit queue does not allow its role. `modules/ecs-service/` has its own for how a Java service serves TLS and for the db-migrate container, `bootstrap/` one for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
 
 Real `*.tfvars` and `*.s3.tfbackend` files are git-ignored; copy the `.example` files next to them.

@@ -1,5 +1,52 @@
 # AI usage log
 
+## 2026-10-20 — INF-03 db-migrate init container
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: find where the runbook uses `scripts/db-run-sql.sh` and how to stop
+  needing it for deploys; recommend a Flyway `db-migrate` init container in
+  each Go service's task over a separate migration task (the owner chose it,
+  and to collapse client-service's two SQL files into one because nothing is
+  deployed); build one `infrastructure/db-migrate` image from the Go services'
+  `data/` directories, with an `afterMigrate.sql` callback that creates the
+  auditor's and chain-verify's logins from Secrets Manager placeholders; add
+  the `migrations` input to the `ecs-service` module and wire it into the CRM
+  stack; run the same image against each Go service's local Compose database
+  (`make migrate`, used by `make run`, and the SFTP stack's `db-migrate`
+  service before `receiver-api`), as the owner asked, so an edited migration
+  fails locally first; drop `--expand-env` and the audit console's password
+  secrets; write module and stack tests; amend ADR-0028 decision 3
+  (resolving open item 8) and ADR-0042 decision 6, and update the runbook,
+  the four services' READMEs, the architecture pages,
+  `docs/database/migrations.md`, the Terraform README, the infrastructure plan
+  and the resource register.
+- Human verification required: decide ADR-0028 and ADR-0042; tell the
+  client-service, account-service, auditor and receiver owners that a deployed
+  migration is never edited, and that an existing local database needs one
+  `make db-reset`; on a new stack, build and push the db-migrate image,
+  apply crm, and check each of the four services' `db-migrate` log
+  streams and that the auditor connects as `auditor_app`.
+- Data: repository content and synthetic values only. Local PostgreSQL
+  containers, synthetic passwords and a throwaway CA were used for the checks.
+  Nothing ran in AWS, and no secrets or real client data were used.
+- Verification: `terraform fmt -check` is clean for the tracked files;
+  `terraform validate` passes for the crm, business-dashboard and sftp-server
+  stacks; `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 5/5 in `modules/ecs-service`, and the new
+  crm assertion fails when a service loses its migrations. The image, run
+  against PostgreSQL 17: each database migrated from empty and a rerun changed
+  nothing; the audit logins worked with their roles and a rerun replaced their
+  passwords; a missing placeholder and an edited migration both stopped it;
+  a database set up by hand was refused; LF and CRLF copies of a file gave the
+  same checksum; `verify-full` worked with a two-CA bundle and refused a wrong
+  CA and a wrong host name. Locally, `make migrate` in account-service,
+  client-service and the auditor, and `make db-up` in the SFTP stack, migrated
+  fresh Compose databases and changed nothing on a rerun; on account-service,
+  a database loaded with `psql` and an edited migration were both refused
+  with the Makefile's hint. The test containers and volumes were removed. `db-run-sql.sh` built the same psql override with
+  stubbed `terraform` and `aws` commands.
+
 ## 2026-10-20 — INF-08 HTTPS from the internal ALB to the Java services
 
 - Human owner: Neo Jia Wen.

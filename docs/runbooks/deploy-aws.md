@@ -7,7 +7,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 
 ## Before you start
 
-- **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for `scripts/db-run-sql.sh`.
+- **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for the scripts (step 5, 9.5 and the database console).
 - **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
 - **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
@@ -155,7 +155,10 @@ build auditor             services/auditor/Dockerfile             .
 build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
 build account-service     services/account-service/Dockerfile     services/account-service
 build transaction-service services/sftp/receiver/Dockerfile       services/sftp/receiver
+build db-migrate          infrastructure/db-migrate/Dockerfile    .
 ```
+
+`db-migrate` is Flyway with the Go services' database migrations. Their tasks run it before they start ([Schema migrations](../database/migrations.md)).
 
 ## 3. Create the CRM stack, stopped
 
@@ -231,13 +234,13 @@ repo() { printf '%s' "$REPOS" | python -c "import json,sys; print(json.load(sys.
 aws ecr get-login-password | docker login --username AWS --password-stdin "$(repo auditor | cut -d/ -f1)"
 
 push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
-for s in user-service event-alert-service auditor client-service account-service transaction-service; do push "$s"; done
+for s in user-service event-alert-service auditor client-service account-service transaction-service db-migrate; do push "$s"; done
 
 DASHBOARD=$(terraform -chdir=infrastructure/terraform/stacks/business-dashboard output -raw ecr_repository)
 docker tag "crm/dashboard-service:$TAG" "$DASHBOARD:$TAG" && docker push "$DASHBOARD:$TAG"
 ```
 
-## 6. Start the stacks and set up the databases
+## 6. Start the stacks
 
 ```sh
 cd infrastructure/terraform/stacks/crm
@@ -246,31 +249,24 @@ cd -
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars   # takes running=true from the CRM stack
 ```
 
-Then, **once per new stack**, apply the schemas that no service applies itself. user-service and event-alert-service run Flyway on startup and need nothing. Each command starts a psql task inside the VPC and prints its output.
+The databases need nothing by hand:
+- user-service and event-alert-service run Flyway on startup.
+- The other services' tasks run their `db-migrate` container first, which applies their database's migrations. For the auditor, it also creates the auditor's and chain-verify's own logins (ADR-0022 decision 2), whose passwords stay in Secrets Manager.
+
+**On a new stack, restart every service once the apply finishes**, for Service Connect:
+- a task can call only the Service Connect names that existed when the task started;
+- on a new stack, a service can start before the services it calls are registered;
+- it then fails with `UnknownHostException: auditor` or a similar error until it restarts.
 
 ```sh
-# Note: switch to Flyway later? So we don't have to maintain these scripts
-scripts/db-run-sql.sh clients      services/client-profile-management-service/data/V1_init.sql
-scripts/db-run-sql.sh clients      services/client-profile-management-service/data/V2_agent_subject.sql
-scripts/db-run-sql.sh accounts     services/account-service/data/V1_init.sql
-scripts/db-run-sql.sh transactions services/sftp/receiver/data/init.sql
-scripts/db-run-sql.sh audit        services/auditor/data/schema.sql
-scripts/db-run-sql.sh audit        infrastructure/terraform/sql/audit-logins.sql --expand-env
+# Stop gap measure for now: A sturdier long-term fix would be to make Terraform create the called services before the services that call them, or to restart services automatically after the first start
+cluster=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)
+for s in user-service client-service account-service auditor dashboard-service event-alert-service; do
+  aws ecs update-service --cluster "$cluster" --service "$s" --force-new-deployment --query 'service.serviceName' --output text
+done
 ```
 
-- **Run `services/auditor/data/schema.sql` only on an empty audit-db.** It begins with `DROP TABLE`.
-- The last command creates the auditor's and chain-verify's own logins (ADR-0022 decision 2). Their passwords stay in Secrets Manager.
-- Then restart every service. The auditor needs the restart to connect with its new login. The other services need it for Service Connect: a task can call only the Service Connect names that existed when the task started. On a new stack, a service can start before the services it calls are registered. It then fails with `UnknownHostException: auditor` or a similar error until it restarts.
-
-  ```sh
-  # Stop gap measure for now: A sturdier long-term fix would be to make Terraform create the called services before the services that call them, or to restart services automatically after the first start
-  cluster=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)
-  for s in user-service client-service account-service auditor dashboard-service event-alert-service; do
-    aws ecs update-service --cluster "$cluster" --service "$s" --force-new-deployment --query 'service.serviceName' --output text
-  done
-  ```
-
-Until the db-migrate task exists (INF-03), the other services log in as their database's master user.
+Apart from the auditor and chain-verify, the services log in as their database's master user until INF-03.
 
 ## 7. Upload the frontend
 
@@ -294,7 +290,7 @@ cd -
      --query 'services[].[serviceName,runningCount,desiredCount]' --output table
    ```
 
-   A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 6's schema is missing.
+   A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); for a `db-migrate` failure, its `db-migrate/…` log stream gives Flyway's reason ([Troubleshooting](#troubleshooting)).
 2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
@@ -549,7 +545,9 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | That service's tasks started before the service they call was registered in Service Connect. Restart the calling service (`aws ecs update-service ... --force-new-deployment`), as at the end of step 6 |
-| The auditor cannot log in | Step 6's `audit-logins.sql` has not run, or the auditor started before it |
+| client-service, account-service, transaction-service or the auditor never starts its app; its `db-migrate/…` log stream says `Migration checksum mismatch` | A migration file was edited after it was applied. Restore the file, put the change in the next version ([Schema migrations](../database/migrations.md)), then build and push db-migrate with a new tag and apply crm |
+| The same, with `Found non-empty schema(s) "public" but no schema history table` | The database's schema was applied by hand, before db-migrate existed. Tear the stack down and create it again |
+| The same, with `No value provided for placeholder` (auditor only) | Its task definition lacks the login password secrets. Apply crm from current code |
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
 | `terraform output` shows `sftp_client_public_key = <<EOT` | The key ends in a newline, so it prints as a heredoc. Read it with `terraform output -raw sftp_client_public_key`, as in step 9.1 |
 | `No outputs found` from the sftp-server stack | Its apply has not finished. Run it again and fix the error it reports |
@@ -565,4 +563,4 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `Attribute redefined` in `crm/env/prod.tfvars` or `sftp-server/env/prod.tfvars` | A variable is set twice, usually by a line added by hand or by an older copy of the runbook's snippets, which appended without removing the old line. Delete the older line. The snippets in 9.2 and 9.3 now replace their lines themselves |
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
-| Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why: a database error usually means step 6's `init.sql` is missing. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 9) |
+| Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why; for a failed migration, see its `db-migrate/…` stream. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 9) |

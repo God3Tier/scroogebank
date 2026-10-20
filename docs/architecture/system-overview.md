@@ -14,7 +14,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
 | [Request, audit and ingestion flows](data-flow.md) | Numbered flows 1–13a, audit write path (outbox + SQS), audit read path (gRPC), transaction ingestion (SFTP + Lambda) |
 | [Security model](../security/security-model.md) | Identity, authorization, perimeter, encryption, audit tamper resistance, GDPR erasure, authentication events, client data envelope encryption |
 | [Database design](../database/schema.md) | Databases and owners, one RDS instance per service, AWS Backup |
-| [Schema migrations](../database/migrations.md) | The db-migrate task per service |
+| [Schema migrations](../database/migrations.md) | The db-migrate init container in each service's task |
 | [X-factor features](x-factors.md) | Market-news alerts, business dashboard, Client Relationship Health Monitor |
 | [NFR mapping](nfr-mapping.md) | How each non-functional requirement (NFR 1–13) is met |
 | [Test strategy](../testing/test-strategy.md) | How the design will be evaluated |
@@ -56,7 +56,7 @@ The diagram is kept outside the repository, in the team's Google Drive: `(NEW) A
 - **Scheduled tasks in AZ-1a:** the alert worker, the health analysis task and chain-verify sit in their owning service's column because each is built from that service's image. One EventBridge line feeds all three.
 - **Region ap-northeast-1 (Tokyo)** sits outside the Singapore region. It holds only the Bedrock AgentCore web search used by x-factor 1, which receives public terms only.
 - **chain-verify** sits in the auditor column because it is built from the auditor's code and container image. It is a separate scheduled task, not part of the auditor service ([Audit integrity and GDPR](../security/security-model.md#audit-integrity-and-gdpr)).
-- **db-migrate** stands for one migration task per service, each touching only its own database ([Databases](../database/schema.md#databases)).
+- **db-migrate** stands for each service's migration step: an init container in that service's task that migrates only its own database before the service starts ([ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3, [Databases](../database/schema.md#databases)).
 - **Core banking system** is drawn outside AWS because it is an external system. Its EC2 hosting is only a simulation aid.
 - **Gateway endpoints** for S3 and DynamoDB sit on the VPC edge, so traffic to those services stays off the NAT gateway.
 - **GitHub Actions** is outside AWS; it deploys through OIDC.
@@ -109,7 +109,7 @@ Recorded in [ADR-0017](../adr/ADR-0017-microservices-per-business-area.md) (Acce
 | **auditor** | Consumes audit events from SQS, appends them to the hash chain, and serves audit reads over internal gRPC. | Go, ECS |
 | **chain-verify** | Daily hash-chain verification; writes the chain head to S3 Object Lock. Built from the auditor codebase and image. | Go, ECS scheduled task |
 | **cognito-triggers** | F1: sends each login and forgotten-password reset to the audit queue within 3 seconds, and never fails the sign-in; a failed send is logged for replay ([Authentication events](../security/security-model.md#authentication-events)). | Java 25, AWS Lambda (outside the VPC), invoked by Cognito |
-| **db-migrate** | Applies one service's versioned schema migrations to that service's database before the service deploys. One task definition per service. | ECS one-off task |
+| **db-migrate** | Applies one service's versioned schema migrations to that service's database before the service starts. Flyway, in an init container in each Go service's task; user-service and event-alert-service migrate on startup. | ECS init container |
 | **RDS for PostgreSQL** (users-db, clients-db, accounts-db, transactions-db, audit-db) | Relational ACID storage. One instance per service, each with a Multi-AZ standby. | Managed |
 | **alerts-db, health-db** | The x-factor services' own RDS instances: holdings, instrument master, events, alerts and decisions (alerts-db); activity projection, signals, evidence, tasks and explanations (health-db). Each has its own outbox. | Managed |
 | **Client key store** (DynamoDB `client-keys`) | Per-client data keys, one-to-one with client UUIDs, wrapped by a symmetric KMS key. Owned by client-service. | Managed (on-demand) |
@@ -157,7 +157,7 @@ Each service on the diagram is listed with the requirement it serves. "Spec" mea
 | **ECS Fargate services** (user, client, account, transaction, event-alert, dashboard, health-monitor, auditor) | Runs the containerised services with no servers to manage. Target-tracking auto scaling keeps at least one task per service and scales out across two AZs. | NFR 1 (auto-scaling), NFR 2, NFR 11 (cloud native, containers) | No |
 | **AWS Lambda: transaction-ingest** (VPC-attached) | The Feature 3 ingestion worker. Invoked on a schedule, it connects to the external SFTP server, imports ready files into transactions-db and audits each file. Costs almost nothing between runs ([Transaction ingestion (Feature 3)](data-flow.md#transaction-ingestion-feature-3)). | Feature 3 | No |
 | **chain-verify** (scheduled ECS task) | Daily hash-chain verification and anchoring. Runs to completion and costs nothing between runs. | Spec: "Audit logs should be tamper-resistant" | No |
-| **db-migrate** (one-off ECS task per service) | Applies each service's database migrations before its deployment, using a database user that is the only one allowed to change the schema. | NFR 3, NFR 10 (automated deployment) | Yes: migrations can run on service startup instead ([Databases](../database/schema.md#databases)) |
+| **db-migrate** (init container in each service's task) | Applies each service's database migrations before its app starts. Only this container gets the database's master credentials. | NFR 3, NFR 10 (automated deployment) | Yes: migrations can run on service startup instead ([Databases](../database/schema.md#databases)) |
 | **EventBridge Scheduler** | Invokes the transaction-ingest Lambda every few minutes and starts chain-verify, the alert worker and the health analysis task, with no always-on scheduler process. | Feature 3, audit integrity, Features 4–6 | No |
 | **Alert worker, health analysis** (scheduled ECS tasks) | Batch work for x-factors 1 and 3. Runs once per schedule and costs nothing between runs; a timer inside the always-on services would run in every copy and restart with every deployment. | Features 4–6, NFR 1 | No |
 | **ECR** | Private container image registry, with vulnerability scanning on push. | NFR 8 (security audits), NFR 10 (CI/CD) | No |
