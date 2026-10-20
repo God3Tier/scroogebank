@@ -2,10 +2,11 @@
 
 ## Platform Terraform resources
 
-Status: defined in Terraform and validated with mocked providers; no successful
-live apply or deployed ARN is claimed. Human owner: Neo Jia Wen. The exact
-resource inventory and observed charges must be added from Terraform state and
-Cost Explorer after INF-02's approved test-account apply.
+Status: defined in Terraform, validated with mocked providers, and applied to
+the team's paid-plan account (INF-02; the decision owner confirmed the CRM,
+business-dashboard and sftp-server stacks on 2026-10-20). Human owner: Neo Jia
+Wen. The exact resource inventory and observed charges still have to be added
+from Terraform state and Cost Explorer.
 
 | Resource group | Environment / region | Owner | Purpose and expected cost | Shutdown / cleanup |
 |---|---|---|---|---|
@@ -19,9 +20,9 @@ Cost Explorer after INF-02's approved test-account apply.
 | ACM certificates and Route 53 records | Per CRM environment, with `domain_name`; CloudFront's certificate in Virginia, the ALB's in Singapore | Neo Jia Wen | `sg.<domain>` for CloudFront and `alb.sg.<domain>` for the internal ALB, with their DNS validation records; certificates free, records included in the hosted zone's charge | Destroyed with the CRM stack |
 | API Gateway, VPC Link and internal ALB | Per CRM environment / Singapore | Neo Jia Wen | JWT-checked public API into private ECS services; ALB has an idle cost even while stopped | Destroy staging; prod ALB remains until the prod stack is destroyed |
 | Cognito user pool, clients, groups, domain and trigger Lambda | Per CRM environment / Singapore | Neo Jia Wen | Managed login, required MFA, service identity and auth-event auditing | Scales per request; user-pool deletion protection is lifted only during deliberate teardown |
-| ECS cluster, Service Connect, task definitions/services and ECR repositories | Per CRM environment / Singapore | Neo Jia Wen | Six API/worker images and the db-migrate image, 1–6 prod tasks while running; compute is a major running cost. db-migrate (Flyway, about 280 MB) is about USD 0.03 a month per stored image, and runs inside the Go services' tasks at no extra compute cost (ADR-0028). The five service TLS certificates' secrets cost USD 0.40 a month each, running or stopped | `running=false` scales services to zero; ECR retains ten images per repository; the secrets go with the stack |
+| ECS cluster, Service Connect, task definitions/services and ECR repositories | Per CRM environment / Singapore | Neo Jia Wen | Six API/worker images and the db-migrate image, 1–6 prod tasks while running; compute is a major running cost. db-migrate (Flyway, about 280 MB) is about USD 0.03 a month per stored image, and runs inside the tasks of the services with a database at no extra compute cost (ADR-0028). The five service TLS certificates' secrets cost USD 0.40 a month each, running or stopped | `running=false` scales services to zero; ECR retains ten images per repository; the secrets go with the stack |
 | dashboard-service: ECR repository, task definition/service, target group and listener rule, security group, TLS certificate secret | Per CRM environment / Singapore, in the CRM's cluster (`stacks/business-dashboard`, ADR-0047) | Neo Jia Wen | Business dashboard (X-factor 2); one 1 vCPU / 2 GB task while running, about USD 1.50 a day, moved from the CRM stack. Its self-signed TLS certificate's secret is USD 0.40 a month, running or stopped | Follows the CRM's `running` after its own apply; destroy before the CRM stack |
-| Six RDS PostgreSQL instances | Per CRM environment / Singapore | Neo Jia Wen | Service-owned databases; single-AZ normally and Multi-AZ only for the demo week | Stop between sessions; AWS restarts stopped instances after seven days, so stop them again |
+| Six RDS PostgreSQL instances and the services' database login secrets | Per CRM environment / Singapore | Neo Jia Wen | Service-owned databases; single-AZ normally and Multi-AZ only for the demo week. Each service, and the ingest Lambda, has its own login without schema rights (ADR-0028): eight Secrets Manager secrets, the auditor's two and six more, at USD 0.40 a month each, running or stopped (USD 2.40 a month for the six) | Stop between sessions; AWS restarts stopped instances after seven days, so stop them again. The secrets go with the stack |
 | DynamoDB client-keys and encrypted ID-document S3 bucket | Per CRM environment / Singapore | Neo Jia Wen | Envelope-encryption keys and encrypted synthetic identity documents | On-demand DynamoDB; deletion protection and bucket cleanup follow the teardown flag |
 | Audit SQS/DLQ and Object-Lock anchor bucket | Per CRM environment / Singapore | Neo Jia Wen | Durable audit delivery and tamper-evident daily anchors | Queues disappear with the stack; locked anchor versions require expiry or authorized governance bypass |
 | AWS Backup plan and primary vault | Prod / Singapore | Neo Jia Wen | Daily database/key-table backups. The Sydney vault, its KMS key and the cross-Region copy are left out because the account's service control policy denies the vault (ADR-0042 decision 11) | Not created in staging; remove recovery points before teardown |

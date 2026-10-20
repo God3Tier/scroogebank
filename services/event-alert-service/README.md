@@ -141,6 +141,12 @@ mvn -B -pl services/event-alert-service -am verify
 Runtime database settings are supplied through `EVENT_ALERT_DB_URL`,
 `EVENT_ALERT_DB_USERNAME`, and `EVENT_ALERT_DB_PASSWORD`. Never commit real
 credentials. Flyway owns the schema and Hibernate validates it at startup.
+Locally and in tests, Spring Boot's Flyway applies `db/migration` on startup.
+In AWS, the task's `db-migrate` container applies the same files before the
+service starts, and the task definition sets `SPRING_FLYWAY_ENABLED=false`:
+the service connects as its own login, `event_alert_service`, which cannot
+change the schema ([ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)
+decision 3). A worker deployed later must set the same.
 
 API mode also requires `COGNITO_ISSUER_URI` and `COGNITO_APP_CLIENT_ID`, and
 refuses to start without the app client ID. It accepts only Cognito access

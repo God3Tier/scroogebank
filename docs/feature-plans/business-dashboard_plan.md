@@ -3,7 +3,7 @@
 - Feature name: `business-dashboard`
 - Shared feature branch: `feat/business-dashboard`, restarted from `dev` at `5f9690a` on 2026-10-09. The first line is kept as `backup/business-dashboard-v1`.
 - Subtask branch prefix: `task/business-dashboard/<subtask>`
-- Status: **In progress.** Service, audit, roster and aggregate endpoints are built and unit-tested; end-to-end checks, deployment and UI are not done.
+- Status: **In progress.** Service, audit, roster and aggregate endpoints are built and unit-tested, and the service runs in AWS from its own stack (BD-T11); end-to-end checks and UI are not done.
 - Primary developer: **TBC** (must be named before tasks are confirmed; see §20)
 - Plan last updated: 2026-10-20 (deployment: BD-T11)
 - Decisions: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (topology, cache, audit), [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) (metric definitions), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (aggregate endpoints), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (its own Terraform stack). ADR-0033 and ADR-0038 are Accepted; ADR-0039 and ADR-0047 are Proposed.
@@ -20,7 +20,7 @@
 | user-service | `GET /aggregates/transactions/stats`, in front of the receiver |
 | SFTP receiver | Private `POST /aggregates/transactions/stats`; index on `transactions(transaction_date)` |
 | End-to-end checks with real tokens | Not run |
-| Deployment | Defined in Terraform as its own stack, `infrastructure/terraform/stacks/business-dashboard` (ADR-0047, 2026-10-20); plan-tested with mocked providers, not yet applied to AWS |
+| Deployment | Defined in Terraform as its own stack, `infrastructure/terraform/stacks/business-dashboard` (ADR-0047, 2026-10-20); plan-tested with mocked providers, and applied to the team's AWS account, where dashboard-service runs (confirmed 2026-10-20) |
 | UI | Not possible yet: there is no `frontend/` on `dev`. `task/frontend-building` holds one of the three mockup commits (`851f737`); `task/business-dashboard/frontend-mockup` holds all three on an old base and must not be merged |
 
 What changed on `dev` since the first branch, and how this plan follows it:
@@ -190,7 +190,7 @@ Owners marked TBC must be confirmed before more parallel work starts (`project_p
 | BD-T08 | Transaction aggregates | TBC | Joseph Yau (review) | `services/sftp/receiver/src/{internal,serverd}`, `data/init.sql`; `services/user-service/.../TransactionStats*` | `task/business-dashboard/transaction-stats` | Feature 3 receiver; user-service | Done; review pending | 2026-10-09 |
 | BD-T09 | Panels, per-agent table, accounts per client | TBC | — | `services/dashboard-service/{service,upstream}` | `task/business-dashboard/panels` | — | Done | 2026-10-09 |
 | BD-T10 | End-to-end checks and seed data | TBC | Joseph Yau | all five services | `task/business-dashboard/e2e` | Needs Cognito users for one admin and two agents | Planned | 2026-10-09 |
-| BD-T11 | Deployment: its own Terraform stack (ADR-0047) | TBC | Platform (Neo Jia Wen) | `infrastructure/terraform/stacks/business-dashboard/**`, the CRM stack's `dashboard_inputs` output, `docs/runbooks/deploy-aws.md` | `task/infrastructure/business-dashboard-stack` | The CRM stack, applied first | Written; validated and plan-tested with mocked providers; not yet applied to AWS | 2026-10-20 |
+| BD-T11 | Deployment: its own Terraform stack (ADR-0047) | TBC | Platform (Neo Jia Wen) | `infrastructure/terraform/stacks/business-dashboard/**`, the CRM stack's `dashboard_inputs` output, `docs/runbooks/deploy-aws.md` | `task/infrastructure/business-dashboard-stack` | The CRM stack, applied first | Written; validated and plan-tested with mocked providers. Applied to AWS, where dashboard-service runs (confirmed 2026-10-20) | 2026-10-20 |
 | BD-T12 | UI | TBC | Frontend | `frontend/src/pages`, `frontend/src/api/dashboard.*` | `task/frontend/real-data` | The mockup pages now read dashboard-service; panels it does not serve are hidden (open item 25) | Implemented; frontend tests, lint and build pass; not yet run against a deployed dashboard-service | 2026-10-16 |
 
 Merge path: `task/business-dashboard/<subtask>` → `feat/business-dashboard` → `dev`.

@@ -1,5 +1,42 @@
 # AI usage log
 
+## 2026-10-20 — INF-03 least-privilege database logins, and stale statuses
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: work out what each service does in its database (no DDL, `TRUNCATE`
+  or sequences; soft deletes are updates; transaction-service only reads);
+  recommend that db-migrate apply user-service's and event-alert-service's
+  migrations in AWS only, with their own Flyway off there and their code
+  unchanged, which the owner chose; add login callbacks to the db-migrate
+  image, with an advisory lock against concurrent grants; give every
+  service, and the ingest Lambda, its own login secret in the CRM stack,
+  with tests; amend ADR-0028 decision 3 and ADR-0042 decision 6. Also
+  update the docs that still said INF-03, INF-08, INF-12 and INF-13 were
+  not applied to AWS, using only what the owner confirmed had worked there.
+- Human verification required: decide ADR-0028 and ADR-0042; build and
+  push db-migrate with the other images, apply crm to the running stack,
+  and check that the users and alerts `db-migrate` streams say "up to
+  date", every service is healthy, no log group shows `permission denied`
+  or `password authentication failed`, and the ingest Lambda imports the
+  next file. Tell Azeez (event-alert-service) and Joseph Yau (the receiver
+  and the ingest Lambda).
+- Data: repository content only, with throwaway passwords in local Docker
+  containers. Nothing ran in AWS, and no secrets or real client data were
+  used.
+- Verification: `terraform fmt -check` is clean; `terraform validate` passes
+  for all four stacks; `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 8/8 in `modules/ecs-service`, and the CRM
+  test fails when a service is given its master secret. The image, run
+  against PostgreSQL 17 with passwords checked from another container:
+  each login signed in, could change rows but not the schema, its history
+  or roles, and lost its old password on a rerun; `transaction_service`
+  could only read; `transaction_ingest` ran the receiver's upsert and outbox
+  relay; a later table was granted on the next migrate; three concurrent
+  migrations succeeded and the lock serialised the callbacks; a database
+  migrated with Spring Boot's `__` separator was up to date with it and
+  reported a description mismatch without it.
+
 ## 2026-10-20 — INF-14 redeploy on start for Service Connect
 
 - Human owner: Neo Jia Wen.
