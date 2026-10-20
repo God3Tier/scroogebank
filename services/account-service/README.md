@@ -6,10 +6,11 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. 403 if the caller is an agent and the client is not verified (ADR-0050) |
+| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. For an unverified client an agent may open only a `PENDING` account; any other status is 403 (ADR-0050) |
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
+| PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Audited with the status before and after (ADR-0050) |
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
 | GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |
@@ -41,7 +42,7 @@ The `accounts` table has no foreign key to `clients`, because clients live in an
   | client service answers | Response |
   |---|---|
   | 200 | The account is created. The client's `created_by_agent_id` is stored as `owner_agent_id` |
-  | 200, but the caller is an agent and the client's `verification_status` is not `VERIFIED` (in any case) | 403 `verify the client before opening an account`, and nothing is created. Admins are not restricted ([ADR-0050](../../docs/adr/ADR-0050-agents-open-accounts-only-for-verified-clients.md)) |
+  | 200, but the caller is an agent, the client's `verification_status` is not `VERIFIED` (in any case) and the status is not `PENDING` | 403 `an unverified client's account can only be opened as pending`, and nothing is created. Admins are not restricted ([ADR-0050](../../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)) |
   | 404 | 404, and nothing is created |
   | Anything else, or no answer within 2 seconds | 503, and nothing is created |
 

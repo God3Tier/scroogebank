@@ -59,6 +59,20 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 		account.GET("", listAccounts(accounts))
 		account.GET("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.GetAccount, "accountId"))
 		account.DELETE("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))
+		// Only an account's status can change, by the agent who owns it, once
+		// its client is verified (ADR-0050).
+		account.PATCH("/:accountId", security.RequireAccountOwner(db, "accountId"), withCallerAndAccount(accounts.UpdateAccountStatus))
+	}
+}
+
+// withCallerAndAccount is withCaller for handlers that also take the route's
+// account ID.
+func withCallerAndAccount(handler func(http.ResponseWriter, *http.Request, models.Caller, string)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		accountID := c.Param("accountId")
+		withCaller(func(w http.ResponseWriter, r *http.Request, caller models.Caller) {
+			handler(w, r, caller, accountID)
+		})(c)
 	}
 }
 
