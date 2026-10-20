@@ -54,6 +54,24 @@ variable "bedrock_region" {
   default     = "us-east-1"
 }
 
+variable "agentcore_gateway_url" {
+  description = "URL of the Tokyo AgentCore Gateway (the gatewayUrl the spike prints), passed to the worker as ALERT_AGENTCORE_GATEWAY_URL. Null until the gateway exists; with no URL every search fails cleanly as PROVIDER_NOT_CONFIGURED."
+  type        = string
+  default     = null
+}
+
+variable "cloudwatch_metrics_enabled" {
+  description = "Let the worker export its metrics to CloudWatch as it exits (ALERT_CLOUDWATCH_METRICS_ENABLED), and give its task role cloudwatch:PutMetricData for that namespace only. Each distinct metric and tag combination is a billed custom metric, so it defaults to off (ADR-0049)."
+  type        = bool
+  default     = false
+}
+
+variable "cloudwatch_namespace" {
+  description = "CloudWatch namespace the worker's metrics go to."
+  type        = string
+  default     = "CRM/EventAlerts"
+}
+
 variable "agentcore_gateway_arn" {
   description = "ARN of the Tokyo AgentCore Gateway the worker searches through. Created after the live spike; null until then, and the worker gets no AgentCore permission."
   type        = string

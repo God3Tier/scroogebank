@@ -63,6 +63,19 @@ data "aws_iam_policy_document" "bedrock" {
   }
 }
 
+data "aws_iam_policy_document" "metrics" {
+  statement {
+    sid       = "PutWorkerMetricsToOneNamespace"
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"] # PutMetricData has no resource-level ARN; the condition narrows it
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = [var.cloudwatch_namespace]
+    }
+  }
+}
+
 data "aws_iam_policy_document" "agentcore" {
   statement {
     sid       = "InvokeTheSearchGateway"
@@ -86,7 +99,7 @@ module "event_alert_worker" {
   memory             = 1024
   cpu_architecture   = local.crm.cpu_architecture
 
-  environment = {
+  environment = merge({
     ALERT_MODE              = "WORKER"
     EVENT_ALERT_DB_URL      = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
     AWS_REGION              = var.aws_region
@@ -96,8 +109,12 @@ module "event_alert_worker" {
     ALERT_AI_BEDROCK_REGION = var.bedrock_region
     # The API process publishes the audit outbox, including rows a worker run
     # leaves behind, so the worker needs no queue access.
-    ALERT_AUDIT_PUBLISHER_ENABLED = "false"
-  }
+    ALERT_AUDIT_PUBLISHER_ENABLED    = "false"
+    ALERT_CLOUDWATCH_METRICS_ENABLED = tostring(var.cloudwatch_metrics_enabled)
+    ALERT_CLOUDWATCH_NAMESPACE       = var.cloudwatch_namespace
+    },
+    var.agentcore_gateway_url == null ? {} : { ALERT_AGENTCORE_GATEWAY_URL = var.agentcore_gateway_url },
+  )
   secrets = {
     EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"
     EVENT_ALERT_DB_PASSWORD = "${local.crm.alerts_db_secret_arn}:password::"
@@ -109,6 +126,7 @@ module "event_alert_worker" {
   task_role_policies = merge(
     var.ai_enabled ? { bedrock = data.aws_iam_policy_document.bedrock.json } : {},
     local.use_agentcore ? { agentcore = data.aws_iam_policy_document.agentcore.json } : {},
+    var.cloudwatch_metrics_enabled ? { metrics = data.aws_iam_policy_document.metrics.json } : {},
   )
 
   use_spot           = local.crm.use_spot

@@ -142,3 +142,24 @@ run "failed_run_alarm_reports_to_the_crm_topic" {
     error_message = "A non-zero exit reports to the CRM stack's alarm topic."
   }
 }
+
+run "metrics_gateway_and_replay" {
+  command = plan
+
+  variables {
+    ingestion_enabled          = true
+    cloudwatch_metrics_enabled = true
+    agentcore_gateway_url      = "https://example-gw.gateway.bedrock-agentcore.ap-northeast-1.amazonaws.com"
+    agentcore_gateway_arn      = "arn:aws:bedrock-agentcore:ap-northeast-1:123456789012:gateway/example"
+  }
+
+  assert {
+    condition     = can(regex("ALERT_REPLAY|ALERT_WORKER_REPLAY_OPERATOR", output.replay_command)) && can(regex("--launch-type FARGATE", output.replay_command))
+    error_message = "The replay command starts a one-off task with the four replay variables to fill in."
+  }
+  assert {
+    condition     = can(regex("ALERT_WORKER_REPLAY_CORRELATION_ID", output.replay_command)) && can(regex("event-alert-worker", output.replay_command))
+    error_message = "The replay command overrides the worker container and names the correlation ID."
+  }
+}
+

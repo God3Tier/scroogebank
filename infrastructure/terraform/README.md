@@ -81,7 +81,7 @@ The event-alert worker (X-factor 1, [ADR-0048](../../docs/adr/ADR-0048-alert-wor
 | Alarm | An EventBridge rule: a non-zero exit publishes to the CRM stack's alarm topic |
 | IAM | Bedrock on the pinned inference profile only with `ai_enabled`; AgentCore `InvokeGateway` only with `ingestion_enabled` and `agentcore_gateway_arn` |
 
-`ingestion_enabled` and `ai_enabled` default to false. The Tokyo AgentCore gateway is not created here: its resources wait for the live spike. After a CRM apply that changes `running`, apply this stack again.
+`ingestion_enabled`, `ai_enabled` and `cloudwatch_metrics_enabled` default to false. The Tokyo AgentCore gateway is not created here: its resources wait for the live spike, and `agentcore_gateway_url` and `agentcore_gateway_arn` point the worker at one made by hand. The `replay_command` output starts a one-off replay task (ADR-0049). After a CRM apply that changes `running`, apply this stack again.
 
 ### `stacks/sftp-server`
 

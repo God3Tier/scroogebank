@@ -32,3 +32,19 @@ output "run_once_command" {
     "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", local.crm.subnet_ids)}],securityGroups=[${local.crm.alerts_service_sg}],assignPublicIp=DISABLED}'",
   ])
 }
+
+output "replay_command" {
+  description = "Replay one past window by hand (ADR-0049): replace the four <...> values, then run it. The worker refuses the replay unless the operator and ticket are set, and writes an audit event first."
+  value = join(" ", [
+    "aws ecs run-task",
+    "--cluster ${local.crm.cluster_name}",
+    "--launch-type FARGATE",
+    "--task-definition ${module.event_alert_worker.task_definition_family}",
+    "--network-configuration 'awsvpcConfiguration={subnets=[${join(",", local.crm.subnet_ids)}],securityGroups=[${local.crm.alerts_service_sg}],assignPublicIp=DISABLED}'",
+    "--overrides '{\"containerOverrides\":[{\"name\":\"event-alert-worker\",\"environment\":[",
+    "{\"name\":\"ALERT_WORKER_REPLAY_FROM\",\"value\":\"<2026-10-14T01:00:00Z>\"},",
+    "{\"name\":\"ALERT_WORKER_REPLAY_TO\",\"value\":\"<2026-10-14T03:00:00Z>\"},",
+    "{\"name\":\"ALERT_WORKER_REPLAY_OPERATOR\",\"value\":\"<your-name>\"},",
+    "{\"name\":\"ALERT_WORKER_REPLAY_CORRELATION_ID\",\"value\":\"<ticket-or-reason>\"}]}]}'",
+  ])
+}
