@@ -1,6 +1,7 @@
 # Plans the stack against mocked providers (no AWS account needed) and checks
-# what high_availability, running, environment and deletion_protection change
-# (ADR-0042, ADR-0029). Run with: terraform init -backend=false && terraform test
+# what high_availability, running, environment, deletion_protection and
+# domain_name change (ADR-0042, ADR-0029). Run with:
+# terraform init -backend=false && terraform test
 
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
@@ -20,6 +21,9 @@ mock_provider "aws" {
   }
   mock_data "aws_iam_openid_connect_provider" {
     defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" }
+  }
+  mock_data "aws_route53_zone" {
+    defaults = { zone_id = "Z0123456789EXAMPLE", name = "example.com" }
   }
 }
 
@@ -87,6 +91,52 @@ run "prod" {
     condition     = length(var.local_dev_origins) == 0 && !contains(aws_cognito_user_pool_client.web.explicit_auth_flows, "ALLOW_USER_SRP_AUTH")
     error_message = "Prod: web sign-in must exclude local callback origins and direct SRP authentication."
   }
+  assert {
+    condition     = aws_lb_listener.internal.protocol == "HTTP" && aws_lb_listener.internal.port == 80 && length(aws_acm_certificate.alb) == 0 && length(aws_acm_certificate.app) == 0 && length(aws_cloudfront_distribution.this.aliases) == 0
+    error_message = "Without domain_name: no certificates, the internal ALB on HTTP 80 and the default CloudFront name."
+  }
+}
+
+run "custom_domain" {
+  command = plan
+
+  variables {
+    domain_name               = "example.com"
+    enable_ingest_lambda      = true
+    ingest_lambda_zip         = "tests/plan_modes.tftest.hcl"
+    sftp_server_address       = "203.0.113.10:22"
+    sftp_host_key_fingerprint = "SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+  }
+
+  assert {
+    condition     = aws_acm_certificate.alb[0].domain_name == "alb.sg.example.com" && aws_acm_certificate.app[0].domain_name == "sg.example.com"
+    error_message = "Custom domain: certificates for alb.<app host> and the app host, sg.<domain> in prod."
+  }
+  assert {
+    condition     = aws_lb_listener.internal.protocol == "HTTPS" && aws_lb_listener.internal.port == 443 && aws_lb_listener.internal.ssl_policy == "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    error_message = "Custom domain: the internal ALB listens on HTTPS 443 with TLS 1.2 or 1.3."
+  }
+  assert {
+    condition     = aws_apigatewayv2_integration.alb.tls_config[0].server_name_to_verify == "alb.sg.example.com"
+    error_message = "Custom domain: API Gateway verifies the ALB's certificate name."
+  }
+  assert {
+    condition     = aws_cloudfront_distribution.this.aliases == toset(["sg.example.com"]) && aws_cloudfront_distribution.this.viewer_certificate[0].minimum_protocol_version == "TLSv1.2_2021"
+    error_message = "Custom domain: CloudFront answers on sg.<domain> with TLS 1.2 or later."
+  }
+  assert {
+    condition     = aws_route53_record.app[0].name == "sg.example.com" && aws_route53_record.alb[0].name == "alb.sg.example.com" && length(aws_route53_record.certificate_validation) == 2
+    error_message = "Custom domain: records for the app, the ALB and both certificates' validation."
+  }
+  assert {
+    # CloudFront's generated name is unknown until apply; the custom origin is first.
+    condition     = local.web_origins[0] == "https://sg.example.com"
+    error_message = "Custom domain: sign-in accepts callbacks on the custom domain."
+  }
+  assert {
+    condition     = aws_lambda_function.ingest[0].environment[0].variables["ACCOUNT_SERVICE_BASE_URL"] == "https://alb.sg.example.com"
+    error_message = "Custom domain: the ingest Lambda calls the ALB by the name on its certificate."
+  }
 }
 
 run "high_availability_week" {
@@ -132,6 +182,7 @@ run "staging" {
 
   variables {
     environment = "staging"
+    domain_name = "example.com"
   }
 
   assert {
@@ -145,6 +196,10 @@ run "staging" {
   assert {
     condition     = alltrue([for db in module.db : db.backup_retention_days == 7])
     error_message = "Staging keeps 7 days of RDS backups."
+  }
+  assert {
+    condition     = local.app_host == "sg-staging.example.com" && local.alb_host == "alb.sg-staging.example.com"
+    error_message = "Staging's names sit beside prod's: sg-staging.<domain>."
   }
 }
 

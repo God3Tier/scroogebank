@@ -230,7 +230,7 @@ resource "aws_lambda_function" "ingest" {
       SFTP_REMOTE_DIR           = "/reports"
       SFTP_HOST_KEY_FINGERPRINT = coalesce(var.sftp_host_key_fingerprint, "unset")
       SFTP_PRIVATE_KEY_SECRET   = aws_secretsmanager_secret.sftp_client_key.arn
-      ACCOUNT_SERVICE_BASE_URL  = "${local.alb_scheme}://${aws_lb.internal.dns_name}"
+      ACCOUNT_SERVICE_BASE_URL  = local.alb_base_url
       COGNITO_TOKEN_URL         = "https://${aws_cognito_user_pool_domain.this.domain}.auth.${local.region}.amazoncognito.com/oauth2/token"
       COGNITO_INGEST_SECRET     = aws_secretsmanager_secret.ingest_client.arn
       COGNITO_INGEST_SCOPE      = "crm-accounts/lookup"

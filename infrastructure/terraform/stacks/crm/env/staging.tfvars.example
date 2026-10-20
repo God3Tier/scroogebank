@@ -16,6 +16,10 @@ image_tag = "replace-with-the-pushed-tag"
 root_admin_email = "you+crm-root-staging@example.edu"
 alarm_email      = "you@example.edu"
 
+# The domain you registered in Route 53 (runbook step 1): staging is then at
+# https://sg-staging.<domain>, beside prod's https://sg.<domain>.
+# domain_name = "example.com"
+
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).
 # Put in your account ID.
 extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-staging-dashboard-service-task"]

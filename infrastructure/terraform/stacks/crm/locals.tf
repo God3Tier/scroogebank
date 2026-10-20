@@ -86,6 +86,12 @@ locals {
     transaction = "transaction-service"
   }
 
-  alb_scheme = var.internal_alb_certificate_arn == null ? "http" : "https"
-  alb_port   = var.internal_alb_certificate_arn == null ? 80 : 443
+  # Custom domain (dns.tf): the app's name and the internal ALB's, under
+  # domain_name. Without one, the default CloudFront name and HTTP to the ALB.
+  custom_domain = var.domain_name != null
+  app_host      = local.custom_domain ? "${var.legal_entity}${local.is_prod ? "" : "-${var.environment}"}.${var.domain_name}" : null
+  alb_host      = local.custom_domain ? "alb.${local.app_host}" : null
+  alb_scheme    = local.custom_domain ? "https" : "http"
+  alb_port      = local.custom_domain ? 443 : 80
+  alb_base_url  = "${local.alb_scheme}://${local.custom_domain ? local.alb_host : aws_lb.internal.dns_name}"
 }
