@@ -54,6 +54,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - `modules/postgres` and `modules/ecs-service` are one module per pattern (ADR-0028).
    - `stacks/crm` is one stack per legal entity and environment ([ADR-0026](ADR-0026-one-stack-per-legal-entity.md)), with state at `crm/<entity>/<environment>.tfstate`.
    - `stacks/sftp-server` is the external bank's SFTP server, in its own stack ([ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1).
+   - `stacks/business-dashboard` is dashboard-service, one stack per CRM stack, with state at `business-dashboard/<entity>/<environment>.tfstate`. It runs inside the CRM stack's network and cluster and reads that stack's `dashboard_inputs` output ([ADR-0047](ADR-0047-business-dashboard-terraform-stack.md)).
 2. **State.** A versioned, KMS-encrypted, TLS-only S3 bucket with native locking. This settles ADR-0028 decision 4, which left the backend to be chosen when the infrastructure work started.
 3. **The paid plan.** The stack needs an AWS account on the paid plan; there is no Free-plan mode. Its sizes:
 
@@ -158,7 +159,7 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
 
 - bootstrap;
 - building and pushing images and the Lambda zip;
-- the apply order (crm, then sftp-server, then crm again);
+- the apply order (crm, then business-dashboard, then sftp-server, then crm again);
 - the one-time database steps and the frontend upload;
 - starting and stopping sessions;
 - teardown.
@@ -167,8 +168,9 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
 
 ## Validation
 
-- `terraform validate` on all three stacks.
+- `terraform validate` on all four stacks.
 - `terraform test` in `stacks/crm`: six runs plan the stack against mocked providers and check prod, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
+- `terraform test` in `stacks/business-dashboard`: see [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md).
 - The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks.
 
 ## References
@@ -191,3 +193,4 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
 - 2026-10-16: amended while Proposed, as decided by the decision owner, to cut Fargate cost:
   - **Decision 3:** services run 1–6 tasks while running instead of 2–6, with [ADR-0018](ADR-0018-ecs-fargate-compute.md) amended to match. Cost Impact changed to match.
 - 2026-10-19: Cost Impact updated, as decided by the decision owner: dashboard-service runs on 1 vCPU and 2 GB instead of 0.5 vCPU and 1 GB. On 0.5 vCPU, shared with its Service Connect proxy, the JVM took 34 s to start and 1.5–3.4 s for its first call to each upstream, so the first dashboard after a start timed out. About USD 22 a month more running 24/7, about USD 3 a month at two 10-hour sessions a week.
+- 2026-10-20: amended while Proposed, as decided by the decision owner: dashboard-service moves out of `stacks/crm` into `stacks/business-dashboard` ([ADR-0047](ADR-0047-business-dashboard-terraform-stack.md)). Decision 1, Operational Impact and Validation changed to match. Cost Impact is unchanged: the same resources run.
