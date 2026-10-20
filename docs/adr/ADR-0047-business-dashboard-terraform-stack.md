@@ -68,6 +68,7 @@ The dashboard needs about 20 values from the CRM stack: the cluster, subnets, VP
 1. **Stack.** `infrastructure/terraform/stacks/business-dashboard` deploys dashboard-service:
    - There is one stack per CRM stack, that is per legal entity and environment ([ADR-0026](ADR-0026-one-stack-per-legal-entity.md)). Its state is at `business-dashboard/<entity>/<environment>.tfstate` in the same bucket.
    - It holds the ECR repository, the security group and its rules, and the service through `modules/ecs-service`: the task definition, roles, log group, target group, the listener rule at priority 50 for `/api/dashboard` and `/api/dashboard/*`, and auto scaling.
+   - It also holds dashboard-service's TLS certificate, self-signed with the `tls` provider, and the Secrets Manager secret the task reads it from. The internal ALB, its only caller, reaches it over HTTPS ([ADR-0042](ADR-0042-terraform-deployment.md) decision 8).
    - Resource names keep the CRM's `crm-<entity>-<environment>` prefix, so they are the same as before.
 2. **Wiring.** The stack reads the CRM stack's `dashboard_inputs` output with `terraform_remote_state`. That output is the contract between the two stacks, and renaming one of its keys is a breaking change.
 3. **Network.** The dashboard stack owns its security group, the rule letting the internal ALB reach it on 8085, and the rules on the CRM's user, client and account groups that let it call each service on its port. The CRM stack defines its rules as separate resources, never inline, so no rule is managed by both stacks.
@@ -104,11 +105,12 @@ Reading the state is the only option that needs no hand-copied values and no new
 - The allowed-traffic chain is unchanged: the internal ALB reaches the dashboard on 8085; the dashboard reaches user-, client- and account-service on their ports and nothing else inside the VPC; egress through the NAT gateway is as before.
 - The audit queue's list of senders is unchanged in effect, and the precondition stops a deployment that would lose audit events.
 - Reading the CRM's state exposes its secrets, including the project CA's private key, to whoever applies the dashboard stack. Those are the same operators, using the same role ([ADR-0046](ADR-0046-human-deploy-access-mfa-role.md)), who already apply the CRM stack. The dashboard stack never writes that state.
-- The CA certificate passed to the dashboard is public; its key is not passed.
+- The CA certificate passed to the dashboard is public; its key is not passed. That is why the dashboard's own certificate is self-signed rather than issued by the project CA: the ALB, its only caller, does not check target certificates, and nothing calls it over Service Connect. A future Service Connect caller would need a CA-issued certificate, which means the CRM stack issuing it and passing its secret through `dashboard_inputs`.
+- The certificate's private key is in this stack's state, in the same restricted bucket as the CRM's.
 
 ## Cost Impact
 
-None. The same service, repository, log group, target group and rules exist as before, recorded in a different state file. The extra state object in the existing bucket is a few kilobytes.
+The move itself costs nothing. The same service, repository, log group, target group and rules exist as before, recorded in a different state file. The extra state object in the existing bucket is a few kilobytes. The TLS certificate's secret, added later (INF-08), costs USD 0.40 a month, running or stopped.
 
 The only new risk is a dashboard left running after the CRM is stopped. One task at 1 vCPU and 2 GB on Fargate costs about USD 1.50 a day in ap-southeast-1.
 
@@ -126,9 +128,10 @@ The only new risk is a dashboard left running after the CRM is stopped. One task
   - the repository settings;
   - the ALB rule and the rules on the three upstream groups;
   - the deploy-role policy with and without the CRM's role;
+  - the TLS certificate's name and its secret's recovery window, with and without deletion protection;
   - that the plan fails when the audit queue does not allow the role.
 - `terraform test` in `stacks/crm` still passes its six runs.
-- The first real apply: dashboard-service passes its ALB health check, `/api/dashboard/*` returns panels for an agent and an admin, and its audit events reach the audit queue with no `AccessDenied` in its logs.
+- The first real apply: dashboard-service passes its ALB health check over HTTPS, `/api/dashboard/*` returns panels for an agent and an admin, and its audit events reach the audit queue with no `AccessDenied` in its logs.
 
 ## References
 
@@ -138,3 +141,4 @@ The only new risk is a dashboard left running after the CRM is stopped. One task
 ## Revision history
 
 - 2026-10-20 10:49 +08:00: proposed.
+- 2026-10-20: amended while Proposed, as decided by the decision owner (INF-08): the stack holds a self-signed TLS certificate and its secret, so the internal ALB reaches dashboard-service over HTTPS. Decision 1, Security & Privacy Impact, Cost Impact and Validation changed to match.

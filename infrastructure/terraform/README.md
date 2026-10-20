@@ -47,7 +47,7 @@ The CRM for one legal entity and environment:
 | Area | Deployed |
 |---|---|
 | Network | A VPC across 2 Availability Zones, with public, app and database subnets. One NAT gateway, removed while the stack is stopped; its Elastic IP stays. Gateway endpoints for S3 and DynamoDB |
-| Edge and API | CloudFront serves the frontend from a private bucket and forwards `/api/*` to an API Gateway HTTP API. API Gateway checks the Cognito token, then passes requests through a VPC Link to the internal ALB, which routes by path. In prod, WAF sits on CloudFront, without request logging. With `domain_name`: the app at `sg.<domain>` (`sg-staging.<domain>` for staging), ACM certificates for it (in us-east-1) and for `alb.sg.<domain>`, and HTTPS from API Gateway and the ingest Lambda to the ALB, with API Gateway checking the certificate's name |
+| Edge and API | CloudFront serves the frontend from a private bucket and forwards `/api/*` to an API Gateway HTTP API. API Gateway checks the Cognito token, then passes requests through a VPC Link to the internal ALB, which routes by path and reaches every service over HTTPS. In prod, WAF sits on CloudFront, without request logging. With `domain_name`: the app at `sg.<domain>` (`sg-staging.<domain>` for staging), ACM certificates for it (in us-east-1) and for `alb.sg.<domain>`, and HTTPS from API Gateway and the ingest Lambda to the ALB, with API Gateway checking the certificate's name |
 | Sign-in | A Cognito user pool with ADMIN and AGENT groups and managed login. The Cognito triggers Lambda, which audits logins and password resets |
 | Services | On ECS Fargate, 1 to 6 tasks each, and 0 while stopped: user-service, client-service, account-service, the auditor, chain-verify (daily at 03:00 SGT), transaction-service, and event-alert-service (its read API only). Also their ECR repositories, Service Connect, the project CA and the service certificates. dashboard-service runs in the same cluster but is deployed by `stacks/business-dashboard` |
 | Data | 6 RDS PostgreSQL instances: users, clients, accounts, transactions, audit and alerts. Each is `db.t4g.micro` with 20 GB of gp3 that can grow to 100 GB, and 7 days of point-in-time recovery. Also the `client-keys` DynamoDB table, the ID-documents bucket, 4 Singapore KMS keys and a psql console task for each database |
@@ -62,7 +62,8 @@ The CRM for one legal entity and environment:
 dashboard-service, the business dashboard (ADR-0033), for one CRM stack (ADR-0047). It reads the CRM stack's `dashboard_inputs` output from that stack's state, so apply the CRM stack first. It contains:
 
 - the dashboard-service ECR repository;
-- the service on Fargate (1 vCPU, 2 GB), behind the internal ALB at `/api/dashboard/*`, as a Service Connect client only;
+- the service on Fargate (1 vCPU, 2 GB), behind the internal ALB at `/api/dashboard/*` over HTTPS, as a Service Connect client only;
+- its TLS certificate, self-signed because only the ALB calls it and the project CA's key stays in the CRM stack, in a Secrets Manager secret;
 - its security group, and rules on the CRM's user, client and account groups that let it call those services;
 - a policy on the CRM's GitHub deploy role, when that role exists.
 
@@ -82,7 +83,6 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 |---|---|---|
 | event-alert-service | It runs, but nothing creates alerts, so it has none to show | INF-06: the alert worker |
 | Database logins | Most services sign in as their database's master user, and schemas are applied by hand | INF-03: db-migrate tasks |
-| ALB to the Java services | user-service, dashboard-service and event-alert-service get plain HTTP from the ALB | INF-08: TLS in those services |
 
 ### Left out of the account
 
@@ -114,6 +114,6 @@ terraform validate
 terraform test      # plans each mode against mocked providers; no AWS account needed
 ```
 
-`stacks/business-dashboard/` runs the same way; its test stands in for the CRM stack's state, and checks the rules on the CRM's groups and that the plan fails while the audit queue does not allow its role. `bootstrap/` has its own `terraform test` for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
+`stacks/business-dashboard/` runs the same way; its test stands in for the CRM stack's state, and checks the rules on the CRM's groups and that the plan fails while the audit queue does not allow its role. `modules/ecs-service/` has its own for how a Java service serves TLS, `bootstrap/` one for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
 
 Real `*.tfvars` and `*.s3.tfbackend` files are git-ignored; copy the `.example` files next to them.

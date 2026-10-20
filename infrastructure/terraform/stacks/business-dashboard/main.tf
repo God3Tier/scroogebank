@@ -1,8 +1,8 @@
 # The business dashboard (XF2, ADR-0033) in its own stack (ADR-0047):
-# dashboard-service's image repository, security group and ECS service. It
-# runs inside the CRM stack's VPC, cluster, internal ALB and Service Connect
-# namespace, and reads them from that stack's dashboard_inputs output. Apply
-# the CRM stack first and destroy this one first.
+# dashboard-service's image repository, security group, TLS certificate and
+# ECS service. It runs inside the CRM stack's VPC, cluster, internal ALB and
+# Service Connect namespace, and reads them from that stack's dashboard_inputs
+# output. Apply the CRM stack first and destroy this one first.
 
 data "terraform_remote_state" "crm" {
   backend = "s3"
@@ -105,6 +105,43 @@ resource "aws_vpc_security_group_ingress_rule" "upstream" {
   description                  = "dashboard to ${each.key}"
 }
 
+# --------------------------------------------------------------------- TLS
+# The internal ALB reaches the dashboard over HTTPS (INF-08). It is the only
+# caller and does not check its targets' certificates, so the certificate is
+# self-signed here: the project CA's key stays in the CRM stack.
+
+resource "tls_private_key" "dashboard" {
+  algorithm   = "ECDSA"
+  ecdsa_curve = "P256"
+}
+
+resource "tls_self_signed_cert" "dashboard" {
+  private_key_pem = tls_private_key.dashboard.private_key_pem
+  dns_names       = ["dashboard-service"]
+
+  subject {
+    common_name = "dashboard-service"
+  }
+
+  validity_period_hours = 24 * 365
+  early_renewal_hours   = 24 * 30
+  allowed_uses          = ["digital_signature", "key_encipherment", "server_auth"]
+}
+
+resource "aws_secretsmanager_secret" "tls" {
+  name                    = "${local.name}/tls/dashboard"
+  description             = "Self-signed TLS certificate and key for dashboard-service"
+  recovery_window_in_days = local.crm.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "tls" {
+  secret_id = aws_secretsmanager_secret.tls.id
+  secret_string = jsonencode({
+    cert = tls_self_signed_cert.dashboard.cert_pem
+    key  = tls_private_key.dashboard.private_key_pem
+  })
+}
+
 # ------------------------------------------------------- dashboard-service
 
 data "aws_iam_policy_document" "send_audit" {
@@ -132,7 +169,7 @@ module "dashboard_service" {
   memory           = 2048
   cpu_architecture = local.crm.cpu_architecture
   port             = local.port
-  app_protocol     = "http"
+  port_name        = "https"
 
   environment = {
     OIDC_ISSUER_URI          = local.crm.cognito_issuer
@@ -144,7 +181,12 @@ module "dashboard_service" {
     ACCOUNT_SERVICE_BASE_URL = local.crm.upstreams.account.url
   }
   task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
-  tls                = { mode = "java", ca_pem = local.crm.ca_pem }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.crm.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.tls.arn
+  }
 
   # A client only: nothing calls the dashboard inside the VPC.
   service_connect = {
@@ -153,7 +195,7 @@ module "dashboard_service" {
   }
 
   load_balancer = merge(local.crm.alb, {
-    protocol          = "HTTP"
+    protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules             = [{ priority = 50, paths = ["/api/dashboard", "/api/dashboard/*"] }]
   })
@@ -163,6 +205,8 @@ module "dashboard_service" {
   max_tasks          = local.crm.max_tasks
   use_spot           = local.crm.use_spot
   log_retention_days = local.crm.log_retention_days
+
+  depends_on = [aws_secretsmanager_secret_version.tls]
 }
 
 # ------------------------------------------------------------ CI delivery

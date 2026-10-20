@@ -2,6 +2,8 @@
 # stack's state (no AWS account needed), and checks how it attaches to that
 # stack (ADR-0047). Run with: terraform init -backend=false && terraform test
 
+mock_provider "tls" {}
+
 mock_provider "aws" {
   mock_data "aws_caller_identity" {
     defaults = { account_id = "123456789012" }
@@ -42,7 +44,7 @@ override_data {
         }
         alb_sg = "sg-0a1b"
         upstreams = {
-          user    = { security_group = "sg-0user", port = 8081, url = "http://user-service:8081" }
+          user    = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
           client  = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
           account = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
         }
@@ -97,6 +99,10 @@ run "prod" {
     error_message = "The service keeps its name, so the runbook and the CloudWatch dashboard find it."
   }
   assert {
+    condition     = tls_self_signed_cert.dashboard.dns_names == tolist(["dashboard-service"]) && aws_secretsmanager_secret.tls.name == "crm-sg-prod/tls/dashboard" && aws_secretsmanager_secret.tls.recovery_window_in_days == 7
+    error_message = "The dashboard's certificate is in its own secret under the CRM's prefix, restorable for 7 days while deletion protection is on."
+  }
+  assert {
     condition     = length(aws_iam_role_policy.github_deploy) == 0
     error_message = "No deploy-role policy while the CRM stack has no deploy role."
   }
@@ -123,7 +129,7 @@ run "stopped_teardown_ready_with_ci" {
           }
           alb_sg = "sg-0a1b"
           upstreams = {
-            user    = { security_group = "sg-0user", port = 8081, url = "http://user-service:8081" }
+            user    = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
             client  = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
             account = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
           }
@@ -148,6 +154,10 @@ run "stopped_teardown_ready_with_ci" {
   assert {
     condition     = aws_ecr_repository.dashboard.force_delete == true
     error_message = "With deletion protection off, destroy empties the repository, as the CRM stack's do."
+  }
+  assert {
+    condition     = aws_secretsmanager_secret.tls.recovery_window_in_days == 0
+    error_message = "With deletion protection off, destroy deletes the TLS secret at once, so the next apply can create it again."
   }
   assert {
     condition     = length(aws_iam_role_policy.github_deploy) == 1 && aws_iam_role_policy.github_deploy[0].role == "crm-sg-prod-github-deploy"
@@ -176,7 +186,7 @@ run "audit_queue_does_not_allow_the_role" {
           }
           alb_sg = "sg-0a1b"
           upstreams = {
-            user    = { security_group = "sg-0user", port = 8081, url = "http://user-service:8081" }
+            user    = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
             client  = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
             account = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
           }

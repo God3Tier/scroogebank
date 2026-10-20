@@ -116,7 +116,7 @@ variable "task_role_policies" {
 }
 
 variable "tls" {
-  description = "Prepare TLS files in /tls before the app starts. mode is go or java. When serves_tls is true, cert_secret_arn holds the service's own certificate (JSON keys cert and key)."
+  description = "Prepare TLS files in /tls before the app starts. mode is go or java. When serves_tls is true, cert_secret_arn holds the service's own certificate (JSON keys cert and key); a java service then serves HTTPS through Spring Boot's server.ssl settings, which this module sets."
   type = object({
     mode            = string
     ca_pem          = string

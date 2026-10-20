@@ -59,7 +59,7 @@ module "user_service" {
   memory             = 1024
   cpu_architecture   = var.cpu_architecture
   port               = local.ports.user
-  app_protocol       = "http"
+  port_name          = "https"
 
   environment = {
     DB_HOST                  = module.db["users"].address
@@ -83,15 +83,22 @@ module "user_service" {
   }
   secret_arns        = [local.db_master_secret["users"]]
   task_role_policies = { service = data.aws_iam_policy_document.user_service.json }
-  tls                = { mode = "java", ca_pem = local.ca_pem }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["user"].arn
+  }
 
+  # dashboard-service calls it here and checks its certificate, so Service
+  # Connect proxies the port as TCP (ADR-0042 decision 7).
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
-    aliases       = [{ port_name = "http", dns_name = local.sc.user, port = local.ports.user }]
+    aliases       = [{ port_name = "https", dns_name = local.sc.user, port = local.ports.user }]
   }
 
   load_balancer = merge(local.alb, {
-    protocol          = "HTTP"
+    protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules = [
       { priority = 10, paths = ["/api/accounts/*/transactions", "/api/transactions"] },
@@ -105,7 +112,7 @@ module "user_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
+  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.service_tls]
 }
 
 # ----------------------------------------------------------- client-service
@@ -493,7 +500,7 @@ module "event_alert_service" {
   memory             = 1024
   cpu_architecture   = var.cpu_architecture
   port               = local.ports.alerts
-  app_protocol       = "http"
+  port_name          = "https"
 
   environment = {
     EVENT_ALERT_DB_URL            = "jdbc:postgresql://${module.db["alerts"].address}:5432/${module.db["alerts"].db_name}?sslmode=require"
@@ -512,9 +519,15 @@ module "event_alert_service" {
   }
   secret_arns        = [local.db_master_secret["alerts"]]
   task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["alerts"].arn
+  }
 
   load_balancer = merge(local.alb, {
-    protocol          = "HTTP"
+    protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules             = [{ priority = 60, paths = ["/api/alerts", "/api/alerts/*"] }]
   })
@@ -524,5 +537,5 @@ module "event_alert_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
+  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.service_tls]
 }
