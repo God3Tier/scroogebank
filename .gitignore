@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+### Local project docs ###
+# Personal copies of the spec, TODOs and notes; not part of the repository.
+/references/
+
 ### Java / Maven ###
 target/
 *.class

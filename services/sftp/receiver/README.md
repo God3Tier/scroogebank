@@ -154,4 +154,4 @@ The binary runs as a Lambda function when Lambda's `AWS_LAMBDA_RUNTIME_API` is s
 - **Database:** `DB_SSLMODE=verify-full`, with `DB_SSLROOTCERT=/var/task/rds-ca.pem`, the RDS CA bundle in the zip.
 - **Retries:** Lambda does not retry a failed invocation, and drops one throttled for more than 5 minutes behind a long run. The next scheduled run picks the files up.
 
-The function, its schedule, network and IAM are in `infrastructure/terraform/stacks/crm/lambda.tf` and `scheduler.tf`, behind `enable_ingest_lambda`. [The deployment runbook](../../../docs/runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda) turns it on.
+The function, its schedule, network and IAM are in `infrastructure/terraform/stacks/crm/lambda.tf` and `scheduler.tf`, behind `enable_ingest_lambda`. [The deployment runbook](../../../docs/runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda) turns it on.

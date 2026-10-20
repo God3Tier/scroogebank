@@ -2,7 +2,8 @@
 # VPC Link -> ALB -> services; each service -> its own database on 5432;
 # named callers -> the auditor and other services; the ALB also admits the
 # ingest Lambda for /internal calls. Rules are separate resources so groups can
-# refer to each other without cycles.
+# refer to each other without cycles, and so the business-dashboard stack can
+# add its own rules to the user, client and account groups (ADR-0047).
 
 locals {
   ports = {
@@ -12,7 +13,6 @@ locals {
     auditor_http = 8080
     auditor_grpc = 50051
     transaction  = 8080
-    dashboard    = 8085
     alerts       = 8080
   }
 
@@ -25,7 +25,6 @@ locals {
     auditor      = "auditor tasks"
     chain_verify = "chain-verify tasks"
     transaction  = "transaction-service tasks"
-    dashboard    = "dashboard-service tasks"
     alerts       = "event-alert-service tasks"
     ingest       = "transaction-ingest Lambda"
     db_console   = "One-off database console tasks (runbook)"
@@ -43,20 +42,16 @@ locals {
     { to = "alb", from = "ingest", port = local.alb_port },
 
     { to = "user", from = "alb", port = local.ports.user },
-    { to = "user", from = "dashboard", port = local.ports.user },
     { to = "client", from = "alb", port = local.ports.client },
     { to = "client", from = "account", port = local.ports.client },
-    { to = "client", from = "dashboard", port = local.ports.client },
     { to = "account", from = "alb", port = local.ports.account },
     { to = "account", from = "user", port = local.ports.account },
     { to = "account", from = "client", port = local.ports.account },
-    { to = "account", from = "dashboard", port = local.ports.account },
     { to = "auditor", from = "user", port = local.ports.auditor_http },
     { to = "auditor", from = "user", port = local.ports.auditor_grpc },
     # transaction-service checks no token, so only user-service may call it
     # (security-model "Defense in depth").
     { to = "transaction", from = "user", port = local.ports.transaction },
-    { to = "dashboard", from = "alb", port = local.ports.dashboard },
     { to = "alerts", from = "alb", port = local.ports.alerts },
 
     { to = "db_users", from = "user", port = 5432 },
@@ -77,7 +72,7 @@ locals {
 
   # Groups whose members reach AWS APIs, Cognito's keys and the SFTP server
   # through the NAT gateway, and other tasks inside the VPC.
-  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "dashboard", "alerts", "ingest", "db_console"]
+  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "ingest", "db_console"]
 
   sg = { for k, v in aws_security_group.this : k => v.id }
 }

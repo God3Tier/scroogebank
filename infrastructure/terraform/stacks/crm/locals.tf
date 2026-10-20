@@ -59,13 +59,13 @@ locals {
   use_fargate_spot = coalesce(var.use_fargate_spot, var.environment == "staging")
 
   # ------------------------------------------------------------------ images
+  # dashboard-service's repository is in the business-dashboard stack.
   ecr_repositories = [
     "user-service",
     "client-service",
     "account-service",
     "auditor",
     "transaction-service",
-    "dashboard-service",
     "event-alert-service",
   ]
 

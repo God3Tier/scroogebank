@@ -41,6 +41,8 @@ resource "aws_iam_role" "github_deploy" {
   assume_role_policy = data.aws_iam_policy_document.github_assume[0].json
 }
 
+# The business-dashboard stack adds its own repository and roles to this role
+# (ADR-0047).
 locals {
   service_modules = {
     user        = module.user_service
@@ -49,7 +51,6 @@ locals {
     auditor     = module.auditor
     chain       = module.chain_verify
     transaction = module.transaction_service
-    dashboard   = module.dashboard_service
     alerts      = module.event_alert_service
   }
 }
