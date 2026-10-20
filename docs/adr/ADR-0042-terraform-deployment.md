@@ -84,10 +84,15 @@ Building the stack also showed that the code on `dev` needs more from the deploy
 6. **Database logins.** The auditor and chain-verify log in as `auditor_app` and `chain_verify`, holding the roles `auditor_service` and `auditor_chain_verify` (ADR-0022 decision 2). Terraform generates their passwords; the logins are created once by hand (runbook) until the db-migrate task exists. Every other service connects as its instance's RDS-managed master user until then. This is a temporary deviation from ADR-0028 decision 3 (no schema rights for application users, [open item 8](../architecture/open-items.md#8-migrations-on-startup-or-as-a-task)).
 7. **Service Connect proxies TLS ports as TCP.** The auditor's gRPC and HTTPS ports, client-service and account-service have no `appProtocol`. Their TLS is end to end (ADR-0021 decision 7), so Envoy cannot read gRPC or HTTP inside it, and `appProtocol: grpc` (ADR-0021 decision 5) would break the connection. Envoy balances connections, and the server's `MaxConnectionAge` makes callers reconnect, as decision 7 already says. Plain-HTTP services (user-service, transaction-service) keep `appProtocol: http`.
 8. **Internal ALB.**
-   - It listens on HTTP inside the VPC until there is a domain for an ACM certificate ([open item 2](../architecture/open-items.md#2-domain-name)); setting `internal_alb_certificate_arn` switches it to HTTPS, with API Gateway verifying the name.
+   - **Custom domain and HTTPS** ([ADR-0019](ADR-0019-edge-entry-chain.md) decision 5, [open item 2](../architecture/open-items.md#2-domain-name)). The domain is registered by hand in Route 53, which creates its public hosted zone. Both stay outside Terraform, like the deploy role (ADR-0046), so no destroy removes them. With `domain_name` set, `stacks/crm`:
+     - finds the zone by name;
+     - serves the app at `<legal_entity>.<domain>` for prod and `<legal_entity>-<environment>.<domain>` otherwise (`sg.<domain>`, `sg-staging.<domain>`), through a CloudFront alias with an ACM certificate from us-east-1;
+     - gives the internal ALB an ACM certificate for `alb.<app host>`, and listens on HTTPS 443 with `ELBSecurityPolicy-TLS13-1-2-2021-06`. API Gateway verifies that name on the VPC Link connection, and the ingest Lambda calls the ALB by it;
+     - validates both certificates through DNS records in the zone, and keeps the `*.cloudfront.net` origin in Cognito's callback URLs, so both addresses sign in.
+
+     The ALB's name is a public record that resolves to its private addresses in the app subnets, which nothing outside the VPC can reach. A private hosted zone would cost another USD 0.50 a month and protect nothing more. Without `domain_name`, the ALB listens on HTTP 80 inside the VPC and the app uses the default CloudFront name, which the mocked tests and an account without a domain still use.
    - Target groups use HTTPS for the Go services, which serve TLS in production, and HTTP for the Java services, which do not. The security model's "self-signed TLS between the ALB and tasks" is therefore not met for the Java services yet.
 9. **Not deployed yet, each a task in `docs/feature-plans/infrastructure_plan.md`:**
-   - the transaction-ingest Lambda (`enable_ingest_lambda`, off): since INF-04 the receiver's poller runs as a Lambda function and reads its secrets from Secrets Manager at start, but it has not run in AWS yet. A deployment turns it on with the zip from `make lambda` and the sftp-server stack's address and host key fingerprint ([runbook](../runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda) §9);
    - the health monitor: it is not runnable yet;
    - the alert worker, its schedule, AgentCore in Tokyo and Bedrock access: EDA-D1-02 (Azeez);
    - the GitHub deploy role (`enable_github_deploy_role`, off) and any CI checks on Terraform: deployments are run by hand for now.
@@ -134,7 +139,8 @@ Requiring the paid plan keeps one configuration, the one the accepted ADRs descr
 - No secret is in git, images or task definitions: tasks read Secrets Manager through per-service execution roles.
 - The state bucket holds private keys, so access to it must stay restricted to administrators.
 - Every task role and the queue, anchor and documents bucket policies follow least privilege.
-- The internal ALB's plain HTTP inside the VPC is reachable only from the VPC Link and the ingest Lambda.
+- With a domain, API Gateway and the ingest Lambda reach the internal ALB over TLS 1.2 or 1.3, and API Gateway checks the certificate's name. Without one, the ALB's plain HTTP inside the VPC is reachable only from the VPC Link and the ingest Lambda.
+- The ALB's DNS name is public and shows its private addresses, but gives no route to them.
 
 ## Cost Impact
 
@@ -153,11 +159,13 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 
 The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
+The domain adds about USD 15 a year for a `.com`, charged at registration and not covered by AWS credits, and USD 0.50 a month for its hosted zone, running or stopped. The ACM certificates are free.
+
 ## Operational Impact
 
 `docs/runbooks/deploy-aws.md` covers:
 
-- bootstrap;
+- bootstrap, and registering the domain by hand;
 - building and pushing images and the Lambda zip;
 - the apply order (crm, then business-dashboard, then sftp-server, then crm again);
 - the one-time database steps and the frontend upload;
@@ -169,7 +177,7 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
 ## Validation
 
 - `terraform validate` on all four stacks.
-- `terraform test` in `stacks/crm`: six runs plan the stack against mocked providers and check prod, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
+- `terraform test` in `stacks/crm`: seven runs plan the stack against mocked providers and check prod, the custom domain, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
 - `terraform test` in `stacks/business-dashboard`: see [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md).
 - The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks.
 
@@ -177,7 +185,7 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
 
 - AWS: Choosing a plan (Free account plan terms), AWS Billing and Cost Management User Guide
 - Reported Free plan limits: `FreeTierRestrictionError` on RDS backup retention above 1 day and on non-micro instance classes (GitHub issues yc-software/qm#352, aaronpotter/terraform-aws#18)
-- [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md), [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md), [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md), [ADR-0026](ADR-0026-one-stack-per-legal-entity.md), [ADR-0028](ADR-0028-cicd-migrations-terraform.md), [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0040](ADR-0040-cognito-triggers-java-lambda.md), [ADR-0041](ADR-0041-client-identity-documents-and-manual-verification.md)
+- [ADR-0019](ADR-0019-edge-entry-chain.md), [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md), [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md), [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md), [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md), [ADR-0026](ADR-0026-one-stack-per-legal-entity.md), [ADR-0028](ADR-0028-cicd-migrations-terraform.md), [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0040](ADR-0040-cognito-triggers-java-lambda.md), [ADR-0041](ADR-0041-client-identity-documents-and-manual-verification.md)
 
 ## Revision history
 
@@ -194,3 +202,6 @@ The Fargate row is the minimum; tasks added by auto scaling under load cost more
   - **Decision 3:** services run 1–6 tasks while running instead of 2–6, with [ADR-0018](ADR-0018-ecs-fargate-compute.md) amended to match. Cost Impact changed to match.
 - 2026-10-19: Cost Impact updated, as decided by the decision owner: dashboard-service runs on 1 vCPU and 2 GB instead of 0.5 vCPU and 1 GB. On 0.5 vCPU, shared with its Service Connect proxy, the JVM took 34 s to start and 1.5–3.4 s for its first call to each upstream, so the first dashboard after a start timed out. About USD 22 a month more running 24/7, about USD 3 a month at two 10-hour sessions a week.
 - 2026-10-20: amended while Proposed, as decided by the decision owner: dashboard-service moves out of `stacks/crm` into `stacks/business-dashboard` ([ADR-0047](ADR-0047-business-dashboard-terraform-stack.md)). Decision 1, Operational Impact and Validation changed to match. Cost Impact is unchanged: the same resources run.
+- 2026-10-20: amended while Proposed, as decided by the decision owner, which resolves open item 2:
+  - **Decision 8:** a domain registered by hand in Route 53. With `domain_name` set, the app is served at `sg.<domain>` and the internal ALB listens on HTTPS with an ACM certificate that API Gateway verifies. This replaces the `internal_alb_certificate_arn` and `internal_alb_server_name` variables. Security & Privacy Impact, Cost Impact, Operational Impact and Validation changed to match.
+  - **Decision 9:** the transaction-ingest Lambda leaves the not-deployed list. Runbook §9.3 turns it on, and it imports the SFTP server's files into transactions-db in AWS, as the decision owner confirmed on 2026-10-20.

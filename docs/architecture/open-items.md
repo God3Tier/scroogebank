@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -15,6 +15,8 @@ The spec says audit logs are accessible only to administrators, while the UI moc
 ## 2. Domain name
 
 Needed for the ACM certificate on the internal ALB, at about USD 13/year plus USD 0.50/month for the hosted zone.
+
+**Resolved (2026-10-20)** by [ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8 (Proposed). The domain is registered by hand in Route 53, outside Terraform ([runbook §1.1](../runbooks/deploy-aws.md#11-register-a-domain-once-per-account)). With `domain_name` set, the CRM stack serves the app at `sg.<domain>` and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's hosted zone. Cost: about USD 15/year for a `.com`, which AWS credits do not cover, plus USD 0.50/month for the hosted zone.
 
 ## 3. Admin-wide activity view in user-service
 

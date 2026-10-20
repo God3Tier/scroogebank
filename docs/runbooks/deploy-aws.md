@@ -100,6 +100,19 @@ Bootstrap creates no GuardDuty detector: the account already has one, and a seco
 - Both count cost before credits, so they still fire when credits cover the bill.
 - Each threshold e-mails once per budget period. Cost data refreshes a few times a day, so an alert can arrive hours after the spend.
 
+### 1.1 Register a domain (once per account)
+
+The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). You register the domain by hand, outside Terraform, like the `crm-infra-admin` role, so no destroy removes it.
+
+1. In the Route 53 console, open **Domains → Registered domains → Register domains**, search for a name and check out. Choose a name that does not imitate a real bank or organisation.
+2. Register it for 1 year with **auto-renew off**, and keep privacy protection on.
+3. **Cost:** about USD 15 a year for a `.com`; the console shows each TLD's price, and some are cheaper. It is charged at once and not refunded. **AWS credits do not cover domain registration**, so it goes on the account's card. The hosted zone adds USD 0.50 a month.
+4. **Verify the registrant e-mail within 15 days.** Route 53 sends a link to the registrant contact's address; without it, the domain is suspended and certificates stop validating.
+
+Registration usually finishes within minutes, and Route 53 e-mails when it does. Route 53 also creates a public hosted zone with the same name and points the domain at it. Terraform finds that zone by name, so never delete it or create a second zone with the same name ([Troubleshooting](#troubleshooting)).
+
+Without a domain, leave `domain_name` out in step 3: the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
+
 ## 2. Build the Lambda zip and the images
 
 ```sh
@@ -131,10 +144,11 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 
 ## 3. Create the CRM stack, stopped
 
-In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
+In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag, your domain and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
 
 ```sh
 cd infrastructure/terraform/stacks/crm
+DOMAIN='<your-domain>'   # from step 1.1, such as example.com - set it yourself
 STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
@@ -142,10 +156,12 @@ sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/pro
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 sed -i '/^extra_audit_producer_role_arns *=/d' env/prod.tfvars   # replaces an older line
 printf '%s\n' "extra_audit_producer_role_arns = [\"arn:aws:iam::${ACCOUNT:?not signed in}:role/crm-sg-prod-dashboard-service-task\"]" >> env/prod.tfvars
-grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda|extra_audit_producer_role_arns)' env/prod.tfvars
+sed -i '/^domain_name *=/d' env/prod.tfvars   # replaces an older line
+printf 'domain_name = "%s"\n' "${DOMAIN:?set DOMAIN}" >> env/prod.tfvars
+grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda|extra_audit_producer_role_arns|domain_name)' env/prod.tfvars
 ```
 
-The role's name starts with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack.
+The role's name starts with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack. Without a domain, skip the `DOMAIN` line and the two `domain_name` lines.
 
 **In a new account, check for an old `env/prod.tfvars`.** The `cp` line keeps an existing file, so one from an earlier deployment still has step 9.3's `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint` lines. Delete those four lines before the apply. They point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]").
 
@@ -159,11 +175,11 @@ terraform apply -var-file=env/prod.tfvars -var running=false
 cd -
 ```
 
-`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
+`running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. With `domain_name`, the apply also requests two certificates, `sg.<domain>` (in us-east-1, for CloudFront) and `alb.sg.<domain>` (for the internal ALB), and waits for ACM to validate them through DNS, usually a few minutes. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
 
 **Staging (optional).** Staging is a second, separate copy of the stack for short promotion tests (ADR-0029): Fargate Spot, one Availability Zone, no WAF, no AWS Backup and no deletion protection. A test deployment does not need it, and running both doubles the cost.
 
-- To create it, repeat this step and step 4 with `env/staging.s3.tfbackend` and `env/staging.tfvars`, and use `staging.tfvars` in every later command for it.
+- To create it, repeat this step and step 4 with `env/staging.s3.tfbackend` and `env/staging.tfvars`, and use `staging.tfvars` in every later command for it. The same `domain_name` puts staging at `sg-staging.<domain>`, beside prod.
 - The backend file decides which stack's state this directory works on, and the scripts read that same state. To switch environments, run `terraform init -reconfigure -backend-config=env/<environment>.s3.tfbackend` first.
 - Never apply one environment's tfvars while the directory is initialised on the other's backend: Terraform would try to turn that stack into the other one.
 
@@ -260,7 +276,7 @@ cd -
    ```
 
    A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); a database error usually means step 6's schema is missing.
-2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
+2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 
 ## 9. The external SFTP server and the ingest Lambda
@@ -480,6 +496,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 
   A hard-deleted secret cannot be restored. The databases' master secrets (`rds!db-...`) are deleted with their instances and never conflict.
 - **Starting over** gives a new user pool and empty databases, so you can change `root_admin_email` then.
+- **The domain and its hosted zone stay** (step 1.1): they are outside Terraform. The certificates and DNS records go with the crm stack. The zone costs USD 0.50 a month while it exists; delete it only when you give up the domain, since a later deployment would then need a new zone and the domain's name servers changed to it.
 - **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). Before destroying, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), or wait 7 days.
 - **Destroy `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
 
@@ -518,6 +535,11 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | The business-dashboard plan stops with `The audit queue does not allow arn:aws:iam::…-dashboard-service-task` | The CRM stack's `extra_audit_producer_role_arns` is missing that ARN. Add it to `crm/env/prod.tfvars`, apply the CRM stack, then the business-dashboard stack (steps 3 and 4) |
 | The business-dashboard plan fails to read the remote state (`Unable to find remote state`), or says the object has no attribute `dashboard_inputs` | The CRM stack it points at has not been applied, or was applied from code older than ADR-0047. Apply the CRM stack first, and check that `state_bucket`, `legal_entity` and `environment` in `business-dashboard/env/prod.tfvars` match the CRM stack's |
 | `RepositoryNotEmptyException` destroying the business-dashboard stack | Its repository still has `force_delete` off. Apply the CRM stack with `-var deletion_protection=false`, apply the business-dashboard stack, then destroy it ([Tear down](#tear-down)) |
+| The crm plan stops with `no matching Route 53 Hosted Zone found` | `domain_name` is not a hosted zone in this account: a typo, a registration that has not finished, or a deleted zone. `aws route53 list-hosted-zones-by-name --dns-name <domain>` lists it. To recreate a deleted zone, create a public zone with the same name, then set the domain's name servers to the zone's four NS values (Route 53 → Registered domains → the domain → **Edit name servers**) |
+| The crm plan stops with `multiple Route 53 Hosted Zone matched` | Two zones have the domain's name. Keep the one whose NS values match the domain's name servers (Route 53 → Registered domains) and delete the other |
+| The crm apply waits a long time on `aws_acm_certificate_validation` | ACM cannot see the validation records: the domain's name servers do not point at this zone (it was recreated), or the domain is suspended because the registrant e-mail was not verified (step 1.1). Fix that; the apply carries on, or times out after 75 minutes and can be run again |
+| `CNAMEAlreadyExists` creating the CloudFront distribution | Another distribution already answers on `sg.<domain>`, usually one from a crm stack that was not destroyed. Destroy that stack, or remove the name from that distribution, and apply again |
+| `AccessDenied` from ACM in us-east-1 | The account refuses certificates in us-east-1, which CloudFront requires. Remove `domain_name` from `crm/env/prod.tfvars` and apply: the app keeps its `*.cloudfront.net` address, and the internal ALB goes back to HTTP |
 | `Attribute redefined` in `crm/env/prod.tfvars` or `sftp-server/env/prod.tfvars` | A variable is set twice, usually by a line added by hand or by an older copy of the runbook's snippets, which appended without removing the old line. Delete the older line. The snippets in 9.2 and 9.3 now replace their lines themselves |
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
