@@ -1,7 +1,7 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
-> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.
-> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access).
+> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.
+> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack).
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
 
@@ -144,7 +144,9 @@ grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda)' env/pro
 
 **In a new account, check for an old `env/prod.tfvars`.** The `cp` line keeps an existing file, so one from an earlier deployment still has step 8.3's `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint` lines. Delete those four lines before the apply. They point at the old account's SFTP server, and step 8.3 adds them back with the new stack's values. Left in, they make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]").
 
-Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs. Create the stack, still in `stacks/crm`:
+Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs. Also put your account ID (`aws sts get-caller-identity --query Account --output text`) in `extra_audit_producer_role_arns`, which lets the business dashboard's role send audit events ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)). If your `env/prod.tfvars` is older than that setting, copy its block from `env/prod.tfvars.example`. The role's name contains the stack's prefix, `crm-sg-prod` by default. dashboard-service's image tag is set in the business-dashboard stack, so an `image_tags` entry for it here does nothing.
+
+Create the stack, still in `stacks/crm`:
 
 ```sh
 terraform init -backend-config=env/prod.s3.tfbackend
@@ -154,15 +156,29 @@ cd -
 
 `running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet. Confirm the alarm e-mail subscription. Later steps read the stack's outputs (the cluster name, the app URL and the rest) with `terraform output` themselves, so there is nothing to note down.
 
+Then create the business-dashboard stack, which deploys dashboard-service into the CRM stack's cluster ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)). It reads the CRM stack's state, so the CRM stack must be applied first. In the same terminal, so `STATE_BUCKET` and `TAG` are still set:
+
+```sh
+cd infrastructure/terraform/stacks/business-dashboard
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?set STATE_BUCKET as above}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars
+sed -i -e "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" -e "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/prod.tfvars
+terraform init -backend-config=env/prod.s3.tfbackend
+terraform apply -var-file=env/prod.tfvars
+cd -
+```
+
+It takes the task count from the CRM stack, so this apply also starts no task. If the plan stops with `The audit queue does not allow arn:aws:iam::…`, the CRM stack's `extra_audit_producer_role_arns` is missing that ARN: add it, apply the CRM stack, then this one.
+
 **Staging (optional).** Staging is a second, separate copy of the stack for short promotion tests (ADR-0029): Fargate Spot, one Availability Zone, no WAF, no AWS Backup and no deletion protection. A test deployment does not need it, and running both doubles the cost.
 
-- To create it, repeat this step with `env/staging.s3.tfbackend` and `env/staging.tfvars`, and use `staging.tfvars` in every later command for it.
+- To create it, repeat this step for both stacks with `env/staging.s3.tfbackend` and `env/staging.tfvars`, and use `staging.tfvars` in every later command for it.
 - The backend file decides which stack's state this directory works on, and the scripts read that same state. To switch environments, run `terraform init -reconfigure -backend-config=env/<environment>.s3.tfbackend` first.
 - Never apply one environment's tfvars while the directory is initialised on the other's backend: Terraform would try to turn that stack into the other one.
 
 ## 4. Push the images
 
-Step 3 created the ECR repositories. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys:
+Step 3 created the ECR repositories: dashboard-service's in the business-dashboard stack, the others in the CRM stack. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys:
 
 ```sh
 TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' infrastructure/terraform/stacks/crm/env/prod.tfvars); echo "$TAG"
@@ -171,7 +187,10 @@ repo() { printf '%s' "$REPOS" | python -c "import json,sys; print(json.load(sys.
 aws ecr get-login-password | docker login --username AWS --password-stdin "$(repo auditor | cut -d/ -f1)"
 
 push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
-for s in user-service dashboard-service event-alert-service auditor client-service account-service transaction-service; do push "$s"; done
+for s in user-service event-alert-service auditor client-service account-service transaction-service; do push "$s"; done
+
+DASHBOARD=$(terraform -chdir=infrastructure/terraform/stacks/business-dashboard output -raw ecr_repository)
+docker tag "crm/dashboard-service:$TAG" "$DASHBOARD:$TAG" && docker push "$DASHBOARD:$TAG"
 ```
 
 ## 5. Start the stack and set up the databases
@@ -180,6 +199,7 @@ for s in user-service dashboard-service event-alert-service auditor client-servi
 cd infrastructure/terraform/stacks/crm
 terraform apply -var-file=env/prod.tfvars -var running=true
 cd -
+terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars   # takes running=true from the CRM stack
 ```
 
 Then, **once per new stack**, apply the schemas that no service applies itself. user-service and event-alert-service run Flyway on startup and need nothing. Each command starts a psql task inside the VPC and prints its output.
@@ -407,13 +427,16 @@ Run it again after opening, closing or deleting accounts, and after the sftp-ser
 ```sh
 # stop
 terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tfvars -var running=false
+terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars
 scripts/aws-session.sh stop
 # start
 scripts/aws-session.sh start
 terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tfvars -var running=true
+terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars
 ```
 
 - Stopping scales every service to 0, pauses the schedules, removes the NAT gateway (its Elastic IP stays) and stops the databases and the SFTP server.
+- The business-dashboard stack reads `running` from the CRM stack's state, so apply it after the CRM stack every time. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
 - Starting takes several minutes, mostly the databases.
 - RDS starts a stopped instance again after 7 days, so stop it again after a longer break.
 - For the high-availability demo week, add `-var high_availability=true`.
@@ -429,8 +452,12 @@ terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tf
 STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster); echo "$STACK"   # the secrets step below needs it after the outputs are gone
 terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
+terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply   -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/business-dashboard destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
+
+- **Destroy business-dashboard before crm.** Its rules sit on the CRM stack's security groups and its service runs in the CRM's cluster, so the CRM stack cannot be destroyed while it exists. Its apply after the CRM's `deletion_protection=false` apply lets its destroy empty dashboard-service's image repository.
 
 - **Prod first needs its protections lifted:** apply once with `-var deletion_protection=false`. That turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots, so the stack can be created again straight away; take a manual snapshot first if you want to keep any data. Staging has none to lift.
 - **Then hard delete any secret still pending deletion.** The stack's secrets have fixed names (`crm-<entity>-<environment>/...`), so a secret still in its recovery window makes the next apply fail with `a secret with this name is already scheduled for deletion`. Secrets are left like this when destroy runs without the `deletion_protection=false` apply first. This deletes them at once, and does nothing if there are none. It uses `STACK` from the block above; in a new terminal the destroyed stack has no outputs, so set `STACK=crm-<legal_entity>-<environment>` (`crm-sg-prod` by default) instead:
@@ -479,6 +506,9 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
 | `terraform output` shows `sftp_client_public_key = <<EOT` | The key ends in a newline, so it prints as a heredoc. Read it with `terraform output -raw sftp_client_public_key`, as in step 8.1 |
 | `No outputs found` from the sftp-server stack | Its apply has not finished. Run it again and fix the error it reports |
+| The business-dashboard plan stops with `The audit queue does not allow arn:aws:iam::…-dashboard-service-task` | The CRM stack's `extra_audit_producer_role_arns` is missing that ARN. Add it to `crm/env/prod.tfvars`, apply the CRM stack, then the business-dashboard stack (step 3) |
+| The business-dashboard plan fails to read the remote state (`Unable to find remote state`), or says the object has no attribute `dashboard_inputs` | The CRM stack it points at has not been applied, or was applied from code older than ADR-0047. Apply the CRM stack first, and check that `state_bucket`, `legal_entity` and `environment` in `business-dashboard/env/prod.tfvars` match the CRM stack's |
+| `RepositoryNotEmptyException` destroying the business-dashboard stack | Its repository still has `force_delete` off. Apply the CRM stack with `-var deletion_protection=false`, apply the business-dashboard stack, then destroy it ([Tear down](#tear-down)) |
 | `Attribute redefined` in `crm/env/prod.tfvars` or `sftp-server/env/prod.tfvars` | A variable is set twice, usually by a line added by hand or by an older copy of the runbook's snippets, which appended without removing the old line. Delete the older line. The snippets in 8.2 and 8.3 now replace their lines themselves |
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
