@@ -176,7 +176,7 @@ function AgentDashboard() {
     return (
         <div className="page">
             <header className="page-header">
-                <h1>Agent Dashboard</h1>
+                <h1>Agent Home</h1>
                 <p className="page-subtitle">Create and manage client profiles</p>
             </header>
 
