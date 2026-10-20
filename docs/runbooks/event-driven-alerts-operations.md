@@ -37,7 +37,7 @@ and deployment evidence remain pending approved AWS access.
 There is intentionally no unauthenticated operator endpoint in this offline
 slice. Production controls must be exposed only through an authenticated,
 authorized adapter. Re-enable writes a redacted event to the PostgreSQL audit
-outbox before changing in-memory control state. An unavailable or full outbox
+outbox before changing the control state. An unavailable or full outbox
 fails closed and leaves the capability disabled.
 
 ## Inspect health and consumption
@@ -118,13 +118,16 @@ and retention are implemented and tested, but no production broker or cloud
 control was exercised. This document must not be used as evidence that cloud
 controls were tested.
 
-The worker runs as a new process every 4 hours, and the controls above keep
-their state in memory. Each worker run starts with the monthly search and token
-counts and the estimated cost at zero, and with no disable in force; only the
-cap of 4 searches per run holds across runs. Six scheduled runs a day use at most
-744 searches in a 31-day month, under the quota of 1,000, but manual runs and
-replays add to that with no monthly limit, and the budget stop never carries
-over to the next run. Keep the counts and
-disables in alerts-db before enabling ingestion or the model for the worker.
-Until then, the enable flags, read at each start, are the only kill switches
-that persist.
+The monthly search and token counts, the estimated cost and every disable are
+kept in alerts-db (`outbound_usage` by UTC month, `outbound_control` by
+capability), so the API and each worker run share them. Reservations are atomic
+statements, so concurrent processes cannot exceed a quota, and a reservation is
+kept even if the caller's own transaction later rolls back. An operator disable
+or a quota or budget stop made in one process therefore applies to the next worker
+run. Configuration still wins: a capability switched off by its enable flag stays
+off, whatever is stored.
+
+Each run holds a PostgreSQL session advisory lock for its whole duration. A
+second run, scheduled, manual or a replay, ends as `ALREADY_RUNNING` before it
+reserves quota or searches. The lock belongs to one database connection, so a
+crashed process releases it when its connection closes.

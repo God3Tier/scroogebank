@@ -106,6 +106,13 @@ decision 1). EventBridge Scheduler is to start it as an ECS task every 4 hours.
   `DISABLED`, `CONTROL_BLOCKED`, `NO_QUERIES`, `ALREADY_RUNNING`,
   `ALREADY_SUCCEEDED` and `SUCCEEDED`.
 
+The monthly search and token quotas, the estimated-cost stop and an operator's
+disable are kept in alerts-db (`outbound_usage`, `outbound_control`), so the API
+and every worker run share them. Quota reservations are atomic, so two processes
+cannot take more than the quota. Each run also holds a PostgreSQL advisory lock
+for its whole duration; a run that cannot take it ends as `ALREADY_RUNNING`
+without searching or using quota, whether it is scheduled, manual or a replay.
+
 Not done yet (details, owners and suggested fixes in
 [`docs/feature-plans/event-driven-alerts_gaps.md`](../../docs/feature-plans/event-driven-alerts_gaps.md)):
 
@@ -114,14 +121,6 @@ Not done yet (details, owners and suggested fixes in
   caller.
 - There is no AgentCore client, so with `ALERT_INGESTION_ENABLED=true` every run
   fails with `PROVIDER_NOT_CONFIGURED`.
-- The monthly search and token quotas, the estimated-cost stop and an operator's
-  disable are kept in memory. Each run is a new process, so it starts with the
-  counts at zero and nothing disabled; only the cap of 4 searches per run holds
-  across runs. Keep them in alerts-db before ingestion or the model is enabled
-  for the worker (see the operations runbook).
-- Two runs at once both search if their windows end at different times: the run
-  lease only covers the same window. Do not start a manual run while a scheduled
-  one is running.
 - Micrometer metrics are not exported from the short-lived worker. Until
   CloudWatch is set up, the log line is the record of each run.
 
