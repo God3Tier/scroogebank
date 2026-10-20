@@ -47,7 +47,7 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
 
-**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed), which chose neither. Each Go service's task runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. user-service and event-alert-service still migrate on startup. Application logins without schema rights come later (INF-03).
+**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed), which chose neither. In AWS, the task of each service with a database runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. The container also gives the service its own login without schema rights. user-service and event-alert-service still migrate on startup locally and in their tests.
 
 ## 9. Client ID validation at import
 

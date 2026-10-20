@@ -76,7 +76,7 @@ For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transacti
 | `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID`, `COGNITO_API_AUDIENCE` | Token validation, as in client-profile-management-service |
 | `COGNITO_SERVICE_CLIENT_IDS` | Comma-separated Cognito app clients allowed to call `/internal` with a client-credentials token (the transaction import's). Empty: every `/internal` call is refused |
 | `AWS_REGION`, `AUDIT_QUEUE_URL`, `AWS_ENDPOINT_URL` | Auditor SQS queue |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`) |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`). In AWS, `DB_USER` is the service's own login, `account_service`, which cannot change the schema ([Database logins](../../docs/database/migrations.md#database-logins)) |
 | `APP_ENV`, `APP_ADDR`, `APP_TLS_CERT_FILE`, `APP_TLS_KEY_FILE` | `local` or `production`; listen address (default `:8083`); TLS in production |
 
 ## Auditor SQS events

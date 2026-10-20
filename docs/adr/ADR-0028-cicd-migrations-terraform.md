@@ -34,7 +34,7 @@ NFR 10 asks the team to demonstrate CI/CD; NFR 11 asks for infrastructure define
   - The task's execution role can read the master secret.
 - **One migration task per service before deployment:** gives the same separation of rights, and stops the pipeline before new tasks start.
   - Cons: something must start it before every deploy. There is no pipeline yet, and Terraform applies by hand would have to run it each time.
-- **Migrations on application startup:** simpler, and safe with several tasks because Flyway locks; but the application user needs schema rights. Allowed for local development, and what user-service and event-alert-service do today.
+- **Migrations on application startup:** simpler, and safe with several tasks because Flyway locks; but the application user needs schema rights. Allowed for local development, where user-service and event-alert-service still do it.
 - **One shared migration job for all databases:** breaks database-per-service. Rejected.
 
 ### Migration tool for the Go services
@@ -69,17 +69,27 @@ NFR 10 asks the team to demonstrate CI/CD; NFR 11 asks for infrastructure define
    Promotion follows `dev → staging → main` (`project_plan.md` §5).
 2. **AWS access** from CI only through an OIDC-federated IAM role with least privilege.
 3. **db-migrate** (resolves [open item 8](../architecture/open-items.md#8-migrations-on-startup-or-as-a-task)):
-   - Each Go service's task has a `db-migrate` init container, which runs before the app container on every task start. The app starts only if it succeeds.
+   - The task of each service with a database has a `db-migrate` init container, which runs before the app container on every task start. The app starts only if it succeeds.
    - It applies that service's migrations to that service's database only. It connects as the database's master user and checks RDS's certificate.
    - Only this container receives the master credentials. Flyway's lock keeps tasks that start together from migrating twice.
    - **The tool is Flyway 11.7.2**, the version user-service uses.
-     - One image, `infrastructure/db-migrate/`, holds each Go service's `data/` directory as its database's migrations. Each task applies only its own database's directory.
-     - The files stay where the services' Makefiles and tests use them, named `V<n>_<description>.sql`.
+     - One image, `infrastructure/db-migrate/`, holds every service's migrations, one directory per database. Each task applies only its own database's directory.
+     - The files stay where the services' builds and tests use them:
+       - the Go services' `data/` directories, named `V<n>_<description>.sql`;
+       - user-service's and event-alert-service's `src/main/resources/db/migration`, named `V<n>__<description>.sql`, as Spring Boot's Flyway reads them. The stack sets Flyway's separator to `__` for those two databases, so the history matches what their apps already wrote.
    - **A deployed migration is never edited**: the change goes in the next version. Flyway's checksums reject an edited file, and the task does not start.
    - **Locally, the same image migrates each Go service's own Compose database** (`make run`, `make migrate`, the SFTP stack's `db-migrate` service). An edited migration therefore fails on the developer's machine first. Throwaway databases for code generation and tests still load the files with `psql`.
-   - **audit-db's migration also creates the auditor's and chain-verify's logins** ([ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 2). It sets their passwords from Secrets Manager on every run.
-   - **user-service and event-alert-service** keep running Flyway on startup.
-   - **Application logins without schema rights come later (INF-03).** Until then, the Go services' apps still connect as the master user ([ADR-0042](ADR-0042-terraform-deployment.md) decision 6).
+   - **user-service and event-alert-service still run Flyway on startup locally and in their tests.** In AWS the stack turns it off (`SPRING_FLYWAY_ENABLED=false`), and their db-migrate applies the same files. Their code does not change.
+   - **Each service connects with its own login, without schema rights.** db-migrate creates the login after every migrate, and sets its password from Secrets Manager. The master user owns the tables, so a login cannot change the schema or create roles.
+
+     | Login | Rights |
+     |---|---|
+     | `user_service`, `client_service`, `account_service`, `event_alert_service` | Read and change rows in every table except Flyway's history |
+     | `transaction_service` | Read `transactions` only, since the service checks no token |
+     | `transaction_ingest` (the ingest Lambda) | Read and change rows in every table except Flyway's history |
+     | `auditor_app`, `chain_verify` | The roles in [ADR-0022](ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 2 |
+
+     Granting on every run means a table that a later migration adds is granted with no extra step.
 4. **Terraform** defines all infrastructure. State is kept remotely with locking and encryption. [ADR-0042](ADR-0042-terraform-deployment.md) (Proposed) chooses the backend: a versioned, encrypted S3 bucket with native locking.
 
 ## Rationale
@@ -90,6 +100,8 @@ OIDC removes the most common CI credential leak. A migration container gives eac
 
 It needs no step before each deploy, which the current Terraform applies by hand could not guarantee. Terraform supports the per-entity stacks and the staging create-and-destroy lifecycle that the budget depends on.
 
+An application that runs Flyway itself needs schema rights. So in AWS, db-migrate applies user-service's and event-alert-service's migrations too, and every application can use a login without them. Keeping Spring Boot's Flyway for their local runs and tests leaves their code unchanged.
+
 ## Consequences
 
 ### Positive
@@ -97,11 +109,14 @@ It needs no step before each deploy, which the current Terraform applies by hand
 - No AWS keys in GitHub.
 - Broken migrations, contract breaks and vulnerable images are caught before deployment.
 - Staging can be rebuilt from code at any time.
+- A bug or injection in an application cannot drop or alter its tables.
 
 ### Negative / Trade-offs
 
 - More pipeline steps and longer CI runs.
 - One more image, db-migrate, to build and push with the services' images.
+- **A Java service's migration reaches AWS only in a new db-migrate image.** The runbook builds every image with one tag, so they go out together.
+- **user-service's and event-alert-service's migrations run two ways:** with Spring Boot's Flyway locally, and with db-migrate in AWS. Both use the same files, so a problem shows up locally first.
 - **Every task start runs Flyway first.** It pulls a 276 MB image and starts a JVM before the app starts. This is expected to take tens of seconds on Fargate, but hasn't been measured there.
 - **Deployed migrations can't be edited.** Until now the Go services' SQL files were edited in place. A deployed file is now final, and changes go in the next version.
 - Remote state needs a bootstrap step.
@@ -111,9 +126,10 @@ It needs no step before each deploy, which the current Terraform applies by hand
 - The OIDC trust policy is restricted to this repository and its protected branches.
 - **Who holds schema rights.**
   - Only a task's db-migrate container receives its database's master credentials.
-  - The auditor and chain-verify log in without DDL rights.
-  - The other applications still use the master user until INF-03.
+  - Every application, and the ingest Lambda, logs in without DDL rights (decision 3).
+  - The database console (`scripts/db-run-sql.sh`) still runs SQL as the master user, for an operator.
 - **The login passwords.**
+  - Each login has its own Secrets Manager secret. ECS gives an app container only its own login, and a db-migrate container only the passwords it sets. The ingest Lambda reads only its own.
   - They are Flyway placeholders filled from Secrets Manager, so they are in neither git nor the image.
   - Flyway prints a failing statement in full, so a failed `ALTER ROLE … PASSWORD` would log that password. The block before it makes sure the role exists, so the statement has no expected way to fail.
 - **TLS to RDS:** db-migrate checks RDS's certificate and name (`sslmode=verify-full`).
@@ -126,6 +142,7 @@ It needs no step before each deploy, which the current Terraform applies by hand
 - The db-migrate image in ECR costs about USD 0.03 a month for each copy kept. The repository keeps the 10 newest.
 - Pulls go through the S3 gateway endpoint at no charge.
 - The container shares its task's CPU and memory, and runs before the app needs them.
+- The six login secrets other than the auditor's cost USD 0.40 a month each, USD 2.40 a month per stack, running or stopped.
 
 ## Operational Impact
 
@@ -133,6 +150,8 @@ It needs no step before each deploy, which the current Terraform applies by hand
 - ECS rolls back failed deployments automatically.
 - A new stack needs no database step by hand. The runbook builds and pushes db-migrate with the other images.
 - Each task's db-migrate log stream says what Flyway applied, or why it stopped.
+- A `permission denied` error in an application's log means a table its login was not granted, such as one created outside a migration. The next task start grants every table that a migration created.
+- Each login callback takes an advisory lock first, so tasks that start together don't fail on concurrent grants.
 
 ## Validation
 
@@ -140,11 +159,24 @@ It needs no step before each deploy, which the current Terraform applies by hand
 - Staging is created from Terraform, tested and destroyed.
 - `terraform test` in `modules/ecs-service` checks:
   - db-migrate runs between tls-init and the app;
-  - only it receives its credentials;
+  - only it receives its credentials and its other Flyway settings;
   - it requires the TLS files.
-- `stacks/crm`'s tests check which services migrate, and that only audit-db's migration gets the login passwords.
+- `stacks/crm`'s tests check:
+  - every service with a database migrates it;
+  - each database's db-migrate gets only the passwords of the logins it creates;
+  - each service and the ingest Lambda read their own login's secret, never the master secret;
+  - user-service and event-alert-service set the separator `__` and turn their own Flyway off.
 - **The image was run locally against PostgreSQL 17.** Each database migrated from empty, and a rerun changed nothing. The audit logins worked and held their roles, and a new password replaced the old one. An edited migration was rejected. `verify-full` worked against a bundle of two CAs, and rejected a wrong CA and a wrong host name.
 - **Each Go service's local migration was run.** `make migrate` (account-service, client-service, the auditor) and `make db-up` (the SFTP stack) migrated each Compose database, and a rerun changed nothing. On account-service, a database loaded with `psql` and an edited migration were both refused.
+- **In AWS (2026-10-20),** db-migrate migrated client-service's, account-service's, transaction-service's and the auditor's databases, and the services started.
+- **The logins were checked locally against PostgreSQL 17 (2026-10-20),** from another container, so passwords were checked:
+  - Each login signed in with its placeholder password. After a rerun with a new password, the old one was refused.
+  - Each could read and change rows. None could create, alter or drop a table, read Flyway's history or create a role.
+  - `transaction_service` could only read `transactions`. `transaction_ingest` ran the receiver's upsert and its outbox relay.
+  - A table created after a migrate was granted by the next one.
+  - Three migrations of one empty database at once all succeeded, and the advisory lock made the callbacks wait for each other.
+  - A database first migrated by Flyway with the `__` separator, as Spring Boot's does, was "up to date" for db-migrate with `__`. Without the setting, Flyway reported "Migration description mismatch".
+- **Still to check in AWS:** every service and the ingest Lambda run under their own logins, with no `permission denied` or `password authentication failed` in their logs.
 
 ## References
 
@@ -163,3 +195,9 @@ It needs no step before each deploy, which the current Terraform applies by hand
   - the same image migrates each Go service's local database.
 
   Decision 1's pipeline steps, Options Considered, Rationale, Consequences, Security & Privacy Impact, Cost Impact, Operational Impact and Validation changed to match.
+- 2026-10-20: amended again while Proposed, as decided by the decision owner (INF-03, application logins). Decision 3 changes:
+  - in AWS, db-migrate also applies user-service's and event-alert-service's migrations, and their own Flyway is off there;
+  - every service, and the ingest Lambda, connects with its own login without schema rights;
+  - transaction-service's login only reads.
+
+  Options Considered, Rationale, Consequences, Security & Privacy Impact, Cost Impact (USD 2.40 a month per stack for the secrets), Operational Impact and Validation changed to match.

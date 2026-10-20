@@ -183,7 +183,7 @@ data "aws_iam_policy_document" "ingest" {
     sid     = "ReadSecretsAtStart"
     actions = ["secretsmanager:GetSecretValue"]
     resources = [
-      local.db_master_secret["transactions"],
+      local.app_login_secret["transaction_ingest"],
       aws_secretsmanager_secret.sftp_client_key.arn,
       aws_secretsmanager_secret.ingest_client.arn,
     ]
@@ -224,7 +224,7 @@ resource "aws_lambda_function" "ingest" {
       DB_NAME                   = module.db["transactions"].db_name
       DB_SSLMODE                = "verify-full"
       DB_SSLROOTCERT            = "/var/task/rds-ca.pem" # packaged in the zip
-      DB_SECRET_ARN             = local.db_master_secret["transactions"]
+      DB_SECRET_ARN             = local.app_login_secret["transaction_ingest"]
       SFTP_ADDR                 = coalesce(var.sftp_server_address, "unset:22")
       SFTP_USER                 = "reportuser"
       SFTP_REMOTE_DIR           = "/reports"
@@ -238,7 +238,12 @@ resource "aws_lambda_function" "ingest" {
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.ingest, aws_iam_role_policy.ingest, aws_iam_role_policy_attachment.ingest_vpc]
+  depends_on = [
+    aws_cloudwatch_log_group.ingest,
+    aws_iam_role_policy.ingest,
+    aws_iam_role_policy_attachment.ingest_vpc,
+    aws_secretsmanager_secret_version.app_login,
+  ]
 
   lifecycle {
     precondition {

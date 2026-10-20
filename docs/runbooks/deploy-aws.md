@@ -158,7 +158,7 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 build db-migrate          infrastructure/db-migrate/Dockerfile    .
 ```
 
-`db-migrate` is Flyway with the Go services' database migrations. Their tasks run it before they start ([Schema migrations](../database/migrations.md)).
+`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's and event-alert-service's migrations reach AWS only through it.
 
 ## 3. Create the CRM stack, stopped
 
@@ -259,13 +259,9 @@ cd -
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars   # takes running=true from the CRM stack
 ```
 
-The databases need nothing by hand:
-- user-service and event-alert-service run Flyway on startup.
-- The other services' tasks run their `db-migrate` container first, which applies their database's migrations. For the auditor, it also creates the auditor's and chain-verify's own logins (ADR-0022 decision 2), whose passwords stay in Secrets Manager.
+The databases need nothing by hand. Each service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
-
-Apart from the auditor and chain-verify, the services log in as their database's master user until INF-03.
 
 ## 7. Upload the frontend
 
@@ -545,9 +541,11 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | The calling service's latest deployment was made before the service it calls existed. Either the stack's first apply had `running=true` instead of creating it stopped (step 3), or the called service was created or replaced since the stack last started. Redeploy the calling service: `aws ecs update-service --cluster "$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)" --service <service> --force-new-deployment`. The next stop and start also fixes it |
-| client-service, account-service, transaction-service or the auditor never starts its app; its `db-migrate/…` log stream says `Migration checksum mismatch` | A migration file was edited after it was applied. Restore the file, put the change in the next version ([Schema migrations](../database/migrations.md)), then build and push db-migrate with a new tag and apply crm |
+| A service with a database never starts its app; its `db-migrate/…` log stream says `Migration checksum mismatch` | A migration file was edited after it was applied. Restore the file, put the change in the next version ([Schema migrations](../database/migrations.md)), then build and push db-migrate with a new tag and apply crm |
 | The same, with `Found non-empty schema(s) "public" but no schema history table` | The database's schema was applied by hand, before db-migrate existed. Tear the stack down and create it again |
-| The same, with `No value provided for placeholder` (auditor only) | Its task definition lacks the login password secrets. Apply crm from current code |
+| The same, with `No value provided for placeholder` | Its task definition lacks the login secrets. Apply crm from current code |
+| A service, or the ingest Lambda, logs `password authentication failed for user "<login>"` | Its login was not created: the pushed db-migrate image is older than the Terraform, so it has no login callback. Build and push db-migrate from the same commit (steps 2 and 5), set `image_tag`, and apply crm. The ingest Lambda also fails like this until transaction-service has started once with its login; its next run succeeds |
+| A service logs `permission denied for table <table>` | Its login was not granted that table, because something created it outside a migration. Move the change into a migration ([Schema migrations](../database/migrations.md)); meanwhile, a redeploy runs db-migrate, which grants every table: `aws ecs update-service --cluster "$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)" --service <service> --force-new-deployment` |
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
 | `terraform output` shows `sftp_client_public_key = <<EOT` | The key ends in a newline, so it prints as a heredoc. Read it with `terraform output -raw sftp_client_public_key`, as in step 9.1 |
 | `No outputs found` from the sftp-server stack | Its apply has not finished. Run it again and fix the error it reports |

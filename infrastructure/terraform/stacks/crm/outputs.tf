@@ -144,13 +144,16 @@ output "dashboard_inputs" {
 
 # ------------------------------------------- for EDA-D1-02 (alert worker)
 
+# alerts_db_secret_arn is event-alert-service's login, which cannot change the
+# schema (data.tf), so the worker sets SPRING_FLYWAY_ENABLED=false as the API
+# does; event-alert-service's db-migrate applies the migrations.
 output "alerts_worker_inputs" {
   description = "What the alert worker's Terraform needs from this stack."
   value = {
     cluster_arn            = aws_ecs_cluster.this.arn
     subnet_ids             = local.app_subnet_ids
     alerts_db_address      = module.db["alerts"].address
-    alerts_db_secret_arn   = module.db["alerts"].master_secret_arn
+    alerts_db_secret_arn   = aws_secretsmanager_secret.app_login["event_alert_service"].arn
     alerts_db_sg           = local.sg["db_alerts"]
     alerts_service_sg      = local.sg["alerts"]
     task_definition_family = module.event_alert_service.task_definition_family

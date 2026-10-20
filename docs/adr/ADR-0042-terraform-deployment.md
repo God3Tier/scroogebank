@@ -85,10 +85,12 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - for Java services, a JVM truststore that adds the project CA.
 
    Go services read the certificate and key through their own settings. For a Java service, the `ecs-service` module sets Spring Boot's `SERVER_SSL_CERTIFICATE` and `SERVER_SSL_CERTIFICATEPRIVATEKEY`, so the services need no code change and still serve plain HTTP locally. The private keys are also in the Terraform state, so only administrators may read the state bucket.
-6. **Database logins.** The auditor and chain-verify log in as `auditor_app` and `chain_verify`, holding the roles `auditor_service` and `auditor_chain_verify` (ADR-0022 decision 2).
-   - Terraform generates their passwords.
-   - The auditor's db-migrate container creates the logins and sets the passwords at every start ([ADR-0028](ADR-0028-cicd-migrations-terraform.md) decision 3).
-   - Every other service connects as its instance's RDS-managed master user until INF-03 gives them logins without schema rights. This is a temporary deviation from ADR-0028 decision 3.
+6. **Database logins.** No service connects as its instance's RDS-managed master user. Each has its own login without schema rights ([ADR-0028](ADR-0028-cicd-migrations-terraform.md) decision 3):
+   - the auditor and chain-verify log in as `auditor_app` and `chain_verify`, holding the roles `auditor_service` and `auditor_chain_verify` (ADR-0022 decision 2);
+   - user-service, client-service, account-service and event-alert-service each have a login that reads and changes rows;
+   - transaction-service's login only reads `transactions`, and the ingest Lambda has its own login.
+
+   Terraform generates each password and keeps it in its own Secrets Manager secret. The db-migrate container of the service that owns the database creates the logins and sets their passwords at every start. Only db-migrate and the database console receive the master credentials.
 7. **Service Connect proxies TLS ports as TCP.** The auditor's gRPC and HTTPS ports, user-service, client-service and account-service have no `appProtocol`. Their TLS is end to end (ADR-0021 decision 7), so Envoy cannot read gRPC or HTTP inside it, and `appProtocol: grpc` (ADR-0021 decision 5) would break the connection. Envoy balances connections, and the server's `MaxConnectionAge` makes callers reconnect, as decision 7 already says. transaction-service, the only plain-HTTP service on Service Connect, keeps `appProtocol: http`.
 8. **Internal ALB.**
    - **Custom domain and HTTPS** ([ADR-0019](ADR-0019-edge-entry-chain.md) decision 5, [open item 2](../architecture/open-items.md#2-domain-name)). The domain is registered by hand in Route 53, which creates its public hosted zone. Both stay outside Terraform, like the deploy role (ADR-0046), so no destroy removes them. With `domain_name` set, `stacks/crm`:
@@ -133,7 +135,6 @@ Requiring the paid plan keeps one configuration, the one the accepted ADRs descr
 ### Negative / Trade-offs
 
 - Every deployment is billed. The account must be on the paid plan, and the stack must be stopped between sessions to stay within the USD 300 limit (see Cost Impact).
-- Most services use their database's master user until INF-03.
 - Starting a session takes longer: the NAT gateway is recreated (about 2–3 minutes) and the RDS instances start (several minutes).
 - Every start and stop redeploys every service (decision 4). Plans show each service updating in place, and a stop briefly starts one new task per service before scaling it to 0.
 - A stack created with `running = true` starts its tasks on deployments that can miss other services' names (decision 4). Its callers fail with `UnknownHostException` until they are redeployed.
@@ -170,7 +171,7 @@ Rough ap-southeast-1 figures in USD a month for prod; verify them with the AWS P
 
 The Fargate row is the minimum; tasks added by auto scaling under load cost more. Running 24/7 would pass the USD 300 limit within a month. With two 10-hour sessions a week and the stack stopped in between, prod costs about USD 100 a month, so the stop model is required, not optional. Staging costs less while it runs (Fargate Spot, no WAF or AWS Backup) and is destroyed after each promotion test (ADR-0029).
 
-Each service certificate's secret costs USD 0.40 a month, running or stopped. The three added for user-service, event-alert-service and dashboard-service add USD 1.20 a month (INF-08).
+Each service certificate's secret costs USD 0.40 a month, running or stopped. The three added for user-service, event-alert-service and dashboard-service add USD 1.20 a month (INF-08). The six database logins added for the services other than the auditor (decision 6) add USD 2.40 a month (INF-03).
 
 The project account's domain, `itsag3t6.com`, is already paid until July 2027, so the custom domain adds only its hosted zone: USD 0.50 a month, running or stopped. A domain registered for another account costs about USD 15 a year for a `.com`, which AWS credits do not cover. The ACM certificates are free.
 
@@ -194,11 +195,16 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - `terraform test` in `stacks/crm`: seven runs plan the stack against mocked providers and check prod, the custom domain, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
 - `terraform test` in `modules/ecs-service`:
   - two runs check that a Java service serving TLS gets its certificate files, Spring Boot's TLS settings, a TCP Service Connect port and HTTPS health checks, and that one that does not stays on HTTP;
-  - three check the db-migrate container ([ADR-0028](ADR-0028-cicd-migrations-terraform.md));
+  - four check the db-migrate container ([ADR-0028](ADR-0028-cicd-migrations-terraform.md));
   - two check that a change in the minimum task count redeploys the service (decision 4).
 - `terraform test` in `stacks/business-dashboard`: see [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md).
-- The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks, all over HTTPS.
-- The first start of a new stack, created stopped, must leave every service able to call the others with no restart: no `UnknownHostException` in any log group.
+- **Done (2026-10-20, confirmed by the decision owner):**
+  - The first real apply on a paid-plan account finished.
+  - user-service, event-alert-service and dashboard-service pass their ALB health checks over HTTPS.
+  - With `domain_name`, the app answers at `https://sg.itsag3t6.com`, and API Gateway reaches the ALB over HTTPS.
+- **Still to check:**
+  - The first start of a new stack, created stopped, must leave every service able to call the others with no restart: no `UnknownHostException` in any log group.
+  - Every service and the ingest Lambda must run under their own logins (decision 6): no `permission denied` or `password authentication failed` in any log group.
 
 ## References
 
@@ -234,3 +240,6 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - 2026-10-20: amended while Proposed, as decided by the decision owner:
   - **Decision 4:** starting or stopping the stack redeploys every service, so every task gets every Service Connect name, and every stack is created stopped. This replaces the runbook's restart of every service after a new stack's first start.
   - Consequences, Operational Impact and Validation changed to match. Cost Impact is unchanged: a stop's extra tasks run for seconds.
+- 2026-10-20: amended while Proposed, as decided by the decision owner (INF-03, application logins):
+  - **Decision 6:** every service, and the ingest Lambda, connects with its own login without schema rights, which ends the deviation from ADR-0028 decision 3.
+  - Consequences, Cost Impact (USD 2.40 a month for the secrets) and Validation changed to match. Validation also records the first apply's results, which the decision owner confirmed.

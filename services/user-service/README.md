@@ -72,7 +72,7 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 |---|---|---|
 | `DB_HOST` / `DB_PORT` | This service's own RDS instance | Postgres connection |
 | `USER_DB_NAME` | `users_db` | Database name |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials. In AWS, the service's own login `user_service`, which cannot change the schema |
 | `AUDITOR_GRPC_TARGET` | The auditor's Service Connect endpoint, e.g. `auditor:50051` | Activity feed reads |
 | `AUDITOR_GRPC_TLS_CA` | ECS task definition / local environment | PEM file of the CA that signed the auditor's certificate, from the project CA (ADR-0021). Unset means plaintext, for local development only |
 | `OIDC_ISSUER_URI` | `https://cognito-idp.<region>.amazonaws.com/<pool-id>` | Resource-server JWT validation |
@@ -84,6 +84,8 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |
 
 None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. In AWS, all are set by the task definition in `infrastructure/terraform/stacks/crm/services.tf` ([ADR-0042](../../docs/adr/ADR-0042-terraform-deployment.md)).
+
+**Migrations.** Locally and in tests, Spring Boot's Flyway applies `src/main/resources/db/migration` on startup. In AWS, the task's `db-migrate` container applies the same files before the service starts, and the task definition sets `SPRING_FLYWAY_ENABLED=false`, because `user_service` cannot change the schema ([ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md) decision 3, [Schema migrations](../../docs/database/migrations.md)). Never edit a migration once it has been applied; add the next version.
 
 This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool. It also needs `sqs:SendMessage` scoped to the Auditor's `audit-insert` queue when audit publishing is enabled. AWS credentials use the standard SDK provider chain; no credentials are configured in application properties.
 
