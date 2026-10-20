@@ -3,13 +3,18 @@ package bank.dashboard.service;
 import bank.dashboard.config.DashboardProperties;
 import bank.dashboard.dto.DashboardResponse;
 import bank.dashboard.dto.DashboardWindow;
+import bank.dashboard.dto.Panel;
+import bank.dashboard.dto.PanelReason;
 import bank.dashboard.dto.Scope;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -81,15 +86,52 @@ class DashboardCacheTest {
         assertThat(cache.get(key("agent-1"), () -> response("agent-1")).cacheHit()).isTrue();
     }
 
+    @ParameterizedTest
+    @EnumSource(value = PanelReason.class, names = {"UPSTREAM_TIMEOUT", "UPSTREAM_ERROR"})
+    void doesNotKeepAResponseWithATransientFailure(PanelReason reason) {
+        // Kept for the TTL, one slow call after a restart would make the
+        // dashboard look down for three minutes.
+        AtomicInteger computations = new AtomicInteger();
+        Supplier<DashboardResponse> partlyFailed = () -> {
+            computations.incrementAndGet();
+            return response(Map.of("clients", Panel.ok("figures"), "accounts", Panel.unavailable(reason)));
+        };
+
+        ServedResponse first = cache.get(key("agent-1"), partlyFailed);
+        ServedResponse second = cache.get(key("agent-1"), partlyFailed);
+
+        assertThat(computations).hasValue(2);
+        assertThat(first.cacheHit()).isFalse();
+        assertThat(second.cacheHit()).isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = PanelReason.class, names = {"UPSTREAM_TIMEOUT", "UPSTREAM_ERROR"}, mode = EnumSource.Mode.EXCLUDE)
+    void keepsAResponseWhoseFailuresAskingAgainWouldNotChange(PanelReason reason) {
+        // Not wired up, refused, mixed currencies, an unsupported window: the
+        // next request would get the same answer.
+        AtomicInteger computations = new AtomicInteger();
+        Supplier<DashboardResponse> settled = () -> {
+            computations.incrementAndGet();
+            return response(Map.of("clients", Panel.ok("figures"), "accounts", Panel.unavailable(reason)));
+        };
+
+        cache.get(key("agent-1"), settled);
+        boolean secondWasAHit = cache.get(key("agent-1"), settled).cacheHit();
+
+        assertThat(computations).hasValue(1);
+        assertThat(secondWasAHit).isTrue();
+    }
+
     private DashboardCache.Key key(String subject) {
         return new DashboardCache.Key(subject, false, "overview", WINDOW, null);
     }
 
     private DashboardResponse response(String marker) {
-        return new DashboardResponse(
-                Instant.parse("2026-09-20T10:15:00Z"),
-                WINDOW,
-                Scope.AGENT,
-                Map.of("clients", bank.dashboard.dto.Panel.ok(marker)));
+        return response(Map.of("clients", Panel.ok(marker)));
+    }
+
+    private DashboardResponse response(Map<String, Panel> panels) {
+        return new DashboardResponse(Instant.parse("2026-09-20T10:15:00Z"), WINDOW, Scope.AGENT, panels);
     }
 }

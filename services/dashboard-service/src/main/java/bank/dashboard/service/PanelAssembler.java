@@ -101,10 +101,16 @@ public class PanelAssembler {
 
     private Panel fromCause(String name, Throwable cause) {
         if (cause instanceof UpstreamUnavailableException upstream) {
-            // Includes the not-wired-up case, which is expected when running
-            // the dashboard on its own rather than an incident. Logged at
-            // debug so it does not drown the logs.
-            log.debug("Panel '{}' unavailable: {}", name, upstream.getMessage());
+            // An upstream that answered with an error or could not be reached
+            // is an incident, and its message is the only record of why. The
+            // other reasons, such as the not-wired-up case when running the
+            // dashboard on its own, are expected, so they stay at debug and
+            // do not drown the logs.
+            if (upstream.reason().isTransient()) {
+                log.warn("Panel '{}' unavailable: {}", name, upstream.getMessage());
+            } else {
+                log.debug("Panel '{}' unavailable: {}", name, upstream.getMessage());
+            }
             return Panel.unavailable(upstream.reason());
         }
         if (cause instanceof AccessDeniedException) {

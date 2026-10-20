@@ -11,7 +11,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 - **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
 - **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
-- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 335 a month left running at one task per service and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 100 a month (ADR-0042 "Cost Impact").
+- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 360 a month left running at one task per service and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 100 a month (ADR-0042 "Cost Impact").
 
 ## AWS access
 
@@ -139,8 +139,10 @@ STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo 
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
 sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/prod.tfvars
-grep -E '^(image_tag|root_admin_email|alarm_email)' env/prod.tfvars
+grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda)' env/prod.tfvars
 ```
+
+**In a new account, check for an old `env/prod.tfvars`.** The `cp` line keeps an existing file, so one from an earlier deployment still has step 8.3's `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint` lines. Delete those four lines before the apply. They point at the old account's SFTP server, and step 8.3 adds them back with the new stack's values. Left in, they make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]").
 
 Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs. Create the stack, still in `stacks/crm`:
 
@@ -299,19 +301,24 @@ The producer is the bank's file generator. It needs the ECR repository that 8.1 
    aws ecr get-login-password | docker login --username AWS --password-stdin "${URL%%/*}"
    docker build --platform linux/arm64 -t "$URL:$PTAG" services/sftp/producer
    docker push "$URL:$PTAG"
-   # Take note of p
    ```
 
-2. Once the push has succeeded, add the image to `sftp-server/env/prod.tfvars`. Run this in the same terminal, as it uses step 1's `URL` and `PTAG`, and first delete any older `producer_image` line: Terraform refuses an attribute set twice.
+2. Once the push has succeeded, add the image to `sftp-server/env/prod.tfvars`. Run this in the same terminal, as it uses step 1's `URL` and `PTAG`. It replaces any older `producer_image` line, since Terraform refuses an attribute set twice:
 
    ```sh
+   : "${URL:?set URL as in step 1}" "${PTAG:?set PTAG as in step 1}" &&
+   sed -i -E '/^producer_image *=/d' infrastructure/terraform/stacks/sftp-server/env/prod.tfvars &&
    printf '%s\n' "producer_image = \"$URL:$PTAG\"" >> infrastructure/terraform/stacks/sftp-server/env/prod.tfvars
    tail -1 infrastructure/terraform/stacks/sftp-server/env/prod.tfvars
    ```
 
    The line looks like `producer_image = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:6f606ec"`. In a new terminal `URL` and `PTAG` are empty: set `URL` as in step 1, then list the tags already pushed with `aws ecr list-images --repository-name "${URL#*/}" --query 'imageIds[].imageTag' --output text`.
 
-3. Apply sftp-server again. Changing `producer_image` replaces the instance (its startup script changes). The host key stays the same, so its fingerprint does too.
+3. Apply sftp-server again. Changing `producer_image` replaces the instance (its startup script changes), so the plan must show `aws_instance.sftp` being replaced. The host key stays the same, so its fingerprint does too. Without this apply, the instance has no Docker and no producer, and no transactions are written.
+
+   ```sh
+   terraform -chdir=infrastructure/terraform/stacks/sftp-server apply -var-file=env/prod.tfvars
+   ```
 
 The producer starts with an empty account list and publishes nothing until you give it the CRM's accounts (8.5).
 
@@ -325,12 +332,14 @@ transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ing
    make -C services/sftp lambda   # services/sftp/receiver/dist/transaction-ingest.zip
    ```
 
-2. Copy the sftp-server outputs into the crm stack's `env/prod.tfvars`. First delete any older `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` or `sftp_host_key_fingerprint` lines: Terraform refuses an attribute set twice.
+2. Copy the sftp-server outputs into the crm stack's `env/prod.tfvars`. This replaces any older `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` or `sftp_host_key_fingerprint` lines, such as ones from an earlier deployment, since Terraform refuses an attribute set twice:
 
    ```sh
    cd infrastructure/terraform/stacks
    ADDR=$(terraform -chdir=sftp-server output -raw sftp_server_address)
    FP=$(terraform -chdir=sftp-server output -raw sftp_host_key_fingerprint)
+   : "${ADDR:?no sftp-server output: finish 8.1}" "${FP:?no sftp-server output: finish 8.1}" &&
+   sed -i -E '/^(enable_ingest_lambda|ingest_lambda_zip|sftp_server_address|sftp_host_key_fingerprint) *=/d' crm/env/prod.tfvars &&
    printf '%s\n' \
      'enable_ingest_lambda      = true' \
      'ingest_lambda_zip         = "../../../../services/sftp/receiver/dist/transaction-ingest.zip"' \
@@ -340,7 +349,14 @@ transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ing
    ```
 
    `sftp_server_address` looks like `13.250.0.10:22`, and `sftp_host_key_fingerprint` like `SHA256:AbC…`. `ingest_lambda_zip` is relative to `stacks/crm`. A plan fails if any of the four is missing.
-3. Apply the crm stack again.
+3. Apply the crm stack again. Keep `running` as it is now, `true` since step 5: a different value starts or stops the whole stack, not only the Lambda.
+
+   ```sh
+   cd infrastructure/terraform/stacks/crm
+   terraform apply -var-file=env/prod.tfvars -var running=true
+   cd -
+   ```
+
 4. Run it once without waiting for the schedule, and read its log:
 
    ```sh
@@ -463,7 +479,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Sign-in page says "Login pages unavailable" | The app client has no managed login style; re-apply the stack |
 | `terraform output` shows `sftp_client_public_key = <<EOT` | The key ends in a newline, so it prints as a heredoc. Read it with `terraform output -raw sftp_client_public_key`, as in step 8.1 |
 | `No outputs found` from the sftp-server stack | Its apply has not finished. Run it again and fix the error it reports |
-| `Attribute redefined` in `crm/env/prod.tfvars` | Step 8.3's snippet appends; delete the older lines it repeats |
+| `Attribute redefined` in `crm/env/prod.tfvars` or `sftp-server/env/prod.tfvars` | A variable is set twice, usually by a line added by hand or by an older copy of the runbook's snippets, which appended without removing the old line. Delete the older line. The snippets in 8.2 and 8.3 now replace their lines themselves |
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
 | Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why: a database error usually means step 5's `init.sql` is missing. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 8) |

@@ -18,6 +18,7 @@ import bank.dashboard.upstream.dto.ClientStats;
 import bank.dashboard.upstream.dto.TeamComparison;
 import bank.dashboard.window.WindowParser;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -39,7 +40,14 @@ import java.util.function.Supplier;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DashboardService {
+
+    // The per-agent table's inputs, named so the assembler's log lines say
+    // which of them failed.
+    private static final String AGENTS_ROSTER = "agents.roster";
+    private static final String AGENTS_CLIENTS = "agents.clients";
+    private static final String AGENTS_ACCOUNTS = "agents.accounts";
 
     private final ClientStatsPort clientStats;
     private final AccountStatsPort accountStats;
@@ -120,13 +128,17 @@ public class DashboardService {
      */
     public ServedResponse agentPerformance(DashboardWindow window, AgentSortMetric sort) {
         return cached("agents", window, sort.wireValue(), () -> {
-            Map<String, Supplier<Object>> panels = new LinkedHashMap<>();
-            panels.put("agents", () -> AgentPerformanceTable.build(
-                    userRoster.agents(),
-                    clientStats.stats(window, true),
-                    accountStats.stats(window, true),
-                    sort));
-            return build(window, panels);
+            // The table needs three upstreams. They are fetched in parallel
+            // like any other panels and joined here: one after another, they
+            // shared a single call's budget, which three cold calls after a
+            // restart could exceed. Only the joined panel is returned.
+            Map<String, Supplier<Object>> inputs = new LinkedHashMap<>();
+            inputs.put(AGENTS_ROSTER, userRoster::agents);
+            inputs.put(AGENTS_CLIENTS, () -> clientStats.stats(window, true));
+            inputs.put(AGENTS_ACCOUNTS, () -> accountStats.stats(window, true));
+            Map<String, Panel> panels = new LinkedHashMap<>();
+            panels.put("agents", agentsTable(assembler.assemble(inputs), sort));
+            return response(window, panels);
         });
     }
 
@@ -159,13 +171,41 @@ public class DashboardService {
         return Panel.ok(new AccountsPerClient(clientTotal == 0 ? null : (double) accountTotal / clientTotal));
     }
 
+    /**
+     * Joins the per-agent table's inputs. The first unavailable input decides
+     * the reason, as for {@link #accountsPerClient}.
+     */
+    @SuppressWarnings("unchecked")
+    private static Panel agentsTable(Map<String, Panel> inputs, AgentSortMetric sort) {
+        for (Panel input : inputs.values()) {
+            if (input.isUnavailable()) {
+                return Panel.unavailable(input.reason());
+            }
+        }
+        try {
+            return Panel.ok(AgentPerformanceTable.build(
+                    (List<AgentSummary>) inputs.get(AGENTS_ROSTER).data(),
+                    (ClientStats) inputs.get(AGENTS_CLIENTS).data(),
+                    (AccountStats) inputs.get(AGENTS_ACCOUNTS).data(),
+                    sort));
+        } catch (RuntimeException ex) {
+            // An answer the join cannot use, such as one missing its rows,
+            // costs the panel as it did when the join ran inside the call.
+            log.warn("Panel 'agents' failed", ex);
+            return Panel.unavailable(PanelReason.UPSTREAM_ERROR);
+        }
+    }
+
     private DashboardResponse build(DashboardWindow window, Map<String, Supplier<Object>> panels) {
-        Map<String, Panel> resolved = assembler.assemble(panels);
+        return response(window, assembler.assemble(panels));
+    }
+
+    private DashboardResponse response(DashboardWindow window, Map<String, Panel> panels) {
         return new DashboardResponse(
                 Instant.now(clock),
                 window,
                 currentUser.isAdmin() ? Scope.ADMIN : Scope.AGENT,
-                resolved);
+                panels);
     }
 
     private ServedResponse cached(String endpoint, DashboardWindow window, String variant,

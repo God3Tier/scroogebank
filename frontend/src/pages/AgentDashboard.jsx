@@ -113,7 +113,7 @@ function ClientList({ onChanged }) {
 // "My Clients" from the client list; transaction counts from the business
 // dashboard, which serves them for a window.
 function useAgentTotals(version) {
-    const [totals, setTotals] = useState({ clients: null, transactions: null, pending: null })
+    const [totals, setTotals] = useState({ loading: true, clients: null, transactions: null, pending: null })
 
     useEffect(() => {
         let current = true
@@ -124,6 +124,7 @@ function useAgentTotals(version) {
             if (!current) return
             const tx = dashboard.status === 'fulfilled' ? panelData(dashboard.value.panels?.transactions) : null
             setTotals({
+                loading: false,
                 clients: clients.status === 'fulfilled' ? clients.value.totalElements : null,
                 transactions: tx ? tx.total : null,
                 pending: tx ? (tx.byStatus?.Pending ?? 0) : null,
@@ -180,14 +181,16 @@ function AgentDashboard() {
             </header>
 
             <div className="stat-grid">
-                <StatCard label="My Clients" value={formatNumber(totals.clients)} icon="groups" />
+                <StatCard loading={totals.loading} label="My Clients" value={formatNumber(totals.clients)} icon="groups" />
                 <StatCard
+                    loading={totals.loading}
                     label="Transactions"
                     value={formatNumber(totals.transactions)}
                     icon="receipt_long"
                     caption={`Last ${TRANSACTION_DAYS} days`}
                 />
                 <StatCard
+                    loading={totals.loading}
                     label="Pending Transactions"
                     value={formatNumber(totals.pending)}
                     icon="pending_actions"
