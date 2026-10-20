@@ -76,6 +76,19 @@ Terraform cannot ask for an MFA code, so it gets the session's credentials from 
 - **If the MFA prompt hangs or never appears in Git Bash**, run that line in PowerShell, or as `winpty aws sts get-caller-identity --profile crm`. The session is cached for both, so the `eval` line then works in Git Bash.
 - If `aws configure export-credentials` is not recognised, update the AWS CLI.
 
+## Register a domain (once per account)
+
+The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). You register the domain by hand, outside Terraform, like the `crm-infra-admin` role. Do it once, before step 1: destroying a stack, `bootstrap` included, never removes the domain or its zone, so every later deployment reuses them.
+
+1. In the Route 53 console, open **Domains → Registered domains → Register domains**, search for a name and check out. Choose a name that does not imitate a real bank or organisation, and leave out "bank": a new domain whose page is a bank-branded sign-in can be flagged as phishing.
+2. Register it for 1 year with **auto-renew off**, and keep privacy protection on.
+3. **Cost:** about USD 15 a year for a `.com`; the console shows each TLD's price, and some are cheaper. It is charged at once and not refunded. **AWS credits do not cover domain registration**, so it goes on the account's card. The hosted zone adds USD 0.50 a month.
+4. **Verify the registrant e-mail within 15 days.** Route 53 sends a link to the registrant contact's address; without it, the domain is suspended and certificates stop validating.
+
+Registration usually finishes within minutes, and Route 53 e-mails when it does. Route 53 also creates a public hosted zone with the same name and points the domain at it. Terraform finds that zone by name, so never delete it or create a second zone with the same name ([Troubleshooting](#troubleshooting)).
+
+Without a domain, leave `domain_name` out in step 3: the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
+
 ## 1. Bootstrap the account (once per account)
 
 ```sh
@@ -99,19 +112,6 @@ Bootstrap creates no GuardDuty detector: the account already has one, and a seco
 - `crm-bedrock` e-mails when a month's Bedrock cost passes 50, 80 and 100% of `bedrock_budget_usd`.
 - Both count cost before credits, so they still fire when credits cover the bill.
 - Each threshold e-mails once per budget period. Cost data refreshes a few times a day, so an alert can arrive hours after the spend.
-
-### 1.1 Register a domain (once per account)
-
-The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). You register the domain by hand, outside Terraform, like the `crm-infra-admin` role, so no destroy removes it.
-
-1. In the Route 53 console, open **Domains → Registered domains → Register domains**, search for a name and check out. Choose a name that does not imitate a real bank or organisation.
-2. Register it for 1 year with **auto-renew off**, and keep privacy protection on.
-3. **Cost:** about USD 15 a year for a `.com`; the console shows each TLD's price, and some are cheaper. It is charged at once and not refunded. **AWS credits do not cover domain registration**, so it goes on the account's card. The hosted zone adds USD 0.50 a month.
-4. **Verify the registrant e-mail within 15 days.** Route 53 sends a link to the registrant contact's address; without it, the domain is suspended and certificates stop validating.
-
-Registration usually finishes within minutes, and Route 53 e-mails when it does. Route 53 also creates a public hosted zone with the same name and points the domain at it. Terraform finds that zone by name, so never delete it or create a second zone with the same name ([Troubleshooting](#troubleshooting)).
-
-Without a domain, leave `domain_name` out in step 3: the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
 
 ## 2. Build the Lambda zip and the images
 
@@ -148,7 +148,7 @@ In the same terminal as step 2, so `TAG` is still set (in a new one, set it agai
 
 ```sh
 cd infrastructure/terraform/stacks/crm
-DOMAIN='<your-domain>'   # from step 1.1, such as example.com - set it yourself
+DOMAIN='<your-domain>'   # the one you registered (Register a domain), such as example.com - set it yourself
 STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
@@ -496,7 +496,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 
   A hard-deleted secret cannot be restored. The databases' master secrets (`rds!db-...`) are deleted with their instances and never conflict.
 - **Starting over** gives a new user pool and empty databases, so you can change `root_admin_email` then.
-- **The domain and its hosted zone stay** (step 1.1): they are outside Terraform. The certificates and DNS records go with the crm stack. The zone costs USD 0.50 a month while it exists; delete it only when you give up the domain, since a later deployment would then need a new zone and the domain's name servers changed to it.
+- **The domain and its hosted zone stay** ([Register a domain](#register-a-domain-once-per-account)): they are outside Terraform, so destroying `bootstrap` leaves them too. The certificates and DNS records go with the crm stack. The zone costs USD 0.50 a month while it exists; delete it only when you give up the domain, since a later deployment would then need a new zone and the domain's name servers changed to it.
 - **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). Before destroying, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), or wait 7 days.
 - **Destroy `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
 
@@ -537,7 +537,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | `RepositoryNotEmptyException` destroying the business-dashboard stack | Its repository still has `force_delete` off. Apply the CRM stack with `-var deletion_protection=false`, apply the business-dashboard stack, then destroy it ([Tear down](#tear-down)) |
 | The crm plan stops with `no matching Route 53 Hosted Zone found` | `domain_name` is not a hosted zone in this account: a typo, a registration that has not finished, or a deleted zone. `aws route53 list-hosted-zones-by-name --dns-name <domain>` lists it. To recreate a deleted zone, create a public zone with the same name, then set the domain's name servers to the zone's four NS values (Route 53 → Registered domains → the domain → **Edit name servers**) |
 | The crm plan stops with `multiple Route 53 Hosted Zone matched` | Two zones have the domain's name. Keep the one whose NS values match the domain's name servers (Route 53 → Registered domains) and delete the other |
-| The crm apply waits a long time on `aws_acm_certificate_validation` | ACM cannot see the validation records: the domain's name servers do not point at this zone (it was recreated), or the domain is suspended because the registrant e-mail was not verified (step 1.1). Fix that; the apply carries on, or times out after 75 minutes and can be run again |
+| The crm apply waits a long time on `aws_acm_certificate_validation` | ACM cannot see the validation records: the domain's name servers do not point at this zone (it was recreated), or the domain is suspended because the registrant e-mail was not verified ([Register a domain](#register-a-domain-once-per-account)). Fix that; the apply carries on, or times out after 75 minutes and can be run again |
 | `CNAMEAlreadyExists` creating the CloudFront distribution | Another distribution already answers on `sg.<domain>`, usually one from a crm stack that was not destroyed. Destroy that stack, or remove the name from that distribution, and apply again |
 | `AccessDenied` from ACM in us-east-1 | The account refuses certificates in us-east-1, which CloudFront requires. Remove `domain_name` from `crm/env/prod.tfvars` and apply: the app keeps its `*.cloudfront.net` address, and the internal ALB goes back to HTTP |
 | `Attribute redefined` in `crm/env/prod.tfvars` or `sftp-server/env/prod.tfvars` | A variable is set twice, usually by a line added by hand or by an older copy of the runbook's snippets, which appended without removing the old line. Delete the older line. The snippets in 9.2 and 9.3 now replace their lines themselves |

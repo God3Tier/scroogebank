@@ -1,7 +1,8 @@
 # Custom domain (ADR-0019 decision 5, ADR-0042 decision 8). The domain is
 # registered by hand in Route 53, which creates its public hosted zone; both
-# stay outside Terraform, so destroying the stack never removes them (runbook
-# step 1). Everything here exists only when domain_name is set.
+# stay outside Terraform, so no destroy, bootstrap's included, removes them
+# (runbook "Register a domain"). Everything here exists only when domain_name
+# is set.
 
 data "aws_route53_zone" "this" {
   count        = local.custom_domain ? 1 : 0

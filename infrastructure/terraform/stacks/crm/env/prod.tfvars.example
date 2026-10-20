@@ -21,9 +21,10 @@ image_tag = "replace-with-the-pushed-tag"
 root_admin_email = "you+crm-root@example.edu"
 alarm_email      = "you@example.edu"
 
-# The domain you registered in Route 53 (runbook step 1): the app is then at
-# https://sg.<domain> and the internal ALB listens on HTTPS. Runbook step 3
-# writes this line. Without it, the app keeps its *.cloudfront.net address.
+# The domain you registered in Route 53 (runbook "Register a domain"): the
+# app is then at https://sg.<domain> and the internal ALB listens on HTTPS.
+# Runbook step 3 writes this line. Without it, the app keeps its
+# *.cloudfront.net address.
 # domain_name = "example.com"
 
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).

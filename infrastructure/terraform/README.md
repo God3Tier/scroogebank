@@ -20,7 +20,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `high_availability` | The demo week: Multi-AZ standbys and a NAT gateway per AZ |
 | `enable_cognito_triggers` | The login and password-reset audit Lambda (ADR-0040); needs its zip. Keep `true`: `false` is for the mocked tests and leaves sign-ins unaudited |
 | `enable_ingest_lambda` | The transaction import Lambda (ADR-0024); needs its zip and the sftp-server stack's address and host key ([runbook §9.3](../../docs/runbooks/deploy-aws.md#93-turn-on-the-ingest-lambda)) |
-| `domain_name` | A domain registered in Route 53 ([runbook §1.1](../../docs/runbooks/deploy-aws.md#11-register-a-domain-once-per-account)): the app at `sg.<domain>` and the internal ALB on HTTPS (ADR-0042 decision 8). Unset, the app keeps its `*.cloudfront.net` address and the ALB listens on HTTP inside the VPC |
+| `domain_name` | A domain registered in Route 53 ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)): the app at `sg.<domain>` and the internal ALB on HTTPS (ADR-0042 decision 8). Unset, the app keeps its `*.cloudfront.net` address and the ALB listens on HTTP inside the VPC |
 | `deletion_protection` | Defaults to on for prod; apply with `false` before `terraform destroy` |
 | `enable_github_deploy_role` | The role a deploy workflow assumes; off while deployments are run by hand |
 
@@ -38,7 +38,7 @@ What every stack in the account shares:
 
 The GitHub OIDC provider (`enable_github_oidc`) is off until CI deploys. GuardDuty is not created here: the account already has a detector ([Left out of the account](#left-out-of-the-account)).
 
-Two account-wide things are made by hand, outside Terraform, so no destroy removes them: the deploy role `crm-infra-admin` (ADR-0046), and the domain with the Route 53 hosted zone that registering it creates ([runbook §1.1](../../docs/runbooks/deploy-aws.md#11-register-a-domain-once-per-account)).
+Two account-wide things are made by hand, outside Terraform, so no destroy removes them: the deploy role `crm-infra-admin` (ADR-0046), and the domain with the Route 53 hosted zone that registering it creates ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)).
 
 ### `stacks/crm`
 
