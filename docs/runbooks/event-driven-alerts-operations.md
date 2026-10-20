@@ -40,6 +40,40 @@ authorized adapter. Re-enable writes a redacted event to the PostgreSQL audit
 outbox before changing the control state. An unavailable or full outbox
 fails closed and leaves the capability disabled.
 
+## Deploy the worker
+
+The worker is the `stacks/alert-worker` Terraform stack ([ADR-0048](../adr/ADR-0048-alert-worker-terraform-stack.md)), deployed by hand as in [deploy-aws.md](deploy-aws.md): sign in as the `crm` role first ([AWS access](deploy-aws.md#aws-access)) and run these from the repository root in Git Bash. It reads the CRM stack's state, so apply the CRM stack first and push the event-alert-service image (its step 5). The worker uses the same image and tag as the API.
+
+```sh
+cd infrastructure/terraform/stacks/alert-worker
+STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
+sed -i "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" env/prod.tfvars
+terraform init -backend-config=env/prod.s3.tfbackend
+terraform apply -var-file=env/prod.tfvars
+cd -
+```
+
+With both switches at their default `false` this creates the task definition, a `DISABLED` schedule, the failed-run rule and two IAM roles, and nothing runs. The schedule follows the CRM stack's `running`: apply this stack again after a CRM apply changes it.
+
+### Smoke test the task and the alarm
+
+This needs no AgentCore client. With ingestion on and no client, a run fails cleanly with `PROVIDER_NOT_CONFIGURED` and exits 1, which should raise the alarm.
+
+1. Set `ingestion_enabled = true` in `env/prod.tfvars` and apply. The schedule becomes `ENABLED` while the stack is running.
+2. Start one run now. The output holds the full command; run it, and note the task ARN it prints:
+
+   ```sh
+   eval "$(terraform -chdir=infrastructure/terraform/stacks/alert-worker output -raw run_once_command)"
+   ```
+
+3. Read the one summary line in the log group from `terraform output -raw log_group`: `worker run status=FAILED ... error_code=PROVIDER_NOT_CONFIGURED`.
+4. Check that the alarm e-mail arrived, and that alerts-db has one `FAILED` row in `search_run` (use `scripts/db-run-sql.sh alerts`).
+5. **Set `ingestion_enabled = false` and apply again,** or the schedule keeps failing every four hours. It spends nothing else, since no search runs.
+
+Do not turn `ai_enabled` on until the AI benchmark gates pass and the Bedrock policy has been tried on a real account (ADR-0048 validation).
+
 ## Inspect health and consumption
 
 Inspect application health and these low-cardinality Micrometer series:

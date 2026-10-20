@@ -1,0 +1,22 @@
+# Copy to prod.tfvars (git-ignored). Apply the CRM stack first: this stack reads
+# that stack's alerts_worker_inputs output from its state (ADR-0048). The worker
+# uses the same image and tag as the event-alert-service API. Its schedule
+# follows the CRM stack's running variable, so apply this stack again after
+# every CRM apply that changes it.
+
+legal_entity = "sg"
+environment  = "prod"
+
+# The bootstrap stack's state_bucket output, the same bucket as in
+# env/prod.s3.tfbackend.
+state_bucket = "crm-tfstate-123456789012"
+
+# Both stay false until the AgentCore client exists, the live spike has passed
+# and the AI benchmark gates are met. With ingestion_enabled = true and no
+# AgentCore client, every run fails with PROVIDER_NOT_CONFIGURED: use that, on
+# purpose, to test the failed-run alarm (runbook).
+ingestion_enabled = false
+ai_enabled        = false
+
+# The Tokyo AgentCore gateway the worker searches through (after the spike).
+# agentcore_gateway_arn = "arn:aws:bedrock-agentcore:ap-northeast-1:<ACCOUNT_ID>:gateway/<ID>"

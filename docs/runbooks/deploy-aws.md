@@ -272,6 +272,10 @@ scripts/db-run-sql.sh audit        infrastructure/terraform/sql/audit-logins.sql
 
 Until the db-migrate task exists (INF-03), the other services log in as their database's master user.
 
+### 6.1 The alert worker (optional)
+
+The event-alert worker has its own stack, `stacks/alert-worker` ([ADR-0048](../adr/ADR-0048-alert-worker-terraform-stack.md)). It needs the CRM stack running and the images pushed, and it does nothing until ingestion is switched on. The steps are in the [event-alert operations runbook](event-driven-alerts-operations.md#deploy-the-worker).
+
 ## 7. Upload the frontend
 
 ```sh
@@ -498,9 +502,12 @@ terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=e
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply   -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard destroy -var-file=env/prod.tfvars
+# only if you created the alert worker (6.1); it owns no data, so no extra apply is needed first
+terraform -chdir=infrastructure/terraform/stacks/alert-worker destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
 
+- **Destroy alert-worker and business-dashboard before crm.** The alert worker's task runs in the CRM's cluster and uses its security group and database secret.
 - **Destroy business-dashboard before crm.** Its rules sit on the CRM stack's security groups and its service runs in the CRM's cluster, so the CRM stack cannot be destroyed while it exists. Its apply after the CRM's `deletion_protection=false` apply lets its destroy empty dashboard-service's image repository.
 
 - **Prod first needs its protections lifted:** apply once with `-var deletion_protection=false`. That turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots, so the stack can be created again straight away; take a manual snapshot first if you want to keep any data. Staging has none to lift.

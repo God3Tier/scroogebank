@@ -483,8 +483,9 @@ module "transaction_service" {
 # business-dashboard stack (ADR-0047), from the dashboard_inputs output.
 
 # ------------------------------------------------------ event-alert-service
-# api mode only. The worker, its schedule, AgentCore in Tokyo and Bedrock
-# access are EDA-D1-02 (Azeez); ingestion and the model stay switched off.
+# api mode only. The worker and its schedule are in stacks/alert-worker
+# (ADR-0048); AgentCore in Tokyo waits for the live spike (EDA-D1-02).
+# Ingestion and the model stay switched off.
 
 module "event_alert_service" {
   source = "../../modules/ecs-service"

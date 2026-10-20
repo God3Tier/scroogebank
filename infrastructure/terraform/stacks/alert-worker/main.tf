@@ -1,0 +1,231 @@
+# The event-alert worker (X-factor 1, ADR-0048) in its own stack: one ingestion
+# window per run, started by EventBridge Scheduler on an ECS Fargate task. It
+# runs inside the CRM stack's cluster, subnets and alerts security group, and
+# reads them from that stack's alerts_worker_inputs output. It is the same
+# image as the event-alert-service API, started with ALERT_MODE=WORKER
+# (ADR-0007), so it needs no repository, database or security group of its own.
+# Apply the CRM stack first and destroy this one first. The Tokyo AgentCore
+# gateway is not created here: its resources are decided after the live spike.
+
+data "terraform_remote_state" "crm" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = "crm/${var.legal_entity}/${var.environment}.tfstate"
+    region = var.aws_region
+  }
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+locals {
+  crm        = data.terraform_remote_state.crm.outputs.alerts_worker_inputs
+  name       = local.crm.name_prefix
+  account_id = data.aws_caller_identity.current.account_id
+  partition  = data.aws_partition.current.partition
+
+  # The worker only does anything when ingestion is on. With it off a run exits
+  # at once as DISABLED, so the schedule stays off and saves the task starts.
+  # The CRM stack's running variable pauses it too (ADR-0029): apply this
+  # stack again after every CRM apply that changes it.
+  schedule_on = local.crm.running && var.ingestion_enabled
+
+  # The global inference profile the service pins (application.yml
+  # alert.ai.model), and the foundation model behind it. A global profile can
+  # route to any Region, so the model ARN is Region-wildcarded and tied to the
+  # profile by the bedrock:InferenceProfileArn condition.
+  bedrock_profile_id  = "global.openai.gpt-5.6-luna"
+  bedrock_model_id    = "openai.gpt-5.6-luna"
+  bedrock_profile_arn = "arn:${local.partition}:bedrock:${var.bedrock_region}:${local.account_id}:inference-profile/${local.bedrock_profile_id}"
+
+  use_agentcore = var.ingestion_enabled && var.agentcore_gateway_arn != null
+}
+
+# ----------------------------------------------------------------- the task
+
+data "aws_iam_policy_document" "bedrock" {
+  statement {
+    sid       = "InvokeThePinnedProfile"
+    actions   = ["bedrock:InvokeModel"] # the Converse API is authorised as InvokeModel
+    resources = [local.bedrock_profile_arn]
+  }
+
+  statement {
+    sid       = "InvokeTheModelOnlyThroughThatProfile"
+    actions   = ["bedrock:InvokeModel"]
+    resources = ["arn:${local.partition}:bedrock:*::foundation-model/${local.bedrock_model_id}"]
+    condition {
+      test     = "StringLike"
+      variable = "bedrock:InferenceProfileArn"
+      values   = [local.bedrock_profile_arn]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "agentcore" {
+  statement {
+    sid       = "InvokeTheSearchGateway"
+    actions   = ["bedrock-agentcore:InvokeGateway"]
+    resources = [coalesce(var.agentcore_gateway_arn, "arn:${local.partition}:bedrock-agentcore:ap-northeast-1:${local.account_id}:gateway/unset")]
+  }
+}
+
+module "event_alert_worker" {
+  source = "../../modules/ecs-service"
+
+  name               = "event-alert-worker"
+  name_prefix        = local.name
+  create_service     = false
+  cluster_arn        = local.crm.cluster_arn
+  cluster_name       = local.crm.cluster_name
+  subnet_ids         = local.crm.subnet_ids
+  security_group_ids = [local.crm.alerts_service_sg]
+  image              = local.crm.image
+  cpu                = 512
+  memory             = 1024
+  cpu_architecture   = local.crm.cpu_architecture
+
+  environment = {
+    ALERT_MODE              = "WORKER"
+    EVENT_ALERT_DB_URL      = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
+    AWS_REGION              = var.aws_region
+    ALERT_INGESTION_ENABLED = tostring(var.ingestion_enabled)
+    ALERT_AI_ENABLED        = tostring(var.ai_enabled)
+    ALERT_AI_PROVIDER       = var.ai_enabled ? "bedrock" : "none"
+    ALERT_AI_BEDROCK_REGION = var.bedrock_region
+    # The API process publishes the audit outbox, including rows a worker run
+    # leaves behind, so the worker needs no queue access.
+    ALERT_AUDIT_PUBLISHER_ENABLED = "false"
+  }
+  secrets = {
+    EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"
+    EVENT_ALERT_DB_PASSWORD = "${local.crm.alerts_db_secret_arn}:password::"
+  }
+  secret_arns = [local.crm.alerts_db_secret_arn]
+
+  # Only what the switched-on capabilities need (least privilege). The keys
+  # depend on variables only, so they are known at plan time.
+  task_role_policies = merge(
+    var.ai_enabled ? { bedrock = data.aws_iam_policy_document.bedrock.json } : {},
+    local.use_agentcore ? { agentcore = data.aws_iam_policy_document.agentcore.json } : {},
+  )
+
+  use_spot           = local.crm.use_spot
+  log_retention_days = local.crm.log_retention_days
+}
+
+# -------------------------------------------------------------- the schedule
+
+data "aws_iam_policy_document" "scheduler_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.account_id]
+    }
+  }
+}
+
+resource "aws_iam_role" "scheduler" {
+  name               = "${local.name}-alert-worker-scheduler"
+  assume_role_policy = data.aws_iam_policy_document.scheduler_assume.json
+}
+
+data "aws_iam_policy_document" "scheduler" {
+  statement {
+    sid       = "StartAlertWorker"
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:${local.partition}:ecs:${var.aws_region}:${local.account_id}:task-definition/${module.event_alert_worker.task_definition_family}:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [local.crm.cluster_arn]
+    }
+  }
+
+  statement {
+    sid       = "PassAlertWorkerRoles"
+    actions   = ["iam:PassRole"]
+    resources = [module.event_alert_worker.task_role_arn, module.event_alert_worker.execution_role_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "scheduler" {
+  name   = "start-alert-worker"
+  role   = aws_iam_role.scheduler.id
+  policy = data.aws_iam_policy_document.scheduler.json
+}
+
+resource "aws_scheduler_schedule" "alert_worker" {
+  name                         = "${local.name}-alert-worker"
+  description                  = "One alert ingestion window every four hours (ADR-0031, ADR-0048)"
+  schedule_expression          = var.schedule
+  schedule_expression_timezone = "Asia/Singapore"
+  state                        = local.schedule_on ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = local.crm.cluster_arn
+    role_arn = aws_iam_role.scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = module.event_alert_worker.task_definition_arn
+      launch_type         = "FARGATE"
+      task_count          = 1
+
+      network_configuration {
+        subnets          = local.crm.subnet_ids
+        security_groups  = [local.crm.alerts_service_sg]
+        assign_public_ip = false
+      }
+    }
+
+    # A failed run is reported by the alarm below. Retrying would repeat the
+    # searches, and the next scheduled run resumes from the watermark anyway.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+# ---------------------------------------------------------------- the alarm
+
+# The worker exits 1 when its window failed (WorkerRunner), so a non-zero exit
+# is the alarm signal (ADR-0031: an alarm on failed runs). It reports to the
+# CRM stack's alarm topic, as chain-verify's does.
+resource "aws_cloudwatch_event_rule" "failed" {
+  name        = "${local.name}-alert-worker-failed"
+  description = "The alert worker stopped with a non-zero exit code"
+  event_pattern = jsonencode({
+    source        = ["aws.ecs"]
+    "detail-type" = ["ECS Task State Change"]
+    detail = {
+      clusterArn = [local.crm.cluster_arn]
+      group      = ["family:${module.event_alert_worker.task_definition_family}"]
+      lastStatus = ["STOPPED"]
+      containers = {
+        name     = ["event-alert-worker"]
+        exitCode = [{ "anything-but" = 0 }]
+      }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "failed" {
+  rule = aws_cloudwatch_event_rule.failed.name
+  arn  = local.crm.alarm_topic_arn
+}

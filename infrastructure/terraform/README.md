@@ -7,6 +7,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `bootstrap/` | Account-wide: the state bucket, CloudTrail, AWS Budgets, the GitHub OIDC provider (off) | Local, applied once per account |
 | `stacks/crm/` | One legal entity's whole stack (ADR-0026): network, edge, API entry, Cognito, ECS services, databases, audit pipeline, alarms, backups | `crm/<entity>/<environment>.tfstate` |
 | `stacks/business-dashboard/` | dashboard-service (X-factor 2), inside one CRM stack's network and cluster; reads that stack's `dashboard_inputs` output (ADR-0047) | `business-dashboard/<entity>/<environment>.tfstate` |
+| `stacks/alert-worker/` | The event-alert worker (X-factor 1): a scheduled ECS task every four hours, its IAM and a failed-run alarm, inside one CRM stack's cluster; reads that stack's `alerts_worker_inputs` output (ADR-0048) | `alert-worker/<entity>/<environment>.tfstate` |
 | `stacks/sftp-server/` | The simulated core banking SFTP server, an external system with its own stack (ADR-0024) | `sftp-server/<environment>.tfstate` |
 | `modules/postgres/` | One RDS PostgreSQL instance for one service (ADR-0023) | |
 | `modules/ecs-service/` | One Fargate service or scheduled task, with its roles, logs, Service Connect, ALB rules, auto scaling and TLS files | |
@@ -26,7 +27,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 
 ## What each stack deploys
 
-The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `crm`, `business-dashboard`, `sftp-server`, then `crm` again with the SFTP server's address. Destroy `business-dashboard` before `crm`. Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
+The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `crm`, `business-dashboard`, `alert-worker`, `sftp-server`, then `crm` again with the SFTP server's address. Destroy `business-dashboard` and `alert-worker` before `crm`. Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
 
 ### `bootstrap`
 
@@ -68,6 +69,19 @@ dashboard-service, the business dashboard (ADR-0033), for one CRM stack (ADR-004
 - a policy on the CRM's GitHub deploy role, when that role exists.
 
 Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`. The plan fails until you do.
+
+### `stacks/alert-worker`
+
+The event-alert worker (X-factor 1, [ADR-0048](../../docs/adr/ADR-0048-alert-worker-terraform-stack.md)), inside the CRM stack's cluster, subnets and alerts security group:
+
+| Area | Deployed |
+|---|---|
+| Task | A scheduled ECS Fargate task (0.5 vCPU, 1 GB) from the event-alert-service image and tag the CRM stack deploys, started with `ALERT_MODE=WORKER`. No service, repository or database of its own |
+| Schedule | An EventBridge Scheduler schedule, every four hours in Singapore time, with a role that can only run that task. `ENABLED` only while the CRM stack's `running` is true **and** `ingestion_enabled` is true |
+| Alarm | An EventBridge rule: a non-zero exit publishes to the CRM stack's alarm topic |
+| IAM | Bedrock on the pinned inference profile only with `ai_enabled`; AgentCore `InvokeGateway` only with `ingestion_enabled` and `agentcore_gateway_arn` |
+
+`ingestion_enabled` and `ai_enabled` default to false. The Tokyo AgentCore gateway is not created here: its resources wait for the live spike. After a CRM apply that changes `running`, apply this stack again.
 
 ### `stacks/sftp-server`
 

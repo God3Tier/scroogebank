@@ -1,7 +1,7 @@
 # EventBridge Scheduler (ADR-0022, ADR-0024): chain-verify daily, and the
 # transaction import every 5 minutes once its Lambda exists. Schedules pause
-# while the stack is stopped. The alert worker's schedule belongs to
-# EDA-D1-02.
+# while the stack is stopped. The alert worker's schedule is in
+# stacks/alert-worker (ADR-0048).
 
 data "aws_iam_policy_document" "scheduler_assume" {
   statement {
