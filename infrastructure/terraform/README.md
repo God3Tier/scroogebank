@@ -70,7 +70,7 @@ Its tasks follow the CRM stack's `running`: apply this stack again after every C
 Stands in for the bank's core banking system, Feature 3's external server. It has its own VPC and contains:
 
 - a `t4g.micro` EC2 instance running OpenSSH, with a fixed Elastic IP;
-- one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key. Terraform generates the host key, or takes one you were given from `host_key_file` ([runbook §8.1](../../docs/runbooks/deploy-aws.md#81-create-the-sftp-server));
+- one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key. Terraform generates the host key, or takes one you were given from `host_key_file` ([runbook §9.1](../../docs/runbooks/deploy-aws.md#91-create-the-sftp-server));
 - an ECR repository for the producer container, which writes a synthetic transaction file every 5 minutes once `producer_image` is set.
 
 ### Deployed but not working yet
@@ -78,7 +78,7 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 | Part | Why it doesn't work | Waiting for |
 |---|---|---|
 | event-alert-service | It runs, but nothing creates alerts, so it has none to show | INF-06: the alert worker |
-| SFTP server | It writes files, but nothing collects them until the ingest Lambda is turned on | INF-04: turn on the ingest Lambda ([runbook §8](../../docs/runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda)) |
+| SFTP server | It writes files, but nothing collects them until the ingest Lambda is turned on | INF-04: turn on the ingest Lambda ([runbook §9](../../docs/runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda)) |
 | Database logins | Most services sign in as their database's master user, and schemas are applied by hand | INF-03: db-migrate tasks |
 | Internal ALB | It serves HTTP, not HTTPS, inside the VPC | [Open item 2](../../docs/architecture/open-items.md#2-domain-name): a domain name, so ACM can issue a certificate |
 | ALB to the Java services | user-service, dashboard-service and event-alert-service get plain HTTP | INF-08: TLS in those services |
@@ -100,7 +100,7 @@ To restore one, uncomment it, and for the DR vault the prod assertion in `stacks
 
 | Part | Waiting for |
 |---|---|
-| transaction-ingest Lambda (`enable_ingest_lambda`), the SFTP receiver's poller (`services/sftp/receiver/src/cronjob`) | INF-04: the poller runs as a Lambda function and reads its secrets from Secrets Manager. Build its zip with `make lambda` in `services/sftp` and turn it on as [runbook §8](../../docs/runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda) says; it has not run in AWS yet (INF-02). Until then, no transactions reach transactions-db |
+| transaction-ingest Lambda (`enable_ingest_lambda`), the SFTP receiver's poller (`services/sftp/receiver/src/cronjob`) | INF-04: the poller runs as a Lambda function and reads its secrets from Secrets Manager. Build its zip with `make lambda` in `services/sftp` and turn it on as [runbook §9](../../docs/runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda) says; it has not run in AWS yet (INF-02). Until then, no transactions reach transactions-db |
 | Alert worker, its 4-hourly schedule, AgentCore web search in Tokyo and Bedrock access | INF-06 (EDA-D1-02), blocked until the alerts ADRs are accepted |
 | Health monitor, its daily analysis task and health-db | INF-07: the service does not run yet |
 | GitHub deploy role (`enable_github_deploy_role`) and CI workflows | INF-09: deferred while deployments are run by hand |

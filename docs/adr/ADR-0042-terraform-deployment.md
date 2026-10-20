@@ -87,7 +87,7 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - It listens on HTTP inside the VPC until there is a domain for an ACM certificate ([open item 2](../architecture/open-items.md#2-domain-name)); setting `internal_alb_certificate_arn` switches it to HTTPS, with API Gateway verifying the name.
    - Target groups use HTTPS for the Go services, which serve TLS in production, and HTTP for the Java services, which do not. The security model's "self-signed TLS between the ALB and tasks" is therefore not met for the Java services yet.
 9. **Not deployed yet, each a task in `docs/feature-plans/infrastructure_plan.md`:**
-   - the transaction-ingest Lambda (`enable_ingest_lambda`, off): since INF-04 the receiver's poller runs as a Lambda function and reads its secrets from Secrets Manager at start, but it has not run in AWS yet. A deployment turns it on with the zip from `make lambda` and the sftp-server stack's address and host key fingerprint ([runbook](../runbooks/deploy-aws.md#8-the-external-sftp-server-and-the-ingest-lambda) §8);
+   - the transaction-ingest Lambda (`enable_ingest_lambda`, off): since INF-04 the receiver's poller runs as a Lambda function and reads its secrets from Secrets Manager at start, but it has not run in AWS yet. A deployment turns it on with the zip from `make lambda` and the sftp-server stack's address and host key fingerprint ([runbook](../runbooks/deploy-aws.md#9-the-external-sftp-server-and-the-ingest-lambda) §9);
    - the health monitor: it is not runnable yet;
    - the alert worker, its schedule, AgentCore in Tokyo and Bedrock access: EDA-D1-02 (Azeez);
    - the GitHub deploy role (`enable_github_deploy_role`, off) and any CI checks on Terraform: deployments are run by hand for now.

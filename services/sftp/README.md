@@ -21,7 +21,7 @@ To see audit events, set `AUDIT_QUEUE_URL` (and `AWS_ENDPOINT_URL` for LocalStac
 
 ## The producer's accounts when deployed
 
-The deployed producer reads its accounts from the file named in `CRM_ACCOUNT_IDS_FILE` instead, on every run, and publishes nothing while the file lists none. `scripts/sync-producer-accounts.sh` fills the file with the CRM's open accounts ([ADR-0045](../../docs/adr/ADR-0045-producer-account-list-synced-from-crm.md), [deploy-aws.md](../../docs/runbooks/deploy-aws.md) §8.5). To try the same locally, mount a file into the `producer` container and set `CRM_ACCOUNT_IDS_FILE` to its path. Fault files are published either way.
+The deployed producer reads its accounts from the file named in `CRM_ACCOUNT_IDS_FILE` instead, on every run, and publishes nothing while the file lists none. `scripts/sync-producer-accounts.sh` fills the file with the CRM's open accounts ([ADR-0045](../../docs/adr/ADR-0045-producer-account-list-synced-from-crm.md), [deploy-aws.md](../../docs/runbooks/deploy-aws.md) §9.5). To try the same locally, mount a file into the `producer` container and set `CRM_ACCOUNT_IDS_FILE` to its path. Fault files are published either way.
 
 ## Fault files for the demo
 

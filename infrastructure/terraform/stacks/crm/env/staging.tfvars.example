@@ -8,7 +8,7 @@ environment  = "staging"
 # Leave false; start a test with -var running=true.
 running = false
 
-# The tag you pushed every image with (runbook step 4).
+# The tag you pushed every image with (runbook step 5).
 image_tag = "replace-with-the-pushed-tag"
 
 # Mailboxes you can read: Cognito e-mails the root admin's temporary password,
@@ -18,9 +18,7 @@ alarm_email      = "you@example.edu"
 
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).
 # Put in your account ID.
-extra_audit_producer_role_arns = [
-  "arn:aws:iam::123456789012:role/crm-sg-staging-dashboard-service-task",
-]
+extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-staging-dashboard-service-task"]
 
 # Optional while testing the frontend from Vite against the staging user pool.
 local_dev_origins = ["http://localhost:5173"]

@@ -10,7 +10,7 @@ high_availability = false
 # gateway). Start a session with: terraform apply -var-file=env/prod.tfvars -var running=true
 running = false
 
-# The tag you pushed every image with (runbook step 4), for example the commit
+# The tag you pushed every image with (runbook step 5), for example the commit
 # SHA. Until then the value does not matter: no task starts while running = false.
 image_tag = "replace-with-the-pushed-tag"
 
@@ -23,11 +23,9 @@ alarm_email      = "you@example.edu"
 
 # dashboard-service's task role, from the business-dashboard stack (ADR-0047).
 # The name is fixed, so set it before that stack exists; it refuses to plan
-# until this list has it. Put in your account ID.
-extra_audit_producer_role_arns = [
-  "arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task",
-]
+# until this list has it. Runbook step 3 writes this line with your account ID.
+extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task"]
 
-# Fill these in after applying the sftp-server stack (runbook step 8).
+# Fill these in after applying the sftp-server stack (runbook step 9).
 # sftp_server_address       = "203.0.113.10:22"
 # sftp_host_key_fingerprint = "SHA256:..."

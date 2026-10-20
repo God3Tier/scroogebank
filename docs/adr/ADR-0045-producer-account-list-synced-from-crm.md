@@ -91,7 +91,7 @@ None. SSM Run Command on an EC2 instance is free, and each sync runs one short E
 
 ## Operational Impact
 
-- [deploy-aws.md](../runbooks/deploy-aws.md) §8.5 adds the sync, and §8.1–8.2 drop `crm_account_ids`.
+- [deploy-aws.md](../runbooks/deploy-aws.md) §9.5 adds the sync, and §9.1–9.2 drop `crm_account_ids`.
 - Applying the sftp-server stack with this change replaces the instance once, because its startup script changes. The host key, and so its fingerprint, stays the same.
 
 ## Validation

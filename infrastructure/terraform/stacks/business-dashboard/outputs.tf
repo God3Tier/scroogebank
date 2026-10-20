@@ -1,5 +1,5 @@
 output "ecr_repository" {
-  description = "Push dashboard-service images here (runbook step 4)."
+  description = "Push dashboard-service images here (runbook step 5)."
   value       = aws_ecr_repository.dashboard.repository_url
 }
 
