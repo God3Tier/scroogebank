@@ -25,8 +25,8 @@ Use a browser window at least 1280 px wide, so the dashboards show their full tw
 
 | Role | Email | Password | Lands on |
 |---|---|---|---|
-| Admin | `alice.admin@example.com` | `admin123` | `/admin` (Admin Dashboard) |
-| Agent | `sarah.agent@example.com` | `agent123` | `/agent` (Agent Dashboard) |
+| Admin | `alice.admin@example.com` | `admin123` | `/admin` (Admin Home) |
+| Agent | `sarah.agent@example.com` | `agent123` | `/agent` (Agent Home) |
 
 Only these two seed accounts have passwords. Login is a front-end check against `src/data/admins.js` and `src/data/agents.js`. There is no session, so every page is also reachable from the sidebar without logging in.
 
@@ -40,8 +40,8 @@ Figures depend on today's date, because each window ends today. The script there
 
 ### Part A: Admin view (about 4 minutes)
 
-1. **Log in as admin.** Go to **Login** and sign in as Alice. You land on the existing **Admin Dashboard**. Point out that this page manages staff and lists transactions, but answers no management questions.
-2. **Open Admin Insights** in the sidebar (`/insights/admin`).
+1. **Log in as admin.** Go to **Login** and sign in as Alice. You land on the existing **Admin Home**. Point out that this page manages staff and lists transactions, but answers no management questions.
+2. **Open Admin Dashboard** in the sidebar (`/insights/admin`).
 3. **Header.**
    - The **Bank-wide** badge shows the scope. The dashboard service derives it from the caller's token, never from a request parameter.
    - The line under the window selector shows the date range and "Figures as of …, cached up to 60 s". Responses are cached for up to 60 seconds, so figures are not real-time.
@@ -67,8 +67,8 @@ Figures depend on today's date, because each window ends today. The script there
 
 ### Part B: Agent view (about 3 minutes)
 
-1. **Log in as the agent.** Go to **Login** and sign in as Sarah. You land on the existing **Agent Dashboard**.
-2. **Open Agent Insights** in the sidebar (`/insights/agent`).
+1. **Log in as the agent.** Go to **Login** and sign in as Sarah. You land on the existing **Agent Home**.
+2. **Open Agent Dashboard** in the sidebar (`/insights/agent`).
 3. **Header.** The badge now says **My clients only**. Every figure covers only Sarah's clients, and there is no agent parameter she could change to see another agent's figures.
 4. **KPI tiles.** The same metrics as the admin view, scoped to her book.
 5. **My action queue.**
@@ -93,7 +93,7 @@ Most definitions come from `docs/feature-plans/business-dashboard_plan.md` §8.3
 
 ### Which metrics each side shows
 
-| Panel | Admin Insights (bank-wide) | Agent Insights (own clients only) |
+| Panel | Admin Dashboard (bank-wide) | Agent Dashboard (own clients only) |
 |---|---|---|
 | KPI tiles | Total clients, Clients added, Verified share, Total accounts (with accounts opened), Booked initial deposits, Active agents | My clients, Added in window, Verified share, My accounts (with accounts opened), Booked initial deposits |
 | Activity over time | Daily activity: clients created per day and transactions per day | Transactions per day, inside My client transactions |

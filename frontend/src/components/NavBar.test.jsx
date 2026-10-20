@@ -26,7 +26,9 @@ describe('NavBar', () => {
   it("shows an agent their own pages only, and signs them out", () => {
     renderNavBar({ isAuthenticated: true, user: { profile: { 'cognito:groups': ['Agent'], email: 'synthetic.agent@example.test' } } })
 
-    expect(screen.getByRole('link', { name: /Agent Dashboard/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Agent Home/ })).toHaveAttribute('href', '/agent')
+    expect(screen.getByRole('link', { name: /Agent Dashboard/ })).toHaveAttribute('href', '/insights/agent')
+    expect(screen.queryByRole('link', { name: /Admin Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Admin Dashboard/ })).not.toBeInTheDocument()
     expect(screen.getByText('synthetic.agent@example.test')).toBeInTheDocument()
 
@@ -34,5 +36,14 @@ describe('NavBar', () => {
 
     expect(signOut).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: /Signing out/ })).toBeDisabled()
+  })
+
+  it('shows an admin the admin pages only', () => {
+    renderNavBar({ isAuthenticated: true, user: { profile: { 'cognito:groups': ['Admin'], email: 'synthetic.admin@example.test' } } })
+
+    expect(screen.getByRole('link', { name: /Admin Home/ })).toHaveAttribute('href', '/admin')
+    expect(screen.getByRole('link', { name: /Admin Dashboard/ })).toHaveAttribute('href', '/insights/admin')
+    expect(screen.queryByRole('link', { name: /Agent Home/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Agent Dashboard/ })).not.toBeInTheDocument()
   })
 })
