@@ -8,6 +8,11 @@ output "task_definition_family" {
   value       = aws_ecs_task_definition.this.family
 }
 
+output "container_names" {
+  description = "The task's containers, in the order they start."
+  value       = [for c in concat(local.init_container, local.migrate_container, [local.app_container]) : c.name]
+}
+
 output "task_role_arn" {
   description = "The application's role."
   value       = aws_iam_role.task.arn

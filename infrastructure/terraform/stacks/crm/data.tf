@@ -45,10 +45,10 @@ module "db" {
 
 # ------------------------------------------------- least-privilege logins
 # The auditor and chain-verify never connect as the owner or master user
-# (ADR-0022 decision 2). Terraform makes their passwords; the logins are
-# created once in audit-db by hand until the db-migrate task exists
-# (runbook "Bootstrap the databases"). Other services use their instance's
-# master secret until then (ADR-0042 decision 6).
+# (ADR-0022 decision 2). Terraform makes their passwords; the auditor's
+# db-migrate container creates the logins and sets the passwords on every
+# start (services.tf). Other services still use their instance's master
+# secret (ADR-0042 decision 6).
 
 locals {
   audit_logins = {
@@ -206,8 +206,9 @@ resource "aws_s3_bucket_policy" "documents" {
 }
 
 # --------------------------------------------------------- database console
-# A one-off psql task per database, for the bootstrap steps in the runbook.
-# It runs only when someone starts it with aws ecs run-task.
+# A one-off psql task per database, for ad-hoc SQL and the producer's account
+# sync (scripts/db-run-sql.sh). It runs only when someone starts it with
+# aws ecs run-task.
 
 resource "aws_iam_role" "db_console_exec" {
   name               = "${local.name}-db-console-exec"
@@ -222,7 +223,7 @@ resource "aws_iam_role_policy_attachment" "db_console_exec" {
 data "aws_iam_policy_document" "db_console_secrets" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = concat([for db in module.db : db.master_secret_arn], [for sec in aws_secretsmanager_secret.audit_login : sec.arn])
+    resources = [for db in module.db : db.master_secret_arn]
   }
 }
 
@@ -257,18 +258,10 @@ resource "aws_ecs_task_definition" "db_console" {
       { name = "PGDATABASE", value = module.db[each.key].db_name },
       { name = "PGSSLMODE", value = "require" },
     ]
-    # audit-db's console also holds the passwords for the logins it creates
-    # once, so they never appear in run-task overrides (scripts/db-run-sql.sh).
-    secrets = concat(
-      [
-        { name = "PGUSER", valueFrom = "${module.db[each.key].master_secret_arn}:username::" },
-        { name = "PGPASSWORD", valueFrom = "${module.db[each.key].master_secret_arn}:password::" },
-      ],
-      each.key == "audit" ? [
-        { name = "AUDITOR_APP_PASSWORD", valueFrom = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:password::" },
-        { name = "CHAIN_VERIFY_PASSWORD", valueFrom = "${aws_secretsmanager_secret.audit_login["chain_verify"].arn}:password::" },
-      ] : [],
-    )
+    secrets = [
+      { name = "PGUSER", valueFrom = "${module.db[each.key].master_secret_arn}:username::" },
+      { name = "PGPASSWORD", valueFrom = "${module.db[each.key].master_secret_arn}:password::" },
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {

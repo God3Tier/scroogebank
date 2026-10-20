@@ -15,6 +15,30 @@ locals {
   }
 
   db_master_secret = { for k, db in module.db : k => db.master_secret_arn }
+
+  # The Go services' schemas (ADR-0028 decision 3). Each task's db-migrate
+  # container applies its database's directory in the db-migrate image as the
+  # master user, checking RDS's certificate, before the service starts.
+  # user-service and event-alert-service run Flyway themselves. audit-db's
+  # also creates the auditor's and chain-verify's logins and sets their
+  # passwords (infrastructure/db-migrate/audit/afterMigrate.sql).
+  migrations = {
+    for db in ["clients", "accounts", "transactions", "audit"] : db => {
+      image    = local.image["db-migrate"]
+      location = db
+      url      = "jdbc:postgresql://${module.db[db].address}:5432/${module.db[db].db_name}?sslmode=verify-full&sslrootcert=/tls/rds-ca.pem"
+      secrets = merge(
+        {
+          FLYWAY_USER     = "${local.db_master_secret[db]}:username::"
+          FLYWAY_PASSWORD = "${local.db_master_secret[db]}:password::"
+        },
+        db == "audit" ? {
+          FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD  = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:password::"
+          FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD = "${aws_secretsmanager_secret.audit_login["chain_verify"].arn}:password::"
+        } : {},
+      )
+    }
+  }
 }
 
 data "aws_iam_policy_document" "send_audit" {
@@ -204,6 +228,7 @@ module "client_service" {
     serves_tls      = true
     cert_secret_arn = aws_secretsmanager_secret.service_tls["client"].arn
   }
+  migrations = local.migrations["clients"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -269,6 +294,7 @@ module "account_service" {
     serves_tls      = true
     cert_secret_arn = aws_secretsmanager_secret.service_tls["account"].arn
   }
+  migrations = local.migrations["accounts"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -357,7 +383,11 @@ module "auditor" {
     USER     = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:username::"
     PASSWORD = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:password::"
   }
-  secret_arns        = [aws_secretsmanager_secret.audit_login["auditor"].arn]
+  # The master secret and chain-verify's password are for db-migrate only.
+  secret_arns = concat(
+    [for login in aws_secretsmanager_secret.audit_login : login.arn],
+    [local.db_master_secret["audit"]],
+  )
   task_role_policies = { service = data.aws_iam_policy_document.auditor.json }
   tls = {
     mode            = "go"
@@ -365,6 +395,7 @@ module "auditor" {
     serves_tls      = true
     cert_secret_arn = aws_secretsmanager_secret.service_tls["auditor"].arn
   }
+  migrations = local.migrations["audit"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -465,6 +496,7 @@ module "transaction_service" {
   }
   secret_arns = [local.db_master_secret["transactions"]]
   tls         = { mode = "go", ca_pem = local.ca_pem }
+  migrations  = local.migrations["transactions"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
