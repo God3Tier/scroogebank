@@ -95,6 +95,14 @@ run "prod" {
     condition     = aws_lb_listener.internal.protocol == "HTTP" && aws_lb_listener.internal.port == 80 && length(aws_acm_certificate.alb) == 0 && length(aws_acm_certificate.app) == 0 && length(aws_cloudfront_distribution.this.aliases) == 0
     error_message = "Without domain_name: no certificates, the internal ALB on HTTP 80 and the default CloudFront name."
   }
+  assert {
+    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
+    error_message = "Every service behind the ALB in this stack, and the auditor, gets a project-CA certificate (INF-08)."
+  }
+  assert {
+    condition     = output.dashboard_inputs.upstreams.user.url == "https://user-service:8081"
+    error_message = "dashboard-service calls user-service over HTTPS."
+  }
 }
 
 run "custom_domain" {

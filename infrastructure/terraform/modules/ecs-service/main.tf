@@ -23,7 +23,8 @@ locals {
   #   ca.pem        the project CA, trusted for service-to-service TLS
   #   rds-ca.pem    the RDS CA bundle for this region, for verify-full
   #   ca-bundle.pem public roots + both CAs (Go reads it through SSL_CERT_FILE)
-  #   cert.pem, key.pem   the service's own certificate, when it serves TLS
+  #   cert.pem, key.pem   the service's own certificate, when it serves TLS;
+  #                 a Java service serves it through Spring Boot's server.ssl
   #   truststore    the JVM's cacerts plus the project CA (Java services)
   tls_script_go = <<-EOT
     set -eu
@@ -38,6 +39,8 @@ locals {
     chown -R 65532:65532 /tls
   EOT
 
+  # /tls is opened to all because some images run as a non-root user
+  # (event-alert-service's alerts).
   tls_script_java = <<-EOT
     set -eu
     printf '%s\n' "$CRM_CA_PEM" > /tls/ca.pem
@@ -45,14 +48,24 @@ locals {
     cp "$JAVA_HOME/lib/security/cacerts" /tls/truststore
     chmod 0644 /tls/truststore
     keytool -importcert -noprompt -keystore /tls/truststore -storepass changeit -alias crm-project-ca -file /tls/ca.pem
+    if [ -n "$${TLS_CERT:-}" ]; then
+      printf '%s\n' "$TLS_CERT" > /tls/cert.pem
+      printf '%s\n' "$TLS_KEY" > /tls/key.pem
+    fi
     chmod 0444 /tls/*
+    chmod 0755 /tls
   EOT
 
   tls_enabled = var.tls != null
+  serves_tls  = local.tls_enabled && try(var.tls.serves_tls, false)
 
   tls_env = local.tls_enabled ? (
     var.tls.mode == "java"
-    ? { JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=/tls/truststore -Djavax.net.ssl.trustStorePassword=changeit" }
+    ? merge(
+      { JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=/tls/truststore -Djavax.net.ssl.trustStorePassword=changeit" },
+      # Spring Boot's server.ssl.certificate and certificate-private-key.
+      local.serves_tls ? { SERVER_SSL_CERTIFICATE = "/tls/cert.pem", SERVER_SSL_CERTIFICATEPRIVATEKEY = "/tls/key.pem" } : {},
+    )
     : { SSL_CERT_FILE = "/tls/ca-bundle.pem" }
   ) : {}
 
@@ -118,7 +131,7 @@ locals {
 
   # Counts and keys below use only values known at plan time: the secret
   # ARNs themselves may not exist until apply.
-  secret_arns = concat(var.secret_arns, local.tls_enabled && try(var.tls.serves_tls, false) ? [var.tls.cert_secret_arn] : [])
+  secret_arns = concat(var.secret_arns, local.serves_tls ? [var.tls.cert_secret_arn] : [])
 }
 
 # ------------------------------------------------------------------ logs
