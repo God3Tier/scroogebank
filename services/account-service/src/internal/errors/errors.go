@@ -15,6 +15,9 @@ var (
 	ErrInvalidClientID          = errors.New("invalid client id")
 	ErrClientNotFound           = errors.New("client not found")
 	ErrClientServiceUnavailable = errors.New("client service unavailable")
+	// ErrClientNotVerified refuses an agent's account for a client who is not
+	// verified yet (ADR-0050).
+	ErrClientNotVerified = errors.New("verify the client before opening an account")
 
 	// Account errors
 	ErrInvalidBranchID      = errors.New("invalid branch id")

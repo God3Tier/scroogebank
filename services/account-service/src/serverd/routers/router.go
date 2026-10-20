@@ -53,8 +53,9 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 	account.Use(auditLogger)
 	{
 		// Ownership of the client is checked by client-profile-management-
-		// service inside CreateAccount, using the caller's token.
-		account.POST("", adaptHandler(accounts.CreateAccount, ""))
+		// service inside CreateAccount, using the caller's token. The caller
+		// is passed too: agents need a verified client (ADR-0050).
+		account.POST("", withCaller(accounts.CreateAccount))
 		account.GET("", listAccounts(accounts))
 		account.GET("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.GetAccount, "accountId"))
 		account.DELETE("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))

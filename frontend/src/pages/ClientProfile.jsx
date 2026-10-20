@@ -50,10 +50,16 @@ function updateProblem(error) {
   return 'The changes could not be saved. Try again.'
 }
 
+// Agents may open accounts only for verified clients; admins for any client
+// (ADR-0050).
+const VERIFY_FIRST = 'Verify this client before opening an account.'
+
 // account-service answers a validation failure with a bare "bad input", so
-// a 400 cannot say which field was wrong.
+// a 400 cannot say which field was wrong. A 403 means the client is not
+// verified, for a page loaded before someone else changed that.
 function openAccountProblem(error) {
   if (error.status === 400) return 'Check the account details and try again.'
+  if (error.status === 403) return VERIFY_FIRST
   if (error.status === 404) return 'This client is no longer available.'
   if (error.status === 409) return 'This client already has an account of this type.'
   if (error.status === 503) return 'The client could not be checked just now. Try again shortly.'
@@ -215,7 +221,8 @@ function ClientProfile() {
 function ClientProfileView({ clientId }) {
   const auth = useAuth()
   const ownSubject = auth.user?.profile?.sub
-  const homePath = inAnyGroup(auth.user, [ADMIN]) ? '/admin' : '/agent'
+  const admin = inAnyGroup(auth.user, [ADMIN])
+  const homePath = admin ? '/admin' : '/agent'
   const [state, setState] = useState({ status: 'loading', client: null, documents: [], error: null })
   const [file, setFile] = useState(null)
   const [upload, setUpload] = useState({ saving: false, error: '', message: '' })
@@ -363,6 +370,7 @@ function ClientProfileView({ clientId }) {
 
   const { client, documents } = state
   const verified = isVerified(client)
+  const canOpenAccount = admin || verified
   const withoutDocument = verified && client.verified_with_documents === false
   const verifyWithDocuments = checked.size > 0
   const evidenceCount = documents.filter((doc) => doc.verification_evidence).length
@@ -431,7 +439,7 @@ function ClientProfileView({ clientId }) {
       <section className="card" aria-labelledby="accounts-title">
         <div className="document-preview__header">
           <h2 id="accounts-title">Accounts</h2>
-          {!openingAccount && (
+          {!openingAccount && canOpenAccount && (
             <button type="button" onClick={() => { setAccountMessage(''); setOpeningAccount(true) }}>Open account</button>
           )}
         </div>
@@ -440,7 +448,7 @@ function ClientProfileView({ clientId }) {
           <AccountOpener clientId={clientId} onOpened={handleAccountOpened} onCancel={() => setOpeningAccount(false)} />
         ) : (
           <p className="section-note">
-            Open a bank account for this client. To see the accounts they hold,
+            {canOpenAccount ? 'Open a bank account for this client.' : VERIFY_FIRST} To see the accounts they hold,
             use <Link to={`/agent/client/${encodeURIComponent(clientId)}/transactions`}>View accounts and transactions</Link>.
           </p>
         )}

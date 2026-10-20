@@ -1,5 +1,36 @@
 # AI usage log
 
+## 2026-10-20 — Activity feed timeout, page names, dashboard budgets, verified clients only
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: four changes on four branches, all from `dev`.
+  - `task/base-features/auditor-channel-warm-up`: read the owner's
+    CloudWatch line for the activity feed failing on first load
+    (`DEADLINE_EXCEEDED`, about 1.8 s of the 2 s deadline spent
+    connecting) and make user-service connect to the auditor at startup.
+  - `task/frontend/page-names`: rename Agent/Admin Dashboard to
+    Agent/Admin Home, and Agent/Admin Insights to Agent/Admin Dashboard.
+  - `task/business-dashboard/longer-upstream-budgets`: raise
+    dashboard-service's budgets to 10 s per call and 15 s overall, which
+    the owner chose, and amend ADR-0033.
+  - `task/base-features/verified-clients-only-accounts`: draft ADR-0050
+    and make account-service refuse an agent's account for an unverified
+    client (403), with the client page following the same rule.
+- Human verification required: decide ADR-0050 and tell Joseph Yau
+  (Feature 2) and the frontend owner. In AWS, check that the activity feed
+  loads on the first visit after a deploy with no `DEADLINE_EXCEEDED`, that
+  the dashboards load after a restart with no `exceeded its budget`, and
+  that an agent's direct `POST /api/accounts` for an unverified client
+  returns 403.
+- Data: repository content and one CloudWatch log line the owner pasted,
+  with no client data. No secrets or real client data were used.
+- Verification: user-service's 83 tests pass, dashboard-service's 105,
+  account-service's `make test` and `go vet`, and the frontend's tests,
+  lint and build on both frontend branches. The new tests for the auditor
+  channel, the account-service rule and the hidden button fail without
+  their change.
+
 ## 2026-10-20 — INF-03 least-privilege database logins, and stale statuses
 
 - Human owner: Neo Jia Wen.

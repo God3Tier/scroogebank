@@ -9,10 +9,10 @@ import (
 )
 
 type AccountService interface {
-	// CreateAccount asks client-profile-management-service for the client's
-	// owner, using the caller's Authorization header, and stores that owner on
-	// the account.
-	CreateAccount(ctx context.Context, account models.CreateAccountInput, authorization string) error
+	// CreateAccount asks client-profile-management-service for the client,
+	// using the caller's Authorization header, and stores the client's owner
+	// on the account. An agent may open one only for a verified client.
+	CreateAccount(ctx context.Context, account models.CreateAccountInput, caller models.Caller, authorization string) error
 	GetAccount(ctx context.Context, accountID string) (*orm.Account, error)
 	DeleteAccount(ctx context.Context, accountID string) error
 	// ListAccounts returns a client's accounts that the caller may see.

@@ -37,6 +37,15 @@ const unverified = {
   verification_status: 'UNVERIFIED',
 }
 
+// Agents may open accounts only for verified clients (ADR-0050).
+const verified = {
+  ...unverified,
+  verification_status: 'VERIFIED',
+  verified_by_agent_id: AGENT_SUB,
+  verified_at: '2026-10-13T05:00:00Z',
+  verified_with_documents: true,
+}
+
 const document = {
   document_id: 'doc-0001',
   client_id: CLIENT_ID,
@@ -200,13 +209,15 @@ describe('client page', () => {
   })
 
   it('opens an account for the client and says so', async () => {
+    getClient.mockResolvedValue(verified)
     createAccount.mockResolvedValue({ account_id: 'acct-0001', status: 'Account created successfully' })
     renderPage()
     await fillAccountForm()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Savings account opened. Account ID: acct-0001')
+    // A verified client's page already has a status: the verification.
+    expect(await screen.findByText(/Savings account opened\. Account ID: acct-0001/)).toHaveAttribute('role', 'status')
     expect(createAccount).toHaveBeenCalledWith({
       client_id: CLIENT_ID,
       account_type: 'SAVINGS',
@@ -219,6 +230,7 @@ describe('client page', () => {
   })
 
   it('keeps the form open and explains when the client already has that type of account', async () => {
+    getClient.mockResolvedValue(verified)
     createAccount.mockRejectedValue(Object.assign(new Error('Request failed (409)'), { status: 409 }))
     renderPage()
     await fillAccountForm()
@@ -227,6 +239,32 @@ describe('client page', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already has an account of this type')
     expect(screen.getByLabelText(/^Branch ID/)).toHaveValue('SG-001')
+  })
+
+  it('offers an agent no account for an unverified client', async () => {
+    renderPage()
+
+    expect(await screen.findByText(/Verify this client before opening an account/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open account' })).not.toBeInTheDocument()
+  })
+
+  it('lets an admin open an account for an unverified client', async () => {
+    useAuth.mockReturnValue({ isAuthenticated: true, user: { profile: { sub: 'admin-sub-0009', 'cognito:groups': ['Admin'] } } })
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: 'Open account' })).toBeInTheDocument()
+    expect(screen.queryByText(/Verify this client before opening an account/)).not.toBeInTheDocument()
+  })
+
+  it('explains a refusal for a client who is not verified', async () => {
+    getClient.mockResolvedValue(verified)
+    createAccount.mockRejectedValue(Object.assign(new Error('Request failed (403)'), { status: 403 }))
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Verify this client before opening an account')
   })
 
   it('says so when the client is already verified', async () => {

@@ -6,7 +6,7 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted |
+| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. 403 if the caller is an agent and the client is not verified (ADR-0050) |
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
@@ -41,6 +41,7 @@ The `accounts` table has no foreign key to `clients`, because clients live in an
   | client service answers | Response |
   |---|---|
   | 200 | The account is created. The client's `created_by_agent_id` is stored as `owner_agent_id` |
+  | 200, but the caller is an agent and the client's `verification_status` is not `VERIFIED` (in any case) | 403 `verify the client before opening an account`, and nothing is created. Admins are not restricted ([ADR-0050](../../docs/adr/ADR-0050-agents-open-accounts-only-for-verified-clients.md)) |
   | 404 | 404, and nothing is created |
   | Anything else, or no answer within 2 seconds | 503, and nothing is created |
 

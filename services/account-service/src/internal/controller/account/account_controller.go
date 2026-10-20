@@ -7,7 +7,9 @@ import (
 )
 
 type AccountController interface {
-	CreateAccount(w http.ResponseWriter, r *http.Request)
+	// CreateAccount takes the caller from the verified token too: an agent
+	// may open an account only for a verified client.
+	CreateAccount(w http.ResponseWriter, r *http.Request, caller models.Caller)
 	GetAccount(w http.ResponseWriter, r *http.Request)
 	DeleteAccount(w http.ResponseWriter, r *http.Request)
 	// ListAccounts takes the caller explicitly rather than from a header, so

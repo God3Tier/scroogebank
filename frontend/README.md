@@ -88,6 +88,8 @@ Open the browser's network tab and click **Sign in**. The `/oauth2/authorize` re
 
 Uploading never verifies anyone. Verify sends the checked documents' IDs, and client-service records who verified, when and which documents; the page then shows that, and marks the documents used.
 
+Until the client is verified, an agent sees "Verify this client before opening an account." in place of **Open account**, and account-service refuses the request with 403 ([ADR-0050](../docs/adr/ADR-0050-agents-open-accounts-only-for-verified-clients.md)). Admins can open an account for any client.
+
 Documents are optional, because the requirements Q&A does not expect an upload (CPM06). With no document checked, the agent confirms "I have checked this client's identity without an uploaded document" and clicks **Verify without a document**. That verification is never hidden: the page shows a **Without a document** badge and says the client was verified without an uploaded document, client-service returns `verified_with_documents: false`, and the audit event says so. The calls are in `src/api/clients.js`. Locally, Vite's `/api` rule sends them to client-profile-management-service on port 8080, which `make run` starts with its LocalStack bucket (see its README).
 
 The Agent Dashboard's **Manage Client Profiles and Accounts** list comes from `GET /api/clients`; **Edit** on a row opens this page, where **Open account** opens a bank account for the client through account-service.
