@@ -47,6 +47,8 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
 
+**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed), which chose neither. Each Go service's task runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. user-service and event-alert-service still migrate on startup. Application logins without schema rights come later (INF-03).
+
 ## 9. Client ID validation at import
 
 For now, transaction-ingest does not check Client IDs against client-service; ownership is checked when transactions are read ([Ingestion decisions](data-flow.md#ingestion-decisions)). Account IDs, by contrast, are checked at import: the poller asks account-service which account references exist and stores their client IDs ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)). The Feature 3 owner must confirm this, or choose another way to validate, in the Feature 3 plan and [ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) (project_plan §13 requires the ingestion design to be decided explicitly).

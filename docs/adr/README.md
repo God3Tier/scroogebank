@@ -63,7 +63,7 @@ Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](
 - [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md) — One RDS PostgreSQL instance per service with a Multi-AZ standby, AWS Backup with a cross-region copy, and no cache tier.
 - [ADR-0026](ADR-0026-one-stack-per-legal-entity.md) — Segregate data by deploying one full Terraform stack per legal entity; only Singapore is deployed.
 - [ADR-0027](ADR-0027-observability-baseline.md) — Structured PII-masked logs, CloudWatch metrics and dashboard, alarms to SNS with named owners, GuardDuty and CloudTrail.
-- [ADR-0028](ADR-0028-cicd-migrations-terraform.md) — GitHub Actions deploying through OIDC, one schema-migration task per service, and all infrastructure in Terraform.
+- [ADR-0028](ADR-0028-cicd-migrations-terraform.md) — GitHub Actions deploying through OIDC; schema migrations with Flyway in an init container in each service's task, before its app starts; and all infrastructure in Terraform.
 - [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) — Local dev, disposable staging, prod only for the final weeks, and Multi-AZ only in the demo week, to stay under USD 300.
 - [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) — X-factor 1: a worker every 4 hours sends only public terms to AgentCore web search in Tokyo; summaries use Bedrock in Singapore; own alerts-db.
 - [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) — X-factor 1: deterministic instrument master and matching with no vector similarity; search only instruments held by ≥ 2 clients and ≥ 5% of clients.

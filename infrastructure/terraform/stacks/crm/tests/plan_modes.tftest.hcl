@@ -103,6 +103,21 @@ run "prod" {
     condition     = output.dashboard_inputs.upstreams.user.url == "https://user-service:8081"
     error_message = "dashboard-service calls user-service over HTTPS."
   }
+  assert {
+    condition = (
+      alltrue([for m in [module.client_service, module.account_service, module.transaction_service, module.auditor] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"]) &&
+      !contains(module.user_service.container_names, "db-migrate") && !contains(module.event_alert_service.container_names, "db-migrate")
+    )
+    error_message = "The Go services' tasks migrate their databases before starting; the Java services run Flyway themselves (ADR-0028 decision 3)."
+  }
+  assert {
+    condition     = join(",", sort(keys(local.migrations["audit"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD,FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD,FLYWAY_USER" && length(local.migrations["clients"].secrets) == 2
+    error_message = "Only audit-db's db-migrate gets the auditor's and chain-verify's passwords, for the logins it creates."
+  }
+  assert {
+    condition     = contains(keys(aws_ecr_repository.this), "db-migrate")
+    error_message = "The db-migrate image has its own repository."
+  }
 }
 
 run "custom_domain" {

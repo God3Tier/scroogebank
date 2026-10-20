@@ -81,7 +81,10 @@ Building the stack also showed that the code on `dev` needs more from the deploy
    - for Java services, a JVM truststore that adds the project CA.
 
    Go services read the certificate and key through their own settings. For a Java service, the `ecs-service` module sets Spring Boot's `SERVER_SSL_CERTIFICATE` and `SERVER_SSL_CERTIFICATEPRIVATEKEY`, so the services need no code change and still serve plain HTTP locally. The private keys are also in the Terraform state, so only administrators may read the state bucket.
-6. **Database logins.** The auditor and chain-verify log in as `auditor_app` and `chain_verify`, holding the roles `auditor_service` and `auditor_chain_verify` (ADR-0022 decision 2). Terraform generates their passwords; the logins are created once by hand (runbook) until the db-migrate task exists. Every other service connects as its instance's RDS-managed master user until then. This is a temporary deviation from ADR-0028 decision 3 (no schema rights for application users, [open item 8](../architecture/open-items.md#8-migrations-on-startup-or-as-a-task)).
+6. **Database logins.** The auditor and chain-verify log in as `auditor_app` and `chain_verify`, holding the roles `auditor_service` and `auditor_chain_verify` (ADR-0022 decision 2).
+   - Terraform generates their passwords.
+   - The auditor's db-migrate container creates the logins and sets the passwords at every start ([ADR-0028](ADR-0028-cicd-migrations-terraform.md) decision 3).
+   - Every other service connects as its instance's RDS-managed master user until INF-03 gives them logins without schema rights. This is a temporary deviation from ADR-0028 decision 3.
 7. **Service Connect proxies TLS ports as TCP.** The auditor's gRPC and HTTPS ports, user-service, client-service and account-service have no `appProtocol`. Their TLS is end to end (ADR-0021 decision 7), so Envoy cannot read gRPC or HTTP inside it, and `appProtocol: grpc` (ADR-0021 decision 5) would break the connection. Envoy balances connections, and the server's `MaxConnectionAge` makes callers reconnect, as decision 7 already says. transaction-service, the only plain-HTTP service on Service Connect, keeps `appProtocol: http`.
 8. **Internal ALB.**
    - **Custom domain and HTTPS** ([ADR-0019](ADR-0019-edge-entry-chain.md) decision 5, [open item 2](../architecture/open-items.md#2-domain-name)). The domain is registered by hand in Route 53, which creates its public hosted zone. Both stay outside Terraform, like the deploy role (ADR-0046), so no destroy removes them. With `domain_name` set, `stacks/crm`:
@@ -126,7 +129,7 @@ Requiring the paid plan keeps one configuration, the one the accepted ADRs descr
 ### Negative / Trade-offs
 
 - Every deployment is billed. The account must be on the paid plan, and the stack must be stopped between sessions to stay within the USD 300 limit (see Cost Impact).
-- Until db-migrate exists, schemas are applied by hand, and most services use their database's master user.
+- Most services use their database's master user until INF-03.
 - Starting a session takes longer: the NAT gateway is recreated (about 2–3 minutes) and the RDS instances start (several minutes).
 - The CA and service private keys are in the Terraform state.
 - Without the cross-region copy (decision 11), backups exist only in ap-southeast-1, and no Vault Lock protects them. [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md)'s recovery by rebuilding in ap-southeast-2, and the restore rehearsal it plans, cannot be done until the policy allows the vault.
@@ -172,7 +175,7 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 - bootstrap, and registering the domain by hand;
 - building and pushing images and the Lambda zip;
 - the apply order (crm, then business-dashboard, then sftp-server, then crm again);
-- the one-time database steps and the frontend upload;
+- the frontend upload;
 - starting and stopping sessions;
 - teardown.
 
@@ -182,7 +185,9 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
 
 - `terraform validate` on all four stacks.
 - `terraform test` in `stacks/crm`: seven runs plan the stack against mocked providers and check prod, the custom domain, the high-availability week, the stopped state, staging, the Lambda settings from ADR-0024 and ADR-0040, and teardown.
-- `terraform test` in `modules/ecs-service`: two runs check that a Java service serving TLS gets its certificate files, Spring Boot's TLS settings, a TCP Service Connect port and HTTPS health checks, and that one that does not stays on HTTP.
+- `terraform test` in `modules/ecs-service`:
+  - two runs check that a Java service serving TLS gets its certificate files, Spring Boot's TLS settings, a TCP Service Connect port and HTTPS health checks, and that one that does not stays on HTTP;
+  - three check the db-migrate container ([ADR-0028](ADR-0028-cicd-migrations-terraform.md)).
 - `terraform test` in `stacks/business-dashboard`: see [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md).
 - The first real apply on a paid-plan account must finish, and the services must pass their ALB health checks, all over HTTPS.
 
@@ -214,3 +219,6 @@ The project account's domain, `itsag3t6.com`, is already paid until July 2027, s
   - **Decision 5:** user-service and event-alert-service get project-CA certificates, and dashboard-service a self-signed one in its own stack. Java services serve them through Spring Boot's `server.ssl` settings.
   - **Decision 7:** user-service's port becomes TCP on Service Connect; only transaction-service keeps `appProtocol: http`.
   - **Decision 8:** every target group uses HTTPS, which closes the gap with the security model. Security & Privacy Impact, Cost Impact and Validation changed to match.
+- 2026-10-20: amended while Proposed, as decided by the decision owner (INF-03).
+  - **Decision 6:** the auditor's db-migrate container creates the auditor's and chain-verify's logins ([ADR-0028](ADR-0028-cicd-migrations-terraform.md) decision 3), and the runbook no longer applies any SQL by hand.
+  - Consequences, Operational Impact and Validation changed to match.
