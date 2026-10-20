@@ -302,6 +302,8 @@ resource "aws_cloudwatch_dashboard" "this" {
           region = local.region
           stat   = "Average"
           period = 300
+          # dashboard-service runs in this cluster; the business-dashboard
+          # stack deploys it (ADR-0047).
           metrics = [for s in ["user-service", "client-service", "account-service", "auditor", "transaction-service", "dashboard-service", "event-alert-service"] :
             ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", s]
           ]

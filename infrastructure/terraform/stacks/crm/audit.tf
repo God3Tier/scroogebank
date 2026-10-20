@@ -32,13 +32,13 @@ resource "aws_sqs_queue_redrive_allow_policy" "audit_dlq" {
 locals {
   # Roles allowed to send audit events. The queue alone does not prove which
   # service sent an event (open item 18); this policy at least limits sending
-  # to these roles.
+  # to these roles. dashboard-service's role comes in through
+  # extra_audit_producer_role_arns (ADR-0047).
   audit_producer_role_arns = compact(concat(
     [
       module.user_service.task_role_arn,
       module.client_service.task_role_arn,
       module.account_service.task_role_arn,
-      module.dashboard_service.task_role_arn,
       module.event_alert_service.task_role_arn,
       aws_iam_role.cognito_triggers_replay.arn,
     ],

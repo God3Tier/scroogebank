@@ -104,6 +104,44 @@ output "sftp_client_public_key" {
   value = trimspace(tls_private_key.sftp_client.public_key_openssh)
 }
 
+# --------------------------------------- for the business-dashboard stack
+
+output "dashboard_inputs" {
+  description = "What the business-dashboard stack reads from this stack's state (ADR-0047). Renaming a key here breaks that stack."
+  value = {
+    name_prefix    = local.name
+    vpc_id         = aws_vpc.this.id
+    app_subnet_ids = local.app_subnet_ids
+    cluster_arn    = aws_ecs_cluster.this.arn
+    cluster_name   = aws_ecs_cluster.this.name
+    namespace_arn  = aws_service_discovery_http_namespace.this.arn
+    alb            = local.alb
+    alb_sg         = local.sg["alb"]
+
+    # The services dashboard-service calls over Service Connect (ADR-0033).
+    upstreams = {
+      user    = { security_group = local.sg["user"], port = local.ports.user, url = "http://${local.sc.user}:${local.ports.user}" }
+      client  = { security_group = local.sg["client"], port = local.ports.client, url = "https://${local.sc.client}:${local.ports.client}" }
+      account = { security_group = local.sg["account"], port = local.ports.account, url = "https://${local.sc.account}:${local.ports.account}" }
+    }
+
+    ca_pem                   = local.ca_pem
+    cognito_issuer           = local.cognito_issuer
+    cognito_web_client_id    = aws_cognito_user_pool_client.web.id
+    audit_queue_url          = aws_sqs_queue.audit.url
+    audit_queue_arn          = aws_sqs_queue.audit.arn
+    audit_producer_role_arns = local.audit_producer_role_arns
+
+    min_tasks               = local.min_tasks
+    max_tasks               = local.max_tasks
+    use_spot                = local.use_fargate_spot
+    log_retention_days      = local.log_retention_days
+    cpu_architecture        = var.cpu_architecture
+    deletion_protection     = local.deletion_protection
+    github_deploy_role_name = var.enable_github_deploy_role ? aws_iam_role.github_deploy[0].name : null
+  }
+}
+
 # ------------------------------------------- for EDA-D1-02 (alert worker)
 
 output "alerts_worker_inputs" {

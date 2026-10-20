@@ -472,58 +472,8 @@ module "transaction_service" {
   depends_on = [aws_ecs_cluster_capacity_providers.this]
 }
 
-# -------------------------------------------------------- dashboard-service
-
-module "dashboard_service" {
-  source = "../../modules/ecs-service"
-
-  name               = "dashboard-service"
-  name_prefix        = local.name
-  cluster_arn        = aws_ecs_cluster.this.arn
-  cluster_name       = aws_ecs_cluster.this.name
-  subnet_ids         = local.app_subnet_ids
-  security_group_ids = [local.sg["dashboard"]]
-  image              = local.image["dashboard-service"]
-  # 1 vCPU, not 0.5: on 0.5, shared with the Service Connect proxy, the JVM
-  # took 34 s to start and 1.5-3.4 s for its first call to each upstream.
-  # Fargate pairs 1 vCPU with at least 2 GB.
-  cpu              = 1024
-  memory           = 2048
-  cpu_architecture = var.cpu_architecture
-  port             = local.ports.dashboard
-  app_protocol     = "http"
-
-  environment = {
-    OIDC_ISSUER_URI          = local.cognito_issuer
-    COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
-    AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
-    AWS_REGION               = local.region
-    USER_SERVICE_BASE_URL    = "http://${local.sc.user}:${local.ports.user}"
-    CLIENT_SERVICE_BASE_URL  = "https://${local.sc.client}:${local.ports.client}"
-    ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
-  }
-  task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
-  tls                = { mode = "java", ca_pem = local.ca_pem }
-
-  # A client only: nothing calls the dashboard inside the VPC.
-  service_connect = {
-    namespace_arn = aws_service_discovery_http_namespace.this.arn
-    aliases       = []
-  }
-
-  load_balancer = merge(local.alb, {
-    protocol          = "HTTP"
-    health_check_path = "/actuator/health"
-    rules             = [{ priority = 50, paths = ["/api/dashboard", "/api/dashboard/*"] }]
-  })
-
-  min_tasks          = local.min_tasks
-  max_tasks          = local.max_tasks
-  use_spot           = local.use_fargate_spot
-  log_retention_days = local.log_retention_days
-
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
-}
+# dashboard-service runs in this cluster but is deployed by the
+# business-dashboard stack (ADR-0047), from the dashboard_inputs output.
 
 # ------------------------------------------------------ event-alert-service
 # api mode only. The worker, its schedule, AgentCore in Tokyo and Bedrock
