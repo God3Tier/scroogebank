@@ -1,5 +1,34 @@
 # AI usage log
 
+## 2026-10-20 — INF-12 business-dashboard stack
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: compare ways of passing the CRM stack's values to a separate stack
+  (remote state, copied tfvars, lookups by name, an SSM parameter); move
+  dashboard-service from `stacks/crm` into a new `stacks/business-dashboard`
+  that reads the CRM's new `dashboard_inputs` output, owns its image
+  repository, security group and rules on the CRM's service groups, and stops
+  its plan when the audit queue does not allow its role; write its mocked
+  plan tests; draft ADR-0047, amend ADR-0042, and update the runbook, the
+  Terraform README, the infrastructure and business-dashboard plans, the
+  resource register and `scripts/aws-session.sh`. Also ignore the local
+  `references/` folder.
+- Human verification required: decide ADR-0047; on the next session, apply
+  the CRM stack with the dashboard's role in `extra_audit_producer_role_arns`,
+  then the business-dashboard stack, and check that `/api/dashboard/*` returns
+  panels for an agent and an admin and that its audit events reach the queue.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used. `terraform fmt
+  -check` printed one line each from the git-ignored real `env/prod.tfvars`
+  files (an image URI with the account ID, and the SFTP server's address);
+  they were not changed or copied.
+- Verification: `terraform fmt -check` is clean for every tracked file;
+  `terraform validate` passes for the crm, business-dashboard and sftp-server
+  stacks; `terraform test` passes 6/6 in `stacks/crm` and 3/3 in
+  `stacks/business-dashboard`, whose failing-precondition run confirms the
+  audit check. Nothing ran in AWS.
+
 ## 2026-10-16 — INF-05 transaction-service image
 
 - Human owner: Neo Jia Wen; the Feature 3 owner (Joseph Yau) to confirm, as the
