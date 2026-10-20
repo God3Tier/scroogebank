@@ -41,7 +41,7 @@ CHAIN_ANCHOR_BUCKET ?= chain-anchors
 LOCALSTACK_KEY   := test
 
 .PHONY: \
-	db-up db-down db-logs db-reset load-schema psql \
+	db-up db-down db-logs db-reset migrate psql \
 	run chain-verify down \
 	tools-image mockery proto \
 	test-db-up test-db-down generate-orm sqlboiler \
@@ -53,16 +53,11 @@ LOCALSTACK_KEY   := test
 # compose.yaml
 # ============================================================
 
-## Start PostgreSQL and LocalStack (SQS), load the database schema if missing,
-## generate the gRPC code, and run the Auditor
-run: proto
-	$(COMPOSE) up -d postgres localstack
-	@until $(COMPOSE) exec -T postgres pg_isready -h 127.0.0.1 -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1; do sleep 1; done
+## Start PostgreSQL and LocalStack (SQS), apply the migrations, generate the
+## gRPC code, and run the Auditor
+run: proto migrate
+	$(COMPOSE) up -d localstack
 	@until $(COMPOSE) exec -T localstack awslocal sqs get-queue-url --queue-name audit-insert >/dev/null 2>&1; do sleep 2; done
-	@if ! $(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -tAc "SELECT to_regclass('public.audit_log') IS NOT NULL" | grep -qx t; then \
-		echo "Loading Auditor database schema..."; \
-		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
-	fi
 	HOST=localhost USER=$(DB_USER) PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) SSLMODE=disable GRPC_PORT=$(GRPC_PORT) HTTP_PORT=$(HTTP_PORT) COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" AWS_REGION=$(AWS_REGION) AWS_ENDPOINT_URL=$(AWS_ENDPOINT_URL) AWS_ACCESS_KEY_ID=$(LOCALSTACK_KEY) AWS_SECRET_ACCESS_KEY=$(LOCALSTACK_KEY) AUDIT_QUEUE_URL=$(AUDIT_QUEUE_URL) AUDIT_DLQ_URL=$(AUDIT_DLQ_URL) go run ./src/serverd
 
 ## Check the local audit chain once, as the daily chain-verify task does:
@@ -94,13 +89,12 @@ db-reset:
 db-logs:
 	$(COMPOSE) logs -f postgres
 
-load-schema:
-	PGPASSWORD=$(DB_PASS) psql \
-		-h $(DB_HOST) \
-		-p $(DB_PORT) \
-		-U $(DB_USER) \
-		-d $(DB_NAME) \
-		-f $(SCHEMA_FILE)
+## Apply data/schema.sql to the local database with Flyway, as the auditor's
+## db-migrate container does in AWS (docs/database/migrations.md). Flyway
+## records the file's checksum, so editing it once applied fails here, as it
+## would there.
+migrate: db-up
+	@$(COMPOSE) run --rm --build db-migrate || { echo "If Flyway found a non-empty schema with no schema history table, the database was loaded before Flyway: run make db-reset, then make run."; exit 1; }
 
 psql:
 	PGPASSWORD=$(DB_PASS) psql \

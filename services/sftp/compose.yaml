@@ -12,7 +12,6 @@ services:
       - "${POSTGRES_PORT:-5437}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-transactions.sql:ro
     networks:
       - backend
     healthcheck:
@@ -22,6 +21,27 @@ services:
       timeout: 5s
       retries: 10
 
+  # Applies receiver/data/ to db with Flyway, from the image transaction-service's
+  # db-migrate container runs in AWS (docs/database/migrations.md). It runs and
+  # exits before receiver-api starts; make db-up and the poller targets run it too.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-transactions}
+      FLYWAY_USER: ${POSTGRES_USER:-crm}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/transactions
+    networks:
+      - backend
+
+  # Loads init.sql directly: it starts empty every time, so there is no
+  # applied migration for Flyway to check.
   test-db:
     image: postgres:17-alpine
     profiles: ["test"]
@@ -128,8 +148,8 @@ services:
     networks:
       - backend
     depends_on:
-      db:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     logging:
       driver: json-file
