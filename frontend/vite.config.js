@@ -7,8 +7,9 @@ export default defineConfig({
   server: {
     // The first matching rule wins, in the same order as the deployed ALB's
     // rules. Locally, user-service listens on 8081 (users, activities and
-    // transactions), account-service on 8083, dashboard-service on 8085 and
-    // client-profile-management-service on 8080.
+    // transactions), account-service on 8083, dashboard-service on 8085,
+    // engagement-service on 8086 and client-profile-management-service on
+    // 8080.
     proxy: {
       '^/api/accounts/[^/]+/transactions': {
         target: 'http://localhost:8081',
@@ -32,6 +33,10 @@ export default defineConfig({
       },
       '/api/dashboard': {
         target: 'http://localhost:8085',
+        changeOrigin: true,
+      },
+      '/api/engagement': {
+        target: 'http://localhost:8086',
         changeOrigin: true,
       },
       '/api': {
