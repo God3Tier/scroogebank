@@ -134,6 +134,10 @@ run "prod" {
     error_message = "AI drafting is off by default, with the Nova Micro Asia-Pacific profile (ADR-0054)."
   }
   assert {
+    condition     = module.engagement_service.app_environment.ENGAGEMENT_HOLIDAY_SYNC_ENABLED == "true" && aws_cloudwatch_log_metric_filter.holiday_data.pattern == "?\"holiday_coverage_short\" ?\"holiday_sync_mismatch\""
+    error_message = "The holiday sync runs in AWS, and its warnings raise an alarm (ADR-0057)."
+  }
+  assert {
     condition     = module.engagement_service.app_environment.SPRING_FLYWAY_ENABLED == "false" && module.engagement_service.app_environment.CLIENT_SERVICE_BASE_URL == "https://client-service:8080"
     error_message = "db-migrate applies the migrations, and client-service is reached over Service Connect."
   }

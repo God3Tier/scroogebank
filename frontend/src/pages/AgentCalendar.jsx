@@ -5,6 +5,7 @@ import { listClients } from '../api/clients.js'
 import {
   cancelEvent,
   createEvent,
+  getHolidayCoverage,
   getPreferences,
   listEvents,
   listHolidays,
@@ -22,6 +23,15 @@ const pad = (n) => String(n).padStart(2, '0')
 
 function currentMonth(now) {
   const [year, month] = singaporeParts(now).date.split('-').map(Number)
+  return { year, month }
+}
+
+const monthIndex = ({ year, month }) => year * 12 + month
+
+// The last month the holiday list covers, or null when unknown.
+function lastMonthOf(coverage) {
+  if (!coverage?.coveredThrough) return null
+  const [year, month] = coverage.coveredThrough.split('-').map(Number)
   return { year, month }
 }
 
@@ -135,6 +145,19 @@ function AgentCalendar({ now: fixedNow }) {
     void load()
   }, [load, version])
 
+  // Months past the holiday list are not offered, so the calendar never shows
+  // a year without its holidays. Unknown coverage sets no limit.
+  const [lastMonth, setLastMonth] = useState(null)
+  useEffect(() => {
+    let current = true
+    Promise.resolve()
+      .then(() => getHolidayCoverage())
+      .then((coverage) => current && setLastMonth(lastMonthOf(coverage)))
+      .catch(() => current && setLastMonth(null))
+    return () => { current = false }
+  }, [])
+  const atLastMonth = lastMonth !== null && monthIndex(month) >= monthIndex(lastMonth)
+
   useEffect(() => {
     let current = true
     listClients({ size: 100 })
@@ -237,7 +260,8 @@ function AgentCalendar({ now: fixedNow }) {
               <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
             </button>
             <h2 className="calendar-month">{MONTH_NAME.format(new Date(Date.UTC(month.year, month.month - 1, 1)))}</h2>
-            <button type="button" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Next month">
+            <button type="button" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Next month"
+              disabled={atLastMonth}>
               <span className="material-symbols-outlined" aria-hidden="true">chevron_right</span>
             </button>
           </div>

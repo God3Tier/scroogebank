@@ -5,7 +5,7 @@ openapi: 3.0.3
 # PreferencesAndHolidaysApiTest) check its statuses and shapes.
 #
 # Decisions: ADR-0051 to ADR-0054, accepted 2026-10-21; ADR-0056 (drafts
-# edited as plain text), accepted 2026-10-21. Implemented by
+# edited as plain text) and ADR-0057 (holiday sync), accepted 2026-10-21. Implemented by
 # services/engagement-service.
 
 info:
@@ -206,6 +206,32 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Holiday' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/engagement/holidays/coverage:
+    get:
+      tags: [holidays]
+      summary: How far a country's holiday list reaches
+      description: |
+        The calendar offers no month after `coveredThrough`, so it never shows
+        a year without its holidays (ADR-0057). The list grows when MOM
+        publishes a new year.
+      operationId: getHolidayCoverage
+      parameters:
+        - name: country
+          in: query
+          required: true
+          description: ISO 3166-1 alpha-2 code.
+          schema: { type: string, pattern: '^[A-Z]{2}$' }
+          example: SG
+      responses:
+        '200':
+          description: The coverage. `coveredThrough` is null for a country with no data.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HolidayCoverage' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -602,6 +628,18 @@ components:
         observed:
           type: boolean
           description: True for a day in lieu of a holiday that falls on a Sunday.
+
+    HolidayCoverage:
+      type: object
+      required: [countryCode]
+      properties:
+        countryCode: { type: string, example: SG }
+        coveredThrough:
+          type: string
+          format: date
+          nullable: true
+          description: 31 December of the latest year with holidays. Null or absent when there are none.
+          example: '2027-12-31'
 
     DraftPurpose:
       type: string

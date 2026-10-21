@@ -30,6 +30,12 @@ export function listHolidays({ country = 'SG', from, to }) {
   return requestJson(`/api/engagement/holidays${query({ country, from, to })}`)
 }
 
+// The last day the holiday list covers (coveredThrough, or null), so the
+// calendar does not offer months without holidays (ADR-0057).
+export function getHolidayCoverage({ country = 'SG' } = {}) {
+  return requestJson(`/api/engagement/holidays/coverage${query({ country })}`)
+}
+
 export function listDrafts({ status, clientId, limit } = {}) {
   return requestJson(`/api/engagement/drafts${query({ status, clientId, limit })}`)
 }

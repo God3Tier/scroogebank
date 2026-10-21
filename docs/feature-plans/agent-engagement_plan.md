@@ -32,7 +32,7 @@ The CRM records clients, accounts and transactions, but gives agents no help man
 2. **Calendar events:** an agent creates, updates and cancels single (non-recurring) events. An event may link to one of the agent's own clients.
 3. **Calendar integration:** each create, update or cancel emails the agent an iCalendar invite, update or cancellation, which Gmail and Outlook add to the agent's calendar (ADR-0052).
 4. **Meeting reminders:** up to two reminder emails per event at chosen offsets, sent by an in-service dispatcher (ADR-0051, ADR-0053).
-5. **Public holidays:** a versioned holiday table, starting with Singapore 2026–2027 (ADR-0054).
+5. **Public holidays:** a versioned holiday table, starting with Singapore 2026–2027 (ADR-0054), with later years added from MOM's data.gov.sg dataset (ADR-0057).
 6. **AI follow-up drafts:** the agent picks a client and a purpose. Bedrock writes a draft from placeholders and public holiday data only, with a template fallback (ADR-0054).
 7. **Sending client emails:** the agent reviews and edits a draft, then sends it through SES (ADR-0053).
 8. Audit events for every write, generate and send, plus the auditor's support for them.
@@ -77,7 +77,7 @@ One deployable service, with internal modules that each touch only their own tab
 | `reminders` | Due-time calculation, rescheduling when an event changes |
 | `notifications` | Mail queue, dispatcher, `MailChannel` port with an SES adapter |
 | `drafting` | `DraftGenerator` port: a Bedrock adapter, a template fallback, a safety screen, placeholder filling |
-| `holidays` | Read-only holiday table and lookup |
+| `holidays` | Holiday table and lookup, and the data.gov.sg sync (ADR-0057) |
 | `audit` | Transactional outbox and relay to the shared `audit-insert` queue (ADR-0020) |
 
 - **Calls in:** the frontend calls `/api/engagement/*` through API Gateway's `/api` route and an ALB rule. Only Cognito access tokens issued to the CRM app client are accepted (ADR-0025).
@@ -108,6 +108,7 @@ All routes are under `/api/engagement`. All need the `AGENT` group (§10).
 | `PUT /events/{id}` | Update with optimistic locking (`version`). Queues an update with a higher `SEQUENCE` and reschedules reminders |
 | `DELETE /events/{id}` | Cancel. Queues a cancellation and cancels pending reminders |
 | `GET /holidays?country&from&to` | Public holidays, for the calendar view |
+| `GET /holidays/coverage?country` | How far the holiday list reaches, so the calendar stops there (ADR-0057) |
 | `POST /drafts` | Generate. Body: `clientId`, `purpose` (`CHECK_IN`, `MEETING_FOLLOW_UP`, `HOLIDAY_GREETING`, `PRE_HOLIDAY_REVIEW`), `tone` (`FORMAL`, `WARM`), optional `eventId` |
 | `GET /drafts?status` | The caller's drafts |
 | `GET /drafts/{id}` | One draft, with placeholders filled in for display |

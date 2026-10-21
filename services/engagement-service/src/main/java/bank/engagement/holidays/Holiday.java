@@ -9,7 +9,10 @@ import org.hibernate.annotations.Immutable;
 import java.time.LocalDate;
 import java.util.UUID;
 
-/** A public holiday, seeded by migrations from an official list (ADR-0054 decision 8). */
+/**
+ * A public holiday from an official list, seeded by migrations and added to by
+ * {@link HolidaySync} (ADR-0054 decision 8, ADR-0057).
+ */
 @Entity
 @Immutable
 @Table(name = "holidays")

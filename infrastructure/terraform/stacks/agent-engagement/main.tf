@@ -323,6 +323,7 @@ module "engagement_service" {
     ENGAGEMENT_MAIL_DOMAIN             = local.mail_domain
     CRM_APP_URL                        = local.crm.app_url
     ENGAGEMENT_AI_ENABLED              = tostring(var.ai_enabled)
+    ENGAGEMENT_HOLIDAY_SYNC_ENABLED    = "true" # MOM's list from data.gov.sg (ADR-0057)
     BEDROCK_REGION                     = var.aws_region
     BEDROCK_MODEL_ID                   = var.bedrock_model_id
   }
@@ -402,6 +403,35 @@ resource "aws_cloudwatch_metric_alarm" "dispatch_lagging" {
   metric_name         = aws_cloudwatch_log_metric_filter.dispatch_lagging.metric_transformation[0].name
   statistic           = "Sum"
   period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [local.crm.alarm_topic_arn]
+}
+
+# The holiday list needs a person (ADR-0057): from October, MOM has not
+# published next year's holidays, or a row no longer matches MOM's list.
+resource "aws_cloudwatch_log_metric_filter" "holiday_data" {
+  name           = "${local.name}-engagement-holiday-data"
+  log_group_name = module.engagement_service.log_group_name
+  pattern        = "?\"holiday_coverage_short\" ?\"holiday_sync_mismatch\""
+
+  metric_transformation {
+    name          = "HolidayDataNeedsAttention"
+    namespace     = "CRM/Engagement"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "holiday_data" {
+  alarm_name          = "${local.name}-engagement-holiday-data"
+  alarm_description   = "engagement-service's holiday list is missing next year, or differs from MOM's list on data.gov.sg."
+  namespace           = "CRM/Engagement"
+  metric_name         = aws_cloudwatch_log_metric_filter.holiday_data.metric_transformation[0].name
+  statistic           = "Sum"
+  period              = 3600
   evaluation_periods  = 1
   threshold           = 0
   comparison_operator = "GreaterThanThreshold"

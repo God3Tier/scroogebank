@@ -29,4 +29,10 @@ public class HolidayController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return holidays.list(country, from, to);
     }
+
+    @GetMapping("/coverage")
+    public HolidayCoverage coverage(
+            @RequestParam @Pattern(regexp = "^[A-Z]{2}$", message = "must be an ISO 3166-1 alpha-2 code") String country) {
+        return new HolidayCoverage(country, holidays.coveredThrough(country).orElse(null));
+    }
 }

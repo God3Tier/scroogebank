@@ -6,6 +6,7 @@ import { listClients } from '../api/clients.js'
 import {
   cancelEvent,
   createEvent,
+  getHolidayCoverage,
   getPreferences,
   listEvents,
   listHolidays,
@@ -19,6 +20,7 @@ vi.mock('../api/engagement.js', async (importOriginal) => ({
   ...(await importOriginal()),
   listEvents: vi.fn(),
   listHolidays: vi.fn(),
+  getHolidayCoverage: vi.fn(),
   createEvent: vi.fn(),
   updateEvent: vi.fn(),
   cancelEvent: vi.fn(),
@@ -47,6 +49,7 @@ beforeEach(() => {
   listClients.mockResolvedValue({ content: [{ client_id: 'client-1', first_name: 'Synthetic', last_name: 'Client' }] })
   listEvents.mockResolvedValue([REVIEW])
   listHolidays.mockResolvedValue([])
+  getHolidayCoverage.mockResolvedValue({ countryCode: 'SG', coveredThrough: '2027-12-31' })
   getPreferences.mockResolvedValue({ invitesEnabled: true, remindersEnabled: true })
   createEvent.mockResolvedValue({})
   updateEvent.mockResolvedValue({})
@@ -82,6 +85,32 @@ describe('AgentCalendar', () => {
 
     expect(await screen.findByText('Deepavali')).toBeInTheDocument()
     expect(listHolidays).toHaveBeenCalledWith({ from: '2026-11-01', to: '2026-11-30' })
+  })
+
+  it('stops at the last month the holiday list covers', async () => {
+    getHolidayCoverage.mockResolvedValue({ countryCode: 'SG', coveredThrough: '2026-12-31' })
+    renderCalendar()
+    const next = await screen.findByRole('button', { name: 'Next month' })
+
+    fireEvent.click(next)
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    fireEvent.click(next)
+    expect(await screen.findByRole('heading', { name: 'December 2026' })).toBeInTheDocument()
+
+    expect(next).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    expect(next).not.toBeDisabled()
+  })
+
+  it('sets no limit when the holiday coverage is unknown', async () => {
+    getHolidayCoverage.mockRejectedValue(new Error('down'))
+    renderCalendar()
+    const next = await screen.findByRole('button', { name: 'Next month' })
+
+    for (let i = 0; i < 3; i += 1) fireEvent.click(next)
+
+    expect(await screen.findByRole('heading', { name: 'January 2027' })).toBeInTheDocument()
+    expect(next).not.toBeDisabled()
   })
 
   it('checks a new meeting before saving it', async () => {

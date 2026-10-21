@@ -15,6 +15,7 @@ vi.mock('./api/engagement.js', async (importOriginal) => ({
   ...(await importOriginal()),
   listEvents: vi.fn().mockResolvedValue([]),
   listHolidays: vi.fn().mockResolvedValue([]),
+  getHolidayCoverage: vi.fn().mockResolvedValue({ countryCode: 'SG', coveredThrough: '2027-12-31' }),
   listDrafts: vi.fn().mockResolvedValue([]),
   getPreferences: vi.fn().mockResolvedValue({ invitesEnabled: true, remindersEnabled: true }),
 }))
