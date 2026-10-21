@@ -15,11 +15,15 @@ const (
 	// CognitoTriggersServiceType is the Lambda Cognito runs after a login or a
 	// forgotten-password reset (ADR-0040).
 	CognitoTriggersServiceType ServiceType = "COGNITO_TRIGGERS"
+
+	// EngagementServiceType is engagement-service: agents' calendar events,
+	// reminder and invite emails, and client follow-up drafts (ADR-0051).
+	EngagementServiceType ServiceType = "ENGAGEMENT"
 )
 
 func (s ServiceType) IsValid() bool {
 	switch s {
-	case UserManagementServiceType, CRMServiceType, TransactionServiceType, EventAlertServiceType, AuditService, DashboardServiceType, CognitoTriggersServiceType:
+	case UserManagementServiceType, CRMServiceType, TransactionServiceType, EventAlertServiceType, AuditService, DashboardServiceType, CognitoTriggersServiceType, EngagementServiceType:
 		return true
 	}
 
@@ -58,6 +62,9 @@ func (s ServiceType) IsValidAction(action string) bool {
 
 	case CognitoTriggersServiceType:
 		return strings.EqualFold("AUTHENTICATION", action)
+
+	case EngagementServiceType:
+		return strings.EqualFold("ENGAGEMENT", action)
 	}
 
 	return false
