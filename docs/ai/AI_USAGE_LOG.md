@@ -13,7 +13,9 @@
   placeholder syntax and chose, from two options Claude Code set out, to fill
   the names in on read and mark them again on save. Claude Code wrote
   ADR-0056, changed `DraftService`, `Placeholders`, the contract, the editor
-  in `AgentDrafts.jsx` and the tests.
+  in `AgentDrafts.jsx` and the tests. When sends then failed with
+  `ses_error`, Claude Code made `SesMailChannel` set `FromEmailAddress` and
+  log SES's error code, status and message with every address masked.
 - Safeguards: synthetic names only in tests. Stored drafts still hold no
   names, and the model's input is unchanged (ADR-0054 decision 2).
 - Human verification required: redeploy engagement-service and the

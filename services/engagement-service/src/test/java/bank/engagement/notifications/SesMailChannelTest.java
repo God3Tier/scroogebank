@@ -3,6 +3,8 @@ package bank.engagement.notifications;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.services.sesv2.SesV2Client;
 import software.amazon.awssdk.services.sesv2.model.MessageRejectedException;
 import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
@@ -43,6 +45,7 @@ class SesMailChannelTest {
         ArgumentCaptor<SendEmailRequest> request = ArgumentCaptor.forClass(SendEmailRequest.class);
         verify(ses).sendEmail(request.capture());
         assertThat(request.getValue().configurationSetName()).isEqualTo("engagement-test");
+        assertThat(request.getValue().fromEmailAddress()).isEqualTo("no-reply@mail.example.test");
         MimeMessage message = MimeMessageFactoryTest.parse(request.getValue().content().raw().data().asByteArray());
         assertThat(message.getSubject()).isEqualTo("Reminder");
     }
@@ -62,5 +65,30 @@ class SesMailChannelTest {
                     assertThat(ex.code()).isEqualTo("ses_rejected");
                     assertThat(ex.retryable()).isFalse();
                 });
+    }
+
+    @Test
+    void anUnmodelledErrorSuchAsAccessDeniedIsAnSesError() {
+        when(ses.sendEmail(any(SendEmailRequest.class))).thenThrow(AwsServiceException.builder()
+                .statusCode(403)
+                .awsErrorDetails(AwsErrorDetails.builder().errorCode("AccessDenied").errorMessage("denied").build())
+                .build());
+
+        assertThatThrownBy(() -> channel.send(mail))
+                .isInstanceOfSatisfying(MailSendException.class, ex -> assertThat(ex.code()).isEqualTo("ses_error"));
+    }
+
+    @Test
+    void errorMessagesAreLoggedWithoutAddresses() {
+        String message = "User `arn:aws:sts::123456789012:assumed-role/task/1' is not authorized to perform "
+                + "`ses:SendRawEmail' on resource `arn:aws:ses:ap-southeast-1:123456789012:identity/"
+                + "synthetic.client@example.test'. From no-reply@mail.example.test (to synthetic.agent@example.test)";
+
+        String masked = SesMailChannel.mask(message, mail);
+
+        assertThat(masked)
+                .contains("identity/<address>'")
+                .contains("From <from> (to <address>)")
+                .doesNotContain("example.test");
     }
 }
