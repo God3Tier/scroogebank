@@ -1,0 +1,89 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: engagement-service
+  datasource:
+    url: ${ENGAGEMENT_DB_URL:jdbc:postgresql://localhost:5436/engagement}
+    username: ${ENGAGEMENT_DB_USERNAME:engagement}
+    password: ${ENGAGEMENT_DB_PASSWORD:}
+  # Locally Flyway runs in the app. In AWS the db-migrate init container runs
+  # it, and the app's login has no schema rights (ADR-0028, ADR-0051).
+  flyway:
+    enabled: ${SPRING_FLYWAY_ENABLED:true}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI}
+
+# Only access tokens issued to the CRM app client are accepted (ADR-0025).
+idp:
+  cognito:
+    app-client-id: ${COGNITO_APP_CLIENT_ID:}
+
+engagement:
+  clients:
+    # client-service, called with the agent's own token. Blank: every client
+    # lookup fails closed with 503.
+    base-url: ${CLIENT_SERVICE_BASE_URL:}
+    timeout: 5s
+  identity:
+    # The CRM user pool, for agents' addresses and names (ADR-0053 decision 4).
+    # Blank: no agent can be looked up, so no mail can be sent to agents.
+    user-pool-id: ${COGNITO_USER_POOL_ID:}
+    region: ${AWS_REGION:ap-southeast-1}
+    endpoint: ${AWS_ENDPOINT_URL:}
+    cache-ttl: 15m
+  mail:
+    # none (default): nothing is sent and the dispatcher does not run.
+    # log: messages are logged by ID only, for local use. ses: Amazon SES.
+    provider: ${ENGAGEMENT_MAIL_PROVIDER:none}
+    from-address: ${SES_FROM_ADDRESS:no-reply@mail.example.test}
+    mail-domain: ${ENGAGEMENT_MAIL_DOMAIN:mail.example.test}
+    configuration-set: ${SES_CONFIGURATION_SET:}
+    crm-app-url: ${CRM_APP_URL:http://localhost:5173}
+    region: ${AWS_REGION:ap-southeast-1}
+    endpoint: ${AWS_ENDPOINT_URL:}
+    # SES sandbox allows 1 message a second (ADR-0053 decision 6).
+    min-send-interval: 1s
+    send-timeout: 10s
+    dispatcher:
+      interval: 60s
+      batch-size: 25
+      lease: 2m
+      # The first send, then a retry after each delay; FAILED when the last
+      # retry fails (ADR-0051 decision 4).
+      retry-delays: 1m,5m,15m
+  ai:
+    # The kill switch (ADR-0054 decision 7). Off: every draft is a template.
+    enabled: ${ENGAGEMENT_AI_ENABLED:false}
+    region: ${BEDROCK_REGION:ap-southeast-1}
+    model-id: ${BEDROCK_MODEL_ID:apac.amazon.nova-micro-v1:0}
+    temperature: 0.3
+    max-output-tokens: 600
+    timeout: 15s
+    daily-drafts-per-agent: ${ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT:20}
+    monthly-token-quota: ${ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA:300000}
+  audit:
+    publisher:
+      # Auditor delivery is opt-in. The default never opens an SQS connection.
+      enabled: ${ENGAGEMENT_AUDIT_PUBLISHER_ENABLED:false}
+      queue-url: ${AUDIT_QUEUE_URL:}
+      region: ${AWS_REGION:ap-southeast-1}
+      endpoint: ${AWS_ENDPOINT_URL:}
+      interval: 5s
+      batch-size: 50
+      max-attempts: 10
+      lease-duration: 30s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
