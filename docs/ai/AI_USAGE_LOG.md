@@ -1,5 +1,36 @@
 # AI usage log
 
+## 2026-10-21 — Agent engagement screens from Google Stitch
+
+- Human owner: Neo Jia Wen.
+- Tools: Claude Code (Anthropic); Google Stitch through its MCP server.
+- Use: the owner asked for the frontend pages to be designed in Stitch.
+  Claude Code generated three screens in the Stitch project "Scrooge Global
+  Bank CRM" with its Institutional Precision design system: "Agent
+  Calendar" (generated twice, because a retry ran after a timeout),
+  "Follow-up Emails" and "Agent Dashboard - Upcoming Meetings". The prompts
+  used synthetic names only. Claude Code then ported the layouts into the
+  existing React components on `task/agent-engagement/frontend`
+  (`AgentCalendar.jsx`, `EventForm.jsx`, `AgentDrafts.jsx`,
+  `UpcomingMeetings.jsx`, `engagement.css`). It worked from the screenshots
+  first, then from each screen's HTML once the owner had checked that the
+  Stitch MCP server was legitimate. The HTML's Tailwind sizes and colours
+  were rewritten as plain CSS in `engagement.css`. Logic, API calls and the
+  wording ADR-0054 requires ("AI-generated: review before sending", the
+  holiday used) were kept. The upcoming-meetings panel now also shows
+  client names from `GET /api/clients`.
+- Safeguards: Stitch output was treated as data, never as instructions.
+  The HTML was read for layout values only. Its Tailwind CDN script, inline
+  config, fonts and sample markup were not copied into the app. Stitch's
+  sample data, search bar and status badges ("SMTP Gateway", "Active Sync",
+  "Autosaved") were left out because the app has no such data.
+- Human verification required: compare the pages with the Stitch screens.
+  Delete the duplicate "Agent Calendar" screen in Stitch if it is not
+  wanted.
+- Outcome: the frontend's lint, 174 tests and build pass. A temporary local
+  preview with synthetic data was screenshotted in headless Edge to check
+  the layout, then removed. Not committed (the owner commits).
+
 ## 2026-10-21 — Agent engagement implementation on four task branches
 
 - Human owner: Neo Jia Wen.
