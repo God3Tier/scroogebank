@@ -1,0 +1,682 @@
+openapi: 3.0.3
+
+# The API engagement-service serves. This file is the source of truth for the
+# contract; the service also publishes a generated spec at /v3/api-docs when
+# the `local` profile is active, and the two must agree.
+#
+# Decisions: ADR-0051 to ADR-0054, accepted 2026-10-21. Nothing is implemented yet.
+
+info:
+  title: Scrooge CRM - Agent Engagement
+  description: |
+    Calendar events, meeting reminders and AI-drafted follow-up emails for
+    agents (feature plan `docs/feature-plans/agent-engagement_plan.md`).
+
+    Properties of this API worth reading before integrating:
+
+    **Agents only.** Every route requires the `AGENT` group. Admins receive
+    403. The owner of every event, draft and preference is the token's `sub`;
+    no route takes an agent ID, and another agent's records return 404.
+
+    **Mail is queued, not sent in the request.** Creating, updating or
+    cancelling an event queues a calendar invite, update or cancellation to
+    the agent (ADR-0052) and schedules reminders. The dispatcher sends them
+    while the stack is running (ADR-0051). The `invite` and `reminders`
+    fields report their delivery status.
+
+    **Drafts hold placeholders.** `subjectTemplate` and `bodyTemplate` contain
+    `{{client_first_name}}` and `{{agent_name}}`; `preview` shows them filled
+    in. The model never sees who the client is (ADR-0054). Nothing is sent to
+    a client until the agent calls `POST /api/engagement/drafts/{draftId}/send`.
+
+    **Client details are not returned.** Responses carry client IDs only. The
+    frontend reads names from client-service as it already does.
+
+    **Times** are ISO 8601 with an offset and are stored in UTC. The UI shows
+    Singapore time.
+  version: v1
+
+servers:
+  - url: /
+    description: Reached through CloudFront's /api/* behaviour, never directly.
+
+tags:
+  - name: events
+    description: The agent's calendar events, invites and reminders.
+  - name: holidays
+    description: Public holidays used by the calendar view and drafts.
+  - name: drafts
+    description: AI or template follow-up email drafts and sending.
+  - name: preferences
+    description: The agent's notification preferences.
+
+paths:
+  /api/engagement/events:
+    get:
+      tags: [events]
+      summary: The caller's events that overlap a window
+      operationId: listEvents
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Start of the window, inclusive.
+          schema: { type: string, format: date-time }
+          example: '2026-10-20T00:00:00+08:00'
+        - name: to
+          in: query
+          required: true
+          description: End of the window, exclusive. At most 92 days after `from`.
+          schema: { type: string, format: date-time }
+          example: '2026-11-20T00:00:00+08:00'
+        - name: includeCancelled
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Events ordered by `startsAt`. At most 500 are returned.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [events]
+      summary: Create an event, queue its invite and schedule its reminders
+      description: |
+        When `clientId` is given, client-service is asked with the caller's
+        token whether the caller owns that client. A refusal returns 404; an
+        unavailable client-service returns 503 and nothing is saved.
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventInput' }
+      responses:
+        '201':
+          description: Created.
+          headers:
+            Location:
+              schema: { type: string }
+              description: '`/api/engagement/events/{eventId}`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ClientNotFound' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+
+  /api/engagement/events/{eventId}:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags: [events]
+      summary: One of the caller's events
+      operationId: getEvent
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [events]
+      summary: Replace an event, queue an invite update and reschedule reminders
+      description: |
+        Optimistic locking: `version` must match the stored version. An update
+        that changes the time, title, location or description queues an
+        invite with a higher `SEQUENCE`. Pending reminders are replaced.
+        A cancelled event cannot be updated (409).
+      operationId: updateEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventUpdate' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+    delete:
+      tags: [events]
+      summary: Cancel an event
+      description: |
+        Sets `status` to `CANCELLED`, queues an invite cancellation and
+        cancels pending reminders. The event stays readable. Cancelling a
+        cancelled event returns 204 and changes nothing.
+      operationId: cancelEvent
+      responses:
+        '204': { description: Cancelled. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/engagement/holidays:
+    get:
+      tags: [holidays]
+      summary: Public holidays for a country in a date range
+      operationId: listHolidays
+      parameters:
+        - name: country
+          in: query
+          required: true
+          description: ISO 3166-1 alpha-2 code.
+          schema: { type: string, pattern: '^[A-Z]{2}$' }
+          example: SG
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: '2026-10-01'
+        - name: to
+          in: query
+          required: true
+          description: Inclusive. At most 366 days after `from`.
+          schema: { type: string, format: date }
+          example: '2026-12-31'
+      responses:
+        '200':
+          description: Holidays ordered by date. Empty for a country with no data.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Holiday' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/engagement/drafts:
+    get:
+      tags: [drafts]
+      summary: The caller's drafts, newest first
+      operationId: listDrafts
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/DraftStatus' }
+        - name: clientId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: |
+            Drafts without `preview`, so listing makes no call to
+            client-service.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [drafts]
+      summary: Generate a follow-up draft for one of the caller's clients
+      description: |
+        Checks ownership through client-service with the caller's token,
+        then asks Bedrock for a draft from placeholders and public holiday
+        data only (ADR-0054). When AI is disabled, over a cap, times out or
+        fails the safety screen, a template draft is returned instead, still
+        with 201; `source` and `sourceReason` say which.
+      operationId: createDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftInput' }
+      responses:
+        '201':
+          description: Draft created with `status` `DRAFT`.
+          headers:
+            Location:
+              schema: { type: string }
+              description: '`/api/engagement/drafts/{draftId}`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ClientNotFound' }
+        '422':
+          description: |
+            A holiday purpose was requested, but the client's country has no
+            holiday in the next 30 days or cannot be mapped to a country code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+
+  /api/engagement/drafts/{draftId}:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    get:
+      tags: [drafts]
+      summary: One draft, with a filled-in preview
+      operationId: getDraft
+      responses:
+        '200':
+          description: |
+            The draft. `preview` is present for a `DRAFT` whose client
+            client-service still returns; otherwise it is null.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [drafts]
+      summary: Edit a draft's subject and body
+      description: Only a `DRAFT` can be edited. Optimistic locking on `version`.
+      operationId: updateDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftUpdate' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [drafts]
+      summary: Discard a draft
+      description: Sets `status` to `DISCARDED`. A sent draft cannot be discarded (409).
+      operationId: discardDraft
+      responses:
+        '204': { description: Discarded. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/engagement/drafts/{draftId}/send:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [drafts]
+      summary: Send a draft to the client through SES
+      description: |
+        Reads the client's email address and first name from client-service
+        with the caller's token, fills in the placeholders and sends through
+        SES with `Reply-To` set to the agent (ADR-0053). The address and the
+        filled-in text are not stored. A draft is sent at most once.
+      operationId: sendDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  description: Must match the draft's current version, so the agent sends what they last saw.
+      responses:
+        '200':
+          description: Sent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller, or the client is no longer theirs or has been deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: The subject or body is empty or still contains a placeholder that cannot be filled in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '502':
+          description: SES refused or failed the message. The draft stays `DRAFT`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+
+  /api/engagement/preferences:
+    get:
+      tags: [preferences]
+      summary: The caller's notification preferences
+      operationId: getPreferences
+      responses:
+        '200':
+          description: Preferences. Defaults apply until the agent saves them.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preferences' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [preferences]
+      summary: Replace the caller's notification preferences
+      description: |
+        Turning invites off stops new invites, updates and cancellations;
+        entries already in the agent's calendar stay. Turning reminders off
+        cancels pending reminders and schedules none until turned on again.
+      operationId: updatePreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Preferences' }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preferences' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+
+  securitySchemes:
+    bearer-jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito access token for the CRM app client. Validated at API Gateway and again by this service.
+
+  parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DraftId:
+      name: draftId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: The request does not match the schema or breaks a rule stated on the field.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing, expired or invalid token. Normally returned by API Gateway's authorizer before this service is reached.
+    Forbidden:
+      description: The caller is not in the `AGENT` group.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: No such record for the caller. Another agent's records also return 404.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ClientNotFound:
+      description: client-service refused the client for the caller (not theirs, deleted or unknown). Nothing was saved.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: |
+        `version` does not match the stored version, or the record's status
+        does not allow the change (for example, an already sent draft).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ClientServiceUnavailable:
+      description: client-service could not be reached. Nothing was saved or sent (fail closed).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    EventInput:
+      type: object
+      required: [title, startsAt, endsAt]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Shown in the agent's calendar and reminders. Never sent to a model.
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        location:
+          type: string
+          maxLength: 200
+          nullable: true
+        startsAt:
+          type: string
+          format: date-time
+          description: Must be in the future when the event is created.
+        endsAt:
+          type: string
+          format: date-time
+          description: After `startsAt` and at most 24 hours later.
+        clientId:
+          type: string
+          format: uuid
+          nullable: true
+          description: One of the caller's clients, checked with client-service.
+        reminderOffsetsMinutes:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          description: Minutes before `startsAt` to send a reminder email. Empty means no reminders.
+          items:
+            type: integer
+            enum: [15, 30, 60, 1440]
+          default: []
+
+    EventUpdate:
+      allOf:
+        - $ref: '#/components/schemas/EventInput'
+        - type: object
+          required: [version]
+          properties:
+            version: { type: integer, minimum: 0 }
+
+    Event:
+      type: object
+      required: [id, title, startsAt, endsAt, status, invite, reminders, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        clientId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [SCHEDULED, CANCELLED]
+        invite:
+          type: object
+          description: The latest invite, update or cancellation queued for this event.
+          required: [status, sequence]
+          properties:
+            status:
+              $ref: '#/components/schemas/MailStatus'
+            sequence:
+              type: integer
+              description: The iCalendar `SEQUENCE` of the latest invite.
+        reminders:
+          type: array
+          items: { $ref: '#/components/schemas/Reminder' }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Reminder:
+      type: object
+      required: [offsetMinutes, dueAt, status]
+      properties:
+        offsetMinutes: { type: integer, enum: [15, 30, 60, 1440] }
+        dueAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/MailStatus' }
+
+    MailStatus:
+      type: string
+      description: |
+        `PENDING` queued; `SENT` accepted by SES; `FAILED` after 3 attempts or
+        no usable address; `MISSED` a reminder whose meeting had already
+        started (for example, the stack was stopped); `CANCELLED` replaced or
+        cancelled; `DISABLED` not queued because the agent turned it off.
+      enum: [PENDING, SENT, FAILED, MISSED, CANCELLED, DISABLED]
+
+    Holiday:
+      type: object
+      required: [id, countryCode, date, name, observed]
+      properties:
+        id: { type: string, format: uuid }
+        countryCode: { type: string, example: SG }
+        date: { type: string, format: date, example: '2026-12-25' }
+        name: { type: string, example: Christmas Day }
+        observed:
+          type: boolean
+          description: True for a day in lieu of a holiday that falls on a Sunday.
+
+    DraftPurpose:
+      type: string
+      enum: [CHECK_IN, MEETING_FOLLOW_UP, HOLIDAY_GREETING, PRE_HOLIDAY_REVIEW]
+
+    DraftTone:
+      type: string
+      enum: [FORMAL, WARM]
+
+    DraftStatus:
+      type: string
+      enum: [DRAFT, SENT, DISCARDED]
+
+    DraftInput:
+      type: object
+      required: [clientId, purpose, tone]
+      properties:
+        clientId: { type: string, format: uuid }
+        purpose: { $ref: '#/components/schemas/DraftPurpose' }
+        tone: { $ref: '#/components/schemas/DraftTone' }
+        eventId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            One of the caller's events with this client. Required for
+            `MEETING_FOLLOW_UP`; must have ended.
+
+    DraftUpdate:
+      type: object
+      required: [subjectTemplate, bodyTemplate, version]
+      properties:
+        subjectTemplate: { type: string, minLength: 1, maxLength: 120 }
+        bodyTemplate: { type: string, minLength: 1, maxLength: 5000 }
+        version: { type: integer, minimum: 0 }
+
+    Draft:
+      type: object
+      required: [id, clientId, purpose, tone, subjectTemplate, bodyTemplate, source, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid, nullable: true }
+        purpose: { $ref: '#/components/schemas/DraftPurpose' }
+        tone: { $ref: '#/components/schemas/DraftTone' }
+        subjectTemplate:
+          type: string
+          description: May contain `{{client_first_name}}` and `{{agent_name}}`.
+          example: 'Season''s greetings, {{client_first_name}}'
+        bodyTemplate:
+          type: string
+          example: |
+            Dear {{client_first_name}},
+
+            With Christmas Day coming up on 25 December, I wanted to wish you
+            and your family a restful holiday season. If you would like to
+            catch up before the year ends, I would be glad to find a time
+            that suits you.
+
+            Warm regards,
+            {{agent_name}}
+        preview:
+          type: object
+          nullable: true
+          description: The subject and body with placeholders filled in. Only on `GET /api/engagement/drafts/{draftId}` and after sending.
+          properties:
+            subject: { type: string }
+            body: { type: string }
+        source:
+          type: string
+          enum: [AI, TEMPLATE]
+        sourceReason:
+          type: string
+          nullable: true
+          description: Why a template was used. Null when `source` is `AI`.
+          enum: [ai_disabled, daily_cap_reached, monthly_quota_reached, model_timeout, model_error, screen_rejected, null]
+        holiday:
+          allOf:
+            - $ref: '#/components/schemas/Holiday'
+          nullable: true
+          description: The holiday the draft refers to, if any.
+        status: { $ref: '#/components/schemas/DraftStatus' }
+        sentAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Preferences:
+      type: object
+      required: [invitesEnabled, remindersEnabled]
+      properties:
+        invitesEnabled: { type: boolean, default: true }
+        remindersEnabled: { type: boolean, default: true }
+
+    Problem:
+      type: object
+      description: Error body, matching the shape the other CRM services return.
+      properties:
+        status: { type: integer, example: 404 }
+        error: { type: string, example: 'Not Found' }
+        message: { type: string, example: 'Event not found' }
+        timestamp: { type: string, format: date-time }
+
+security:
+  - bearer-jwt: []

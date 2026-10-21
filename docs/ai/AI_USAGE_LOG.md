@@ -1,5 +1,47 @@
 # AI usage log
 
+## 2026-10-21 — Agent engagement feature plan, ADR-0051 to 0054 and API contract
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: assess an idea for calendar events, meeting reminders and
+  AI-drafted client follow-up emails, then draft the planning documents on
+  `dev`'s working tree for the owner to move to `task/agent-engagement/plan`.
+  - The owner chose: a standalone feature in a new `engagement-service`
+    (not inside dashboard-service, whose ADR-0033 stays unchanged); emailed
+    iCalendar invites rather than Google or Microsoft calendar APIs; SES for
+    invites, reminders and client emails; Telegram left out for now; the
+    owner as primary developer on every task.
+  - Drafted `docs/feature-plans/agent-engagement_plan.md`, Proposed
+    ADR-0051 (service, database, lease-based dispatcher), ADR-0052
+    (calendar invites), ADR-0053 (SES, long-lived `mail-identity` stack,
+    Cognito lookup of agents' addresses) and ADR-0054 (placeholder-only
+    Bedrock drafts, safety screen, template fallback, holiday table),
+    `docs/api/engagement-api.yaml`, and four ADR index entries.
+- Human verification required: accept or change each ADR; choose and
+  re-check before the demo the destination regions of the Nova Micro
+  profile `apac.amazon.nova-micro-v1:0`, which the owner confirmed with
+  `aws bedrock get-inference-profile` (six Asia-Pacific regions, recorded
+  in ADR-0054); check
+  the Singapore 2026–2027 holiday list against the Ministry of Manpower's
+  before seeding it; confirm with the team that a fourth innovation feature
+  and its cost are acceptable (plan Q1); confirm with Garvit and Swayam the
+  boundary with the Client Health Monitor (plan Q7).
+- Outcome: the owner accepted ADR-0051 to ADR-0054 on 2026-10-21. Before
+  acceptance, ADR-0054 was changed so that the Bedrock model ID is recorded
+  once chosen instead of being a condition of acceptance. Bedrock's model
+  availability page (checked 2026-10-21) showed no small, current text
+  model in-region in Singapore, so the owner then chose Amazon Nova Micro
+  through its Asia-Pacific geographic profile and had ADR-0054 amended
+  before its first commit.
+- Data: repository plans, ADRs, service code and contracts only. No
+  credentials, real client data, AWS connection or model call was used.
+- Verification: SES sandbox limits and Cognito `ListUsers` filtering by
+  `sub` checked against the AWS documentation on 2026-10-21; ADR numbers
+  checked free on every remote branch; every cited ADR and repository path
+  checked to exist on `origin/dev`; the OpenAPI file parsed as YAML. Prices
+  are estimates still to be checked in the AWS Pricing Calculator.
+
 ## 2026-10-20 — Activity feed timeout, page names, dashboard budgets, accounts Pending until verified
 
 - Human owner: Neo Jia Wen.
