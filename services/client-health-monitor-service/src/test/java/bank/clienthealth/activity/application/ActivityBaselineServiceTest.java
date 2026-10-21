@@ -68,6 +68,11 @@ class ActivityBaselineServiceTest {
         var outflow = result.clients().get("client-outflow");
         assertEquals(new BigDecimal("0.00"), outflow.baseline().netFlow());
         assertEquals(new BigDecimal("-2000.00"), outflow.comparison().netFlow());
+        assertEquals(6, outflow.accounts().getFirst().periods().size());
+        assertEquals(new BigDecimal("-2000.00"),
+                outflow.accounts().getFirst().periods().get(4).summary().netFlow());
+        assertEquals(new BigDecimal("-2000.00"),
+                outflow.accounts().getFirst().periods().get(5).summary().netFlow());
 
         var control = result.clients().get("client-control");
         assertEquals(1, control.comparison().completedCount());

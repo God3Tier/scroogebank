@@ -5,7 +5,8 @@
 The module contains the RH-SF00 `ClientHealthFinding V1` handoff, the RH-SF05
 Stage 1 task domain, and the provider-independent RH-SF01 transaction replay
 boundary. RH-SF02 adds the service-owned activity projection, replay-coverage
-tracking, and deterministic account/client baselines.
+tracking, and deterministic account/client baselines. RH-SF03 adds the immutable
+`relationship-health-v1` ruleset and typed outcomes for all three MVP signals.
 
 RH-SF01 currently validates the minimum matched transaction projection, follows
 bounded cursor pages, de-duplicates identical rows, rejects conflicting or
@@ -22,6 +23,12 @@ Pending-to-terminal status changes, and fails closed on immutable conflicts.
 For an 08:00 Asia/Singapore analysis date it retains six months for recurring
 credits and calculates a 90-day baseline plus 30-day comparison. Activity counts
 use explicit ADR-0051 classification; net-flow summaries are SGD-only.
+
+RH-SF03 independently evaluates recurring-credit interruption, customer
+activity decline, and two-period material net outflow under ADR-0052. Outcomes
+carry the exact account, rule version, severity, windows, and typed evidence
+needed by RH-SF04. Rules do not create tasks, apply cooldown/caps, call Bedrock,
+or expose a pseudo-confidence percentage.
 
 ## Ownership boundary
 
@@ -50,6 +57,7 @@ Contract documentation and fixtures:
 - `docs/api/schemas/transaction-replay-page-v1.schema.json`
 - `tests/fixtures/client-health-monitor/`
 - `docs/adr/ADR-0051-client-health-explicit-activity-classification.md`
+- `docs/adr/ADR-0052-client-health-versioned-signal-rules.md`
 
 ## Next implementation step
 
@@ -62,3 +70,7 @@ without reading another service's database.
 For RH-SF02, coordinate health-db migration ownership with Swayam before adding
 the production projection repository. The current repository port and in-memory
 tests intentionally keep database technology out of the rule-facing domain.
+
+The next Garvit-owned step is RH-SF04: turn deterministic rule outcomes into
+idempotent `ClientHealthFinding` records while applying run leases, signal
+fingerprints, cooldown/worsening behavior, and per-agent caps.

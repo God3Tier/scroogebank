@@ -6,10 +6,12 @@ import bank.clienthealth.transaction.contract.MatchedTransaction.ActivityKind;
 import bank.clienthealth.transaction.contract.MatchedTransaction.Status;
 import bank.clienthealth.transaction.contract.MatchedTransaction.TransactionType;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -112,7 +114,20 @@ public final class ActivityBaselineService {
                 accountId,
                 summarize(transactions, baselineStart, comparisonStart),
                 summarize(transactions, comparisonStart, cutoff),
-                series);
+                series,
+                periods(transactions, cutoff));
+    }
+
+    private static List<PeriodSummary> periods(
+            List<ProjectedTransaction> transactions, Instant cutoff
+    ) {
+        List<PeriodSummary> periods = new ArrayList<>();
+        for (int remaining = 6; remaining > 0; remaining--) {
+            Instant from = cutoff.minus(Duration.ofDays(30L * remaining));
+            Instant to = cutoff.minus(Duration.ofDays(30L * (remaining - 1)));
+            periods.add(new PeriodSummary(from, to, summarize(transactions, from, to)));
+        }
+        return List.copyOf(periods);
     }
 
     private static ActivitySummary summarize(
@@ -176,12 +191,20 @@ public final class ActivityBaselineService {
             String accountId,
             ActivitySummary baseline,
             ActivitySummary comparison,
-            List<RecurringCreditSeries> recurringCredits
+            List<RecurringCreditSeries> recurringCredits,
+            List<PeriodSummary> periods
     ) {
         public AccountBaseline {
             recurringCredits = List.copyOf(recurringCredits);
+            periods = List.copyOf(periods);
         }
     }
+
+    public record PeriodSummary(
+            Instant fromInclusive,
+            Instant toExclusive,
+            ActivitySummary summary
+    ) { }
 
     public record ActivitySummary(
             long completedCount,
