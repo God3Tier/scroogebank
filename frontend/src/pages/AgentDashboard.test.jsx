@@ -86,6 +86,25 @@ describe('creating a client', () => {
     }))
   })
 
+  it('starts with Singapore as the city, state and country', () => {
+    renderDashboard()
+
+    expect(screen.getByLabelText('City:')).toHaveValue('Singapore')
+    expect(screen.getByLabelText('State:')).toHaveValue('Singapore')
+    expect(screen.getByLabelText('Country:')).toHaveValue('Singapore')
+  })
+
+  it('checks the details before sending them', async () => {
+    renderDashboard()
+
+    fillInTheForm()
+    fireEvent.change(screen.getByLabelText('Phone Number:'), { target: { value: '91234567' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Profile' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('such as +6591234567')
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
   it('explains a duplicate email or phone number', async () => {
     createClient.mockRejectedValue(Object.assign(new Error('duplicate client'), { status: 409 }))
     renderDashboard()
