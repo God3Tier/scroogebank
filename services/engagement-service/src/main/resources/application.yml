@@ -70,6 +70,16 @@ engagement:
     timeout: 15s
     daily-drafts-per-agent: ${ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT:20}
     monthly-token-quota: ${ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA:300000}
+  holidays:
+    sync:
+      # Adds MOM's newly published years from data.gov.sg (ADR-0057). Off by
+      # default, so local runs and tests make no outside calls.
+      enabled: ${ENGAGEMENT_HOLIDAY_SYNC_ENABLED:false}
+      base-url: https://data.gov.sg
+      dataset-id: d_8ef23381f9417e4d4254ee8b4dcdb176
+      timeout: 10s
+      initial-delay: 1m
+      interval: 24h
   audit:
     publisher:
       # Auditor delivery is opt-in. The default never opens an SQS connection.

@@ -1,5 +1,24 @@
 # AI usage log
 
+## 2026-10-21 — Holiday sync from data.gov.sg
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: the owner asked whether later years' holidays could be added without
+  a migration each year. Claude Code checked data.gov.sg's public API (MOM's
+  consolidated dataset held 2020 to 2027), set out three options, and on the
+  owner's choice wrote ADR-0057, the sync in engagement-service's
+  `holidays` module, the coverage endpoint, the calendar's month limit, the
+  Terraform switch and alarm, tests and docs, on
+  `task/agent-engagement/holiday-sync`.
+- Safeguards: only the dataset ID is sent to data.gov.sg. Holiday names are
+  checked before they can reach the drafting model. Rows are only added.
+  Tests use synthetic data and a stubbed source; no test calls data.gov.sg.
+- Human verification required: after deploying, check the log for
+  `holiday_sync country=SG` and the calendar's last month.
+- Outcome: engagement-service `mvn verify` (110 tests), the frontend's lint,
+  178 tests and build, and the agent-engagement terraform tests pass.
+
 ## 2026-10-21 — Engagement fixes after the first deployment
 
 - Human owner: Neo Jia Wen.

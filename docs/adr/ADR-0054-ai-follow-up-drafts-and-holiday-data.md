@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/plan`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders)
+- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders); [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md) in part (decision 8: new Singapore years come from data.gov.sg)
 
 ## Context
 
@@ -134,7 +134,7 @@ A cross-region inference profile is an ID passed in place of a model ID. The ser
 8. **Holiday data.**
    - `holidays` rows hold the ISO 3166-1 alpha-2 country code, date, name, whether it is an observed (in-lieu) day, the source URL and a `dataset_version`.
    - They are seeded by Flyway migrations from official published lists, starting with Singapore 2026 and 2027 from the Ministry of Manpower. The owner checks each row against the source.
-   - Corrections and new years come in new migrations, never edits to old ones.
+   - Corrections and new years come in new migrations, never edits to old ones. (New Singapore years superseded by [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md): a daily sync adds them from MOM's data.gov.sg dataset; corrections still come in migrations.)
    - The client's free-text `country` is mapped to a code through a fixed table (for example `Singapore` and `SG` map to `SG`). A country that cannot be mapped gets no holidays, and holiday purposes then return 422.
 9. **Audit.** `DRAFT_GENERATE` records the source, reason code, `prompt_version`, `model_id` and holiday ID, and never any text. `EMAIL_SEND` records the draft and client IDs and the SES message ID ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)).
 
@@ -220,3 +220,4 @@ Nova Micro is Amazon's lowest-priced text model on Bedrock. AWS charges cross-re
 - 2026-10-21: amended before first commit, as decided by the decision owner. No small, current text model runs in-region in Singapore, so decision 3 now names Amazon Nova Micro through its Asia-Pacific geographic profile, with Nova Lite as the only allowed substitute and global profiles still forbidden. Context, Options, Rationale, Consequences, Security, Cost, Operational Impact and Validation changed to match.
 - 2026-10-21: the decision owner confirmed the profile ID `apac.amazon.nova-micro-v1:0` with `aws bedrock get-inference-profile` in the project account. It is a system-defined, active profile named "APAC Nova Micro", last updated by AWS on 2025-07-08. It routes to Nova Micro in six regions: ap-southeast-1 (Singapore), ap-southeast-2 (Sydney), ap-northeast-1 (Tokyo), ap-northeast-2 (Seoul), ap-northeast-3 (Osaka) and ap-south-1 (Mumbai).
 - 2026-10-21: decision 6 superseded in part by [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md): agents edit plain text with the names filled in, and drafts are still stored with placeholders. This record is otherwise unchanged.
+- 2026-10-21: decision 8 superseded in part by [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md): new Singapore years are added by a sync from MOM's data.gov.sg dataset; the migrations stay as the baseline. This record is otherwise unchanged.

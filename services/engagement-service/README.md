@@ -14,7 +14,7 @@ Feature plan: [`docs/feature-plans/agent-engagement_plan.md`](../../docs/feature
 | `reminders` | (none) | Reminder due times, rescheduling when an event changes |
 | `notifications` | `mail_queue`, `preferences` | The mail queue, the dispatcher, the SES channel, notification preferences |
 | `drafting` | `email_drafts`, `ai_usage` | Bedrock drafts, the safety screen, templates, caps, sending to the client |
-| `holidays` | `holidays` | The public holiday table, seeded by Flyway |
+| `holidays` | `holidays` | The public holiday table, seeded by Flyway and added to by the data.gov.sg sync |
 | `audit` | `audit_outbox` | The transactional outbox and its relay to the shared audit queue |
 
 A module reads and writes only its own tables; `ArchitectureTest` enforces it.
@@ -25,7 +25,7 @@ A module reads and writes only its own tables; `ArchitectureTest` enforces it.
 - **Agent address.** Cognito `ListUsers` filtered by `sub`, cached 15 minutes. An agent who cannot be found gets no mail (`agent_email_unavailable`).
 - **Drafts.** The model gets the purpose, tone, `en-SG`, up to 3 public holidays in the next 30 days, a banded time since the last meeting and the two placeholders, nothing else. Its JSON reply must pass the safety screen. With AI off, a cap reached, a timeout, an error or a rejected reply, a fixed template is used and the draft says why (`sourceReason`). Drafts are stored with `{{client_first_name}}` and `{{agent_name}}`. Responses carry `subject` and `body` with the names filled in, and `PUT` takes plain text and marks the names as placeholders again before storing it, so no names are stored ([ADR-0056](../../docs/adr/ADR-0056-drafts-edited-as-plain-text.md)).
 - **Sending a draft.** Only the agent's explicit `POST /drafts/{id}/send`, with the version they last saw. The draft is claimed first, so it is sent at most once. The client's address is read at send time and never stored; `Reply-To` is the agent. Only the SES message ID is kept.
-- **Holidays.** Singapore 2026 and 2027 from the Ministry of Manpower, in `V2__seed_singapore_holidays.sql`. Corrections and new years go in new migrations. Only countries mapped in `CountryCodes` get holidays.
+- **Holidays.** Singapore 2026 and 2027 from the Ministry of Manpower, in `V2__seed_singapore_holidays.sql`. With `ENGAGEMENT_HOLIDAY_SYNC_ENABLED`, a sync adds each newly published year from MOM's data.gov.sg dataset a minute after start-up and daily, adding rows only ([ADR-0057](../../docs/adr/ADR-0057-holiday-sync-from-data-gov-sg.md)); `GET /holidays/coverage` says how far the list reaches. Corrections go in new migrations. Only countries mapped in `CountryCodes` get holidays.
 
 ## Running it locally
 
@@ -62,6 +62,7 @@ ENGAGEMENT_MAIL_PROVIDER=log \
 | `ENGAGEMENT_MAIL_DOMAIN` | The sending domain (the sender address's domain without a custom domain), also the calendar `UID` suffix |
 | `CRM_APP_URL` | The CRM's address, linked from invites and reminders |
 | `ENGAGEMENT_AI_ENABLED` | The kill switch. Default `false`: every draft is a template |
+| `ENGAGEMENT_HOLIDAY_SYNC_ENABLED` | Add newly published Singapore holidays from data.gov.sg (ADR-0057). Default `false`; `true` in AWS |
 | `BEDROCK_REGION`, `BEDROCK_MODEL_ID` | Default `ap-southeast-1` and `apac.amazon.nova-micro-v1:0`. A `global.` profile is refused at startup |
 | `ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT`, `ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA` | Caps. Default 20 and 300,000 |
 | `ENGAGEMENT_AUDIT_PUBLISHER_ENABLED`, `AUDIT_QUEUE_URL` | The relay to the shared audit queue. Off by default |

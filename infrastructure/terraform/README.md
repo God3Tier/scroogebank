@@ -90,7 +90,7 @@ engagement-service (ADR-0051) for one CRM stack, built like the business dashboa
 - its TLS certificate, self-signed, in a Secrets Manager secret;
 - its security groups, and a rule on the CRM's client group that lets it call client-service;
 - a task role that may send to the audit queue, send mail only as the identity through the configuration set from the `no-reply` address, call `cognito-idp:ListUsers` on the pool, and invoke Nova Micro's Asia-Pacific profile and its model in the six regions ADR-0054 lists;
-- alarms on dispatcher lag (the service logs `mail_dispatch_lagging`) and the SES bounce rate, to the CRM's alarm topic;
+- alarms on dispatcher lag (the service logs `mail_dispatch_lagging`), the holiday list (`holiday_coverage_short` or `holiday_sync_mismatch`, ADR-0057) and the SES bounce rate, to the CRM's alarm topic;
 - a policy on the CRM's GitHub deploy role, when that role exists.
 
 `ai_enabled` (default `false`) is the AI drafting kill switch, and `mail_enabled` turns SES sending off. Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. engagement-db is not paused by `running`; `scripts/aws-session.sh` stops and starts it with the CRM's databases. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`.
