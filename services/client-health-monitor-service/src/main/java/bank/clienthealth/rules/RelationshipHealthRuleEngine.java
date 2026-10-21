@@ -19,6 +19,10 @@ public final class RelationshipHealthRuleEngine {
                 new SustainedNetOutflowRule(ruleset.netOutflow()));
     }
 
+    public String rulesetVersion() {
+        return ruleset.version();
+    }
+
     public RuleEvaluation evaluate(BaselineResult baseline) {
         Objects.requireNonNull(baseline);
         List<DetectedSignal> outcomes = new ArrayList<>();

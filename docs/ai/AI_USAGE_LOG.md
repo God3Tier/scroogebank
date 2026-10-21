@@ -728,3 +728,19 @@
   compiler override, covering positive signals, exact low-severity boundaries,
   healthy controls, just-below thresholds, insufficient/Unknown activity and
   deterministic repeatability; Java 25 CI remains required.
+
+## 2026-10-21 — Client Health SF04 analysis orchestration
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: record ADR-0053; implement renewable run-lease/watermark ports,
+  deterministic findings/signals/fingerprints, one-finding-per-client grouping,
+  retry-safe task handoff, and explicit cooldown/cap suppression outcomes.
+- Human verification required: Swayam reviews and implements task-side atomic
+  admission in RH-SF05; production run persistence and Java 25 CI remain
+  required.
+- Data: repository-owned synthetic transactions/findings only. No credentials,
+  real client data, AWS calls, Bedrock calls or external services were used.
+- Verification: all 47 client-health tests passed with the local Java 24
+  compiler override, including success, repeated-run, lease-contention,
+  suppression, partial-failure and deterministic-retry scenarios.

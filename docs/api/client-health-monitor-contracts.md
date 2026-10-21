@@ -204,6 +204,22 @@ rows. It is a replaceable adapter, not a second contract.
 - RH-SF04 alone assigns signal IDs/fingerprints, combines all outcomes for one
   client/run, applies suppression, and invokes `RelationshipTaskPort`.
 
+### RH-SF04 analysis and task-handoff boundary
+
+- Daily run IDs are deterministic from analysis date and ruleset version.
+- A renewable 60-minute lease prevents overlapping owners; an expired lease is
+  recoverable.
+- Finding/signal/correlation IDs are deterministic. Evidence fingerprints omit
+  the run ID so overlapping runs de-duplicate the same rule/account/window.
+- One immutable finding contains every detected signal for one client/run.
+- `RelationshipTaskPort` returns `CREATED`, `EVIDENCE_ATTACHED`, `DUPLICATE`,
+  `SUPPRESSED_COOLDOWN`, or `SUPPRESSED_DAILY_CAP`.
+- SF05 resolves assignment and makes cooldown/cap admission atomic with task,
+  history and outbox persistence under ADR-0053.
+- SF04 advances its watermark only after every finding has an explicit outcome.
+  Failure leaves the watermark unchanged; deterministic retries safely replay
+  already-handled findings.
+
 ## Contract B: Client Assignment V1
 
 ### Purpose
