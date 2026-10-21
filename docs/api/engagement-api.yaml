@@ -1,10 +1,11 @@
 openapi: 3.0.3
 
 # The API engagement-service serves. This file is the source of truth for the
-# contract; the service also publishes a generated spec at /v3/api-docs when
-# the `local` profile is active, and the two must agree.
+# contract; the service's controller tests (EventApiTest, DraftApiTest,
+# PreferencesAndHolidaysApiTest) check its statuses and shapes.
 #
-# Decisions: ADR-0051 to ADR-0054, accepted 2026-10-21. Nothing is implemented yet.
+# Decisions: ADR-0051 to ADR-0054, accepted 2026-10-21. Implemented by
+# services/engagement-service.
 
 info:
   title: Scrooge CRM - Agent Engagement

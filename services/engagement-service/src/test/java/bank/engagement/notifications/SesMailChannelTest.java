@@ -1,0 +1,66 @@
+package bank.engagement.notifications;
+
+import jakarta.mail.internet.MimeMessage;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import software.amazon.awssdk.services.sesv2.SesV2Client;
+import software.amazon.awssdk.services.sesv2.model.MessageRejectedException;
+import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
+import software.amazon.awssdk.services.sesv2.model.SendEmailResponse;
+import software.amazon.awssdk.services.sesv2.model.TooManyRequestsException;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class SesMailChannelTest {
+
+    private final SesV2Client ses = mock(SesV2Client.class);
+    private final MailProperties properties = new MailProperties("ses", "no-reply@mail.example.test",
+            "mail.example.test", "engagement-test", "http://localhost:5173", "ap-southeast-1", null,
+            Duration.ZERO, Duration.ofSeconds(10), new MailProperties.Dispatcher(null, 0, null, List.of()));
+    private final SesMailChannel channel = new SesMailChannel(ses, properties,
+            Clock.fixed(Instant.parse("2026-10-21T02:00:00Z"), ZoneOffset.UTC));
+
+    private final OutgoingMail mail = new OutgoingMail("CRM Calendar", "no-reply@mail.example.test",
+            "synthetic.agent@example.test", null, "Reminder", "Text", "<p>Text</p>", null);
+
+    @Test
+    void sendsRawMimeWithTheConfigurationSetAndKeepsTheMessageId() throws Exception {
+        when(ses.sendEmail(any(SendEmailRequest.class))).thenReturn(SendEmailResponse.builder().messageId("ses-1").build());
+
+        assertThat(channel.send(mail)).isEqualTo("ses-1");
+
+        ArgumentCaptor<SendEmailRequest> request = ArgumentCaptor.forClass(SendEmailRequest.class);
+        verify(ses).sendEmail(request.capture());
+        assertThat(request.getValue().configurationSetName()).isEqualTo("engagement-test");
+        MimeMessage message = MimeMessageFactoryTest.parse(request.getValue().content().raw().data().asByteArray());
+        assertThat(message.getSubject()).isEqualTo("Reminder");
+    }
+
+    @Test
+    void throttlingIsRetryableAndRejectionIsNot() {
+        when(ses.sendEmail(any(SendEmailRequest.class))).thenThrow(TooManyRequestsException.builder().build());
+        assertThatThrownBy(() -> channel.send(mail))
+                .isInstanceOfSatisfying(MailSendException.class, ex -> {
+                    assertThat(ex.code()).isEqualTo("ses_throttled");
+                    assertThat(ex.retryable()).isTrue();
+                });
+
+        when(ses.sendEmail(any(SendEmailRequest.class))).thenThrow(MessageRejectedException.builder().build());
+        assertThatThrownBy(() -> channel.send(mail))
+                .isInstanceOfSatisfying(MailSendException.class, ex -> {
+                    assertThat(ex.code()).isEqualTo("ses_rejected");
+                    assertThat(ex.retryable()).isFalse();
+                });
+    }
+}
