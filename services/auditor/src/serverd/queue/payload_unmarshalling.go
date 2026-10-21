@@ -126,6 +126,35 @@ var dashboardViewActions = map[string]bool{
 	"VIEW_AGENT_PERFORMANCE": true,
 }
 
+// engagementActions are what engagement-service records (agent-engagement
+// plan §11): calendar changes, the invite and reminder emails its dispatcher
+// sends, and client follow-up drafts.
+var engagementActions = map[string]bool{
+	"EVENT_CREATE":       true,
+	"EVENT_UPDATE":       true,
+	"EVENT_CANCEL":       true,
+	"INVITE_SENT":        true,
+	"INVITE_FAILED":      true,
+	"REMINDER_SENT":      true,
+	"REMINDER_FAILED":    true,
+	"REMINDER_MISSED":    true,
+	"DRAFT_GENERATE":     true,
+	"DRAFT_DISCARD":      true,
+	"EMAIL_SEND":         true,
+	"EMAIL_SEND_FAILED":  true,
+	"PREFERENCES_UPDATE": true,
+}
+
+// ValidEngagementPayload is engagement-service's outbox envelope, the same
+// shape as event-alert-service's (ADR-0051 decision 7). data holds IDs,
+// statuses and changed field names, never titles, email bodies or addresses.
+type ValidEngagementPayload struct {
+	EventID      string                     `json:"event_id"`
+	EventVersion int                        `json:"event_version"`
+	OccurredAt   time.Time                  `json:"occurred_at"`
+	Data         map[string]json.RawMessage `json:"data"`
+}
+
 type ValidEventAlertPayload struct {
 	EventID      string          `json:"event_id"`
 	EventVersion int             `json:"event_version"`
@@ -175,6 +204,9 @@ func validatePayload(envelope ValidEvent) error {
 	case models.CognitoTriggersServiceType:
 		return validateAuthenticationPayload(envelope)
 
+	case models.EngagementServiceType:
+		return validateEngagementPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
@@ -199,6 +231,25 @@ func validateEventAlertPayload(envelope ValidEvent) error {
 	}
 	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || len(payload.Data) == 0 {
 		return fmt.Errorf("invalid EventAlertPayload: required audit metadata is missing")
+	}
+	return nil
+}
+
+// validateEngagementPayload accepts engagement-service's actions. The actor is
+// the agent's sub, or "system" for what its dispatcher sends.
+func validateEngagementPayload(envelope ValidEvent) error {
+	if !engagementActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for ENGAGEMENT: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorID) == "" {
+		return fmt.Errorf("ENGAGEMENT event requires actor_id")
+	}
+	var payload ValidEngagementPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid EngagementPayload: %w", err)
+	}
+	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || payload.Data == nil {
+		return fmt.Errorf("invalid EngagementPayload: required audit metadata is missing")
 	}
 	return nil
 }
