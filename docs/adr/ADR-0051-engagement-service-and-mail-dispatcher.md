@@ -104,6 +104,8 @@ Existing constraints:
 
 A new service keeps ADR-0033's guarantees intact and matches how the CRM already splits business areas. One deployable service with internal modules gives the separation that matters (each module owns its own tables and sits behind its own interface) without the cost of several ECS services and databases. Leased rows with `SKIP LOCKED` are the same pattern the audit relays already use. They make the dispatcher safe with two tasks and need nothing besides the database the service already has. The stop-model limit is acceptable because the CRM itself is offline at those times, and the demo runs while the stack is up.
 
+The service runs at most 2 tasks, not the 6 the CRM's services and dashboard-service may scale to, because more tasks would not send more mail. SES in the sandbox allows 1 message a second and 200 a day for the whole account ([ADR-0053](ADR-0053-email-delivery-through-ses.md)), and each task paces only its own sends, so extra tasks would mostly be throttled and use up their retries. The service also has a small `db.t4g.micro` database and only agents call it. dashboard-service can take the CRM's limit because it is stateless and has no shared outside limit ([ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md) decision 1, [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md) decision 5). With two tasks, the combined rate can briefly pass 1 a second; SES then throttles a send, and the row is retried (decision 4). (Rationale added 2026-10-21; the decision is unchanged.)
+
 ## Consequences
 
 ### Positive
