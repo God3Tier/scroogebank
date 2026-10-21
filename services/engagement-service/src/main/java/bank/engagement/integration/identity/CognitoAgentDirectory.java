@@ -20,6 +20,9 @@ import java.util.stream.Collectors;
  * Looks agents up with Cognito {@code ListUsers} filtered by {@code sub},
  * asking only for the address and name attributes (ADR-0053 decision 4).
  * Found agents are cached; a failed lookup is not, so the next try asks again.
+ * Cognito refuses the whole call with {@code InvalidParameterException} if the
+ * user lacks a requested attribute, so only the three user-service always sets
+ * are requested.
  */
 public class CognitoAgentDirectory implements AgentDirectory {
 
@@ -28,7 +31,7 @@ public class CognitoAgentDirectory implements AgentDirectory {
     /** A sub is a UUID; anything else would be unsafe inside the filter string. */
     private static final Pattern SUB = Pattern.compile("[A-Za-z0-9-]{1,64}");
 
-    private static final List<String> ATTRIBUTES = List.of("email", "name", "given_name", "family_name");
+    private static final List<String> ATTRIBUTES = List.of("email", "given_name", "family_name");
 
     private final CognitoIdentityProviderClient cognito;
     private final String userPoolId;
@@ -59,7 +62,8 @@ public class CognitoAgentDirectory implements AgentDirectory {
                     .attributesToGet(ATTRIBUTES)
                     .limit(1));
             Optional<AgentProfile> found = response.users().stream().findFirst().map(user -> profile(sub, user));
-            found.ifPresent(profile -> cache.put(sub, profile));
+            found.ifPresentOrElse(profile -> cache.put(sub, profile),
+                    () -> log.warn("No agent found for sub {}", sub));
             return found;
         } catch (SdkException ex) {
             log.warn("Agent lookup failed for sub {}: {}", sub, ex.getClass().getSimpleName());
@@ -75,12 +79,8 @@ public class CognitoAgentDirectory implements AgentDirectory {
                 Boolean.TRUE.equals(user.enabled()));
     }
 
-    /** {@code name} if set, else given and family name, as user-service stores them. */
+    /** Given and family name, as user-service stores them. */
     static String displayName(Map<String, String> attributes) {
-        String name = attributes.get("name");
-        if (name != null && !name.isBlank()) {
-            return name.strip();
-        }
         String joined = (attributes.getOrDefault("given_name", "") + " " + attributes.getOrDefault("family_name", ""))
                 .strip();
         return joined.isEmpty() ? null : joined;

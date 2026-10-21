@@ -99,7 +99,7 @@ Production access is requested from AWS, which gives an initial response within 
    - Invites and reminders come from `CRM Calendar <no-reply@<sending domain>>`.
    - Client emails come from `"<agent name> via Scrooge Bank" <no-reply@<sending domain>>`, with `Reply-To` set to the agent's address, so replies reach the agent.
 4. **Agent address and name.**
-   - The service looks them up with Cognito `ListUsers` filtered by `sub`, asking only for `email`, `name`, `given_name` and `family_name`.
+   - The service looks them up with Cognito `ListUsers` filtered by `sub`, asking only for `email`, `given_name` and `family_name` (amended 2026-10-21: `name` dropped; see the revision history).
    - Results are cached in memory for 15 minutes.
    - A user who is not found or is disabled is not mailed: the row becomes `FAILED` with `agent_email_unavailable` or `agent_disabled`.
 5. **Client address.**
@@ -191,3 +191,4 @@ Prices to be checked on the SES pricing page.
 - 2026-10-21 11:04 +08:00: proposed.
 - 2026-10-21: accepted by the decision owner.
 - 2026-10-21: decisions 1, 3 and 9 superseded in part by [ADR-0055](ADR-0055-sender-address-without-a-domain.md): without the domain's hosted zone, mail comes from one verified address. This record is otherwise unchanged.
+- 2026-10-21: decision 4 amended after the first deployment. `ListUsers` fails with `InvalidParameterException` when the user lacks a requested attribute, and user-service never sets `name`, so every lookup failed. The service now asks for `email`, `given_name` and `family_name`, which user-service sets on every user. It asks for less than before; the decision is otherwise unchanged.

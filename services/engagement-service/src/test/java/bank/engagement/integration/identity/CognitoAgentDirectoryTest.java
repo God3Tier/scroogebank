@@ -36,7 +36,9 @@ class CognitoAgentDirectoryTest {
             ((Consumer<ListUsersRequest.Builder>) invocation.getArgument(0)).accept(builder);
             ListUsersRequest request = builder.build();
             assertThat(request.filter()).isEqualTo("sub = \"" + SUB + "\"");
-            assertThat(request.attributesToGet()).containsExactly("email", "name", "given_name", "family_name");
+            // Only what user-service sets on every user: Cognito fails the call
+            // if a requested attribute is missing.
+            assertThat(request.attributesToGet()).containsExactly("email", "given_name", "family_name");
             return ListUsersResponse.builder().users(UserType.builder().enabled(true).attributes(
                     AttributeType.builder().name("email").value("synthetic.agent@example.test").build(),
                     AttributeType.builder().name("given_name").value("Synthetic").build(),
@@ -64,15 +66,25 @@ class CognitoAgentDirectoryTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void anUnknownAgentIsEmptyAndNotCached() {
+        when(cognito.listUsers(any(Consumer.class))).thenReturn(ListUsersResponse.builder().build());
+
+        assertThat(directory.find(SUB)).isEmpty();
+        assertThat(directory.find(SUB)).isEmpty();
+        verify(cognito, times(2)).listUsers(any(Consumer.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void aSubThatIsNotAUuidIsNeverPutInTheFilter() {
         assertThat(directory.find("x\" or email ^= \"")).isEmpty();
         verify(cognito, never()).listUsers(any(Consumer.class));
     }
 
     @Test
-    void displayNamePrefersNameThenGivenAndFamilyName() {
-        assertThat(CognitoAgentDirectory.displayName(Map.of("name", "Full Name", "given_name", "G")))
-                .isEqualTo("Full Name");
+    void displayNameIsGivenAndFamilyName() {
+        assertThat(CognitoAgentDirectory.displayName(Map.of("given_name", "Given", "family_name", "Family")))
+                .isEqualTo("Given Family");
         assertThat(CognitoAgentDirectory.displayName(Map.of("given_name", "Given"))).isEqualTo("Given");
         assertThat(CognitoAgentDirectory.displayName(Map.of())).isNull();
     }
