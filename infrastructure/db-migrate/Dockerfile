@@ -6,10 +6,10 @@
 #   docker build -t crm/db-migrate:$TAG -f infrastructure/db-migrate/Dockerfile .
 #
 # Each file in a Go service's data/ directory is a versioned migration named
-# V<n>_<description>.sql. user-service and event-alert-service keep theirs in
-# src/main/resources/db/migration, named V<n>__<description>.sql, where
-# Spring Boot's Flyway applies them locally; Terraform sets the separator __
-# for those two directories. Flyway records a checksum for every file it
+# V<n>_<description>.sql. user-service, event-alert-service and
+# engagement-service keep theirs in src/main/resources/db/migration, named
+# V<n>__<description>.sql, where Spring Boot's Flyway applies them locally;
+# Terraform sets the separator __ for those directories. Flyway records a checksum for every file it
 # applies, so a file that has been deployed is never edited: put the change
 # in the next version (docs/database/migrations.md).
 FROM flyway/flyway:11.7.2-alpine
@@ -25,6 +25,7 @@ COPY services/sftp/receiver/data/ /flyway/sql/transactions/
 COPY services/auditor/data/ /flyway/sql/audit/
 COPY services/user-service/src/main/resources/db/migration/ /flyway/sql/users/
 COPY services/event-alert-service/src/main/resources/db/migration/ /flyway/sql/alerts/
+COPY services/engagement-service/src/main/resources/db/migration/ /flyway/sql/engagement/
 
 # The logins: one service's login for each of these databases, the
 # transaction logins and the audit logins.
@@ -32,6 +33,7 @@ COPY infrastructure/db-migrate/app-login/afterMigrate.sql /flyway/sql/clients/
 COPY infrastructure/db-migrate/app-login/afterMigrate.sql /flyway/sql/accounts/
 COPY infrastructure/db-migrate/app-login/afterMigrate.sql /flyway/sql/users/
 COPY infrastructure/db-migrate/app-login/afterMigrate.sql /flyway/sql/alerts/
+COPY infrastructure/db-migrate/app-login/afterMigrate.sql /flyway/sql/engagement/
 COPY infrastructure/db-migrate/transactions/ /flyway/sql/transactions/
 COPY infrastructure/db-migrate/audit/ /flyway/sql/audit/
 
