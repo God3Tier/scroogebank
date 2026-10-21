@@ -41,7 +41,8 @@ class TransactionReplayPageSchemaTest {
     @ParameterizedTest
     @ValueSource(strings = {
         "/fixtures/client-health-monitor/transaction-replay-page-v1.invalid-unmatched.json",
-        "/fixtures/client-health-monitor/transaction-replay-page-v1.invalid-description.json"
+        "/fixtures/client-health-monitor/transaction-replay-page-v1.invalid-description.json",
+        "/fixtures/client-health-monitor/transaction-replay-page-v1.invalid-missing-activity-kind.json"
     })
     void rejectsUnsafeProviderPages(String fixture) throws IOException {
         assertFalse(validate(fixture).isEmpty(), () -> "Expected fixture to be rejected: " + fixture);

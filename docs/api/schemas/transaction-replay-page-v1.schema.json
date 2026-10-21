@@ -46,6 +46,7 @@
         "currency",
         "transactionDate",
         "status",
+        "activityKind",
         "sourceFingerprint"
       ],
       "properties": {
@@ -75,6 +76,9 @@
         },
         "status": {
           "enum": ["Completed", "Pending", "Failed"]
+        },
+        "activityKind": {
+          "enum": ["CustomerInitiated", "Automated", "Unknown"]
         },
         "sourceFingerprint": {
           "oneOf": [

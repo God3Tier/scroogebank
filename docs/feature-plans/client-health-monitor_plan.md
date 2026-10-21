@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00 and RH-SF05 Stage 1 merged, RH-SF01 consumer contract/schema and synthetic replay provider implemented on its task branch
+- Status: In progress; SF00/SF01 and RH-SF05 Stage 1 merged, RH-SF02 provider-independent projection and baselines implemented on its task branch
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/transaction-intake`
+- Current task branch: `task/client-health-monitor/activity-projection`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `8f61151`
+- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `eea7d52`
 - AI-assisted planning: Yes; Cursor
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -122,7 +122,8 @@ Detect that an established recurring external credit is missing beyond its expec
 Detect that recent completed customer-initiated activity is materially lower than the client's own baseline.
 
 - Compare the client with their own history, not demographic groups.
-- Exclude automatic/system entries when the source contract identifies them.
+- Count only explicit `CustomerInitiated` activity under ADR-0051; exclude
+  `Automated` and fail closed on `Unknown` rather than inferring from descriptions.
 - Call it an activity decline or inactivity precursor, not official dormancy.
 - Suppress clients without sufficient baseline activity.
 
@@ -135,16 +136,20 @@ Detect that completed withdrawals materially exceed deposits across multiple per
 - Do not describe the result as fraud, financial distress, or proven attrition.
 - Define an explicit multi-currency policy before enabling this rule.
 
-## Provisional history design
+## History and baseline design
 
 - Generate six months of synthetic transaction history.
-- Initial baseline candidate: previous 90 days.
-- Initial comparison candidate: latest 30 days.
+- At the daily 08:00 Asia/Singapore analysis cut-off, compare the previous
+  90-day baseline with the latest non-overlapping 30-day comparison window.
+- Preserve the full six-month window for recurring-credit grouping.
 - Require at least three observations for recurring-credit classification.
+- Analyse SGD only for the MVP and fail closed on mixed-currency windows.
 - Store rule version and exact input-window boundaries with each signal.
 - Keep windows, thresholds, cooldowns, severity, and caps in a versioned ruleset.
 
-These are project assumptions pending synthetic evaluation, not universal banking standards.
+The window semantics are accepted for RH-SF02. Signal thresholds and severity
+remain project assumptions pending labelled synthetic evaluation, not universal
+banking standards.
 
 ## Combined task and suppression behaviour
 
@@ -478,8 +483,8 @@ Decisions:
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | In progress: consumer contract/schema, bounded replay and six-month synthetic provider implemented; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
-| RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; future migration ownership | `task/client-health-monitor/activity-projection` | Planned | N/A |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer complete and merged; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
+| RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; future migration ownership | `task/client-health-monitor/activity-projection` | Provider-independent projection, replay coverage and account/client 90/30-day baselines implemented locally; production DB adapter pending coordinated migration ownership | 2026-10-21 |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; shared fixtures | `task/client-health-monitor/signal-rules` | Planned | N/A |
 | RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |
 | RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; future migration ownership | `task/client-health-monitor/task-domain` | Stage 1 domain foundation implemented and merged; production persistence pending | 2026-10-16 |

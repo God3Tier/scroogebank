@@ -31,6 +31,7 @@ a decision it governs.
 - [ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) — Client Health uses deterministic versioned rules in one daily Java 25 ECS task, Bedrock Singapore for validated wording only with template fallback, a dedicated health database, scoped service calls, atomic audit outbox and ownership-scoped task access.
 - [ADR-0044](ADR-0044-client-health-transaction-intake-and-replay.md) — Client Health pulls bounded matched activity and six-month replay from a service-authenticated transaction API, with stable synthetic source fingerprints and fail-closed complete runs.
 - [ADR-0046](ADR-0046-human-deploy-access-mfa-role.md) — Operators deploy as the hand-made role `crm-infra-admin` (administrator, MFA required, 4-hour sessions), assumed from IAM users in `crm-deployers` whose keys can reach nothing else; Identity Center is impossible in this member account, and Terraform cannot hold a role that its teardowns would destroy.
+- [ADR-0051](ADR-0051-client-health-explicit-activity-classification.md) — Client Health requires an explicit CustomerInitiated/Automated/Unknown transaction classification so activity baselines exclude non-customer activity without inspecting descriptions.
 
 ## Superseded decisions
 

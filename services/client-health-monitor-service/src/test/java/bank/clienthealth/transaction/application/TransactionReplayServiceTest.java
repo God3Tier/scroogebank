@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bank.clienthealth.transaction.application.TransactionReplayService.IncompleteReplayException;
 import bank.clienthealth.transaction.contract.MatchedTransaction;
+import bank.clienthealth.transaction.contract.MatchedTransaction.ActivityKind;
 import bank.clienthealth.transaction.contract.MatchedTransaction.Status;
 import bank.clienthealth.transaction.contract.MatchedTransaction.TransactionType;
 import bank.clienthealth.transaction.contract.TransactionReplayPage;
@@ -84,7 +85,8 @@ class TransactionReplayServiceTest {
     void validatesProviderContractsAndSafetyBounds() {
         assertThrows(IllegalArgumentException.class, () -> new MatchedTransaction(
                 "txn-1", "client-1", "account-1", TransactionType.DEPOSIT,
-                new BigDecimal("-1.00"), "SGD", FROM, Status.COMPLETED, "source-1"));
+                new BigDecimal("-1.00"), "SGD", FROM, Status.COMPLETED,
+                ActivityKind.AUTOMATED, "source-1"));
         assertThrows(IllegalArgumentException.class,
                 () -> new TransactionReplayPage("2", List.of(), null));
         assertThrows(IllegalArgumentException.class,
@@ -115,6 +117,7 @@ class TransactionReplayServiceTest {
     private static MatchedTransaction transaction(String id, Instant date, Status status) {
         return new MatchedTransaction(
                 id, "client-1", "account-1", TransactionType.DEPOSIT,
-                new BigDecimal("4250.00"), "SGD", date, status, "synthetic-employer-1");
+                new BigDecimal("4250.00"), "SGD", date, status,
+                ActivityKind.AUTOMATED, "synthetic-employer-1");
     }
 }

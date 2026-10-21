@@ -694,3 +694,20 @@
 - Verification: all 32 client-health tests passed with the local Java 24
   compiler override, including contract/schema/mock coverage; CI must repeat
   them on Java 25. Lint diagnostics and Git whitespace checks passed.
+
+## 2026-10-21 — Client Health SF02 activity projection and baselines
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: add explicit activity classification, atomic/idempotent transaction
+  projection, replay-coverage tracking, and six-month/90-day/30-day account and
+  client baseline summaries for the future deterministic rules.
+- Human verification required: review ADR-0051, the 08:00 Asia/Singapore window
+  boundaries, SGD-only failure behavior, and coordinate production health-db
+  migration ownership with Swayam before a database adapter is added.
+- Data: repository-owned synthetic transactions only. No credentials, real
+  client data, AWS calls or external services were used.
+- Verification: all 39 client-health tests passed with the local Java 24
+  compiler override, including projection, status-transition, rollback,
+  classification, currency, coverage, roll-up and synthetic baseline coverage;
+  Java 25 CI verification remains required.

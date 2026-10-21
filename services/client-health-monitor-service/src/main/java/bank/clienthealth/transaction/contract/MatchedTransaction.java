@@ -15,6 +15,7 @@ public record MatchedTransaction(
         String currency,
         Instant transactionDate,
         Status status,
+        ActivityKind activityKind,
         String sourceFingerprint
 ) {
     private static final Pattern IDENTIFIER =
@@ -35,6 +36,7 @@ public record MatchedTransaction(
         }
         transactionDate = Objects.requireNonNull(transactionDate, "transactionDate is required");
         status = Objects.requireNonNull(status, "status is required");
+        activityKind = Objects.requireNonNull(activityKind, "activityKind is required");
         if (sourceFingerprint != null) {
             sourceFingerprint = requireIdentifier(sourceFingerprint, "sourceFingerprint");
         }
@@ -56,5 +58,11 @@ public record MatchedTransaction(
         COMPLETED,
         PENDING,
         FAILED
+    }
+
+    public enum ActivityKind {
+        CUSTOMER_INITIATED,
+        AUTOMATED,
+        UNKNOWN
     }
 }

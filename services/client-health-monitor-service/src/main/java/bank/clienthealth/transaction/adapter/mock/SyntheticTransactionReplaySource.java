@@ -1,6 +1,7 @@
 package bank.clienthealth.transaction.adapter.mock;
 
 import bank.clienthealth.transaction.contract.MatchedTransaction;
+import bank.clienthealth.transaction.contract.MatchedTransaction.ActivityKind;
 import bank.clienthealth.transaction.contract.MatchedTransaction.Status;
 import bank.clienthealth.transaction.contract.MatchedTransaction.TransactionType;
 import bank.clienthealth.transaction.contract.TransactionReplayPage;
@@ -84,10 +85,12 @@ public final class SyntheticTransactionReplaySource implements TransactionReplay
         // Non-completed rows prove later analysis can exclude them.
         transactions.add(transaction(
                 "pending-control", "client-control", "account-control",
-                TransactionType.WITHDRAWAL, "200.00", 9, 25, Status.PENDING, null));
+                TransactionType.WITHDRAWAL, "200.00", 9, 25, Status.PENDING,
+                ActivityKind.CUSTOMER_INITIATED, null));
         transactions.add(transaction(
                 "failed-control", "client-control", "account-control",
-                TransactionType.WITHDRAWAL, "300.00", 9, 26, Status.FAILED, null));
+                TransactionType.WITHDRAWAL, "300.00", 9, 26, Status.FAILED,
+                ActivityKind.CUSTOMER_INITIATED, null));
 
         return new SyntheticTransactionReplaySource(transactions);
     }
@@ -116,7 +119,7 @@ public final class SyntheticTransactionReplaySource implements TransactionReplay
     ) {
         return transaction(
                 id, client, account, TransactionType.DEPOSIT, amount,
-                month, day, Status.COMPLETED, sourceFingerprint);
+                month, day, Status.COMPLETED, ActivityKind.AUTOMATED, sourceFingerprint);
     }
 
     private static MatchedTransaction withdrawal(
@@ -124,16 +127,17 @@ public final class SyntheticTransactionReplaySource implements TransactionReplay
     ) {
         return transaction(
                 id, client, account, TransactionType.WITHDRAWAL, amount,
-                month, day, Status.COMPLETED, null);
+                month, day, Status.COMPLETED, ActivityKind.CUSTOMER_INITIATED, null);
     }
 
     private static MatchedTransaction transaction(
             String id, String client, String account, TransactionType type,
-            String amount, int month, int day, Status status, String sourceFingerprint
+            String amount, int month, int day, Status status,
+            ActivityKind activityKind, String sourceFingerprint
     ) {
         Instant date = Instant.parse("2026-%02d-%02dT01:00:00Z".formatted(month, day));
         return new MatchedTransaction(
                 id, client, account, type, new BigDecimal(amount), "SGD",
-                date, status, sourceFingerprint);
+                date, status, activityKind, sourceFingerprint);
     }
 }

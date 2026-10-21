@@ -94,6 +94,8 @@ for initial replay and daily analysis. It does not select an event stream.
 - `currency`: required uppercase ISO 4217 code; MVP expects `SGD` unless a currency policy is accepted.
 - `transactionDate`: required source transaction time.
 - `status`: required; `Completed`, `Pending`, or `Failed`.
+- `activityKind`: required under ADR-0051; `CustomerInitiated`, `Automated`, or
+  `Unknown`. Unknown is excluded from activity counts rather than guessed.
 - `sourceFingerprint`: optional opaque stable synthetic source reference. It supports recurring-credit grouping without exposing free-text remitter details.
 
 ### Provider guarantees requested
@@ -145,6 +147,7 @@ Proposed response:
       "currency": "SGD",
       "transactionDate": "2026-09-28T00:30:00Z",
       "status": "Completed",
+      "activityKind": "Automated",
       "sourceFingerprint": "synthetic-employer-001"
     }
   ],
@@ -170,6 +173,24 @@ Until Feature 3 delivers the production endpoint, local analysis uses
 provides six deterministic months covering interrupted recurring credit,
 declining activity, sustained net outflow, healthy controls, and non-completed
 rows. It is a replaceable adapter, not a second contract.
+
+### RH-SF02 projection and baseline boundary
+
+- A complete replay is applied atomically by transaction ID.
+- Immutable-field changes fail closed; only Pending may advance to Completed or
+  Failed.
+- Applied replay windows are recorded so analysis cannot mistake absent
+  coverage for zero activity.
+- At 08:00 Asia/Singapore, SF02 exposes a 90-day baseline and non-overlapping
+  30-day comparison per account plus an exact client roll-up.
+- Six months remain available for recurring-credit series grouped by
+  `sourceFingerprint`.
+- Activity counts include only completed `CustomerInitiated` rows. Automated
+  and Unknown rows are excluded and Unknown counts remain visible.
+- Pending/Failed rows contribute to no aggregate. Mixed-currency windows fail
+  closed; the MVP baseline currency is SGD.
+- SF02 exposes exact summaries and sufficiency metadata; SF03 alone decides
+  signal thresholds and severity.
 
 ## Contract B: Client Assignment V1
 

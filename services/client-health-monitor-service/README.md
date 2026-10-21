@@ -4,7 +4,8 @@
 
 The module contains the RH-SF00 `ClientHealthFinding V1` handoff, the RH-SF05
 Stage 1 task domain, and the provider-independent RH-SF01 transaction replay
-boundary.
+boundary. RH-SF02 adds the service-owned activity projection, replay-coverage
+tracking, and deterministic account/client baselines.
 
 RH-SF01 currently validates the minimum matched transaction projection, follows
 bounded cursor pages, de-duplicates identical rows, rejects conflicting or
@@ -12,9 +13,15 @@ out-of-window rows, and exposes a result only after every page succeeds. Its
 contract-faithful mock supplies six deterministic months for the three positive
 signals plus healthy and non-completed controls.
 
-It is intentionally not a runnable application yet. No Lambda handler, Spring
-Boot API, database, Bedrock adapter, transaction HTTP adapter, or deployment
-configuration has been selected or implemented.
+It is intentionally not a runnable application yet. No Spring Boot API,
+health-db adapter/migrations, Bedrock adapter, transaction HTTP adapter, or
+deployment configuration has been implemented.
+
+RH-SF02 atomically applies complete replays by transaction ID, permits only
+Pending-to-terminal status changes, and fails closed on immutable conflicts.
+For an 08:00 Asia/Singapore analysis date it retains six months for recurring
+credits and calculates a 90-day baseline plus 30-day comparison. Activity counts
+use explicit ADR-0051 classification; net-flow summaries are SGD-only.
 
 ## Ownership boundary
 
@@ -42,6 +49,7 @@ Contract documentation and fixtures:
 - `docs/api/schemas/client-health-finding-v1.schema.json`
 - `docs/api/schemas/transaction-replay-page-v1.schema.json`
 - `tests/fixtures/client-health-monitor/`
+- `docs/adr/ADR-0051-client-health-explicit-activity-classification.md`
 
 ## Next implementation step
 
@@ -50,3 +58,7 @@ date-bounded replay endpoint, stable synthetic source fingerprint, and six
 months of reproducible synthetic history. RH-SF01 then replaces the mock with
 the HTTP/service-token adapter and runs the same contract tests end to end,
 without reading another service's database.
+
+For RH-SF02, coordinate health-db migration ownership with Swayam before adding
+the production projection repository. The current repository port and in-memory
+tests intentionally keep database technology out of the rule-facing domain.
