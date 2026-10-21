@@ -1,5 +1,49 @@
 # AI usage log
 
+## 2026-10-21 — Agent engagement implementation on four task branches
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: implement the accepted agent-engagement plan (ADR-0051 to ADR-0054)
+  on four task branches from `feat/agent-engagement`, one git worktree each:
+  - `task/agent-engagement/service`: `services/engagement-service` (Java 25,
+    Spring Boot): events and emailed iCalendar invites, reminders, the
+    lease-based mail dispatcher, SES and logging mail channels, Cognito
+    agent lookup, client-service ownership check, holidays (Singapore 2026
+    and 2027), Bedrock drafts with the safety screen, templates, caps and
+    kill switch, draft send, the audit outbox; Flyway V1 and V2, tests,
+    Dockerfile, Compose, README; the db-migrate image's engagement lines;
+    this plan's status and branch table.
+  - `task/agent-engagement/auditor`: the `ENGAGEMENT` source type, its
+    payload checks and its activity-feed actions.
+  - `task/agent-engagement/frontend`: Calendar and Follow-up Emails pages,
+    the Upcoming meetings panel, preferences, nav, proxy and tests.
+  - `task/agent-engagement/infrastructure`: `stacks/mail-identity` and
+    `stacks/agent-engagement`, the CRM stack's `engagement_inputs` output,
+    the session script, runbook and resource register.
+  - The owner chose the four-branch split, worktrees, and recorded the
+    team's acceptance of the feature (plan Q1).
+- Human verification required: review each branch's diff before
+  committing; check the Singapore holiday rows in
+  `V2__seed_singapore_holidays.sql` against the Ministry of Manpower page
+  (fetched and checked by the assistant on 2026-10-21, page dated
+  2026-06-19); before AE-T11, apply `mail-identity`, confirm DKIM and the
+  recipients' verification, re-check the Nova Micro profile's regions, and
+  run the live evaluation (ADR-0054, 90% gate). ADR-0054 decision 5 says a
+  template draft "still returns 200", but the accepted contract and plan
+  §12 return 201 for a created draft; the code follows the contract, and
+  the owner decides whether ADR-0054 needs a revision note.
+- Outcome: built; not committed (the owner commits). Checks run:
+  engagement-service 97 tests (unit, Testcontainers PostgreSQL, MockMvc,
+  ArchUnit), its image and the db-migrate image built, and a local run
+  (migrations applied, health 200, 401 without a token); auditor
+  `make test`; frontend 173 tests, lint and build; `terraform fmt`,
+  `validate` and `test` for `mail-identity` (3), `agent-engagement` (4) and
+  `crm` (7). No AWS resource was created and no model was called.
+- Data: repository code and docs, the public MOM holiday page, and
+  synthetic test data (`example.test` addresses, made-up IDs). No
+  credentials or real client data.
+
 ## 2026-10-21 — Agent engagement feature plan, ADR-0051 to 0054 and API contract
 
 - Human owner: Neo Jia Wen.

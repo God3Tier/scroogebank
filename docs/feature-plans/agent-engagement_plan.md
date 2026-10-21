@@ -3,11 +3,11 @@
 - Feature name: `agent-engagement`
 - Shared feature branch: `feat/agent-engagement`, from `dev` at `8013775`
 - Subtask branch prefix: `task/agent-engagement/<subtask>`
-- Status: **Planned.** Nothing is built. Required ADRs (§19) are accepted (2026-10-21) and the API contract is drafted. Implementation waits on Q1.
+- Status: **In progress.** Required ADRs (§19) are accepted (2026-10-21), the team accepted the feature (Q1, 2026-10-21), and the work is split across four task branches (§20): service, auditor, frontend and infrastructure. Live AWS checks (AE-T11) follow once all four are merged.
 - Primary developer: **Neo Jia Wen** (all tasks, §20)
 - Plan last updated: 2026-10-21
 - Decisions: [ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) (service, database, dispatcher), [ADR-0052](../adr/ADR-0052-calendar-invites-by-email.md) (calendar invites), [ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) (SES), [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md) (AI drafts, holidays). All Accepted 2026-10-21. Builds on ADR-0017, ADR-0020, ADR-0023, ADR-0025, ADR-0030, ADR-0035, ADR-0036, ADR-0042.
-- Contract: [`docs/api/engagement-api.yaml`](../api/engagement-api.yaml) (drafted; not implemented)
+- Contract: [`docs/api/engagement-api.yaml`](../api/engagement-api.yaml) (implemented by `services/engagement-service`)
 - Drafted with AI assistance (Claude Code). Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.
 
 ## 1. Problem statement
@@ -156,7 +156,7 @@ Times are stored in UTC and shown in Singapore time. Event times must be in the 
 
 ## 11. Audit logging
 
-`source_service` is `ENGAGEMENT`. Actions:
+`source_service` and `event_type` are both `ENGAGEMENT`. The payload is event-alert-service's envelope: `event_id`, `event_version`, `occurred_at` and a `data` object. Actions:
 
 - `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL`
 - `REMINDER_SENT`, `REMINDER_FAILED`, `REMINDER_MISSED`
@@ -169,6 +169,7 @@ Times are stored in UTC and shown in Singapore time. Event times must be in the 
 - `actor_id` is the caller's `sub`, or `system` for dispatcher events.
 - Written through the transactional outbox (ADR-0020) and relayed to `audit-insert`.
 - The auditor gets the `ENGAGEMENT` type and payload checks (task AE-T08).
+- The activity feed (`GET /api/activities`) shows `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL` and `EMAIL_SEND`: the agent's own changes. Reminders, invites and drafts stay in the audit log only.
 
 ## 12. Error and failure behaviour
 
@@ -248,9 +249,9 @@ Rough figures; verify in the AWS Pricing Calculator for ap-southeast-1.
 | Where | What |
 |---|---|
 | Unit | Reminder due times; rescheduling on update or cancel; iCalendar output (stable `UID`, `SEQUENCE` increases, UTC `DTSTART`/`DTEND`, `METHOD:REQUEST` and `METHOD:CANCEL`); holiday lookup; placeholder filling; safety screen; template fallback; caps and kill switch |
-| Repository (Testcontainers Postgres) | Ownership filters; `SKIP LOCKED` claiming with two dispatchers; advisory lock; unique queue rows; optimistic locking |
+| Repository (Testcontainers Postgres) | Ownership filters; `SKIP LOCKED` claiming with two dispatchers; lease expiry; retries; unique queue rows; optimistic locking |
 | Controller and security | Agent only; admin 403; no token 401; another agent's IDs 404; client-service 403, 404 or 503 handling |
-| Adapters | SES (LocalStack SES); Bedrock gateway with a stub; client-service against real response JSON; Cognito lookup |
+| Adapters | SES with a mocked `SesV2Client`, the raw MIME parsed back; Bedrock gateway with a mocked client; client-service against real response JSON (served as `text/plain`, as client-service does); Cognito lookup with a mocked client |
 | Model privacy | The captured Bedrock request has no client name, email, ID or agent-typed text |
 | AI evaluation | Fixture set of purposes and holidays run through the safety screen, following `event-alert-service` `ai/evaluation` |
 | Auditor | `ENGAGEMENT` events of each action pass; bad action or payload rejected |
@@ -264,22 +265,24 @@ Rough figures; verify in the AWS Pricing Calculator for ap-southeast-1.
   - the security group, plus a rule on client-service's group;
   - the ECS service (`modules/ecs-service`, Service Connect to client-service);
   - the database (`modules/postgres`);
-  - the ALB rule for `/api/engagement/*`;
+  - the ALB rule for `/api/engagement` and `/api/engagement/*`, priority 70 (the next free band after event-alert-service's 60), to port 8086;
   - IAM: `ses:SendRawEmail` on the identity, `bedrock:InvokeModel` on the Nova Micro Asia-Pacific profile and its foundation-model ARNs in the profile's six regions (ADR-0054 Security), `cognito-idp:ListUsers` on the pool, `sqs:SendMessage` on `audit-insert` through `extra_audit_producer_role_arns`.
 - **Long-lived stack `stacks/mail-identity`** (ADR-0053 decision 2), applied once per environment and never destroyed by the session scripts. It holds the SES domain identity (`mail.sg.itsag3t6.com` for prod), the DKIM, MAIL FROM and DMARC records in the existing hosted zone, the configuration set, and the verified team inboxes used as demo recipients. `stacks/agent-engagement` reads them by name, so teardowns never force re-verification.
 - The CRM stack needs an output for this stack, like `dashboard_inputs`.
 - **Order:** `mail-identity` once (then confirm DKIM and click each inbox's verification email), then per session the CRM stack and then this stack. Add steps to `docs/runbooks/deploy-aws.md`.
-- **Configuration** (names only; listed in the service README):
-  - `ENGAGEMENT_DB_URL`
-  - `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`
-  - `CLIENT_SERVICE_URL`
-  - `AUDIT_QUEUE_URL`
-  - `SES_FROM_ADDRESS`, `SES_CONFIGURATION_SET`
+- **Configuration** (names only; described in the service README). Names follow the existing services, so `CLIENT_SERVICE_BASE_URL` rather than `CLIENT_SERVICE_URL`, and the issuer is `COGNITO_ISSUER_URI`:
+  - `ENGAGEMENT_DB_URL`, `ENGAGEMENT_DB_USERNAME`, `ENGAGEMENT_DB_PASSWORD`, `SPRING_FLYWAY_ENABLED`
+  - `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID`, `COGNITO_USER_POOL_ID`
+  - `CLIENT_SERVICE_BASE_URL`
+  - `ENGAGEMENT_AUDIT_PUBLISHER_ENABLED`, `AUDIT_QUEUE_URL`, `AWS_REGION`
+  - `ENGAGEMENT_MAIL_PROVIDER` (`none` by default, `ses` in AWS), `SES_FROM_ADDRESS`, `SES_CONFIGURATION_SET`, `ENGAGEMENT_MAIL_DOMAIN`
   - `CRM_APP_URL`
   - `ENGAGEMENT_AI_ENABLED` (default `false`)
   - `BEDROCK_REGION`, `BEDROCK_MODEL_ID`
   - `ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT`, `ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA`
-- **Local:** Docker Compose with Postgres and LocalStack (SES, SQS).
+- **Port:** 8086 locally and in AWS.
+- **Local:** Docker Compose with Postgres and LocalStack (SQS); mail goes to the log (`ENGAGEMENT_MAIL_PROVIDER=log`).
+- **Migrations:** the db-migrate image copies `services/engagement-service/src/main/resources/db/migration/` to `/flyway/sql/engagement/`, with the shared app-login script.
 
 ## 18. Rollback
 
@@ -291,7 +294,7 @@ All drafted and accepted 2026-10-21, owner Neo Jia Wen, and indexed under Accept
 
 | ADR | Decision |
 |---|---|
-| ADR-0051 | engagement-service as a new microservice with its own database (extends ADR-0017 and ADR-0023). One deployable with internal modules. An in-process dispatcher guarded by a Postgres advisory lock and `SKIP LOCKED`. Mail only while the stack runs (ADR-0042 consequence) |
+| ADR-0051 | engagement-service as a new microservice with its own database (extends ADR-0017 and ADR-0023). One deployable with internal modules. An in-process dispatcher in every task that claims rows with `SKIP LOCKED` and a lease. Mail only while the stack runs (ADR-0042 consequence) |
 | ADR-0052 | Calendar integration through emailed iCalendar invites: one-way, agent as the only attendee, stable `UID`, `SEQUENCE` on update, `METHOD:CANCEL`. No provider APIs or OAuth |
 | ADR-0053 | Email through Amazon SES: subdomain identity with DKIM, sandbox for the demo, `Reply-To` the agent, agent address from Cognito by `sub`, client address from client-service at send time, no resolved bodies or addresses stored |
 | ADR-0054 | AI follow-up drafts: Bedrock model and region, the placeholder privacy boundary, no free text to the model, the safety screen, template fallback, mandatory human review, caps and kill switch, and the static versioned holiday table as the data source |
@@ -305,18 +308,28 @@ Joseph Yau reviews anything touching Feature 2 contracts. The auditor owner revi
 | Task ID | Task | Primary dev | Collaborators | Files/components | Branch | Dependencies/conflict zones | Status | Last sync |
 |---|---|---|---|---|---|---|---|---|
 | AE-T01 | This plan, ADR-0051 to 0054, `engagement-api.yaml` | Neo Jia Wen | — | `docs/feature-plans/agent-engagement_plan.md`, `docs/adr/`, `docs/api/engagement-api.yaml` | `task/agent-engagement/plan` | ADR index (`docs/adr/README.md`) | Done: ADRs accepted 2026-10-21; contract drafted | 2026-10-21 |
-| AE-T02 | Service skeleton: security, config, Flyway V1, Dockerfile, Compose | Neo Jia Wen | — | `services/engagement-service/**`, root `pom.xml` | `task/agent-engagement/service-skeleton` | Root `pom.xml` modules | Planned | 2026-10-21 |
-| AE-T03 | Events API and client-ownership check | Neo Jia Wen | Joseph Yau (review) | `engagement-service` `calendar` module | `task/agent-engagement/events` | client-service `GET /api/clients/{id}` contract (read-only use) | Planned | 2026-10-21 |
-| AE-T04 | Mail queue, dispatcher, SES adapter, iCalendar, reminders | Neo Jia Wen | — | `notifications`, `reminders` modules | `task/agent-engagement/notifications` | AE-T03 | Planned | 2026-10-21 |
-| AE-T05 | Holiday table, seed and API | Neo Jia Wen | — | `holidays` module, Flyway V2 | `task/agent-engagement/holidays` | — | Planned | 2026-10-21 |
-| AE-T06 | AI drafting: gateway, safety screen, templates, caps, kill switch, evaluation fixtures | Neo Jia Wen | — | `drafting` module | `task/agent-engagement/drafting` | AE-T05; ADR-0054 accepted | Planned | 2026-10-21 |
-| AE-T07 | Draft edit, send and discard through SES | Neo Jia Wen | — | `drafting`, `notifications` modules | `task/agent-engagement/send` | AE-T04, AE-T06 | Planned | 2026-10-21 |
-| AE-T08 | Audit outbox and auditor `ENGAGEMENT` type | Neo Jia Wen | Auditor owner (review) | `audit` module; `services/auditor/src/internal/models/service_type.go`, `src/serverd/queue/payload_unmarshalling.go` | `task/agent-engagement/audit` | Auditor validation (shared) | Planned | 2026-10-21 |
-| AE-T09 | Frontend: calendar, event form, draft editor, home panel, preferences | Neo Jia Wen | Frontend owner (review) | `frontend/src/pages/AgentCalendar.jsx`, `AgentDrafts.jsx`, `AgentDashboard.jsx`, `frontend/src/api/engagement.js`, `AppRouter.jsx` | `task/agent-engagement/frontend` | `AgentDashboard.jsx` and `AppRouter.jsx` are shared with BD-T12 | Planned | 2026-10-21 |
-| AE-T10 | Terraform stack, SES identity, runbook | Neo Jia Wen | Platform | `infrastructure/terraform/stacks/agent-engagement/**`, `infrastructure/terraform/stacks/mail-identity/**`, CRM stack outputs, `docs/runbooks/deploy-aws.md`, `docs/cost/resource-register.md` | `task/agent-engagement/infrastructure` | CRM stack outputs (shared with ADR-0047 work) | Planned | 2026-10-21 |
-| AE-T11 | End-to-end checks, seed data, cost check | Neo Jia Wen | — | all of the above | `task/agent-engagement/e2e` | Verified SES inboxes; Cognito agent users | Planned | 2026-10-21 |
+| AE-T02 | Service skeleton: security, config, Flyway V1, Dockerfile, Compose | Neo Jia Wen | — | `services/engagement-service/**`, root `pom.xml`, `infrastructure/db-migrate/` (engagement migrations) | `task/agent-engagement/service` | Root `pom.xml` modules; db-migrate image (shared) | Built; tests pass | 2026-10-21 |
+| AE-T03 | Events API and client-ownership check | Neo Jia Wen | Joseph Yau (review) | `engagement-service` `calendar` module | `task/agent-engagement/service` | client-service `GET /api/clients/{id}` contract (read-only use) | Built; tests pass | 2026-10-21 |
+| AE-T04 | Mail queue, dispatcher, SES adapter, iCalendar, reminders | Neo Jia Wen | — | `notifications`, `reminders` modules | `task/agent-engagement/service` | AE-T03 | Built; tests pass | 2026-10-21 |
+| AE-T05 | Holiday table, seed and API | Neo Jia Wen | — | `holidays` module, Flyway V2 | `task/agent-engagement/service` | — | Built; dates checked against MOM (page updated 2026-06-19) | 2026-10-21 |
+| AE-T06 | AI drafting: gateway, safety screen, templates, caps, kill switch, evaluation fixtures | Neo Jia Wen | — | `drafting` module | `task/agent-engagement/service` | AE-T05; ADR-0054 accepted | Built; tests pass; live Nova run in AE-T11 | 2026-10-21 |
+| AE-T07 | Draft edit, send and discard through SES | Neo Jia Wen | — | `drafting`, `notifications` modules | `task/agent-engagement/service` | AE-T04, AE-T06 | Built; tests pass | 2026-10-21 |
+| AE-T08a | Audit outbox and relay | Neo Jia Wen | — | `audit` module | `task/agent-engagement/service` | — | Built; tests pass | 2026-10-21 |
+| AE-T08b | Auditor `ENGAGEMENT` type, payload checks and activity-feed actions | Neo Jia Wen | Auditor owner (review) | `services/auditor/src/internal/models/service_type.go`, `activity_filter.go`, `src/serverd/queue/payload_unmarshalling.go`, their tests, `services/auditor/README.md` | `task/agent-engagement/auditor` | Auditor validation (shared) | Built; tests pass | 2026-10-21 |
+| AE-T09 | Frontend: calendar, event form, draft editor, home panel, preferences | Neo Jia Wen | Frontend owner (review) | `frontend/src/pages/AgentCalendar.jsx`, `AgentDrafts.jsx`, `AgentDashboard.jsx`, `frontend/src/components/engagement/`, `frontend/src/api/engagement.js`, `AppRouter.jsx`, `NavBar.jsx`, `components/activityText.js`, `vite.config.js` | `task/agent-engagement/frontend` | `AgentDashboard.jsx` and `AppRouter.jsx` are shared with BD-T12 | In progress | 2026-10-21 |
+| AE-T10 | Terraform stacks, SES identity, runbook | Neo Jia Wen | Platform | `infrastructure/terraform/stacks/agent-engagement/**`, `infrastructure/terraform/stacks/mail-identity/**`, CRM stack outputs (`engagement_inputs`), `scripts/aws-session.sh`, `docs/runbooks/deploy-aws.md`, `docs/cost/resource-register.md` | `task/agent-engagement/infrastructure` | CRM stack outputs (shared with ADR-0047 work) | In progress | 2026-10-21 |
+| AE-T11 | End-to-end checks, seed data, cost check, live Nova evaluation | Neo Jia Wen | — | all of the above | `task/agent-engagement/e2e` | All four branches merged; verified SES inboxes; Cognito agent users | Planned | 2026-10-21 |
 
-Merge path: `task/agent-engagement/<subtask>` → `feat/agent-engagement` → `dev`.
+Branches. The work is split by area, one task branch each, all from `feat/agent-engagement`, built in separate git worktrees. Each branch touches only its own files, so they merge without conflicts:
+
+| Branch | Owns |
+|---|---|
+| `task/agent-engagement/service` | `services/engagement-service/**`, root `pom.xml`, the db-migrate image's engagement lines, and the shared docs (this plan, the AI usage log) |
+| `task/agent-engagement/auditor` | The auditor files of AE-T08b |
+| `task/agent-engagement/frontend` | `frontend/**` |
+| `task/agent-engagement/infrastructure` | The Terraform, script, runbook and cost files of AE-T10 |
+
+Merge path: `task/agent-engagement/<area>` → `feat/agent-engagement` → `dev`.
 
 ## 21. Agent skills needed
 
@@ -329,7 +342,7 @@ Merge path: `task/agent-engagement/<subtask>` → `feat/agent-engagement` → `d
 
 | # | Question | Owner | Blocks |
 |---|---|---|---|
-| Q1 | Does the team accept a fourth innovation feature, its cost (§14) and a demo slot? | Team | Starting AE-T02 |
+| Q1 | Does the team accept a fourth innovation feature, its cost (§14) and a demo slot? **Resolved 2026-10-21:** the team accepted it | Team | — |
 | Q2 | Which Bedrock model and region? **Resolved 2026-10-21:** Amazon Nova Micro through its Asia-Pacific geographic profile, called through Bedrock Runtime in Singapore (ADR-0054 decision 3). No small, current model runs in-region there. Profile ID `apac.amazon.nova-micro-v1:0` confirmed. Its destination regions (Singapore, Sydney, Tokyo, Seoul, Osaka, Mumbai) are recorded in ADR-0054; re-check them before the demo | Neo Jia Wen | — |
 | Q3 | Agent email from Cognito `ListUsers` by `sub` (no user-service change), or a new user-service `GET /api/users/me`? **Resolved 2026-10-21:** Cognito `ListUsers` by `sub`, as ADR-0053 decision 4 (accepted) | Neo Jia Wen | — |
 | Q4 | Should admins get read-only access to agents' calendars, or is the audit log enough? | Team | §10 |
