@@ -147,6 +147,39 @@ describe('AgentCalendar', () => {
     })
   })
 
+  it('shows a new meeting as soon as it is saved, even before a reload includes it', async () => {
+    const lunch = { ...REVIEW, id: 'event-2', title: 'Synthetic lunch', startsAt: '2026-10-23T02:00:00Z', endsAt: '2026-10-23T03:00:00Z', version: 0 }
+    // The reload after saving still returns the old list.
+    createEvent.mockResolvedValue(lunch)
+    renderCalendar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New meeting on 2026-10-23' }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Synthetic lunch' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await vi.waitFor(() => expect(listEvents).toHaveBeenCalledTimes(2))
+    const day = screen.getByRole('gridcell', { name: '2026-10-23' })
+    expect(await within(day).findByRole('button', { name: /Synthetic lunch/ })).toBeInTheDocument()
+  })
+
+  it('shows an edit and a cancellation at once', async () => {
+    const moved = { ...REVIEW, startsAt: '2026-10-24T06:00:00Z', endsAt: '2026-10-24T07:00:00Z', version: 4 }
+    updateEvent.mockResolvedValue(moved)
+    renderCalendar()
+
+    fireEvent.click(await within(await screen.findByRole('gridcell', { name: '2026-10-22' })).findByRole('button', { name: /Synthetic review/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await within(screen.getByRole('gridcell', { name: '2026-10-24' })).findByRole('button', { name: /Synthetic review/ })).toBeInTheDocument()
+    expect(within(screen.getByRole('gridcell', { name: '2026-10-22' })).queryByRole('button', { name: /Synthetic review/ })).not.toBeInTheDocument()
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(within(screen.getByRole('gridcell', { name: '2026-10-24' })).getByRole('button', { name: /Synthetic review/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel meeting' }))
+
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: /Synthetic review/ })).not.toBeInTheDocument())
+  })
+
   it('allows only two reminders', async () => {
     renderCalendar()
 

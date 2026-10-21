@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { listClients } from '../api/clients.js'
@@ -33,6 +33,20 @@ function lastMonthOf(coverage) {
   if (!coverage?.coveredThrough) return null
   const [year, month] = coverage.coveredThrough.split('-').map(Number)
   return { year, month }
+}
+
+// The loaded meetings with the agent's latest saves applied: a save the
+// reload does not show yet (same or older version) replaces or adds its
+// meeting, and a cancellation removes it.
+function withSaved(events, saved = {}) {
+  const byId = new Map(events.map((event) => [event.id, event]))
+  for (const change of Object.values(saved)) {
+    const loaded = byId.get(change.id)
+    if (loaded && loaded.version >= change.version) continue
+    if (change.status === 'CANCELLED') byId.delete(change.id)
+    else byId.set(change.id, change)
+  }
+  return [...byId.values()]
 }
 
 function shiftMonth({ year, month }, by) {
@@ -119,13 +133,17 @@ function AgentCalendar({ now: fixedNow }) {
   const [now] = useState(() => fixedNow ?? new Date())
   const [searchParams] = useSearchParams()
   const [month, setMonth] = useState(() => currentMonth(now))
-  const [data, setData] = useState({ loading: true, error: '', events: [], holidays: [] })
+  const [data, setData] = useState({ loading: true, error: '', events: [], holidays: [], saved: {} })
   const [clients, setClients] = useState([])
   const [editing, setEditing] = useState(null)
   const [expandedDay, setExpandedDay] = useState(null)
   const [version, setVersion] = useState(0)
+  // Only the latest load may update the page, so a slow earlier response
+  // cannot replace a newer one.
+  const latestLoad = useRef(0)
 
   const load = useCallback(async () => {
+    const loadId = ++latestLoad.current
     const range = monthWindow(month.year, month.month)
     const lastDay = new Date(Date.UTC(month.year, month.month, 0)).getUTCDate()
     try {
@@ -133,9 +151,11 @@ function AgentCalendar({ now: fixedNow }) {
         listEvents(range),
         listHolidays({ from: `${month.year}-${pad(month.month)}-01`, to: `${month.year}-${pad(month.month)}-${pad(lastDay)}` }),
       ])
-      setData({ loading: false, error: '', events, holidays })
+      if (loadId !== latestLoad.current) return
+      setData((current) => ({ loading: false, error: '', events: withSaved(events, current.saved), holidays, saved: current.saved }))
     } catch {
-      setData({ loading: false, error: 'The calendar is temporarily unavailable.', events: [], holidays: [] })
+      if (loadId !== latestLoad.current) return
+      setData((current) => ({ ...current, loading: false, error: 'The calendar is temporarily unavailable.', events: [], holidays: [] }))
     }
   }, [month])
 
@@ -175,22 +195,35 @@ function AgentCalendar({ now: fixedNow }) {
     if (found) setEditing({ event: found })
   }, [linked, data.events])
 
+  // A saved or cancelled meeting shows at once, from the save's own response,
+  // and stays until a reload returns that version of it.
+  function remember(change) {
+    setData((current) => {
+      const saved = { ...current.saved, [change.id]: change }
+      return { ...current, saved, events: withSaved(current.events, saved) }
+    })
+  }
+
   async function handleSave(body) {
-    if (editing.event) await updateEvent(editing.event.id, body)
-    else await createEvent(body)
+    const saved = editing.event ? await updateEvent(editing.event.id, body) : await createEvent(body)
+    if (saved?.id) remember(saved)
     setEditing(null)
     setVersion((v) => v + 1)
   }
 
   async function handleCancelEvent(event) {
     await cancelEvent(event.id)
+    remember({ ...event, status: 'CANCELLED', version: event.version + 1 })
     setEditing(null)
     setVersion((v) => v + 1)
   }
 
+  // Only this month's meetings: a save moved to another month waits for that month.
+  const monthPrefix = `${month.year}-${pad(month.month)}-`
   const byDay = {}
   for (const event of data.events) {
     const day = singaporeParts(event.startsAt).date
+    if (!day.startsWith(monthPrefix)) continue
     ;(byDay[day] ||= []).push(event)
   }
   const holidaysByDay = {}
