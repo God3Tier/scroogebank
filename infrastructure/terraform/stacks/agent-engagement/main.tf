@@ -3,7 +3,7 @@
 # groups, engagement-db, TLS certificate and ECS service. It runs inside the
 # CRM stack's VPC, cluster, internal ALB and Service Connect namespace, read
 # from that stack's engagement_inputs output, and sends through the SES
-# identity of the long-lived mail-identity stack (ADR-0053). Apply
+# identity of the long-lived mail-identity stack (ADR-0053, ADR-0055). Apply
 # mail-identity once, then the CRM stack, then this one; destroy this one
 # before the CRM stack.
 
@@ -31,9 +31,14 @@ locals {
   # CRM stack can allow it on the audit queue before this stack exists.
   task_role_arn = "arn:${local.partition}:iam::${local.account}:role/${local.name}-engagement-service-task"
 
-  # The mail-identity stack's names (ADR-0053 decisions 1 and 3).
-  mail_domain            = "mail.${coalesce(local.crm.app_host, "no-custom-domain.invalid")}"
-  from_address           = "no-reply@${local.mail_domain}"
+  # The mail-identity stack's names (ADR-0053 decisions 1 and 3). Without the
+  # CRM stack's custom domain, mail comes from sender_address, and its domain
+  # is the calendar UID suffix (ADR-0055).
+  domain_mode            = local.crm.app_host != null
+  sender_address         = coalesce(var.sender_address, "sender-address-unset@example.invalid")
+  mail_domain            = local.domain_mode ? "mail.${local.crm.app_host}" : split("@", local.sender_address)[1]
+  from_address           = local.domain_mode ? "no-reply@${local.mail_domain}" : local.sender_address
+  identity_name          = local.domain_mode ? local.mail_domain : local.sender_address
   configuration_set_name = "${local.name}-engagement"
 
   # ADR-0051: at least 1 task and at most 2 while the CRM stack runs, none
@@ -49,12 +54,12 @@ locals {
 # here instead of every send failing later.
 
 data "aws_sesv2_email_identity" "mail" {
-  email_identity = local.mail_domain
+  email_identity = local.identity_name
 
   lifecycle {
     precondition {
-      condition     = local.crm.app_host != null
-      error_message = "The CRM stack has no domain_name, so there is no sending domain. Set it there and apply the mail-identity stack (ADR-0053)."
+      condition     = local.domain_mode || var.sender_address != null
+      error_message = "The CRM stack has no domain_name, so there is no sending domain. Set sender_address here and in the mail-identity stack, and apply that stack (ADR-0055)."
     }
   }
 }
@@ -249,7 +254,7 @@ data "aws_iam_policy_document" "engagement" {
   }
 
   # Only as the sending identity, through the configuration set, from the
-  # no-reply address (ADR-0053 decision 9).
+  # no-reply address or sender_address (ADR-0053 decision 9, ADR-0055).
   statement {
     sid       = "SendEngagementMail"
     actions   = ["ses:SendEmail", "ses:SendRawEmail"]

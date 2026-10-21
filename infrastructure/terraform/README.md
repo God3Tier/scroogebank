@@ -75,7 +75,8 @@ Its tasks follow the CRM stack's `running`: apply this stack again after every C
 
 The SES identity agent engagement sends from (ADR-0053 decision 2). Apply it once per environment, before `agent-engagement`, and keep it: a new identity needs DKIM verification again, and each sandbox recipient must click its verification email again. It contains:
 
-- the domain identity `mail.<app host>` (`mail.sg.itsag3t6.com` in prod) with Easy DKIM, its three DKIM CNAMEs, the MAIL FROM domain `bounce.<sending domain>` with its MX and SPF records, and a DMARC record at `p=none`, all in the existing hosted zone;
+- with `domain_name`: the domain identity `mail.<app host>` (`mail.sg.itsag3t6.com` in prod) with Easy DKIM, its three DKIM CNAMEs, the MAIL FROM domain `bounce.<sending domain>` with its MX and SPF records, and a DMARC record at `p=none`, all in the existing hosted zone;
+- without `domain_name`, in an account with no hosted zone: an email identity for `sender_address`, the one address mail then comes from, and no DNS records (ADR-0055). The agent-engagement stack takes the same `sender_address`;
 - the configuration set `<prefix>-engagement`, which requires TLS and publishes sends, deliveries, bounces, complaints and rejects to CloudWatch;
 - an email identity for each of `verified_recipients`, the team inboxes the SES sandbox may send to. Real addresses go only in the git-ignored tfvars.
 

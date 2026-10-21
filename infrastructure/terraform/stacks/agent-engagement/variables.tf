@@ -42,6 +42,17 @@ variable "mail_enabled" {
   default     = true
 }
 
+variable "sender_address" {
+  description = "The verified address mail comes from when the CRM stack has no domain_name (ADR-0055); the same value as the mail-identity stack's sender_address. Ignored when the CRM stack has a domain. Real addresses go only in the git-ignored tfvars."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.sender_address == null || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.sender_address))
+    error_message = "sender_address must be an email address."
+  }
+}
+
 variable "ai_enabled" {
   description = "The AI drafting kill switch, ENGAGEMENT_AI_ENABLED (ADR-0054 decision 7). Off, every draft is a template. Turn it on only for test and demo runs."
   type        = bool

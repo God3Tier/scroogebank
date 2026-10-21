@@ -186,7 +186,8 @@ output "engagement_inputs" {
     db_migrate_image = local.image["db-migrate"]
 
     # The sending domain is mail.<app_host> (ADR-0053 decision 1); null
-    # without a custom domain, when no mail can be sent.
+    # without a custom domain, when mail comes from the agent-engagement
+    # stack's sender_address instead (ADR-0055).
     app_host        = local.app_host
     app_url         = "https://${local.custom_domain ? local.app_host : aws_cloudfront_distribution.this.domain_name}"
     alarm_topic_arn = aws_sns_topic.alarms.arn

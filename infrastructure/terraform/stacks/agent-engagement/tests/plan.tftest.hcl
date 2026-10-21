@@ -322,3 +322,154 @@ run "rejects_a_global_profile" {
 
   expect_failures = [var.bedrock_model_id]
 }
+
+# A CRM stack without a custom domain: mail comes from sender_address (ADR-0055).
+run "sender_address_without_a_domain" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.crm
+    values = {
+      outputs = {
+        engagement_inputs = {
+          name_prefix    = "crm-sg-prod"
+          vpc_id         = "vpc-0123456789abcdef0"
+          app_subnet_ids = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+          cluster_arn    = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
+          cluster_name   = "crm-sg-prod"
+          namespace_arn  = "arn:aws:servicediscovery:ap-southeast-1:123456789012:namespace/ns-example"
+          alb = {
+            listener_arn   = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:listener/app/crm-sg-prod/abc/def"
+            alb_arn_suffix = "app/crm-sg-prod/abc"
+            vpc_id         = "vpc-0123456789abcdef0"
+          }
+          alb_sg                   = "sg-0a1b"
+          client                   = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
+          ca_pem                   = "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----"
+          cognito_issuer           = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_example"
+          cognito_web_client_id    = "exampleclientid"
+          cognito_user_pool_id     = "ap-southeast-1_example"
+          cognito_user_pool_arn    = "arn:aws:cognito-idp:ap-southeast-1:123456789012:userpool/ap-southeast-1_example"
+          audit_queue_url          = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+          audit_queue_arn          = "arn:aws:sqs:ap-southeast-1:123456789012:crm-sg-prod-audit-insert"
+          audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task", "arn:aws:iam::123456789012:role/crm-sg-prod-engagement-service-task"]
+          db = {
+            kms_key_arn           = "arn:aws:kms:ap-southeast-1:123456789012:key/example"
+            subnet_group_name     = "crm-sg-prod-db"
+            parameter_group_name  = "crm-sg-prod-postgres17"
+            instance_class        = "db.t4g.micro"
+            allocated_storage     = 20
+            max_allocated_storage = 100
+            backup_retention_days = 7
+            deletion_protection   = true
+            skip_final_snapshot   = false
+            backup_tag            = true
+          }
+          db_migrate_image        = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/db-migrate:abc1234"
+          app_host                = null
+          app_url                 = "https://d111111abcdef8.cloudfront.net"
+          alarm_topic_arn         = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
+          min_tasks               = 1
+          max_tasks               = 6
+          use_spot                = false
+          log_retention_days      = 30
+          cpu_architecture        = "X86_64"
+          deletion_protection     = true
+          github_deploy_role_name = null
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.aws_sesv2_email_identity.mail
+    values = { arn = "arn:aws:ses:ap-southeast-1:123456789012:identity/synthetic.sender@example.test" }
+  }
+
+  variables {
+    sender_address = "synthetic.sender@example.test"
+  }
+
+  assert {
+    condition     = data.aws_sesv2_email_identity.mail.email_identity == "synthetic.sender@example.test"
+    error_message = "The identity looked up is the sender address."
+  }
+  assert {
+    condition = (
+      module.engagement_service.app_environment.SES_FROM_ADDRESS == "synthetic.sender@example.test" &&
+      module.engagement_service.app_environment.ENGAGEMENT_MAIL_DOMAIN == "example.test" &&
+      module.engagement_service.app_environment.SES_CONFIGURATION_SET == "crm-sg-prod-engagement"
+    )
+    error_message = "The service sends from the sender address, and its domain is the calendar UID suffix."
+  }
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.engagement.statement :
+      s.sid != "SendEngagementMail" || (
+        toset(s.resources) == toset(["arn:aws:ses:ap-southeast-1:123456789012:identity/synthetic.sender@example.test", "arn:aws:ses:ap-southeast-1:123456789012:configuration-set/crm-sg-prod-engagement"]) &&
+        anytrue([for c in s.condition : c.variable == "ses:FromAddress" && toset(c.values) == toset(["synthetic.sender@example.test"])])
+      )
+    ])
+    error_message = "SES sends only as the sender address identity, through the configuration set, from that address."
+  }
+}
+
+run "needs_a_sender_address_without_a_domain" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.crm
+    values = {
+      outputs = {
+        engagement_inputs = {
+          name_prefix    = "crm-sg-prod"
+          vpc_id         = "vpc-0123456789abcdef0"
+          app_subnet_ids = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+          cluster_arn    = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
+          cluster_name   = "crm-sg-prod"
+          namespace_arn  = "arn:aws:servicediscovery:ap-southeast-1:123456789012:namespace/ns-example"
+          alb = {
+            listener_arn   = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:listener/app/crm-sg-prod/abc/def"
+            alb_arn_suffix = "app/crm-sg-prod/abc"
+            vpc_id         = "vpc-0123456789abcdef0"
+          }
+          alb_sg                   = "sg-0a1b"
+          client                   = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
+          ca_pem                   = "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----"
+          cognito_issuer           = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_example"
+          cognito_web_client_id    = "exampleclientid"
+          cognito_user_pool_id     = "ap-southeast-1_example"
+          cognito_user_pool_arn    = "arn:aws:cognito-idp:ap-southeast-1:123456789012:userpool/ap-southeast-1_example"
+          audit_queue_url          = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+          audit_queue_arn          = "arn:aws:sqs:ap-southeast-1:123456789012:crm-sg-prod-audit-insert"
+          audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task", "arn:aws:iam::123456789012:role/crm-sg-prod-engagement-service-task"]
+          db = {
+            kms_key_arn           = "arn:aws:kms:ap-southeast-1:123456789012:key/example"
+            subnet_group_name     = "crm-sg-prod-db"
+            parameter_group_name  = "crm-sg-prod-postgres17"
+            instance_class        = "db.t4g.micro"
+            allocated_storage     = 20
+            max_allocated_storage = 100
+            backup_retention_days = 7
+            deletion_protection   = true
+            skip_final_snapshot   = false
+            backup_tag            = true
+          }
+          db_migrate_image        = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/db-migrate:abc1234"
+          app_host                = null
+          app_url                 = "https://d111111abcdef8.cloudfront.net"
+          alarm_topic_arn         = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
+          min_tasks               = 1
+          max_tasks               = 6
+          use_spot                = false
+          log_retention_days      = 30
+          cpu_architecture        = "X86_64"
+          deletion_protection     = true
+          github_deploy_role_name = null
+        }
+      }
+    }
+  }
+
+  expect_failures = [data.aws_sesv2_email_identity.mail]
+}

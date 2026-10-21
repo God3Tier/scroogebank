@@ -5,8 +5,15 @@
 legal_entity = "sg"
 environment  = "prod"
 
-# The CRM stack's domain_name; its hosted zone must already exist.
+# The CRM stack's domain_name; its hosted zone must already exist. In an
+# account without that hosted zone, delete this line and set sender_address
+# instead (ADR-0055).
 domain_name = "itsag3t6.com"
+
+# Without domain_name only: the verified address mail comes from, the same as
+# the agent-engagement stack's sender_address. SES emails it a link to click
+# once. A real address goes only in the git-ignored prod.tfvars.
+# sender_address = "synthetic.sender@example.test"
 
 # Team inboxes that may receive mail while SES is in the sandbox. Use real
 # team addresses only in the git-ignored prod.tfvars; these are placeholders.

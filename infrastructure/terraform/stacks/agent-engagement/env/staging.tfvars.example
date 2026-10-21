@@ -5,3 +5,4 @@ environment  = "staging"
 state_bucket = "crm-tfstate-123456789012"
 image_tag    = "replace-with-the-pushed-tag"
 ai_enabled   = false
+# sender_address = "synthetic.sender@example.test"   # only when the CRM stack has no domain_name

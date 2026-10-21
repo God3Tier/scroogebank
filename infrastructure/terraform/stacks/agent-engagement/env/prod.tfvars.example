@@ -14,6 +14,11 @@ state_bucket = "crm-tfstate-123456789012"
 # The tag you pushed engagement-service with, for example the commit SHA.
 image_tag = "replace-with-the-pushed-tag"
 
+# Only when the CRM stack has no domain_name: the mail-identity stack's
+# sender_address, which mail comes from (ADR-0055). A real address goes only
+# in the git-ignored prod.tfvars.
+# sender_address = "synthetic.sender@example.test"
+
 # The AI drafting kill switch (ADR-0054 decision 7). Leave false except for
 # test and demo runs.
 ai_enabled = false

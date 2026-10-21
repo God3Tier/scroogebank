@@ -1,5 +1,25 @@
 # AI usage log
 
+## 2026-10-21 — Engagement mail from a verified address without a domain
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: the owner asked for engagement mail to fall back to a verified
+  sender address when the CRM stack has no `domain_name`. Claude Code
+  drafted ADR-0055, which the owner accepted, made `stacks/mail-identity`'s domain
+  resources conditional, added `sender_address` to it and to
+  `stacks/agent-engagement`, added plan tests for both modes, and updated
+  the tfvars examples, runbook step 4a, the Terraform and service READMEs,
+  and ADR-0053's revision history.
+- Safeguards: no real addresses; tests and examples use `example.test`.
+  The project account's domain mode is unchanged and its existing tests
+  still pass. The DMARC trade-off is stated in the ADR and the runbook.
+- Human verification required: in an account without the domain, check that an invite arrives and what Gmail's "Show
+  original" reports (AE-T11).
+- Outcome: `terraform fmt`, `validate` and `test` pass for
+  `stacks/mail-identity` (5 tests), `stacks/agent-engagement` (6) and
+  `stacks/crm`.
+
 ## 2026-10-21 — Agent engagement screens from Google Stitch
 
 - Human owner: Neo Jia Wen.

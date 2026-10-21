@@ -236,24 +236,28 @@ It takes the task count from the CRM stack, so, like step 3, this apply starts n
 
 ## 4a. Create the mail identity (once) and the agent-engagement stack, stopped
 
-Agent engagement ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)) sends calendar invites, reminders and client emails through SES. It needs the CRM stack's `domain_name`: without a domain there is no sending domain, and the agent-engagement plan stops.
+Agent engagement ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)) sends calendar invites, reminders and client emails through SES. With the CRM stack's `domain_name`, mail comes from `no-reply@mail.<app host>`, signed with the domain's DKIM. In an account without the domain's hosted zone, mail comes from one verified address you choose, `sender_address`, with no DNS records ([ADR-0055](../adr/ADR-0055-sender-address-without-a-domain.md)). Receivers check that address's domain's DMARC policy, so mail from an address at a domain that publishes `p=quarantine` or `p=reject` (many webmail providers do) may go to spam or be refused. Check with `nslookup -type=TXT _dmarc.<domain>`, and prefer a domain with `p=none` or no DMARC record.
 
-**The mail identity, once per environment.** This stack is long-lived: never destroy it between sessions or in a teardown you mean to redeploy from ([ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) decision 2). Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand: real addresses only there, never in the example:
+**The mail identity, once per environment.** This stack is long-lived: never destroy it between sessions or in a teardown you mean to redeploy from ([ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) decision 2). The commands set `domain_name` as step 3 does, when this account has the zone. Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand, and, without a domain, `sender_address` too: real addresses only there, never in the example:
 
 ```sh
 cd infrastructure/terraform/stacks/mail-identity
 STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # then set verified_recipients
+DOMAIN=$(sed -n 's/^domain_name *= *"\([^"]*\)".*/\1/p' ../crm/env/prod.tfvars)
+sed -i '/^domain_name *=/d' env/prod.tfvars   # the CRM stack's, or none
+[ -z "$DOMAIN" ] || printf 'domain_name = "%s"\n' "$DOMAIN" >> env/prod.tfvars
+echo "domain: ${DOMAIN:-none, so set sender_address in env/prod.tfvars}"
 terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars
-terraform output dkim_status   # PENDING until SES finds the DKIM records, usually within an hour
+terraform output dkim_status   # with a domain: PENDING until SES finds the DKIM records, usually within an hour
 cd -
 ```
 
-Each address in `verified_recipients` receives an email from Amazon Web Services; click its link once. In the SES sandbox, mail reaches only those addresses, so seed demo clients and agents with them (synthetic data only). Apply this stack again to add or remove an address.
+Each address in `verified_recipients`, and `sender_address` without a domain, receives an email from Amazon Web Services; click its link once. In the SES sandbox, mail reaches only those addresses, so seed demo clients and agents with them (synthetic data only). Apply this stack again to add or remove an address.
 
-**The agent-engagement stack.** Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`:
+**The agent-engagement stack.** Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`. Without a domain, also set `sender_address` in its `env/prod.tfvars` to the same address as mail-identity's:
 
 ```sh
 cd infrastructure/terraform/stacks/agent-engagement
@@ -267,7 +271,7 @@ terraform apply -var-file=env/prod.tfvars
 cd -
 ```
 
-It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first.
+It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first. If it stops with `The CRM stack has no domain_name`, set `sender_address`.
 
 ## 5. Push the images
 
@@ -589,8 +593,10 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | A meeting's invite stays `Queued` | engagement-service is not running (the stack is stopped, or the agent-engagement stack was not applied after the CRM's start), or `mail_enabled = false`. Mail waiting over 5 minutes raises the `engagement-dispatch-lagging` alarm |
 | Invites or reminders show `Failed` with `agent_email_unavailable` | Cognito has no `email` for that agent, or `COGNITO_USER_POOL_ID` is wrong. Check the user in the pool |
 | Mail shows `Failed` with `ses_rejected`, and the log says the address is not verified | The SES account is in the sandbox and the recipient is not in mail-identity's `verified_recipients`, or has not clicked its verification email. Add it and apply mail-identity |
+| Every send fails with `ses_rejected` just after mail-identity was created, without a domain | `sender_address` has not clicked its verification email. Click it, or apply mail-identity again to resend it |
 | Every send fails with `ses_rejected` just after mail-identity was created | DKIM is not verified yet (`terraform -chdir=infrastructure/terraform/stacks/mail-identity output dkim_status` is not `SUCCESS`). Wait for SES to find the records, usually within an hour |
-| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, or the CRM stack's `domain_name` differs from its `domain_name`. Apply mail-identity with the same domain |
+| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, the CRM stack's `domain_name` differs from its `domain_name`, or, without a domain, the two stacks' `sender_address` differ. Apply mail-identity with the same values |
+| Mail sent without a domain lands in spam or is refused | The sender address's domain publishes DMARC `p=quarantine` or `p=reject`, and SES signs with its own DKIM key, so DMARC fails (ADR-0055). Use an address at a domain with `p=none` or no DMARC record, or deploy in the account with the domain |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | The calling service's latest deployment was made before the service it calls existed. Either the stack's first apply had `running=true` instead of creating it stopped (step 3), or the called service was created or replaced since the stack last started. Redeploy the calling service: `aws ecs update-service --cluster "$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)" --service <service> --force-new-deployment`. The next stop and start also fixes it |

@@ -57,9 +57,9 @@ ENGAGEMENT_MAIL_PROVIDER=log \
 | `COGNITO_USER_POOL_ID` | For agents' addresses and names. Blank: no mail reaches agents |
 | `CLIENT_SERVICE_BASE_URL` | client-service. Blank: every client check fails closed with 503 |
 | `ENGAGEMENT_MAIL_PROVIDER` | `none` (default: nothing is sent, the dispatcher does nothing), `log` (local) or `ses` |
-| `SES_FROM_ADDRESS` | The `no-reply` sending address |
+| `SES_FROM_ADDRESS` | The `no-reply` sending address, or the verified `sender_address` in an account without the domain ([ADR-0055](../../docs/adr/ADR-0055-sender-address-without-a-domain.md)) |
 | `SES_CONFIGURATION_SET` | The SES configuration set |
-| `ENGAGEMENT_MAIL_DOMAIN` | The sending domain, also the calendar `UID` suffix |
+| `ENGAGEMENT_MAIL_DOMAIN` | The sending domain (the sender address's domain without a custom domain), also the calendar `UID` suffix |
 | `CRM_APP_URL` | The CRM's address, linked from invites and reminders |
 | `ENGAGEMENT_AI_ENABLED` | The kill switch. Default `false`: every draft is a template |
 | `BEDROCK_REGION`, `BEDROCK_MODEL_ID` | Default `ap-southeast-1` and `apac.amazon.nova-micro-v1:0`. A `global.` profile is refused at startup |

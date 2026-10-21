@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/plan`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0055](ADR-0055-sender-address-without-a-domain.md) in part (decisions 1, 3 and 9, only for an account without the domain's hosted zone)
 
 ## Context
 
@@ -190,3 +190,4 @@ Prices to be checked on the SES pricing page.
 
 - 2026-10-21 11:04 +08:00: proposed.
 - 2026-10-21: accepted by the decision owner.
+- 2026-10-21: decisions 1, 3 and 9 superseded in part by [ADR-0055](ADR-0055-sender-address-without-a-domain.md): without the domain's hosted zone, mail comes from one verified address. This record is otherwise unchanged.
