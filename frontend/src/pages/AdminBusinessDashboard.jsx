@@ -37,6 +37,8 @@ function AdminBusinessDashboard() {
   })
   const { responses: ranked } = useDashboards({ agents: ['agents', { ...period, sort }] })
   const { overview, portfolio, transactions, actions } = responses
+  // The stat tiles all come from the overview.
+  const tilesLoading = overview === undefined
 
   const clients = panelData(overview?.panels?.clients)
   const accounts = panelData(overview?.panels?.accounts)
@@ -82,8 +84,9 @@ function AdminBusinessDashboard() {
       />
 
       <div className="stat-grid stat-grid-dense stat-grid-3">
-        <StatCard label="Total clients" value={formatNumber(clients?.total)} icon="groups" />
+        <StatCard loading={tilesLoading} label="Total clients" value={formatNumber(clients?.total)} icon="groups" />
         <StatCard
+          loading={tilesLoading}
           label="Clients added"
           value={formatNumber(clients?.createdInWindow)}
           icon="person_add"
@@ -91,18 +94,21 @@ function AdminBusinessDashboard() {
           hint={hintFor('clientsOnboarded')}
         />
         <StatCard
+          loading={tilesLoading}
           label="Verified share"
           value={formatPercent(verifiedShare)}
           icon="verified_user"
           hint={hintFor('verifiedShare')}
         />
         <StatCard
+          loading={tilesLoading}
           label="Total accounts"
           value={formatNumber(accounts?.total)}
           icon="account_balance"
           caption={accounts ? `+${formatNumber(accounts.openedInWindow)} opened` : undefined}
         />
         <StatCard
+          loading={tilesLoading}
           label="Booked initial deposits"
           value={formatSGD(accounts?.bookedInitialDeposits, { compact: true })}
           icon="savings"
@@ -110,6 +116,7 @@ function AdminBusinessDashboard() {
           hint={hintFor('bookedInitialDeposits')}
         />
         <StatCard
+          loading={tilesLoading}
           label="Active agents"
           value={formatNumber(roster?.active)}
           icon="support_agent"

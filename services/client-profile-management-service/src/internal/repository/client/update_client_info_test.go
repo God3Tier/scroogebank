@@ -56,3 +56,31 @@ func TestUpdateClientInformation(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateClientInformationRefusesAnotherClientsContact(t *testing.T) {
+	const id, otherID = "00000000-0000-0000-0000-000000000101", "00000000-0000-0000-0000-000000000104"
+	tests := map[string]struct {
+		email, phone string
+	}{
+		"another client's email, written differently": {email: "Other-104@Example.test", phone: "+6560000111"},
+		"another client's phone, written differently": {email: "alice-101@example.test", phone: "+65 6000 0104"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			db, repo, _ := newTestRepository(t)
+			// No one else holds the new phone, so only the case's contact conflicts.
+			clearContact(t, db, id, "", "+6560000111")
+			profile := seedClient(t, db, repo, id, "alice-101@example.test", "+6560000101")
+			seedClient(t, db, repo, otherID, "other-104@example.test", "+6560000104")
+			t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM clients WHERE client_id = $1`, otherID) })
+			profile.Email, profile.PhoneNumber = test.email, test.phone
+
+			err := repo.UpdateClientInformation(context.Background(), id, profile)
+
+			assert.ErrorIs(t, err, clienterrors.ErrDuplicateClient)
+			var emailHash string
+			require.NoError(t, db.QueryRow(`SELECT email_hash FROM clients WHERE client_id = $1`, id).Scan(&emailHash))
+			assert.Equal(t, encryptiontest.Index("alice-101@example.test"), emailHash, "nothing is changed")
+		})
+	}
+}

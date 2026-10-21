@@ -1,3 +1,4 @@
+import Spinner from '../Spinner.jsx'
 import { formatDate, formatTime } from './format.js'
 
 const WINDOW_OPTIONS = [7, 30, 90]
@@ -30,7 +31,7 @@ function DashboardHeader({ title, subtitle, scopeLabel, days, onDaysChange, resp
           ))}
         </div>
         <p className="generated-at" role="status">
-          {response === undefined && 'Loading figures…'}
+          {response === undefined && <Spinner label="Loading figures…" />}
           {response === null && 'Figures could not be loaded.'}
           {response && (
             <>

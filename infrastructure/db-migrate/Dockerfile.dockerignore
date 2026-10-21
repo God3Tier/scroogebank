@@ -1,0 +1,11 @@
+# The image is built from the repository root but needs only these.
+*
+!services/client-profile-management-service/data/
+!services/account-service/data/
+!services/sftp/receiver/data/
+!services/auditor/data/
+!services/user-service/src/main/resources/db/migration/
+!services/event-alert-service/src/main/resources/db/migration/
+!infrastructure/db-migrate/app-login/
+!infrastructure/db-migrate/transactions/
+!infrastructure/db-migrate/audit/

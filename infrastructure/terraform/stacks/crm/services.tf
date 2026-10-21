@@ -15,6 +15,51 @@ locals {
   }
 
   db_master_secret = { for k, db in module.db : k => db.master_secret_arn }
+  app_login_secret = { for k, s in aws_secretsmanager_secret.app_login : k => s.arn }
+
+  # The logins each database's db-migrate creates, as Flyway placeholders read
+  # from their secrets (data.tf): the service's login and password, or for
+  # transactions and audit, their logins' passwords.
+  migration_placeholders = merge(
+    {
+      for login, l in local.app_logins : l.db => {
+        FLYWAY_PLACEHOLDERS_APP_LOGIN    = "${local.app_login_secret[login]}:username::"
+        FLYWAY_PLACEHOLDERS_APP_PASSWORD = "${local.app_login_secret[login]}:password::"
+      } if l.db != "transactions"
+    },
+    {
+      transactions = {
+        FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD = "${local.app_login_secret["transaction_service"]}:password::"
+        FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD  = "${local.app_login_secret["transaction_ingest"]}:password::"
+      }
+      audit = {
+        FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD  = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:password::"
+        FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD = "${aws_secretsmanager_secret.audit_login["chain_verify"].arn}:password::"
+      }
+    },
+  )
+
+  # The schemas (ADR-0028 decision 3). Each task's db-migrate container
+  # applies its database's directory in the db-migrate image as the master
+  # user, checking RDS's certificate, then creates the logins and sets their
+  # passwords, before the service starts. Only db-migrate gets the master
+  # credentials. user-service's and event-alert-service's files are named for
+  # Spring Boot's Flyway, which applies them locally but is off here.
+  migrations = {
+    for db in keys(local.databases) : db => {
+      image    = local.image["db-migrate"]
+      location = db
+      url      = "jdbc:postgresql://${module.db[db].address}:5432/${module.db[db].db_name}?sslmode=verify-full&sslrootcert=/tls/rds-ca.pem"
+      secrets = merge(
+        {
+          FLYWAY_USER     = "${local.db_master_secret[db]}:username::"
+          FLYWAY_PASSWORD = "${local.db_master_secret[db]}:password::"
+        },
+        local.migration_placeholders[db],
+      )
+      environment = contains(["users", "alerts"], db) ? { FLYWAY_SQL_MIGRATION_SEPARATOR = "__" } : {}
+    }
+  }
 }
 
 data "aws_iam_policy_document" "send_audit" {
@@ -59,7 +104,7 @@ module "user_service" {
   memory             = 1024
   cpu_architecture   = var.cpu_architecture
   port               = local.ports.user
-  app_protocol       = "http"
+  port_name          = "https"
 
   environment = {
     DB_HOST                  = module.db["users"].address
@@ -76,22 +121,32 @@ module "user_service" {
     ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
     SFTP_RECEIVER_BASE_URL   = "http://${local.sc.transaction}:${local.ports.transaction}"
     ROOT_ADMIN_EMAIL         = var.root_admin_email
+    SPRING_FLYWAY_ENABLED    = "false" # db-migrate applies its migrations
   }
   secrets = {
-    POSTGRES_USER     = "${local.db_master_secret["users"]}:username::"
-    POSTGRES_PASSWORD = "${local.db_master_secret["users"]}:password::"
+    POSTGRES_USER     = "${local.app_login_secret["user_service"]}:username::"
+    POSTGRES_PASSWORD = "${local.app_login_secret["user_service"]}:password::"
   }
-  secret_arns        = [local.db_master_secret["users"]]
+  # The master secret is for db-migrate only.
+  secret_arns        = [local.app_login_secret["user_service"], local.db_master_secret["users"]]
   task_role_policies = { service = data.aws_iam_policy_document.user_service.json }
-  tls                = { mode = "java", ca_pem = local.ca_pem }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["user"].arn
+  }
+  migrations = local.migrations["users"]
 
+  # dashboard-service calls it here and checks its certificate, so Service
+  # Connect proxies the port as TCP (ADR-0042 decision 7).
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
-    aliases       = [{ port_name = "http", dns_name = local.sc.user, port = local.ports.user }]
+    aliases       = [{ port_name = "https", dns_name = local.sc.user, port = local.ports.user }]
   }
 
   load_balancer = merge(local.alb, {
-    protocol          = "HTTP"
+    protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules = [
       { priority = 10, paths = ["/api/accounts/*/transactions", "/api/transactions"] },
@@ -105,7 +160,11 @@ module "user_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+  ]
 }
 
 # ----------------------------------------------------------- client-service
@@ -186,10 +245,11 @@ module "client_service" {
     CLIENT_DOCUMENTS_BUCKET  = aws_s3_bucket.documents.bucket
   }
   secrets = {
-    DB_USER     = "${local.db_master_secret["clients"]}:username::"
-    DB_PASSWORD = "${local.db_master_secret["clients"]}:password::"
+    DB_USER     = "${local.app_login_secret["client_service"]}:username::"
+    DB_PASSWORD = "${local.app_login_secret["client_service"]}:password::"
   }
-  secret_arns        = [local.db_master_secret["clients"]]
+  # The master secret is for db-migrate only.
+  secret_arns        = [local.app_login_secret["client_service"], local.db_master_secret["clients"]]
   task_role_policies = { service = data.aws_iam_policy_document.client_service.json }
   tls = {
     mode            = "go"
@@ -197,6 +257,7 @@ module "client_service" {
     serves_tls      = true
     cert_secret_arn = aws_secretsmanager_secret.service_tls["client"].arn
   }
+  migrations = local.migrations["clients"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -214,7 +275,11 @@ module "client_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.service_tls]
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+  ]
 }
 
 # ---------------------------------------------------------- account-service
@@ -251,10 +316,11 @@ module "account_service" {
     COGNITO_SERVICE_CLIENT_IDS = aws_cognito_user_pool_client.transaction_ingest.id
   }
   secrets = {
-    DB_USER     = "${local.db_master_secret["accounts"]}:username::"
-    DB_PASSWORD = "${local.db_master_secret["accounts"]}:password::"
+    DB_USER     = "${local.app_login_secret["account_service"]}:username::"
+    DB_PASSWORD = "${local.app_login_secret["account_service"]}:password::"
   }
-  secret_arns        = [local.db_master_secret["accounts"]]
+  # The master secret is for db-migrate only.
+  secret_arns        = [local.app_login_secret["account_service"], local.db_master_secret["accounts"]]
   task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
   tls = {
     mode            = "go"
@@ -262,6 +328,7 @@ module "account_service" {
     serves_tls      = true
     cert_secret_arn = aws_secretsmanager_secret.service_tls["account"].arn
   }
+  migrations = local.migrations["accounts"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -284,7 +351,11 @@ module "account_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.service_tls]
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+  ]
 }
 
 # ------------------------------------------------------------------ auditor
@@ -350,7 +421,11 @@ module "auditor" {
     USER     = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:username::"
     PASSWORD = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:password::"
   }
-  secret_arns        = [aws_secretsmanager_secret.audit_login["auditor"].arn]
+  # The master secret and chain-verify's password are for db-migrate only.
+  secret_arns = concat(
+    [for login in aws_secretsmanager_secret.audit_login : login.arn],
+    [local.db_master_secret["audit"]],
+  )
   task_role_policies = { service = data.aws_iam_policy_document.auditor.json }
   tls = {
     mode            = "go"
@@ -358,6 +433,7 @@ module "auditor" {
     serves_tls      = true
     cert_secret_arn = aws_secretsmanager_secret.service_tls["auditor"].arn
   }
+  migrations = local.migrations["audit"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -453,11 +529,17 @@ module "transaction_service" {
     DB_SSLROOTCERT = "/tls/rds-ca.pem"
   }
   secrets = {
-    DB_USER     = "${local.db_master_secret["transactions"]}:username::"
-    DB_PASSWORD = "${local.db_master_secret["transactions"]}:password::"
+    DB_USER     = "${local.app_login_secret["transaction_service"]}:username::"
+    DB_PASSWORD = "${local.app_login_secret["transaction_service"]}:password::"
   }
-  secret_arns = [local.db_master_secret["transactions"]]
-  tls         = { mode = "go", ca_pem = local.ca_pem }
+  # The master secret and the ingest Lambda's password are for db-migrate only.
+  secret_arns = [
+    local.app_login_secret["transaction_service"],
+    local.app_login_secret["transaction_ingest"],
+    local.db_master_secret["transactions"],
+  ]
+  tls        = { mode = "go", ca_pem = local.ca_pem }
+  migrations = local.migrations["transactions"]
 
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
@@ -469,58 +551,11 @@ module "transaction_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
+  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.app_login]
 }
 
-# -------------------------------------------------------- dashboard-service
-
-module "dashboard_service" {
-  source = "../../modules/ecs-service"
-
-  name               = "dashboard-service"
-  name_prefix        = local.name
-  cluster_arn        = aws_ecs_cluster.this.arn
-  cluster_name       = aws_ecs_cluster.this.name
-  subnet_ids         = local.app_subnet_ids
-  security_group_ids = [local.sg["dashboard"]]
-  image              = local.image["dashboard-service"]
-  cpu                = 512
-  memory             = 1024
-  cpu_architecture   = var.cpu_architecture
-  port               = local.ports.dashboard
-  app_protocol       = "http"
-
-  environment = {
-    OIDC_ISSUER_URI          = local.cognito_issuer
-    COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
-    AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
-    AWS_REGION               = local.region
-    USER_SERVICE_BASE_URL    = "http://${local.sc.user}:${local.ports.user}"
-    CLIENT_SERVICE_BASE_URL  = "https://${local.sc.client}:${local.ports.client}"
-    ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
-  }
-  task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
-  tls                = { mode = "java", ca_pem = local.ca_pem }
-
-  # A client only: nothing calls the dashboard inside the VPC.
-  service_connect = {
-    namespace_arn = aws_service_discovery_http_namespace.this.arn
-    aliases       = []
-  }
-
-  load_balancer = merge(local.alb, {
-    protocol          = "HTTP"
-    health_check_path = "/actuator/health"
-    rules             = [{ priority = 50, paths = ["/api/dashboard", "/api/dashboard/*"] }]
-  })
-
-  min_tasks          = local.min_tasks
-  max_tasks          = local.max_tasks
-  use_spot           = local.use_fargate_spot
-  log_retention_days = local.log_retention_days
-
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
-}
+# dashboard-service runs in this cluster but is deployed by the
+# business-dashboard stack (ADR-0047), from the dashboard_inputs output.
 
 # ------------------------------------------------------ event-alert-service
 # api mode only. The worker, its schedule, AgentCore in Tokyo and Bedrock
@@ -540,27 +575,37 @@ module "event_alert_service" {
   memory             = 1024
   cpu_architecture   = var.cpu_architecture
   port               = local.ports.alerts
-  app_protocol       = "http"
+  port_name          = "https"
 
   environment = {
     EVENT_ALERT_DB_URL            = "jdbc:postgresql://${module.db["alerts"].address}:5432/${module.db["alerts"].db_name}?sslmode=require"
     COGNITO_ISSUER_URI            = local.cognito_issuer
+    COGNITO_APP_CLIENT_ID         = aws_cognito_user_pool_client.web.id
     ALERT_MODE                    = "API"
     ALERT_AUDIT_PUBLISHER_ENABLED = "true"
     AUDIT_QUEUE_URL               = aws_sqs_queue.audit.url
     AWS_REGION                    = local.region
     ALERT_INGESTION_ENABLED       = "false"
     ALERT_AI_ENABLED              = "false"
+    SPRING_FLYWAY_ENABLED         = "false" # db-migrate applies its migrations
   }
   secrets = {
-    EVENT_ALERT_DB_USERNAME = "${local.db_master_secret["alerts"]}:username::"
-    EVENT_ALERT_DB_PASSWORD = "${local.db_master_secret["alerts"]}:password::"
+    EVENT_ALERT_DB_USERNAME = "${local.app_login_secret["event_alert_service"]}:username::"
+    EVENT_ALERT_DB_PASSWORD = "${local.app_login_secret["event_alert_service"]}:password::"
   }
-  secret_arns        = [local.db_master_secret["alerts"]]
+  # The master secret is for db-migrate only.
+  secret_arns        = [local.app_login_secret["event_alert_service"], local.db_master_secret["alerts"]]
   task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["alerts"].arn
+  }
+  migrations = local.migrations["alerts"]
 
   load_balancer = merge(local.alb, {
-    protocol          = "HTTP"
+    protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules             = [{ priority = 60, paths = ["/api/alerts", "/api/alerts/*"] }]
   })
@@ -570,5 +615,9 @@ module "event_alert_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this]
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+  ]
 }

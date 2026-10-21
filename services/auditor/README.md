@@ -30,7 +30,7 @@ cd services/auditor
 docker compose up -d postgres localstack
 ```
 
-`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, loads the schema if it is missing, generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
+`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, applies `data/schema.sql` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
 
 To run it by hand instead, start the server from the `services/auditor` directory. Since
 LocalStack doesn't check AWS credentials, any non-empty values work:
@@ -233,10 +233,10 @@ Locally, `make run` and `make chain-verify` connect as `postgres`. The tests log
 - the role is enough for its job;
 - `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log` are refused.
 
-**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. `make run` loads the schema only into an empty database, so recreate yours: run `make db-reset`, then `make run`.
+**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. Recreate yours: run `make db-reset`, then `make run`. Flyway also refuses a database loaded before it, with the same fix.
 
 **Infrastructure requirements**, for when the infrastructure is built (ADR-0022, [ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)):
-- **Database logins:** the schema-migration task owns the tables. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify`. Neither service connects as the owner or the master user.
+- **Database logins:** the auditor's db-migrate container owns the tables, as the master user. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify` ([`afterMigrate.sql`](../../infrastructure/db-migrate/audit/afterMigrate.sql)). Neither service connects as the owner or the master user. `make migrate` creates the same logins locally, with local-only passwords.
 - **chain-verify's task:**
   - the ECS task definition runs the auditor image with the entry point `/chain-verify`;
   - it has its own task role and database secret;

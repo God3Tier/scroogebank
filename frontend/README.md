@@ -81,22 +81,24 @@ Open the browser's network tab and click **Sign in**. The `/oauth2/authorize` re
 
 `/clients/:clientId` is one client's page: the profile, the client's identity documents and the verification ([ADR-0041](../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md)). It is open to admins and agents; client-service decides which clients each may see, and answers 404 for another agent's client. An agent:
 
-1. creates the client with **Create Client Profile** on the Agent Dashboard, which opens the new client's page;
+1. creates the client with **Create Client Profile** on Agent Home, which opens the new client's page;
 2. uploads the identity document the client gave them, if any: JPEG, PNG or PDF, up to 5 MB. Use synthetic documents only, never a real NRIC;
 3. opens it with **View**, compares it with the profile and ticks **Checked**. A document can be ticked only once it has been opened;
 4. confirms that they checked the documents and clicks **Verify client**.
 
 Uploading never verifies anyone. Verify sends the checked documents' IDs, and client-service records who verified, when and which documents; the page then shows that, and marks the documents used.
 
+Until the client is verified, **Open account** offers only Pending, and account-service refuses any other status with 403 ([ADR-0050](../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)). After a verification, the page asks an agent whether to make the client's Pending accounts Active. On **Manage accounts and transactions** (`/agent/client/:clientId/transactions`), an agent can change a verified client's account to Active, Inactive, Pending or Closed with `PATCH /api/accounts/{id}`; admins see the status only. The calls are in `src/api/accounts.js`.
+
 Documents are optional, because the requirements Q&A does not expect an upload (CPM06). With no document checked, the agent confirms "I have checked this client's identity without an uploaded document" and clicks **Verify without a document**. That verification is never hidden: the page shows a **Without a document** badge and says the client was verified without an uploaded document, client-service returns `verified_with_documents: false`, and the audit event says so. The calls are in `src/api/clients.js`. Locally, Vite's `/api` rule sends them to client-profile-management-service on port 8080, which `make run` starts with its LocalStack bucket (see its README).
 
-The Agent Dashboard's **Manage Client Profiles** list is still synthetic: client-service has no endpoint that lists clients, so those rows do not open this page.
+Agent Home's **Manage Client Profiles and Accounts** list comes from `GET /api/clients`; **Edit** on a row opens this page, where **Open account** opens a bank account for the client through account-service.
 
 The page uses the existing tokens and components from the Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision), in `src/styles/index.css`.
 
 ## Activity panels
 
-The Admin Dashboard's **Recent Activities** and the Agent Dashboard's **My Recent Activities** read user-service's activity feed, `GET /api/activities` ([ADR-0021](../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). Both are `src/components/ActivityFeed.jsx`; the call is in `src/api/activities.js`.
+Admin Home's **Recent Activities** and Agent Home's **My Recent Activities** read user-service's activity feed, `GET /api/activities` ([ADR-0021](../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). Both are `src/components/ActivityFeed.jsx`; the call is in `src/api/activities.js`.
 
 - **Who sees what.** The spec says "Agents can only see their own client activities. Admins can see the activities of all agents." The panel never sends who the caller is: user-service and the auditor take it from the access token, so an agent gets only their own changes whatever the page asks for. The agent panel therefore shows no names.
 - **Changes only.** Creating, updating, deleting or verifying a client, uploading an identity document, opening or closing an account, and user changes. Views and sign-ins stay in the audit log and are not listed.
@@ -129,7 +131,7 @@ Every page reads the deployed services except Client Health Monitor, whose servi
 |---|---|
 | `/agent` | My Clients and the client list from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit (on the client page) and Delete through client-service |
 | `/admin` | Admin and agent totals and lists from `GET /api/users`; Create Admin / Agent with `POST /api/users` (Cognito e-mails the temporary password); Disable with `PATCH /api/users/{id}/disable` (users are never deleted, and the root admin cannot be disabled); All Transactions from `GET /api/transactions`, 20 at a time |
-| `/clients/:id` | client-service: profile, edit, documents, verification |
+| `/clients/:id` | client-service: profile, edit, documents, verification. Open account with `POST /api/accounts` on account-service |
 | `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions` |
 | `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)) |
 | `/agent/client-health` | Synthetic, from `src/data/clientHealthTasks.js` |

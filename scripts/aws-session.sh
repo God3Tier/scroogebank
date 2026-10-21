@@ -2,12 +2,15 @@
 # Stop or start what Terraform cannot pause between sessions (ADR-0029 stop
 # model): the CRM's RDS instances and the simulated SFTP server's instance.
 # ECS tasks, the schedules and the NAT gateways follow the CRM stack's
-# `running` variable instead:
+# `running` variable instead. The business-dashboard stack reads it from the
+# CRM stack's state, so apply that stack after the CRM stack (ADR-0047):
 #
-#   stop:   terraform apply -var-file=env/prod.tfvars -var running=false
+#   stop:   terraform apply -var-file=env/prod.tfvars -var running=false   (crm)
+#           terraform apply -var-file=env/prod.tfvars                      (business-dashboard)
 #           scripts/aws-session.sh stop
 #   start:  scripts/aws-session.sh start
-#           terraform apply -var-file=env/prod.tfvars -var running=true
+#           terraform apply -var-file=env/prod.tfvars -var running=true    (crm)
+#           terraform apply -var-file=env/prod.tfvars                      (business-dashboard)
 #
 # usage: scripts/aws-session.sh stop|start [crm-stack-dir] [sftp-stack-dir]
 # Needs terraform and the AWS CLI, signed in to the stack's account.

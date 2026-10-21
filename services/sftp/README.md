@@ -5,9 +5,10 @@
 | Service | What it is |
 |---|---|
 | `sftp` | The external SFTP server. Files wait in `/home/reportuser/reports`. |
-| `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. |
+| `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. Its transactions use the account IDs in `CRM_ACCOUNT_IDS`, or random `ACC-000123` references when it is empty. |
 | `db` | transactions-db. |
-| `receiver-api` | transaction-service's internal read API. |
+| `db-migrate` | Applies `receiver/data/` to `db` with Flyway, from the image that transaction-service's db-migrate container runs in AWS, then exits. `receiver-api` starts after it, and `make db-up` runs it too ([Schema migrations](../../docs/database/migrations.md)). |
+| `receiver-api` | transaction-service's internal read API, run with `go run` in the development image. The receiver's Dockerfile builds the production image by default; [the deployment runbook](../../docs/runbooks/deploy-aws.md) pushes it. |
 
 The import itself, the poller, runs from `receiver/`. [receiver/README.md](receiver/README.md) explains how it links rows to accounts, rejects files, retries the connection and audits.
 
@@ -18,6 +19,10 @@ The import itself, the poller, runs from `receiver/`. [receiver/README.md](recei
 3. Run `make test` for the receiver's and the producer's tests.
 
 To see audit events, set `AUDIT_QUEUE_URL` (and `AWS_ENDPOINT_URL` for LocalStack) to the auditor's queue. With it empty, nothing is audited.
+
+## The producer's accounts when deployed
+
+The deployed producer reads its accounts from the file named in `CRM_ACCOUNT_IDS_FILE` instead, on every run, and publishes nothing while the file lists none. `scripts/sync-producer-accounts.sh` fills the file with the CRM's open accounts ([ADR-0045](../../docs/adr/ADR-0045-producer-account-list-synced-from-crm.md), [deploy-aws.md](../../docs/runbooks/deploy-aws.md) §9.5). To try the same locally, mount a file into the `producer` container and set `CRM_ACCOUNT_IDS_FILE` to its path. Fault files are published either way.
 
 ## Fault files for the demo
 

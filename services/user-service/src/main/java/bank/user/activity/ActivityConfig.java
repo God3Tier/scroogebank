@@ -22,7 +22,10 @@ import java.util.Set;
 /**
  * Channel to the auditor's internal gRPC port (ADR-0021). The auditor is
  * reachable only inside the VPC, through ECS Service Connect, never through
- * the API gateway. The channel connects on first use, not at startup.
+ * the API gateway. The channel starts connecting at startup, so the first
+ * user's call is not spent connecting: on Fargate, connecting a new task
+ * took most of the call's 2-second deadline, and the feed failed until a
+ * refresh.
  */
 @Configuration
 public class ActivityConfig {
@@ -34,7 +37,9 @@ public class ActivityConfig {
 
     /**
      * TLS when a CA file is configured, as the target design requires;
-     * plaintext otherwise, for local development only.
+     * plaintext otherwise, for local development only. Connecting does not
+     * block startup: if the auditor is not up yet, the attempt fails and the
+     * first call connects instead.
      */
     @Bean(destroyMethod = "shutdownNow")
     public ManagedChannel auditorChannel(@Value("${auditor.grpc-target}") String target,
@@ -42,7 +47,9 @@ public class ActivityConfig {
         ChannelCredentials credentials = tlsCa.isBlank()
                 ? InsecureChannelCredentials.create()
                 : TlsChannelCredentials.newBuilder().trustManager(new File(tlsCa)).build();
-        return Grpc.newChannelBuilder(target, credentials).build();
+        ManagedChannel channel = Grpc.newChannelBuilder(target, credentials).build();
+        channel.getState(true);
+        return channel;
     }
 
     @Bean

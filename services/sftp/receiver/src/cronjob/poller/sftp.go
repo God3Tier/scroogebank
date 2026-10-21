@@ -28,9 +28,12 @@ func isPermanent(err error) bool {
 }
 
 func (p *Poller) connectSFTP(ctx context.Context) (remoteSFTP, func(), error) {
-	privateKey, err := os.ReadFile(p.config.PrivateKey)
-	if err != nil {
-		return nil, nil, permanentError{fmt.Errorf("read SFTP private key: %w", err)}
+	privateKey := p.config.PrivateKey
+	if len(privateKey) == 0 {
+		var err error
+		if privateKey, err = os.ReadFile(p.config.PrivateKeyPath); err != nil {
+			return nil, nil, permanentError{fmt.Errorf("read SFTP private key: %w", err)}
+		}
 	}
 	signer, err := ssh.ParsePrivateKey(privateKey)
 	if err != nil {

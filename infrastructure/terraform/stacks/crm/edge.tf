@@ -140,6 +140,7 @@ resource "aws_cloudfront_distribution" "this" {
   price_class         = "PriceClass_200" # includes Asia
   http_version        = "http2and3"
   web_acl_id          = local.enable_waf ? aws_wafv2_web_acl.this[0].arn : null
+  aliases             = local.custom_domain ? [local.app_host] : []
 
   origin {
     origin_id                = "frontend"
@@ -191,9 +192,13 @@ resource "aws_cloudfront_distribution" "this" {
     }
   }
 
-  # No custom domain yet (open item 2): the default *.cloudfront.net name.
+  # app_host's certificate from us-east-1 (dns.tf). Without domain_name, the
+  # default *.cloudfront.net name and certificate.
   viewer_certificate {
-    cloudfront_default_certificate = true
+    cloudfront_default_certificate = !local.custom_domain
+    acm_certificate_arn            = local.custom_domain ? aws_acm_certificate_validation.app[0].certificate_arn : null
+    ssl_support_method             = local.custom_domain ? "sni-only" : null
+    minimum_protocol_version       = local.custom_domain ? "TLSv1.2_2021" : null
   }
 }
 
@@ -321,30 +326,34 @@ resource "aws_wafv2_web_acl" "this" {
   }
 }
 
-# CloudFront-scoped WAF resources, including their log group, live in
-# us-east-1. Headers that can carry credentials are redacted before logging.
-resource "aws_cloudwatch_log_group" "waf" {
-  count             = local.enable_waf ? 1 : 0
-  provider          = aws.us_east_1
-  name              = "aws-waf-logs-${local.name}"
-  retention_in_days = local.log_retention_days
-}
-
-resource "aws_wafv2_web_acl_logging_configuration" "this" {
-  count                   = local.enable_waf ? 1 : 0
-  provider                = aws.us_east_1
-  resource_arn            = aws_wafv2_web_acl.this[0].arn
-  log_destination_configs = [aws_cloudwatch_log_group.waf[0].arn]
-
-  redacted_fields {
-    single_header {
-      name = "authorization"
-    }
-  }
-
-  redacted_fields {
-    single_header {
-      name = "cookie"
-    }
-  }
-}
+# Disabled: the account's service control policy denies logs:CreateLogGroup
+# in us-east-1, so WAF request logging is commented out until the SCP allows
+# it. The web ACL itself is unaffected.
+#
+# # CloudFront-scoped WAF resources, including their log group, live in
+# # us-east-1. Headers that can carry credentials are redacted before logging.
+# resource "aws_cloudwatch_log_group" "waf" {
+#   count             = local.enable_waf ? 1 : 0
+#   provider          = aws.us_east_1
+#   name              = "aws-waf-logs-${local.name}"
+#   retention_in_days = local.log_retention_days
+# }
+#
+# resource "aws_wafv2_web_acl_logging_configuration" "this" {
+#   count                   = local.enable_waf ? 1 : 0
+#   provider                = aws.us_east_1
+#   resource_arn            = aws_wafv2_web_acl.this[0].arn
+#   log_destination_configs = [aws_cloudwatch_log_group.waf[0].arn]
+#
+#   redacted_fields {
+#     single_header {
+#       name = "authorization"
+#     }
+#   }
+#
+#   redacted_fields {
+#     single_header {
+#       name = "cookie"
+#     }
+#   }
+# }

@@ -8,13 +8,22 @@ environment  = "staging"
 # Leave false; start a test with -var running=true.
 running = false
 
-# The tag you pushed every image with (runbook step 4).
+# The tag you pushed every image with (runbook step 5).
 image_tag = "replace-with-the-pushed-tag"
 
 # Mailboxes you can read: Cognito e-mails the root admin's temporary password,
 # and AWS e-mails the alarm subscription link.
 root_admin_email = "you+crm-root-staging@example.edu"
 alarm_email      = "you@example.edu"
+
+# The project account's domain (runbook "Register a domain"): staging is at
+# https://sg-staging.itsag3t6.com, beside prod's https://sg.itsag3t6.com.
+# Delete this line in an account without this domain's hosted zone.
+domain_name = "itsag3t6.com"
+
+# dashboard-service's task role, from the business-dashboard stack (ADR-0047).
+# Put in your account ID.
+extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-staging-dashboard-service-task"]
 
 # Optional while testing the frontend from Vite against the staging user pool.
 local_dev_origins = ["http://localhost:5173"]

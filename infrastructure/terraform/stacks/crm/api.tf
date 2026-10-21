@@ -14,15 +14,15 @@ resource "aws_lb" "internal" {
   enable_deletion_protection = local.deletion_protection
 }
 
-# HTTPS needs a certificate, and an ACM certificate needs a domain (open
-# item 2). Until then the listener is HTTP inside the VPC, reachable only from
-# the VPC Link and the ingest Lambda (ADR-0042 decision 8).
+# HTTPS with the ACM certificate for alb_host (dns.tf). Without domain_name
+# there is no certificate, and the listener is HTTP inside the VPC, reachable
+# only from the VPC Link and the ingest Lambda (ADR-0042 decision 8).
 resource "aws_lb_listener" "internal" {
   load_balancer_arn = aws_lb.internal.arn
   port              = local.alb_port
   protocol          = upper(local.alb_scheme)
-  certificate_arn   = var.internal_alb_certificate_arn
-  ssl_policy        = var.internal_alb_certificate_arn == null ? null : "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = local.custom_domain ? aws_acm_certificate_validation.alb[0].certificate_arn : null
+  ssl_policy        = local.custom_domain ? "ELBSecurityPolicy-TLS13-1-2-2021-06" : null
 
   default_action {
     type = "fixed-response"
@@ -73,9 +73,9 @@ resource "aws_apigatewayv2_integration" "alb" {
   timeout_milliseconds   = 29000
 
   dynamic "tls_config" {
-    for_each = var.internal_alb_certificate_arn == null ? [] : [1]
+    for_each = local.custom_domain ? [1] : []
     content {
-      server_name_to_verify = var.internal_alb_server_name
+      server_name_to_verify = local.alb_host
     }
   }
 }

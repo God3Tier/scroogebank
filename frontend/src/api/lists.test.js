@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authorizationHeader } from '../auth/session.js'
-import { listAccountTransactions, listAccounts } from './accounts.js'
+import { createAccount, listAccountTransactions, listAccounts } from './accounts.js'
 import { listClients } from './clients.js'
 import { getDashboard, panelData, windowForDays } from './dashboard.js'
 import { listTransactions } from './transactions.js'
@@ -49,6 +49,16 @@ describe('list and admin APIs', () => {
 
     await listAccountTransactions('account-1')
     expect(lastCall()[0]).toBe('/api/accounts/account-1/transactions')
+  })
+
+  it('opens an account as JSON', async () => {
+    await createAccount({ client_id: 'client-1', account_type: 'SAVINGS' })
+
+    const [url, options] = lastCall()
+    expect(url).toBe('/api/accounts')
+    expect(options.method).toBe('POST')
+    expect(options.headers).toMatchObject({ Authorization: 'Bearer synthetic-token', 'Content-Type': 'application/json' })
+    expect(JSON.parse(options.body)).toEqual({ client_id: 'client-1', account_type: 'SAVINGS' })
   })
 
   it('filters users by role and creates one as JSON', async () => {

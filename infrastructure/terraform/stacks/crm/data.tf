@@ -44,17 +44,56 @@ module "db" {
 }
 
 # ------------------------------------------------- least-privilege logins
-# The auditor and chain-verify never connect as the owner or master user
-# (ADR-0022 decision 2). Terraform makes their passwords; the logins are
-# created once in audit-db by hand until the db-migrate task exists
-# (runbook "Bootstrap the databases"). Other services use their instance's
-# master secret until then (ADR-0042 decision 6).
+# No service connects as its database's master user, which owns the tables;
+# only db-migrate does (ADR-0028 decision 3, ADR-0042 decision 6). Terraform
+# makes each login's password, and the db-migrate container in the task of
+# the service that owns the database creates the login and sets the password
+# on every start (services.tf).
+#
+# The auditor and chain-verify hold the roles ADR-0022 decision 2 defines.
 
 locals {
   audit_logins = {
     auditor      = { username = "auditor_app", role = "auditor_service" }
     chain_verify = { username = "chain_verify", role = "auditor_chain_verify" }
   }
+}
+
+# The other services' logins read and change rows, but cannot change the
+# schema (infrastructure/db-migrate/app-login/afterMigrate.sql).
+# transaction-service checks no token, so its login only reads transactions,
+# and the ingest Lambda has its own (infrastructure/db-migrate/transactions/).
+locals {
+  app_logins = {
+    user_service        = { db = "users" }
+    client_service      = { db = "clients" }
+    account_service     = { db = "accounts" }
+    transaction_service = { db = "transactions" }
+    transaction_ingest  = { db = "transactions" }
+    event_alert_service = { db = "alerts" }
+  }
+}
+
+resource "random_password" "app_login" {
+  for_each = local.app_logins
+  length   = 32
+  special  = false
+}
+
+resource "aws_secretsmanager_secret" "app_login" {
+  for_each                = local.app_logins
+  name                    = "${local.name}/db/${each.value.db}/${each.key}"
+  description             = "${each.value.db}-db login without schema rights"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "app_login" {
+  for_each  = local.app_logins
+  secret_id = aws_secretsmanager_secret.app_login[each.key].id
+  secret_string = jsonencode({
+    username = each.key
+    password = random_password.app_login[each.key].result
+  })
 }
 
 resource "random_password" "audit_login" {
@@ -206,8 +245,9 @@ resource "aws_s3_bucket_policy" "documents" {
 }
 
 # --------------------------------------------------------- database console
-# A one-off psql task per database, for the bootstrap steps in the runbook.
-# It runs only when someone starts it with aws ecs run-task.
+# A one-off psql task per database, for ad-hoc SQL and the producer's account
+# sync (scripts/db-run-sql.sh), as the master user. It runs only when someone
+# starts it with aws ecs run-task.
 
 resource "aws_iam_role" "db_console_exec" {
   name               = "${local.name}-db-console-exec"
@@ -222,7 +262,7 @@ resource "aws_iam_role_policy_attachment" "db_console_exec" {
 data "aws_iam_policy_document" "db_console_secrets" {
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
-    resources = concat([for db in module.db : db.master_secret_arn], [for sec in aws_secretsmanager_secret.audit_login : sec.arn])
+    resources = [for db in module.db : db.master_secret_arn]
   }
 }
 
@@ -257,18 +297,10 @@ resource "aws_ecs_task_definition" "db_console" {
       { name = "PGDATABASE", value = module.db[each.key].db_name },
       { name = "PGSSLMODE", value = "require" },
     ]
-    # audit-db's console also holds the passwords for the logins it creates
-    # once, so they never appear in run-task overrides (scripts/db-run-sql.sh).
-    secrets = concat(
-      [
-        { name = "PGUSER", valueFrom = "${module.db[each.key].master_secret_arn}:username::" },
-        { name = "PGPASSWORD", valueFrom = "${module.db[each.key].master_secret_arn}:password::" },
-      ],
-      each.key == "audit" ? [
-        { name = "AUDITOR_APP_PASSWORD", valueFrom = "${aws_secretsmanager_secret.audit_login["auditor"].arn}:password::" },
-        { name = "CHAIN_VERIFY_PASSWORD", valueFrom = "${aws_secretsmanager_secret.audit_login["chain_verify"].arn}:password::" },
-      ] : [],
-    )
+    secrets = [
+      { name = "PGUSER", valueFrom = "${module.db[each.key].master_secret_arn}:username::" },
+      { name = "PGPASSWORD", valueFrom = "${module.db[each.key].master_secret_arn}:password::" },
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {

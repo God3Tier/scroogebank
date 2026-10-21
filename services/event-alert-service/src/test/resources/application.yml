@@ -12,5 +12,9 @@ spring:
           issuer-uri: https://example.invalid
           jwk-set-uri: https://example.invalid/jwks.json
 
+idp:
+  cognito:
+    app-client-id: test-crm-app-client
+
 alert:
   mode: API

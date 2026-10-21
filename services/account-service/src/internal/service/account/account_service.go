@@ -9,10 +9,15 @@ import (
 )
 
 type AccountService interface {
-	// CreateAccount asks client-profile-management-service for the client's
-	// owner, using the caller's Authorization header, and stores that owner on
-	// the account.
-	CreateAccount(ctx context.Context, account models.CreateAccountInput, authorization string) error
+	// CreateAccount asks client-profile-management-service for the client,
+	// using the caller's Authorization header, and stores the client's owner
+	// on the account. For an unverified client an agent may open only a
+	// pending account (ADR-0050).
+	CreateAccount(ctx context.Context, account models.CreateAccountInput, caller models.Caller, authorization string) error
+	// UpdateAccountStatus changes an account's status for the agent who owns
+	// it, once its client is verified, and returns the status before and
+	// after (ADR-0050). Admins do not manage client accounts.
+	UpdateAccountStatus(ctx context.Context, accountID string, status models.AccountStatus, caller models.Caller, authorization string) (before, after models.AccountStatus, err error)
 	GetAccount(ctx context.Context, accountID string) (*orm.Account, error)
 	DeleteAccount(ctx context.Context, accountID string) error
 	// ListAccounts returns a client's accounts that the caller may see.

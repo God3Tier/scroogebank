@@ -69,7 +69,14 @@ resource "aws_cognito_user_pool_domain" "this" {
 }
 
 locals {
-  web_origins = concat(["https://${aws_cloudfront_distribution.this.domain_name}"], var.local_dev_origins)
+  # The custom domain first, when there is one. CloudFront still answers on
+  # its own name, and the SPA builds its callback from the address it was
+  # loaded from, so both sign in.
+  web_origins = concat(
+    local.custom_domain ? ["https://${local.app_host}"] : [],
+    ["https://${aws_cloudfront_distribution.this.domain_name}"],
+    var.local_dev_origins,
+  )
 }
 
 # The SPA's client (ADR-0025 decision 2): public, code grant only, PKCE added

@@ -1,5 +1,314 @@
 # AI usage log
 
+## 2026-10-20 — Activity feed timeout, page names, dashboard budgets, accounts Pending until verified
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: four changes on four branches, all from `dev`.
+  - `task/base-features/auditor-channel-warm-up`: read the owner's
+    CloudWatch line for the activity feed failing on first load
+    (`DEADLINE_EXCEEDED`, about 1.8 s of the 2 s deadline spent
+    connecting) and make user-service connect to the auditor at startup.
+  - `task/frontend/page-names`: rename Agent/Admin Dashboard to
+    Agent/Admin Home, and Agent/Admin Insights to Agent/Admin Dashboard.
+  - `task/business-dashboard/longer-upstream-budgets`: raise
+    dashboard-service's budgets to 10 s per call and 15 s overall, which
+    the owner chose, and amend ADR-0033.
+  - `task/base-features/verified-clients-only-accounts`: draft ADR-0050.
+    A first version refused an agent's account for an unverified client.
+    Checking the specification and the requirements Q&A showed no such
+    rule, the Q&A's "doc submitted, account opened, account active"
+    workflow, and that admins do not manage client accounts (UM18). The
+    owner then chose: an unverified client's accounts open as Pending; after
+    verifying, the agent may make them Active; a new
+    `PATCH /api/accounts/{id}` lets the owning agent change a verified
+    client's account to any status, never an admin, audited with the status
+    before and after. Implemented in account-service and on the client and
+    accounts pages.
+- Human verification required: decide ADR-0050 and tell Joseph Yau
+  (Feature 2) and the frontend owner. In AWS, check that the activity feed
+  loads on the first visit after a deploy with no `DEADLINE_EXCEEDED`, that
+  the dashboards load after a restart with no `exceeded its budget`, and,
+  after deploying account-service and the frontend together, that an agent
+  can open only a Pending account for an unverified client, activate it
+  after verifying, change its status on the accounts page, and that an
+  admin's `PATCH` returns 403.
+- Data: repository content, the owner's local copies of the specification
+  and the requirements Q&A (read, not committed), and one CloudWatch log
+  line the owner pasted, with no client data. No secrets or real client
+  data were used.
+- Verification: user-service's 83 tests pass, dashboard-service's 105,
+  account-service's `make test` (including the new repository test against
+  PostgreSQL) and `go vet`, and the frontend's tests, lint and build on
+  both frontend branches. The new tests for the auditor channel, each
+  account-service rule (unverified, admin, the Pending exception) and each
+  frontend rule (the form's statuses, the page's control, the admin prompt)
+  fail without their change.
+
+## 2026-10-20 — INF-03 least-privilege database logins, and stale statuses
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: work out what each service does in its database (no DDL, `TRUNCATE`
+  or sequences; soft deletes are updates; transaction-service only reads);
+  recommend that db-migrate apply user-service's and event-alert-service's
+  migrations in AWS only, with their own Flyway off there and their code
+  unchanged, which the owner chose; add login callbacks to the db-migrate
+  image, with an advisory lock against concurrent grants; give every
+  service, and the ingest Lambda, its own login secret in the CRM stack,
+  with tests; amend ADR-0028 decision 3 and ADR-0042 decision 6. Also
+  update the docs that still said INF-03, INF-08, INF-12 and INF-13 were
+  not applied to AWS, using only what the owner confirmed had worked there.
+- Human verification required: decide ADR-0028 and ADR-0042; build and
+  push db-migrate with the other images, apply crm to the running stack,
+  and check that the users and alerts `db-migrate` streams say "up to
+  date", every service is healthy, no log group shows `permission denied`
+  or `password authentication failed`, and the ingest Lambda imports the
+  next file. Tell Azeez (event-alert-service) and Joseph Yau (the receiver
+  and the ingest Lambda).
+- Data: repository content only, with throwaway passwords in local Docker
+  containers. Nothing ran in AWS, and no secrets or real client data were
+  used.
+- Verification: `terraform fmt -check` is clean; `terraform validate` passes
+  for all four stacks; `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 8/8 in `modules/ecs-service`, and the CRM
+  test fails when a service is given its master secret. The image, run
+  against PostgreSQL 17 with passwords checked from another container:
+  each login signed in, could change rows but not the schema, its history
+  or roles, and lost its old password on a rerun; `transaction_service`
+  could only read; `transaction_ingest` ran the receiver's upsert and outbox
+  relay; a later table was granted on the next migrate; three concurrent
+  migrations succeeded and the lock serialised the callbacks; a database
+  migrated with Spring Boot's `__` separator was up to date with it and
+  reported a description mismatch without it.
+
+## 2026-10-20 — INF-14 redeploy on start for Service Connect
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: find why a new stack's services needed a restart after their first
+  start (AWS gives a task the Service Connect names that existed when its
+  service's latest deployment was made, and scaling up makes no new
+  deployment); show that creating called services first cannot fix it,
+  because client-service and account-service call each other; recommend
+  redeploying each service when its minimum task count changes, which the
+  owner chose; add the trigger and a module test; amend ADR-0042 decision 4,
+  and document in the runbook that every stack must be created stopped.
+- Human verification required: decide ADR-0042; create a new stack stopped,
+  start it, and check that no log group shows `UnknownHostException`
+  without a restart.
+- Data: repository content and the AWS ECS developer guide only. Nothing ran
+  in AWS, and no secrets or real client data were used.
+- Verification: `terraform fmt -check` is clean for the modules;
+  `terraform validate` passes for the crm and business-dashboard stacks;
+  `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 7/7 in `modules/ecs-service`, and the new
+  module test fails when the trigger is removed.
+
+## 2026-10-20 — INF-03 db-migrate init container
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: find where the runbook uses `scripts/db-run-sql.sh` and how to stop
+  needing it for deploys; recommend a Flyway `db-migrate` init container in
+  each Go service's task over a separate migration task (the owner chose it,
+  and to collapse client-service's two SQL files into one because nothing is
+  deployed); build one `infrastructure/db-migrate` image from the Go services'
+  `data/` directories, with an `afterMigrate.sql` callback that creates the
+  auditor's and chain-verify's logins from Secrets Manager placeholders; add
+  the `migrations` input to the `ecs-service` module and wire it into the CRM
+  stack; run the same image against each Go service's local Compose database
+  (`make migrate`, used by `make run`, and the SFTP stack's `db-migrate`
+  service before `receiver-api`), as the owner asked, so an edited migration
+  fails locally first; drop `--expand-env` and the audit console's password
+  secrets; write module and stack tests; amend ADR-0028 decision 3
+  (resolving open item 8) and ADR-0042 decision 6, and update the runbook,
+  the four services' READMEs, the architecture pages,
+  `docs/database/migrations.md`, the Terraform README, the infrastructure plan
+  and the resource register.
+- Human verification required: decide ADR-0028 and ADR-0042; tell the
+  client-service, account-service, auditor and receiver owners that a deployed
+  migration is never edited, and that an existing local database needs one
+  `make db-reset`; on a new stack, build and push the db-migrate image,
+  apply crm, and check each of the four services' `db-migrate` log
+  streams and that the auditor connects as `auditor_app`.
+- Data: repository content and synthetic values only. Local PostgreSQL
+  containers, synthetic passwords and a throwaway CA were used for the checks.
+  Nothing ran in AWS, and no secrets or real client data were used.
+- Verification: `terraform fmt -check` is clean for the tracked files;
+  `terraform validate` passes for the crm, business-dashboard and sftp-server
+  stacks; `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 5/5 in `modules/ecs-service`, and the new
+  crm assertion fails when a service loses its migrations. The image, run
+  against PostgreSQL 17: each database migrated from empty and a rerun changed
+  nothing; the audit logins worked with their roles and a rerun replaced their
+  passwords; a missing placeholder and an edited migration both stopped it;
+  a database set up by hand was refused; LF and CRLF copies of a file gave the
+  same checksum; `verify-full` worked with a two-CA bundle and refused a wrong
+  CA and a wrong host name. Locally, `make migrate` in account-service,
+  client-service and the auditor, and `make db-up` in the SFTP stack, migrated
+  fresh Compose databases and changed nothing on a rerun; on account-service,
+  a database loaded with `psql` and an edited migration were both refused
+  with the Makefile's hint. The test containers and volumes were removed. `db-run-sql.sh` built the same psql override with
+  stubbed `terraform` and `aws` commands.
+
+## 2026-10-20 — INF-08 HTTPS from the internal ALB to the Java services
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: list which services the internal ALB reaches and over what; compare
+  where dashboard-service's certificate could come from (the owner chose a
+  self-signed one in its own stack over one issued by the CRM's CA); make the
+  `ecs-service` module's Java `tls-init` script write the service's
+  certificate and set Spring Boot's `SERVER_SSL_CERTIFICATE` and
+  `SERVER_SSL_CERTIFICATEPRIVATEKEY`; give user-service and event-alert-service
+  project-CA certificates and the dashboard a self-signed one; switch the three
+  target groups to HTTPS and user-service's Service Connect port to TCP; write
+  the module's first plan test and extend the stacks' tests; amend ADR-0042
+  decisions 5, 7 and 8 and ADR-0047, and update the runbook, the Terraform
+  README, the infrastructure plan and the resource register.
+- Human verification required: decide ADR-0042 and ADR-0047; apply the CRM
+  stack, then the business-dashboard stack (after `terraform init` there, for
+  the new `tls` provider); check that all five target groups use HTTPS and are
+  healthy, the users, alerts and dashboard pages load, and the dashboard's
+  user-service panels work, which proves the dashboard checks user-service's
+  certificate.
+- Data: repository content and synthetic test values only. A throwaway EC key
+  and self-signed certificate were made in the session's scratch folder for
+  the local checks. Nothing ran in AWS, and no secrets or real client data
+  were used.
+- Verification: `terraform fmt -check` is clean for the tracked files;
+  `terraform validate` passes for the module and the crm, business-dashboard
+  and sftp-server stacks; `terraform test` passes 7/7 in `stacks/crm`, 3/3 in
+  `stacks/business-dashboard` and 2/2 in `modules/ecs-service`. Spring Boot
+  3.5.16 read the `EC PRIVATE KEY` format Terraform writes and served TLS 1.3
+  from those two variables: a locally built dashboard-service jar, and the
+  existing dashboard-service image after the module's Java `tls-init` script
+  ran in it as root, with the app then running as a non-root user. Both
+  answered `UP` on HTTPS with the certificate's name checked, and 400 on plain
+  HTTP.
+
+## 2026-10-20 — INF-13 custom domain and HTTPS internal ALB
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: check which code has no deployment and where the Terraform README was
+  out of date; explain the difference between HTTPS to the internal ALB and
+  INF-08's TLS in the Java services; add `domain_name` to the CRM stack (ACM
+  certificates for CloudFront and the internal ALB, DNS validation and host
+  records in a hand-registered Route 53 zone, the ALB on HTTPS 443 verified by
+  API Gateway, the ingest Lambda calling it by name, Cognito callbacks on the
+  custom domain); write its mocked plan tests; amend ADR-0042 decisions 8 and
+  9, resolve open item 2, and update the runbook, the Terraform README, the
+  system overview, the infrastructure plan and the resource register.
+  The runbook's step 3 sets `domain_name = "itsag3t6.com"` only in an account
+  that has that domain's hosted zone, so a personal account deploys without one.
+- Human verification required: decide ADR-0042; in the project account, apply
+  the CRM stack with `domain_name = "itsag3t6.com"`, then the
+  business-dashboard stack; check that both certificates are issued, the ALB
+  listens on HTTPS 443, the app signs in and loads at
+  `https://sg.itsag3t6.com`, and an ingest run reaches account-service; in a
+  personal account, check that step 3 writes no `domain_name` and the stack
+  deploys on HTTP and `*.cloudfront.net`.
+- Data: repository content and synthetic test values only. To see what was
+  deployed, the git-ignored local tfvars files, the bootstrap stack's local
+  state (resource types only) and the local Docker image list were read, with
+  account IDs and e-mail addresses masked in the output; an SSH public key was
+  shown. An AWS CLI call stopped at the MFA prompt, so no AWS API was called,
+  and no secrets or real client data were used. That the ingest Lambda imports
+  files in AWS is the owner's statement, not observed. Adding `domain_name` to
+  the git-ignored `crm/env/prod.tfvars`, a `terraform fmt -write=false` syntax
+  check printed that whole file unmasked: the operators' two e-mail addresses,
+  the account ID, and the SFTP server's address and host key fingerprint. It
+  holds no passwords or keys; nothing was copied elsewhere. The zone lookup's
+  JMESPath query was tested offline against sample responses.
+- Verification: `terraform fmt -check` is clean for the CRM stack;
+  `terraform validate` passes for the crm, business-dashboard and sftp-server
+  stacks; `terraform test` passes 7/7 in `stacks/crm` (the new `custom_domain`
+  run and a no-domain check in `prod`) and 3/3 in
+  `stacks/business-dashboard`. Nothing ran in AWS.
+
+## 2026-10-20 — INF-12 business-dashboard stack
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: compare ways of passing the CRM stack's values to a separate stack
+  (remote state, copied tfvars, lookups by name, an SSM parameter); move
+  dashboard-service from `stacks/crm` into a new `stacks/business-dashboard`
+  that reads the CRM's new `dashboard_inputs` output, owns its image
+  repository, security group and rules on the CRM's service groups, and stops
+  its plan when the audit queue does not allow its role; write its mocked
+  plan tests; draft ADR-0047, amend ADR-0042, and update the runbook, the
+  Terraform README, the infrastructure and business-dashboard plans, the
+  resource register and `scripts/aws-session.sh`. Also ignore the local
+  `references/` folder.
+- Human verification required: decide ADR-0047; on the next session, apply
+  the CRM stack with the dashboard's role in `extra_audit_producer_role_arns`,
+  then the business-dashboard stack, and check that `/api/dashboard/*` returns
+  panels for an agent and an admin and that its audit events reach the queue.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used. `terraform fmt
+  -check` printed one line each from the git-ignored real `env/prod.tfvars`
+  files (an image URI with the account ID, and the SFTP server's address);
+  they were not changed or copied.
+- Verification: `terraform fmt -check` is clean for every tracked file;
+  `terraform validate` passes for the crm, business-dashboard and sftp-server
+  stacks; `terraform test` passes 6/6 in `stacks/crm` and 3/3 in
+  `stacks/business-dashboard`, whose failing-precondition run confirms the
+  audit check. Nothing ran in AWS.
+
+## 2026-10-16 — INF-05 transaction-service image
+
+- Human owner: Neo Jia Wen; the Feature 3 owner (Joseph Yau) to confirm, as the
+  infrastructure plan lists.
+- Tool: Claude Code (Anthropic).
+- Use: make the SFTP receiver's Dockerfile multi-stage, its default target a
+  distroless transaction-service image built from `src/serverd` as
+  account-service's is, with the development image kept as the `tools` target
+  for the compose file; generate the receiver's ORM for the image in a
+  throwaway database; add transaction-service to the runbook's build, push and
+  check steps; amend ADR-0042 decision 9; replace the hand-written Secrets
+  Manager fake in the INF-04 tests with a mockery mock.
+- Human verification required: build the image with Docker after
+  `make -C services/sftp sqlboiler`, run `make -C services/sftp test`, and check
+  in a test account (INF-02) that transaction-service starts and user-service's
+  transaction reads succeed.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used.
+- Verification: with Docker, `make sqlboiler` generated the ORM in a throwaway
+  database and `make test` passed, the database-backed tests included. The
+  image built for linux/amd64, runs as the distroless nonroot user, and against
+  the test database answered `/health` and `/api/transactions` with 200.
+  `make lambda` built a zip holding an executable arm64 `bootstrap` and the
+  RDS CA bundle; in the `provided.al2023` runtime emulator it initialised, ran
+  one poll per invocation and returned the poll's error. This also covers the
+  INF-04 checks that entry left for Docker. Nothing ran in AWS.
+
+## 2026-10-16 — INF-04 transaction-ingest Lambda
+
+- Human owner: Neo Jia Wen; the Feature 3 owner (Joseph Yau) confirms the
+  runtime (ADR-0024 decision 7) on the pull request.
+- Tool: Claude Code (Anthropic).
+- Use: run the SFTP receiver's poller as the Lambda function ADR-0024 describes:
+  a Lambda mode in `src/cronjob` that builds the poller once per execution
+  environment and polls once per invocation; read the database login, SSH
+  private key and Cognito client secret from Secrets Manager at init; quote the
+  database login in the connection string; add `make lambda` to build the arm64
+  `bootstrap` zip with the RDS CA bundle; in Terraform, point `DB_SSLROOTCERT`
+  at that bundle and turn off Lambda's own retries of the scheduled run; update
+  the receiver README, the runbook, the Terraform README and the
+  infrastructure plan; amend ADR-0042 decisions 9 and 10 to match.
+- Human verification required: review the code; run `make test` and
+  `make lambda` with Docker; apply to a test account (INF-02) and check one
+  invocation imports files and audits them.
+- Data: repository content and synthetic test values only. No AWS credentials,
+  secrets, real client data or live AWS resources were used.
+- Verification: `go vet` and the cronjob, accounts and poller tests passed
+  locally, and the arm64 `bootstrap` cross-compiled; the database-backed SQS
+  relay tests were not run (no database or Docker). Terraform validate and 6
+  CRM mocked-provider tests passed. `make lambda` was not run (Docker was not
+  running).
+
 ## 2026-10-16 — Terraform review and repair
 
 - Human owner: Neo Jia Wen.

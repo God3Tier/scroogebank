@@ -51,21 +51,24 @@ locals {
 
   log_retention_days = 30
 
-  # Tasks per service. The stop model scales to 0 between sessions.
-  min_tasks = var.running ? 2 : 0
+  # Tasks per service. One task keeps Fargate cost down; auto scaling adds
+  # more under load. The stop model scales to 0 between sessions.
+  min_tasks = var.running ? 1 : 0
   max_tasks = var.running ? 6 : 0
 
   use_fargate_spot = coalesce(var.use_fargate_spot, var.environment == "staging")
 
   # ------------------------------------------------------------------ images
+  # dashboard-service's repository is in the business-dashboard stack.
+  # db-migrate is Flyway with the Go services' migrations (services.tf).
   ecr_repositories = [
     "user-service",
     "client-service",
     "account-service",
     "auditor",
     "transaction-service",
-    "dashboard-service",
     "event-alert-service",
+    "db-migrate",
   ]
 
   image = {
@@ -85,6 +88,12 @@ locals {
     transaction = "transaction-service"
   }
 
-  alb_scheme = var.internal_alb_certificate_arn == null ? "http" : "https"
-  alb_port   = var.internal_alb_certificate_arn == null ? 80 : 443
+  # Custom domain (dns.tf): the app's name and the internal ALB's, under
+  # domain_name. Without one, the default CloudFront name and HTTP to the ALB.
+  custom_domain = var.domain_name != null
+  app_host      = local.custom_domain ? "${var.legal_entity}${local.is_prod ? "" : "-${var.environment}"}.${var.domain_name}" : null
+  alb_host      = local.custom_domain ? "alb.${local.app_host}" : null
+  alb_scheme    = local.custom_domain ? "https" : "http"
+  alb_port      = local.custom_domain ? 443 : 80
+  alb_base_url  = "${local.alb_scheme}://${local.custom_domain ? local.alb_host : aws_lb.internal.dns_name}"
 }

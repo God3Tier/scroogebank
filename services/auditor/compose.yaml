@@ -18,6 +18,28 @@ services:
       timeout: 5s
       retries: 10
 
+  # Applies data/schema.sql with Flyway, from the image each task's db-migrate
+  # container runs in AWS (docs/database/migrations.md), and creates the
+  # auditor's and chain-verify's logins. make run and make migrate run it. The
+  # passwords are for this local database only: make run and make
+  # chain-verify connect as postgres.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/myapp
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: postgres
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/audit
+      FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD: auditor_app
+      FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD: chain_verify
+
   # LocalStack stands in for AWS SQS and S3 locally. See ADR-0004 for why the
   # auditor moved from Kafka to SQS. init-queues.sh creates the
   # audit-insert / audit-insert-dlq queues on startup, and

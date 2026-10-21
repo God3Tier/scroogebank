@@ -89,3 +89,22 @@ func TestAggregatesRefuseCallersWithoutACRMRole(t *testing.T) {
 		})
 	}
 }
+
+func TestWithCallerAndAccountPassesTheTokenCallerAndRouteAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	var gotCaller models.Caller
+	var gotAccountID string
+	router.PATCH("/api/accounts/:accountId", signedInAs(&security.Principal{Subject: "agent-a", Role: "AGENT"}),
+		withCallerAndAccount(func(w http.ResponseWriter, _ *http.Request, caller models.Caller, accountID string) {
+			gotCaller, gotAccountID = caller, accountID
+			w.WriteHeader(http.StatusOK)
+		}))
+	res := httptest.NewRecorder()
+
+	router.ServeHTTP(res, httptest.NewRequest(http.MethodPatch, "/api/accounts/account-1?admin=true", nil))
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, models.Caller{Subject: "agent-a"}, gotCaller)
+	assert.Equal(t, "account-1", gotAccountID)
+}

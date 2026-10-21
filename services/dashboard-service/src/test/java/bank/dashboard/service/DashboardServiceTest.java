@@ -1,6 +1,7 @@
 package bank.dashboard.service;
 
 import bank.dashboard.config.DashboardProperties;
+import bank.dashboard.dto.AgentSortMetric;
 import bank.dashboard.dto.DashboardResponse;
 import bank.dashboard.dto.DashboardWindow;
 import bank.dashboard.dto.Panel;
@@ -20,6 +21,7 @@ import bank.dashboard.upstream.dto.ClientStats;
 import bank.dashboard.upstream.dto.TeamComparison;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.stubbing.Answer;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -137,6 +139,74 @@ class DashboardServiceTest {
 
         assertThat(response.panels().get("agents").data()).isEqualTo(new AgentCount(2, 1));
         assertThat(response.panels()).doesNotContainKey("teamComparison");
+    }
+
+    @Test
+    void theAgentsTableFetchesItsThreeInputsInParallel() {
+        // One after another, three cold calls shared one call's budget and
+        // timed out after a restart. In parallel they take the slowest one.
+        when(roster.agents()).thenAnswer(slowly(400, List.of(
+                new AgentSummary("1", "sub-a", "Ada", "Lim", "ada@x.com", "AGENT", true))));
+        when(clients.stats(WINDOW, true)).thenAnswer(slowly(400, agentClientStats()));
+        when(accounts.stats(WINDOW, true)).thenAnswer(slowly(400, agentAccountStats()));
+
+        long startedAt = System.nanoTime();
+        DashboardResponse response = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response();
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+
+        assertThat(response.panels().get("agents").status()).isEqualTo(PanelStatus.OK);
+        assertThat(elapsedMs).describedAs("three 400 ms calls in parallel").isLessThan(1_000);
+    }
+
+    @Test
+    void theAgentsTableReturnsOnlyTheJoinedPanel() {
+        when(clients.stats(WINDOW, true)).thenReturn(agentClientStats());
+        when(accounts.stats(WINDOW, true)).thenReturn(agentAccountStats());
+
+        DashboardResponse response = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response();
+
+        assertThat(response.panels()).containsOnlyKeys("agents");
+    }
+
+    @Test
+    void theAgentsTableIsUnavailableWhenAnyInputIs() {
+        when(clients.stats(WINDOW, true)).thenReturn(agentClientStats());
+        when(accounts.stats(WINDOW, true))
+                .thenThrow(new UpstreamUnavailableException(PanelReason.UPSTREAM_ERROR, "account-service returned 500"));
+
+        Panel agents = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response().panels().get("agents");
+
+        assertThat(agents.status()).isEqualTo(PanelStatus.UNAVAILABLE);
+        assertThat(agents.reason()).isEqualTo(PanelReason.UPSTREAM_ERROR);
+    }
+
+    @Test
+    void anAnswerTheAgentsTableCannotJoinCostsThePanelNotTheRequest() {
+        // As when the join ran inside the call: an upstream error, not a 500.
+        when(roster.agents()).thenReturn(null);
+        when(clients.stats(WINDOW, true)).thenReturn(agentClientStats());
+        when(accounts.stats(WINDOW, true)).thenReturn(agentAccountStats());
+
+        Panel agents = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response().panels().get("agents");
+
+        assertThat(agents.status()).isEqualTo(PanelStatus.UNAVAILABLE);
+        assertThat(agents.reason()).isEqualTo(PanelReason.UPSTREAM_ERROR);
+    }
+
+    private static <T> Answer<T> slowly(long millis, T answer) {
+        return invocation -> {
+            Thread.sleep(millis);
+            return answer;
+        };
+    }
+
+    private static ClientStats agentClientStats() {
+        return new ClientStats(1, Map.of(), 1, List.of(), List.of(new ClientStats.AgentClientCounts("sub-a", 1, 1, 0)));
+    }
+
+    private static AccountStats agentAccountStats() {
+        return new AccountStats(1, Map.of(), Map.of(), Map.of(), Map.of(), 1, BigDecimal.TEN, "SGD", List.of(),
+                List.of(new AccountStats.AgentAccountCounts("sub-a", 1, BigDecimal.TEN)));
     }
 
     private static ClientStats clientStats(long total) {

@@ -34,7 +34,11 @@ export default function useDashboards(requests) {
     return () => { current = false }
   }, [key])
 
-  return { loading: state.key !== key, responses: state.responses, errors: state.errors }
+  // While new requests are in flight (first load, or a changed window or
+  // sort), nothing is returned, so the page shows its loading state rather
+  // than the previous figures under the new heading.
+  const loading = state.key !== key
+  return { loading, responses: loading ? {} : state.responses, errors: loading ? {} : state.errors }
 }
 
 // The panel named. Undefined while its response loads, so PanelCard renders

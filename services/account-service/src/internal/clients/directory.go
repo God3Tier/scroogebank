@@ -4,7 +4,9 @@
 // no foreign key to clients. This lookup replaces it: an account is created
 // only after client-profile-management-service confirms the client exists and
 // that the caller may access it, and the client's owning agent is copied onto
-// the account at that moment (ADR-0035).
+// the account at that moment (ADR-0035). The same answer says whether the
+// client is verified, which an agent needs before opening an account
+// (ADR-0050).
 package clients
 
 import (
@@ -24,12 +26,24 @@ import (
 // upstream.
 const maxClientResponseBytes = 64 << 10
 
+// verifiedStatus is client-profile-management-service's verified state.
+// Clients verified before ADR-0041 hold it in lower case.
+const verifiedStatus = "VERIFIED"
+
+// Client is what account creation needs to know about a client.
+type Client struct {
+	// OwnerAgentID is the Cognito sub of the agent who owns the client.
+	OwnerAgentID string
+	Verified     bool
+}
+
 type Directory interface {
-	// OwnerOf returns the agent who owns the client. It forwards the caller's
-	// Authorization header, so client-profile-management-service applies its
-	// own ownership rule: admins see every client, and an agent asking about
-	// another agent's client gets the same 404 as for a missing one.
-	OwnerOf(ctx context.Context, clientID, authorization string) (string, error)
+	// Lookup returns the client's owner and whether the client is verified.
+	// It forwards the caller's Authorization header, so
+	// client-profile-management-service applies its own ownership rule:
+	// admins see every client, and an agent asking about another agent's
+	// client gets the same 404 as for a missing one.
+	Lookup(ctx context.Context, clientID, authorization string) (Client, error)
 }
 
 type httpDirectory struct {
@@ -44,40 +58,46 @@ func NewHTTPDirectory(baseURL string, timeout time.Duration) Directory {
 	}
 }
 
-func (d httpDirectory) OwnerOf(ctx context.Context, clientID, authorization string) (string, error) {
+func (d httpDirectory) Lookup(ctx context.Context, clientID, authorization string) (Client, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.baseURL+"/api/clients/"+url.PathEscape(clientID), nil)
 	if err != nil {
-		return "", fmt.Errorf("%w: build request: %v", accounterrors.ErrClientServiceUnavailable, err)
+		return Client{}, fmt.Errorf("%w: build request: %v", accounterrors.ErrClientServiceUnavailable, err)
 	}
 	req.Header.Set("Authorization", authorization)
 	req.Header.Set("Accept", "application/json")
 
 	res, err := d.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", accounterrors.ErrClientServiceUnavailable, err)
+		return Client{}, fmt.Errorf("%w: %v", accounterrors.ErrClientServiceUnavailable, err)
 	}
 	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		var client struct {
-			CreatedByAgentID string `json:"created_by_agent_id"`
+		var profile struct {
+			CreatedByAgentID   string `json:"created_by_agent_id"`
+			VerificationStatus string `json:"verification_status"`
 		}
-		if err := json.NewDecoder(io.LimitReader(res.Body, maxClientResponseBytes)).Decode(&client); err != nil {
-			return "", fmt.Errorf("%w: unreadable client profile: %v", accounterrors.ErrClientServiceUnavailable, err)
+		if err := json.NewDecoder(io.LimitReader(res.Body, maxClientResponseBytes)).Decode(&profile); err != nil {
+			return Client{}, fmt.Errorf("%w: unreadable client profile: %v", accounterrors.ErrClientServiceUnavailable, err)
 		}
-		owner := strings.TrimSpace(client.CreatedByAgentID)
+		owner := strings.TrimSpace(profile.CreatedByAgentID)
 		if owner == "" {
-			return "", fmt.Errorf("%w: client profile has no owning agent", accounterrors.ErrClientServiceUnavailable)
+			return Client{}, fmt.Errorf("%w: client profile has no owning agent", accounterrors.ErrClientServiceUnavailable)
 		}
-		return owner, nil
+		// A missing or unknown status is not verified, so the check fails
+		// closed.
+		return Client{
+			OwnerAgentID: owner,
+			Verified:     strings.EqualFold(strings.TrimSpace(profile.VerificationStatus), verifiedStatus),
+		}, nil
 	case http.StatusNotFound:
-		return "", accounterrors.ErrClientNotFound
+		return Client{}, accounterrors.ErrClientNotFound
 	default:
 		// The caller's token already passed this service's own verification,
 		// so any other status (including 401 or 403) means the two services
 		// disagree or the client service is failing. Account creation fails
 		// closed rather than guessing.
-		return "", fmt.Errorf("%w: client service returned %d", accounterrors.ErrClientServiceUnavailable, res.StatusCode)
+		return Client{}, fmt.Errorf("%w: client service returned %d", accounterrors.ErrClientServiceUnavailable, res.StatusCode)
 	}
 }

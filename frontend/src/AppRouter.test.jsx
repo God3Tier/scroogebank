@@ -45,7 +45,7 @@ describe('routes', () => {
     renderAt('/agent/alerts')
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(screen.queryByText('Agent Dashboard')).not.toBeInTheDocument()
+    expect(screen.queryByText('Agent Home')).not.toBeInTheDocument()
     expect(signinRedirect).toHaveBeenCalledWith({ state: { returnTo: '/agent/alerts' } })
   })
 
@@ -73,15 +73,15 @@ describe('routes', () => {
     renderAt('/admin')
 
     expect(screen.getByRole('alert')).toHaveTextContent('not available to your role')
-    expect(screen.queryByText('Admin Dashboard')).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin Home')).not.toBeInTheDocument()
   })
 
-  it('lands an admin on the admin dashboard after the callback', () => {
+  it('lands an admin on the admin home page after the callback', () => {
     useAuth.mockReturnValue(signedInAs(['Admin']))
 
     renderAt('/auth/callback')
 
-    expect(screen.getByRole('heading', { name: 'Admin Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Admin Home' })).toBeInTheDocument()
   })
 
   it('returns an agent to the page they asked for after the callback', () => {
@@ -89,7 +89,7 @@ describe('routes', () => {
 
     renderAt('/auth/callback')
 
-    expect(screen.getByRole('heading', { name: 'Agent Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agent Home' })).toBeInTheDocument()
   })
 
   it('shows a failed sign-in on the callback page', () => {
@@ -100,7 +100,7 @@ describe('routes', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Sign-in failed: invalid_grant')
   })
 
-  it('lets an admin open a client page from the admin dashboard', () => {
+  it('lets an admin open a client page from the admin home page', () => {
     useAuth.mockReturnValue(signedInAs(['Admin']))
 
     renderAt('/agent/client/1/transactions')

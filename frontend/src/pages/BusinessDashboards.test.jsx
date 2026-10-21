@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -99,5 +99,27 @@ describe('business dashboards', () => {
     renderPage(AgentBusinessDashboard)
 
     expect(await screen.findByText('Figures could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('shows a spinner in every panel and tile while the figures load', async () => {
+    getDashboard.mockReturnValue(new Promise(() => {}))
+    renderPage(AdminBusinessDashboard)
+
+    // The header and the five panels, and each of the six tiles.
+    expect(screen.getAllByText('Loading figures…')).toHaveLength(6)
+    expect(screen.getByText('Loading Total clients')).toBeInTheDocument()
+    expect(screen.getAllByText(/^Loading /)).toHaveLength(12)
+  })
+
+  it('shows the spinners again, not the old figures, when the window changes', async () => {
+    respond('AGENT', { overview: { clients: ok(CLIENTS) } })
+    renderPage(AgentBusinessDashboard)
+    expect(await screen.findByText('40')).toBeInTheDocument()
+
+    getDashboard.mockReturnValue(new Promise(() => {}))
+    fireEvent.click(screen.getByRole('button', { name: '7 days' }))
+
+    expect(screen.queryByText('40')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading My clients')).toBeInTheDocument()
   })
 })
