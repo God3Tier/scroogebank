@@ -8,7 +8,9 @@ boundary.
 
 RH-SF01 currently validates the minimum matched transaction projection, follows
 bounded cursor pages, de-duplicates identical rows, rejects conflicting or
-out-of-window rows, and exposes a result only after every page succeeds.
+out-of-window rows, and exposes a result only after every page succeeds. Its
+contract-faithful mock supplies six deterministic months for the three positive
+signals plus healthy and non-completed controls.
 
 It is intentionally not a runnable application yet. No Lambda handler, Spring
 Boot API, database, Bedrock adapter, transaction HTTP adapter, or deployment
@@ -38,12 +40,13 @@ Contract documentation and fixtures:
 
 - `docs/api/client-health-monitor-contracts.md`
 - `docs/api/schemas/client-health-finding-v1.schema.json`
+- `docs/api/schemas/transaction-replay-page-v1.schema.json`
 - `tests/fixtures/client-health-monitor/`
 
 ## Next implementation step
 
 Feature 3 owners must review ADR-0044 and provide the dedicated authenticated,
 date-bounded replay endpoint, stable synthetic source fingerprint, and six
-months of reproducible synthetic history. RH-SF01 can then add the HTTP/service
-token adapter and provider contract fixtures without reading another service's
-database.
+months of reproducible synthetic history. RH-SF01 then replaces the mock with
+the HTTP/service-token adapter and runs the same contract tests end to end,
+without reading another service's database.

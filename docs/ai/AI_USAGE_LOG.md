@@ -678,3 +678,19 @@
   real client data, AWS calls or external services were used.
 - Verification: 27 client-health module tests passed with the local Java 24
   compiler override; CI must repeat them on the required Java 25 toolchain.
+
+## 2026-10-21 — Client Health architecture acceptance and SF01 mock replay
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: revise and accept ADR-0034 after owner review; add the transaction replay
+  page schema and unsafe fixtures; implement a contract-faithful six-month
+  synthetic provider covering all three planned signals and controls.
+- Human verification required: Swayam reviews the accepted architecture before
+  building SF05-SF07; Joseph Yau/Neo Jia Wen review and implement the Feature 3
+  provider side before production enablement.
+- Data: repository-owned synthetic identifiers and transactions only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: all 32 client-health tests passed with the local Java 24
+  compiler override, including contract/schema/mock coverage; CI must repeat
+  them on Java 25. Lint diagnostics and Git whitespace checks passed.

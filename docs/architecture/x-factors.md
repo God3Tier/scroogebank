@@ -76,7 +76,7 @@ Admins see bank-wide and per-agent figures; agents see their own book and work q
 
 ## X-factor 3: Client Relationship Health Monitor
 
-Recorded in [ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) (Proposed).
+Recorded in [ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) (Accepted).
 
 Detects explainable changes in client banking activity and turns them into prioritised, auditable follow-up tasks for agents. The MVP has three deterministic signals: **recurring-credit interruption**, **transaction-activity decline** and **sustained net-outflow trend**; more will follow.
 
@@ -84,7 +84,7 @@ Detects explainable changes in client banking activity and turns them into prior
 - Bedrock only turns verified facts into readable wording. It receives signal type, percentage or banded changes, transaction counts, time-window lengths, expected cadence and days since an expected credit.
 - Bedrock **never** receives names, client IDs, account numbers, raw transactions, descriptions, exact balances, agent IDs or contact information.
 - If Bedrock fails or returns unsupported content, a deterministic template is used, so AI failure never stops task creation.
-- The analysis task reads matched activity from transaction-service and assignments from client-service through the internal ALB with a service token, because a standalone scheduled task cannot use Service Connect. The SFTP import now stores `account_id` and `client_id` on matched rows ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)), but the rest of the activity contract is still open ([open item 16](open-items.md#16-health-monitor-activity-contract)).
+- The analysis task reads matched activity from transaction-service under [ADR-0044](../adr/ADR-0044-client-health-transaction-intake-and-replay.md) and assignments from client-service through the internal ALB with scoped service tokens, because a standalone scheduled task cannot use Service Connect. The contract-faithful synthetic provider supports local work until the Feature 3 owners deliver the production replay endpoint and six-month history.
 
 | Decision | Chosen | Not chosen, and why |
 |---|---|---|

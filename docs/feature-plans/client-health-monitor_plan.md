@@ -2,18 +2,19 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00 and RH-SF05 Stage 1 merged, RH-SF01 consumer foundation implemented locally
+- Status: In progress; SF00 and RH-SF05 Stage 1 merged, RH-SF01 consumer contract/schema and synthetic replay provider implemented on its task branch
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
 - Current task branch: `task/client-health-monitor/transaction-intake`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-16 through PR #111; feature branch includes `origin/dev` at `6f606ec`
+- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `8f61151`
 - AI-assisted planning: Yes; Cursor
 
-ADR-0044 accepts API-based transaction intake and replay for RH-SF01. Runtime,
-compute, database, assignment, Bedrock, and audit decisions remain proposed or
-open until accepted ADRs with human owners exist.
+ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
+Bedrock-fallback, authorization, outbox and observability direction. ADR-0044
+accepts API-based transaction intake and replay for RH-SF01. Detailed assignment,
+provider, persistence and deployment contracts remain coordinated follow-up work.
 
 ## Problem statement
 
@@ -458,13 +459,13 @@ Kill switches:
 
 Decisions:
 
-1. service/runtime/compute boundary;
+1. service/runtime/compute boundary — accepted in ADR-0034;
 2. transaction integration and replay — accepted in ADR-0044;
-3. client assignment and service authentication;
-4. task API/state/authorization and database topology;
-5. Bedrock Region/model/privacy/fallback/cost;
-6. Auditor SQS contract and transactional outbox; and
-7. observability, deployment, backup/rollback, and cost controls.
+3. client assignment and service authentication — scoped service-token direction accepted in ADR-0034; assignment contract pending;
+4. task API/state/authorization and database topology — health-db and authorization direction accepted in ADR-0034; persistence details pending;
+5. Bedrock Region/model/privacy/fallback/cost — Singapore wording-only boundary and fallback accepted in ADR-0034; model limits pending;
+6. Auditor SQS contract and transactional outbox — atomic outbox direction accepted in ADR-0034; Auditor contract pending; and
+7. observability, deployment, backup/rollback, and cost controls — required controls accepted in ADR-0034; implementation/runbooks pending.
 
 ## Agent skills
 
@@ -477,7 +478,7 @@ Decisions:
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | In progress: consumer contract and bounded complete replay implemented locally; provider adapter/fixtures pending | 2026-10-16 |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | In progress: consumer contract/schema, bounded replay and six-month synthetic provider implemented; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; future migration ownership | `task/client-health-monitor/activity-projection` | Planned | N/A |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; shared fixtures | `task/client-health-monitor/signal-rules` | Planned | N/A |
 | RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |

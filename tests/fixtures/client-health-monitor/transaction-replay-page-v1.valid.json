@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1",
+  "items": [
+    {
+      "transactionId": "txn-recurring-001",
+      "clientId": "client-recurring",
+      "accountId": "account-recurring",
+      "type": "Deposit",
+      "amount": "4250.00",
+      "currency": "SGD",
+      "transactionDate": "2026-04-01T01:00:00Z",
+      "status": "Completed",
+      "sourceFingerprint": "synthetic-employer-001"
+    },
+    {
+      "transactionId": "txn-withdrawal-001",
+      "clientId": "client-control",
+      "accountId": "account-control",
+      "type": "Withdrawal",
+      "amount": "125.50",
+      "currency": "SGD",
+      "transactionDate": "2026-04-02T02:00:00Z",
+      "status": "Completed",
+      "sourceFingerprint": null
+    }
+  ],
+  "nextCursor": "opaque-page-2"
+}

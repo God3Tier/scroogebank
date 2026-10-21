@@ -124,8 +124,7 @@ owner approval remain pending:
 
 ```text
 GET /internal/v1/transactions
-    ?clientId={clientId}
-    &from={inclusive-utc}
+    ?from={inclusive-utc}
     &to={exclusive-utc}
     &cursor={opaque-cursor}
     &limit={bounded-limit}
@@ -157,6 +156,20 @@ The endpoint requires a scoped Cognito client-credentials token, inclusive
 `from`, exclusive `to`, bounded `limit`, and an opaque provider cursor. The
 consumer exposes no completed intake result unless every page validates and the
 provider returns the final cursor.
+
+Machine-readable consumer artifacts:
+
+- `docs/api/schemas/transaction-replay-page-v1.schema.json`
+- valid and unsafe provider fixtures under
+  `tests/fixtures/client-health-monitor/transaction-replay-page-v1.*.json`
+- Java records and validation under
+  `bank.clienthealth.transaction.contract`
+
+Until Feature 3 delivers the production endpoint, local analysis uses
+`SyntheticTransactionReplaySource`. It follows the same paging contract and
+provides six deterministic months covering interrupted recurring credit,
+declining activity, sustained net outflow, healthy controls, and non-completed
+rows. It is a replaceable adapter, not a second contract.
 
 ## Contract B: Client Assignment V1
 
