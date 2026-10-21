@@ -1,7 +1,8 @@
 # One containerised service on ECS Fargate (ADR-0018), or, with
 # create_service = false, a task definition that EventBridge Scheduler starts
 # (chain-verify). A service gets its own roles and log group, joins Service
-# Connect, and may sit behind the internal ALB.
+# Connect, and may sit behind the internal ALB. Before its app starts, a task
+# may run tls-init, then db-migrate; the app starts only if both succeed.
 
 terraform {
   required_version = ">= 1.10.0"
@@ -23,7 +24,8 @@ locals {
   #   ca.pem        the project CA, trusted for service-to-service TLS
   #   rds-ca.pem    the RDS CA bundle for this region, for verify-full
   #   ca-bundle.pem public roots + both CAs (Go reads it through SSL_CERT_FILE)
-  #   cert.pem, key.pem   the service's own certificate, when it serves TLS
+  #   cert.pem, key.pem   the service's own certificate, when it serves TLS;
+  #                 a Java service serves it through Spring Boot's server.ssl
   #   truststore    the JVM's cacerts plus the project CA (Java services)
   tls_script_go = <<-EOT
     set -eu
@@ -38,6 +40,8 @@ locals {
     chown -R 65532:65532 /tls
   EOT
 
+  # /tls is opened to all because some images run as a non-root user
+  # (event-alert-service's alerts).
   tls_script_java = <<-EOT
     set -eu
     printf '%s\n' "$CRM_CA_PEM" > /tls/ca.pem
@@ -45,14 +49,24 @@ locals {
     cp "$JAVA_HOME/lib/security/cacerts" /tls/truststore
     chmod 0644 /tls/truststore
     keytool -importcert -noprompt -keystore /tls/truststore -storepass changeit -alias crm-project-ca -file /tls/ca.pem
+    if [ -n "$${TLS_CERT:-}" ]; then
+      printf '%s\n' "$TLS_CERT" > /tls/cert.pem
+      printf '%s\n' "$TLS_KEY" > /tls/key.pem
+    fi
     chmod 0444 /tls/*
+    chmod 0755 /tls
   EOT
 
   tls_enabled = var.tls != null
+  serves_tls  = local.tls_enabled && try(var.tls.serves_tls, false)
 
   tls_env = local.tls_enabled ? (
     var.tls.mode == "java"
-    ? { JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=/tls/truststore -Djavax.net.ssl.trustStorePassword=changeit" }
+    ? merge(
+      { JAVA_TOOL_OPTIONS = "-Djavax.net.ssl.trustStore=/tls/truststore -Djavax.net.ssl.trustStorePassword=changeit" },
+      # Spring Boot's server.ssl.certificate and certificate-private-key.
+      local.serves_tls ? { SERVER_SSL_CERTIFICATE = "/tls/cert.pem", SERVER_SSL_CERTIFICATEPRIVATEKEY = "/tls/key.pem" } : {},
+    )
     : { SSL_CERT_FILE = "/tls/ca-bundle.pem" }
   ) : {}
 
@@ -86,6 +100,31 @@ locals {
     }
   }] : []
 
+  # Applies the database's migrations as its master user, then gives the app
+  # its own login without schema rights (ADR-0028 decision 3). Only this
+  # container gets the master credentials; Flyway's lock keeps several tasks
+  # starting at once from migrating twice.
+  migrate_container = var.migrations == null ? [] : [{
+    name      = "db-migrate"
+    essential = false
+    image     = var.migrations.image
+    environment = [for k, v in merge(var.migrations.environment, {
+      FLYWAY_URL       = var.migrations.url
+      FLYWAY_LOCATIONS = "filesystem:/flyway/sql/${var.migrations.location}"
+    }) : { name = k, value = v }]
+    secrets     = [for k, v in var.migrations.secrets : { name = k, valueFrom = v }]
+    mountPoints = [{ sourceVolume = "tls", containerPath = "/tls", readOnly = true }]
+    dependsOn   = [{ containerName = "tls-init", condition = "SUCCESS" }]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.this.name
+        awslogs-region        = data.aws_region.current.region
+        awslogs-stream-prefix = "db-migrate"
+      }
+    }
+  }]
+
   ports = concat(
     var.port == null ? [] : [{ name = var.port_name, port = var.port, app_protocol = var.app_protocol }],
     var.extra_ports,
@@ -103,7 +142,10 @@ locals {
       environment = [for k, v in merge(var.environment, local.tls_env) : { name = k, value = v }]
       secrets     = [for k, v in var.secrets : { name = k, valueFrom = v }]
       mountPoints = local.tls_enabled ? [{ sourceVolume = "tls", containerPath = "/tls", readOnly = true }] : []
-      dependsOn   = local.tls_enabled ? [{ containerName = "tls-init", condition = "SUCCESS" }] : []
+      dependsOn = concat(
+        local.tls_enabled ? [{ containerName = "tls-init", condition = "SUCCESS" }] : [],
+        var.migrations == null ? [] : [{ containerName = "db-migrate", condition = "SUCCESS" }],
+      )
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -118,7 +160,7 @@ locals {
 
   # Counts and keys below use only values known at plan time: the secret
   # ARNs themselves may not exist until apply.
-  secret_arns = concat(var.secret_arns, local.tls_enabled && try(var.tls.serves_tls, false) ? [var.tls.cert_secret_arn] : [])
+  secret_arns = concat(var.secret_arns, local.serves_tls ? [var.tls.cert_secret_arn] : [])
 }
 
 # ------------------------------------------------------------------ logs
@@ -205,7 +247,7 @@ resource "aws_ecs_task_definition" "this" {
     }
   }
 
-  container_definitions = jsonencode(concat(local.init_container, [local.app_container]))
+  container_definitions = jsonencode(concat(local.init_container, local.migrate_container, [local.app_container]))
   tags                  = var.tags
 }
 
@@ -316,6 +358,21 @@ resource "aws_ecs_service" "this" {
   }
 
   tags = var.tags
+
+  # A task can call another service through Service Connect only if that
+  # service existed when its own service's latest deployment was made, and
+  # scaling up makes no new deployment. A new stack's services are created
+  # together while stopped, so their first deployments can miss each other;
+  # client-service and account-service call each other, so no creation order
+  # fixes that. Starting or stopping the stack changes min_tasks, which
+  # redeploys the service. On a start, that happens at 0 tasks, before the
+  # auto scaling target (which refers to this service) starts any, so every
+  # task gets every name. This relies on stacks being created stopped
+  # (ADR-0042 decision 4).
+  force_new_deployment = true
+  triggers = {
+    min_tasks = tostring(var.min_tasks)
+  }
 
   # Application Auto Scaling owns the task count; the stop model changes its
   # minimum and maximum instead (ADR-0029).

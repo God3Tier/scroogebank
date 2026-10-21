@@ -77,7 +77,7 @@ function ClientList({ onChanged }) {
 
     return (
         <div className="card card-flush">
-            <h2>Manage Client Profiles</h2>
+            <h2>Manage Client Profiles and Accounts</h2>
             {state.loading && <p className="empty-note">Loading…</p>}
             {state.error && <p className="form-error" role="alert">{state.error}</p>}
             {problem && <p className="form-error" role="alert">{problem}</p>}
@@ -92,7 +92,7 @@ function ClientList({ onChanged }) {
                         </span>
 
                         <button onClick={() => navigate(`/agent/client/${client.client_id}/transactions`)}>
-                            View Transactions
+                            View Accounts and Transactions
                         </button>
                         <button onClick={() => navigate(`/clients/${client.client_id}`)}>Edit</button>
                         <button onClick={() => handleDelete(client)}>Delete</button>
@@ -113,7 +113,7 @@ function ClientList({ onChanged }) {
 // "My Clients" from the client list; transaction counts from the business
 // dashboard, which serves them for a window.
 function useAgentTotals(version) {
-    const [totals, setTotals] = useState({ clients: null, transactions: null, pending: null })
+    const [totals, setTotals] = useState({ loading: true, clients: null, transactions: null, pending: null })
 
     useEffect(() => {
         let current = true
@@ -124,6 +124,7 @@ function useAgentTotals(version) {
             if (!current) return
             const tx = dashboard.status === 'fulfilled' ? panelData(dashboard.value.panels?.transactions) : null
             setTotals({
+                loading: false,
                 clients: clients.status === 'fulfilled' ? clients.value.totalElements : null,
                 transactions: tx ? tx.total : null,
                 pending: tx ? (tx.byStatus?.Pending ?? 0) : null,
@@ -175,19 +176,21 @@ function AgentDashboard() {
     return (
         <div className="page">
             <header className="page-header">
-                <h1>Agent Dashboard</h1>
+                <h1>Agent Home</h1>
                 <p className="page-subtitle">Create and manage client profiles</p>
             </header>
 
             <div className="stat-grid">
-                <StatCard label="My Clients" value={formatNumber(totals.clients)} icon="groups" />
+                <StatCard loading={totals.loading} label="My Clients" value={formatNumber(totals.clients)} icon="groups" />
                 <StatCard
+                    loading={totals.loading}
                     label="Transactions"
                     value={formatNumber(totals.transactions)}
                     icon="receipt_long"
                     caption={`Last ${TRANSACTION_DAYS} days`}
                 />
                 <StatCard
+                    loading={totals.loading}
                     label="Pending Transactions"
                     value={formatNumber(totals.pending)}
                     icon="pending_actions"
@@ -209,7 +212,7 @@ function AgentDashboard() {
                     onClick={() => toggleSection('manageProfiles')}
                     aria-expanded={openSection === 'manageProfiles'}
                 >
-                    Manage Client Profiles
+                    Manage Client Profiles and Accounts
                 </button>
             </div>
 

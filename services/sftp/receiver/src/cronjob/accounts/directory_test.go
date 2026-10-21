@@ -126,12 +126,24 @@ func TestLoadConfigRequiresTheServiceCredentials(t *testing.T) {
 	t.Setenv("COGNITO_INGEST_CLIENT_SECRET", "ingest-secret")
 	t.Setenv("COGNITO_INGEST_SCOPE", "")
 
-	cfg, err := LoadConfig()
+	cfg, err := LoadConfig("", "")
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:8083", cfg.BaseURL)
 	assert.Equal(t, "crm-accounts/lookup", cfg.Scope)
 
 	t.Setenv("COGNITO_INGEST_CLIENT_SECRET", "")
-	_, err = LoadConfig()
+	_, err = LoadConfig("", "")
 	assert.ErrorContains(t, err, "COGNITO_INGEST_CLIENT_SECRET")
+}
+
+func TestLoadConfigPrefersCredentialsFromSecretsManager(t *testing.T) {
+	t.Setenv("ACCOUNT_SERVICE_BASE_URL", "http://localhost:8083")
+	t.Setenv("COGNITO_TOKEN_URL", "https://example.auth.ap-southeast-1.amazoncognito.com/oauth2/token")
+	t.Setenv("COGNITO_INGEST_CLIENT_ID", "")
+	t.Setenv("COGNITO_INGEST_CLIENT_SECRET", "")
+
+	cfg, err := LoadConfig("secret-client", "secret-value")
+	require.NoError(t, err)
+	assert.Equal(t, "secret-client", cfg.ClientID)
+	assert.Equal(t, "secret-value", cfg.ClientSecret)
 }

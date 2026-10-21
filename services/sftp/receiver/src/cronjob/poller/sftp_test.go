@@ -95,31 +95,40 @@ func TestConnectSFTPMarksFailuresRetryingCannotFix(t *testing.T) {
 	}{
 		"host key mismatch": {
 			config: func(address, _ string) Config {
-				return Config{Address: address, Username: "reportuser", PrivateKey: keyPath, HostKeySHA256: "SHA256:not-the-server"}
+				return Config{Address: address, Username: "reportuser", PrivateKeyPath: keyPath, HostKeySHA256: "SHA256:not-the-server"}
 			},
 			allowed: publicKey, wantPermanent: true, wantErr: "host key fingerprint mismatch",
 		},
 		"login refused": {
 			config: func(address, fingerprint string) Config {
-				return Config{Address: address, Username: "reportuser", PrivateKey: keyPath, HostKeySHA256: fingerprint}
+				return Config{Address: address, Username: "reportuser", PrivateKeyPath: keyPath, HostKeySHA256: fingerprint}
 			},
 			allowed: otherKey, wantPermanent: true, wantErr: "unable to authenticate",
 		},
 		"private key cannot be parsed": {
 			config: func(address, fingerprint string) Config {
-				return Config{Address: address, Username: "reportuser", PrivateKey: badKeyPath, HostKeySHA256: fingerprint}
+				return Config{Address: address, Username: "reportuser", PrivateKeyPath: badKeyPath, HostKeySHA256: fingerprint}
 			},
 			allowed: publicKey, wantPermanent: true, wantErr: "parse SFTP private key",
 		},
 		"server unreachable": {
 			config: func(_, fingerprint string) Config {
-				return Config{Address: closedAddress, Username: "reportuser", PrivateKey: keyPath, HostKeySHA256: fingerprint}
+				return Config{Address: closedAddress, Username: "reportuser", PrivateKeyPath: keyPath, HostKeySHA256: fingerprint}
 			},
 			allowed: publicKey, wantErr: "connect to SFTP server",
 		},
+		"private key in memory": {
+			// The login succeeds with the key, so the next step fails.
+			config: func(address, fingerprint string) Config {
+				key, err := os.ReadFile(keyPath)
+				require.NoError(t, err)
+				return Config{Address: address, Username: "reportuser", PrivateKey: key, PrivateKeyPath: badKeyPath, HostKeySHA256: fingerprint}
+			},
+			allowed: publicKey, wantErr: "start SFTP subsystem",
+		},
 		"SFTP subsystem refused": {
 			config: func(address, fingerprint string) Config {
-				return Config{Address: address, Username: "reportuser", PrivateKey: keyPath, HostKeySHA256: fingerprint}
+				return Config{Address: address, Username: "reportuser", PrivateKeyPath: keyPath, HostKeySHA256: fingerprint}
 			},
 			allowed: publicKey, wantErr: "start SFTP subsystem",
 		},

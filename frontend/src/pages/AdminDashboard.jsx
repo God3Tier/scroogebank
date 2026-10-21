@@ -239,7 +239,7 @@ function AdminDashboard() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>Admin Dashboard</h1>
+        <h1>Admin Home</h1>
         <p className="page-subtitle">Manage staff accounts and review transactions</p>
       </header>
 

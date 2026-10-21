@@ -24,7 +24,9 @@ info:
 
     **Figures are eventually consistent.** Responses are cached for up to 3
     minutes per task (ADR-0033), so `generatedAt` is authoritative for when the
-    numbers were computed. There is no read-your-writes guarantee.
+    numbers were computed. There is no read-your-writes guarantee. A response
+    with an `upstream_timeout` or `upstream_error` panel is not cached, so
+    asking again retries the upstreams.
 
     **What each figure means** is fixed in ADR-0038. Panel `data` is the
     owning service's answer from `docs/api/dashboard-aggregates.yaml`, except

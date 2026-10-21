@@ -27,6 +27,8 @@ func TestCreateAccount(t *testing.T) {
 		ClientID: clientID, Type: models.AccountTypeSavings, Status: models.AccountStatusActive,
 		InitialDeposit: 100, Currency: "SGD", BranchID: "SG-001",
 	}
+	// The caller comes from the verified token and is passed on unchanged.
+	caller := models.Caller{Subject: "agent-sub"}
 	tests := map[string]struct {
 		body       string
 		serviceErr error
@@ -39,6 +41,7 @@ func TestCreateAccount(t *testing.T) {
 		"maps invalid account":          {body: body, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
 		"maps duplicate account":        {body: body, serviceErr: clienterrors.ErrDuplicateAccount, wantStatus: http.StatusConflict, callSvc: true},
 		"maps missing client":           {body: body, serviceErr: clienterrors.ErrClientNotFound, wantStatus: http.StatusNotFound, callSvc: true},
+		"maps unverified client":        {body: body, serviceErr: clienterrors.ErrClientNotVerified, wantStatus: http.StatusForbidden, callSvc: true},
 		"maps client service outage":    {body: body, serviceErr: clienterrors.ErrClientServiceUnavailable, wantStatus: http.StatusServiceUnavailable, callSvc: true},
 		"maps unexpected service error": {body: body, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
 	}
@@ -53,12 +56,12 @@ func TestCreateAccount(t *testing.T) {
 						got.Type == wantInput.Type && got.Status == wantInput.Status &&
 						got.InitialDeposit == wantInput.InitialDeposit && got.Currency == wantInput.Currency &&
 						got.BranchID == wantInput.BranchID
-				}), "Bearer caller-token").Return(test.serviceErr).Once()
+				}), caller, "Bearer caller-token").Return(test.serviceErr).Once()
 			}
 			req := httptest.NewRequest(http.MethodPost, "/api/accounts", strings.NewReader(test.body))
 			req.Header.Set("Authorization", "Bearer caller-token")
 			res := httptest.NewRecorder()
-			NewAccountController(svc).CreateAccount(res, req)
+			NewAccountController(svc).CreateAccount(res, req, caller)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

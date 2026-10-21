@@ -116,7 +116,7 @@ variable "task_role_policies" {
 }
 
 variable "tls" {
-  description = "Prepare TLS files in /tls before the app starts. mode is go or java. When serves_tls is true, cert_secret_arn holds the service's own certificate (JSON keys cert and key)."
+  description = "Prepare TLS files in /tls before the app starts. mode is go or java. When serves_tls is true, cert_secret_arn holds the service's own certificate (JSON keys cert and key); a java service then serves HTTPS through Spring Boot's server.ssl settings, which this module sets."
   type = object({
     mode            = string
     ca_pem          = string
@@ -128,6 +128,23 @@ variable "tls" {
   validation {
     condition     = var.tls == null || contains(["go", "java"], try(var.tls.mode, ""))
     error_message = "tls.mode must be go or java."
+  }
+}
+
+variable "migrations" {
+  description = "Run Flyway from the db-migrate image in a db-migrate container before the app starts, on every task start (ADR-0028 decision 3). location is the database's directory under /flyway/sql in the image; url is the JDBC URL; secrets (name => valueFrom) holds FLYWAY_USER, FLYWAY_PASSWORD and any FLYWAY_PLACEHOLDERS_*, given to this container only, with their ARNs in secret_arns; environment holds any other Flyway setting for this container. Needs tls, which writes the RDS CA it connects with."
+  type = object({
+    image       = string
+    location    = string
+    url         = string
+    secrets     = map(string)
+    environment = optional(map(string), {})
+  })
+  default = null
+
+  validation {
+    condition     = var.migrations == null || var.tls != null
+    error_message = "migrations needs tls, for /tls/rds-ca.pem."
   }
 }
 
@@ -163,7 +180,7 @@ variable "load_balancer" {
 variable "min_tasks" {
   description = "Minimum tasks; 0 while the stack is stopped."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "max_tasks" {

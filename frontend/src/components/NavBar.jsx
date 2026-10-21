@@ -42,7 +42,7 @@ function NavBar() {
           <>
             <NavLink to="/agent">
               <span className="material-symbols-outlined" aria-hidden="true">support_agent</span>
-              Agent Dashboard
+              Agent Home
             </NavLink>
             <NavLink to="/agent/client-health">
               <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
@@ -54,18 +54,18 @@ function NavBar() {
           <>
             <NavLink to="/admin">
               <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
-              Admin Dashboard
+              Admin Home
             </NavLink>
             <NavLink to="/insights/admin">
               <span className="material-symbols-outlined" aria-hidden="true">insights</span>
-              Admin Insights
+              Admin Dashboard
             </NavLink>
           </>
         )}
         {isAgent && (
           <NavLink to="/insights/agent">
             <span className="material-symbols-outlined" aria-hidden="true">monitoring</span>
-            Agent Insights
+            Agent Dashboard
           </NavLink>
         )}
       </nav>

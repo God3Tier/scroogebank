@@ -111,28 +111,27 @@ variable "root_admin_email" {
 
 # --------------------------------------------------------------- networking
 
-variable "internal_alb_certificate_arn" {
-  description = "ACM certificate for the internal ALB. Needs a domain (open item 2); without one the ALB listens on HTTP inside the VPC."
+variable "domain_name" {
+  description = "A domain registered in Route 53 in this account, such as example.com, whose public hosted zone Route 53 created (ADR-0042 decision 8). Set, the app is served at <legal_entity>[-<environment>].<domain_name> and the internal ALB listens on HTTPS. Null, the app uses the default *.cloudfront.net address and the ALB listens on HTTP inside the VPC."
   type        = string
   default     = null
-}
 
-variable "internal_alb_server_name" {
-  description = "Name on internal_alb_certificate_arn that API Gateway verifies."
-  type        = string
-  default     = null
+  validation {
+    condition     = var.domain_name == null || can(regex("^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,}$", var.domain_name))
+    error_message = "domain_name must be a lower-case domain such as example.com, without a trailing dot."
+  }
 }
 
 # ------------------------------------------------------- transaction import
 
 variable "enable_ingest_lambda" {
-  description = "Deploy the transaction-ingest Lambda (ADR-0024). Leave false until the receiver has a Lambda handler; see docs/feature-plans/infrastructure_plan.md."
+  description = "Deploy the transaction-ingest Lambda (ADR-0024). Needs ingest_lambda_zip and the sftp-server stack's outputs; see docs/runbooks/deploy-aws.md."
   type        = bool
   default     = false
 }
 
 variable "ingest_lambda_zip" {
-  description = "Path to the ingest Lambda's zip (a bootstrap binary for provided.al2023, arm64)."
+  description = "Path to the ingest Lambda's zip, built by `make lambda` in services/sftp: a bootstrap binary for provided.al2023 on arm64, and rds-ca.pem."
   type        = string
   default     = null
 }

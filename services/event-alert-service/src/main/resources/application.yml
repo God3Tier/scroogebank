@@ -17,6 +17,11 @@ spring:
         jwt:
           issuer-uri: ${COGNITO_ISSUER_URI}
 
+# API mode accepts only access tokens issued to this app client (ADR-0005, ADR-0025).
+idp:
+  cognito:
+    app-client-id: ${COGNITO_APP_CLIENT_ID:}
+
 alert:
   mode: ${ALERT_MODE:API}
   audit:

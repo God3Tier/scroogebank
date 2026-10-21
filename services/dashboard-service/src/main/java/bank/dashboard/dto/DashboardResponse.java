@@ -28,4 +28,9 @@ public record DashboardResponse(
     public boolean allPanelsUnavailable() {
         return !panels.isEmpty() && panels.values().stream().allMatch(Panel::isUnavailable);
     }
+
+    /** True when any panel failed in a way the next request may not repeat. */
+    public boolean hasTransientFailure() {
+        return panels.values().stream().anyMatch(panel -> panel.reason() != null && panel.reason().isTransient());
+    }
 }

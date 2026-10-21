@@ -46,6 +46,10 @@ func (r clientRepository) CreateClient(ctx context.Context, client models.Client
 		if deleteErr := r.protector.DeleteKey(ctx, clientID); deleteErr != nil {
 			log.Printf("remove unused data key for client %s: %v", clientID, deleteErr)
 		}
+		if isContactTaken(err) {
+			// Another request took the email or phone after the check above.
+			return errors.ErrDuplicateClient
+		}
 		return err
 	}
 	return nil

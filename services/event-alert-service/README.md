@@ -141,8 +141,18 @@ mvn -B -pl services/event-alert-service -am verify
 Runtime database settings are supplied through `EVENT_ALERT_DB_URL`,
 `EVENT_ALERT_DB_USERNAME`, and `EVENT_ALERT_DB_PASSWORD`. Never commit real
 credentials. Flyway owns the schema and Hibernate validates it at startup.
+Locally and in tests, Spring Boot's Flyway applies `db/migration` on startup.
+In AWS, the task's `db-migrate` container applies the same files before the
+service starts, and the task definition sets `SPRING_FLYWAY_ENABLED=false`:
+the service connects as its own login, `event_alert_service`, which cannot
+change the schema ([ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)
+decision 3). A worker deployed later must set the same.
 
-API mode also requires `COGNITO_ISSUER_URI`. JWT subjects identify actors and
+API mode also requires `COGNITO_ISSUER_URI` and `COGNITO_APP_CLIENT_ID`, and
+refuses to start without the app client ID. It accepts only Cognito access
+tokens issued to that app client (`token_use` `access` and its `client_id`), as
+the other CRM services do (ADR-0005, ADR-0025): an ID token or another app
+client's token gets `401`. JWT subjects identify actors and
 the `cognito:groups` claim supplies the `AGENT` or `ADMIN` role. Agents can post
 decisions and feedback only for assigned alerts; admins are read-only. Mutation
 requests require `Idempotency-Key`, accept `X-Correlation-Id`, and return `503`
@@ -180,7 +190,8 @@ The image runs as a non-root user, and the same image serves both modes. Pass
 the `EVENT_ALERT_DB_*` settings to each; from a container, a database on the
 host is at `host.docker.internal`.
 
-- API: add `COGNITO_ISSUER_URI` and publish port 8080 (`-p 8080:8080`).
+- API: add `COGNITO_ISSUER_URI` and `COGNITO_APP_CLIENT_ID`, and publish port
+  8080 (`-p 8080:8080`).
   `GET /actuator/health` needs no token.
 - Worker: add `ALERT_MODE=WORKER`. The container runs one window and exits with
   the worker's exit code.

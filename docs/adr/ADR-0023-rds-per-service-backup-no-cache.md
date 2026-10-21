@@ -4,7 +4,7 @@
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
-- Feature/branch: `feat/target-architecture`
+- Feature/branch: `feat/target-architecture`; deployment status added on `task/transaction-integration/ingest-lambda`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
 - Superseded by: N/A
@@ -52,6 +52,23 @@ Rough ap-southeast-1 prices, USD/month, for the five core databases (verify with
    - RTO under 12 hours by rebuilding the stack in ap-southeast-2 with Terraform and restoring from the copies.
 4. **No cache tier.** Database indexes, CloudFront caching of static files and in-process caches (Cognito signing keys, reference data, the dashboard's 3-minute cache, [ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md)) are enough at project scale.
 
+## Deployment status
+
+The team's AWS account cannot deploy decision 3's cross-region copy. Its service control policy denies `backup:CreateBackupVault` in ap-southeast-2, so [ADR-0042](ADR-0042-terraform-deployment.md) decision 11 leaves out the Sydney vault, its KMS key, its Vault Lock and the backup plan's copy. The daily AWS Backup plan and RDS point-in-time recovery are deployed, in ap-southeast-1 only.
+
+The policy is set by the organisation that manages the account, not by the team, and it may never be lifted. Until it is:
+
+- recovery from the loss of ap-southeast-1 is not supported, because no copy exists outside it;
+- no Vault Lock protects the recovery points, so they can be deleted or have their retention shortened;
+- the restore rehearsal in Validation can restore only within ap-southeast-1.
+
+Point-in-time recovery and restores within ap-southeast-1 are unaffected.
+
+If the policy is still in place when the deployment is final, Operational Impact applies: this ADR must be superseded with a statement that regional-outage recovery is not supported, unless the decision owner finds another way to keep it. Two options, neither checked against the policy yet:
+
+- copy to a different Region that the policy allows;
+- keep backups in ap-southeast-1 only, with Vault Lock on the primary vault, which keeps protected recovery points but not regional recovery.
+
 ## Rationale
 
 - Option C is the only layout that gives every service its own database server **and** fits the budget.
@@ -69,7 +86,7 @@ Rough ap-southeast-1 prices, USD/month, for the five core databases (verify with
 ### Positive
 
 - Full isolation: a slow query or a bad migration in one database cannot affect another service.
-- Recovery from an AZ failure (automatic failover) and from a regional outage (rebuild from the copies).
+- Recovery from an AZ failure (automatic failover) and from a regional outage (rebuild from the copies). The second is not available while the account refuses the copy ([Deployment status](#deployment-status)).
 
 ### Negative / Trade-offs
 
@@ -84,7 +101,7 @@ Rough ap-southeast-1 prices, USD/month, for the five core databases (verify with
 
 ## Security & Privacy Impact
 
-Separate credentials (RDS-managed master passwords in Secrets Manager) and security groups per database; TLS on every connection; databases in isolated subnets. Backup Vault Lock stops anyone deleting or shortening recovery points, which supports the audit tamper-resistance argument.
+Separate credentials (RDS-managed master passwords in Secrets Manager) and security groups per database; TLS on every connection; databases in isolated subnets. Backup Vault Lock stops anyone deleting or shortening recovery points, which supports the audit tamper-resistance argument. The deployed backups have no Vault Lock while the account refuses the vault ([Deployment status](#deployment-status)).
 
 ## Cost Impact
 
@@ -100,7 +117,7 @@ Seven `db.t4g.micro` instances cost about USD 140â€“155/month single-AZ, or 280â
 ## Validation
 
 - **Failover drill:** reboot with failover on a service's database in the demo week, and record the recovery time.
-- **Restore rehearsal:** rebuild the stack in ap-southeast-2 from the AWS Backup copies within the 12-hour RTO.
+- **Restore rehearsal:** rebuild the stack in ap-southeast-2 from the AWS Backup copies within the 12-hour RTO. While the account refuses the copy, rehearse a restore within ap-southeast-1 instead ([Deployment status](#deployment-status)).
 - A test showing one service's credentials cannot connect to another's database.
 
 ## References
@@ -109,3 +126,8 @@ Seven `db.t4g.micro` instances cost about USD 140â€“155/month single-AZ, or 280â
 - [Why one RDS instance per service](../database/schema.md#why-one-rds-instance-per-service-balancing-cost-and-isolation)
 - [Why AWS Backup is included](../database/schema.md#why-aws-backup-is-included-when-rds-already-has-backups)
 - [`nfr-notes.md`](../architecture/nfr-notes.md): "One RDS instance per service" (agrees) and "Single-region, Multi-AZ only" (differs)
+
+## Revision history
+
+- 2026-10-01 21:50 +08:00: proposed.
+- 2026-10-16: deployment status added while Proposed, as decided by the decision owner, after the account's service control policy refused the ap-southeast-2 vault and noting that the policy may never be lifted. Decision 3 is unchanged as the target.

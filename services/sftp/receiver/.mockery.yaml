@@ -5,6 +5,9 @@ filename: mocks.go
 include-auto-generated: false
 
 packages:
+  receiver/src/cronjob:
+    interfaces:
+      SecretReader: {}
   receiver/src/internal/repository:
     interfaces:
       Transaction: {}

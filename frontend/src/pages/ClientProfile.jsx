@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link, useParams } from 'react-router-dom'
 
+import { createAccount, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { fetchDocument, getClient, listDocuments, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
 
@@ -48,6 +49,40 @@ function updateProblem(error) {
   if (error.status === 409) return 'Another client already has this email or phone number.'
   return 'The changes could not be saved. Try again.'
 }
+
+// An unverified client's new accounts open as Pending; once the client is
+// verified, the agent decides when they become Active (ADR-0050).
+const PENDING_UNTIL_VERIFIED = "This client isn't verified, so new accounts open as Pending."
+
+const NO_ACTIVATION = { accounts: [], busy: false, error: '', message: '' }
+
+// account-service answers a validation failure with a bare "bad input", so
+// a 400 cannot say which field was wrong. A 403 means the account was not
+// Pending for an unverified client.
+function openAccountProblem(error) {
+  if (error.status === 400) return 'Check the account details and try again.'
+  if (error.status === 403) return "This client isn't verified, so the account can only be opened as Pending."
+  if (error.status === 404) return 'This client is no longer available.'
+  if (error.status === 409) return 'This client already has an account of this type.'
+  if (error.status === 503) return 'The client could not be checked just now. Try again shortly.'
+  return 'The account could not be opened. Try again.'
+}
+
+// The types account-service accepts.
+const ACCOUNT_TYPES = [
+  ['CHECKING', 'Checking'],
+  ['SAVINGS', 'Savings'],
+  ['CREDIT', 'Credit'],
+  ['LOAN', 'Loan'],
+  ['INVESTMENT', 'Investment'],
+]
+
+// account-service also accepts INACTIVE and CLOSED, but a new account is
+// not opened dormant or closed.
+const OPENING_STATUSES = [
+  ['ACTIVE', 'Active'],
+  ['PENDING', 'Pending'],
+]
 
 const EDITABLE_FIELDS = [
   ['first_name', 'First Name:', 'text', 50],
@@ -111,6 +146,77 @@ function ProfileEditor({ client, onSaved, onCancel }) {
   )
 }
 
+// Opens a bank account for the client. account-service sets the opening date
+// and makes the client's owner the account's owner. For an unverified client
+// the only status offered is Pending.
+function AccountOpener({ clientId, pendingOnly, onOpened, onCancel }) {
+  const statuses = pendingOnly ? OPENING_STATUSES.filter(([value]) => value === 'PENDING') : OPENING_STATUSES
+  const [form, setForm] = useState({ account_type: '', status: statuses[0][0], initial_deposit: '', currency: 'SGD', branch_id: '' })
+  const [saving, setSaving] = useState({ busy: false, error: '' })
+
+  const setField = (name) => (event) => setForm((current) => ({ ...current, [name]: event.target.value }))
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setSaving({ busy: true, error: '' })
+    let opened
+    try {
+      opened = await createAccount({
+        ...form,
+        client_id: clientId,
+        initial_deposit: Number(form.initial_deposit),
+        currency: form.currency.toUpperCase(),
+        branch_id: form.branch_id.trim(),
+      })
+    } catch (error) {
+      setSaving({ busy: false, error: openAccountProblem(error) })
+      return
+    }
+    setSaving({ busy: false, error: '' })
+    onOpened(form.account_type, opened.account_id)
+  }
+
+  return (
+    <form className="form-grid" onSubmit={handleSubmit}>
+      <label>Account Type:
+        <select required value={form.account_type} onChange={setField('account_type')}>
+          <option value="">Select Account Type</option>
+          {ACCOUNT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      <label>Status:
+        <select required value={form.status} onChange={setField('status')}>
+          {statuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </label>
+      {pendingOnly && <p className="section-note form-grid__full">{PENDING_UNTIL_VERIFIED} Verify the client to make them Active.</p>}
+      <label>Initial Deposit:
+        <input type="number" required min="0" step="0.01" value={form.initial_deposit} onChange={setField('initial_deposit')} />
+      </label>
+      <label>Currency:
+        <input
+          type="text"
+          required
+          minLength={3}
+          maxLength={3}
+          pattern="[A-Za-z]{3}"
+          title="A 3-letter ISO currency code, such as SGD"
+          value={form.currency}
+          onChange={setField('currency')}
+        />
+      </label>
+      <label>Branch ID:
+        <input type="text" required maxLength={50} value={form.branch_id} onChange={setField('branch_id')} />
+      </label>
+      {saving.error && <p className="form-error form-grid__full" role="alert">{saving.error}</p>}
+      <div className="form-actions">
+        <button type="submit" disabled={saving.busy}>{saving.busy ? 'Opening…' : 'Open account'}</button>
+        <button type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  )
+}
+
 function ClientProfile() {
   const { clientId } = useParams()
   // A new client starts from a fresh page, with nothing checked.
@@ -120,7 +226,8 @@ function ClientProfile() {
 function ClientProfileView({ clientId }) {
   const auth = useAuth()
   const ownSubject = auth.user?.profile?.sub
-  const homePath = inAnyGroup(auth.user, [ADMIN]) ? '/admin' : '/agent'
+  const admin = inAnyGroup(auth.user, [ADMIN])
+  const homePath = admin ? '/admin' : '/agent'
   const [state, setState] = useState({ status: 'loading', client: null, documents: [], error: null })
   const [file, setFile] = useState(null)
   const [upload, setUpload] = useState({ saving: false, error: '', message: '' })
@@ -132,6 +239,11 @@ function ClientProfileView({ clientId }) {
   const [previewError, setPreviewError] = useState('')
   const [editing, setEditing] = useState(false)
   const [editMessage, setEditMessage] = useState('')
+  const [openingAccount, setOpeningAccount] = useState(false)
+  const [accountMessage, setAccountMessage] = useState('')
+  // After a verification: the client's Pending accounts, which the agent may
+  // make Active (ADR-0050).
+  const [activation, setActivation] = useState(NO_ACTIVATION)
 
   useEffect(() => {
     let active = true
@@ -172,6 +284,12 @@ function ClientProfileView({ clientId }) {
     } catch {
       setEditMessage('The changes were saved, but the page could not be refreshed. Reload the page.')
     }
+  }
+
+  function handleAccountOpened(accountType, accountId) {
+    const typeLabel = Object.fromEntries(ACCOUNT_TYPES)[accountType]
+    setOpeningAccount(false)
+    setAccountMessage(`${typeLabel} account opened. Account ID: ${accountId}`)
   }
 
   async function handleUpload(event) {
@@ -235,7 +353,41 @@ function ClientProfileView({ clientId }) {
       await reload()
     } catch {
       setVerification({ saving: false, error: 'The client was verified, but the page could not be refreshed. Reload the page.' })
+      return
     }
+    // Agents manage client accounts; admins do not (requirements Q&A UM18).
+    if (!admin) await offerActivation()
+  }
+
+  // Asks the agent whether the newly verified client's Pending accounts
+  // should become Active.
+  async function offerActivation() {
+    let accounts
+    try {
+      accounts = await listAccounts(clientId)
+    } catch {
+      setActivation({ ...NO_ACTIVATION, error: "The client's Pending accounts could not be checked." })
+      return
+    }
+    const pending = accounts.filter((account) => String(account.status).toUpperCase() === 'PENDING')
+    if (pending.length > 0) setActivation({ ...NO_ACTIVATION, accounts: pending })
+  }
+
+  async function handleActivate() {
+    setActivation((current) => ({ ...current, busy: true, error: '' }))
+    const results = await Promise.allSettled(activation.accounts.map((account) => updateAccountStatus(account.id, 'ACTIVE')))
+    const failed = activation.accounts.filter((_, i) => results[i].status === 'rejected')
+    const changed = activation.accounts.length - failed.length
+    if (failed.length === 0) {
+      setActivation({ ...NO_ACTIVATION, message: `${changed} ${changed === 1 ? 'account is' : 'accounts are'} now Active.` })
+      return
+    }
+    // Only the ones that failed are offered again.
+    setActivation({
+      ...NO_ACTIVATION,
+      accounts: failed,
+      error: `${failed.length} ${failed.length === 1 ? 'account' : 'accounts'} could not be made Active. Try again.`,
+    })
   }
 
   if (state.status === 'loading') {
@@ -260,6 +412,7 @@ function ClientProfileView({ clientId }) {
 
   const { client, documents } = state
   const verified = isVerified(client)
+  const accountsPath = `/agent/client/${encodeURIComponent(clientId)}/transactions`
   const withoutDocument = verified && client.verified_with_documents === false
   const verifyWithDocuments = checked.size > 0
   const evidenceCount = documents.filter((doc) => doc.verification_evidence).length
@@ -287,7 +440,7 @@ function ClientProfileView({ clientId }) {
         <div className="client-header__text">
           <h1>{client.first_name} {client.last_name}</h1>
           <p>{client.email}</p>
-          <p><Link to={`/agent/client/${encodeURIComponent(clientId)}/transactions`}>View transactions</Link></p>
+          <p><Link to={accountsPath}>Manage accounts and transactions</Link></p>
         </div>
         <div className="client-header__badges">
           <span className={`status-badge ${verified ? 'status-badge--verified' : 'status-badge--attention'}`}>
@@ -322,6 +475,24 @@ function ClientProfileView({ clientId }) {
               </div>
             ))}
           </dl>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="accounts-title">
+        <div className="document-preview__header">
+          <h2 id="accounts-title">Accounts</h2>
+          {!openingAccount && (
+            <button type="button" onClick={() => { setAccountMessage(''); setOpeningAccount(true) }}>Open account</button>
+          )}
+        </div>
+        {accountMessage && <p className="success-message" role="status">{accountMessage}</p>}
+        {openingAccount ? (
+          <AccountOpener clientId={clientId} pendingOnly={!verified} onOpened={handleAccountOpened} onCancel={() => setOpeningAccount(false)} />
+        ) : (
+          <p className="section-note">
+            Open a bank account for this client.{!verified && ` ${PENDING_UNTIL_VERIFIED}`} To see the accounts they
+            hold and change their status, use <Link to={accountsPath}>Manage accounts and transactions</Link>.
+          </p>
         )}
       </section>
 
@@ -417,7 +588,7 @@ function ClientProfileView({ clientId }) {
 
       <section className="card verify-panel" aria-labelledby="verify-title">
         <h2 id="verify-title">Verification</h2>
-        {verified ? (
+        {verified && (
           <div className="verify-done" role="status">
             <p>
               <span className="material-symbols-outlined" aria-hidden="true">verified_user</span>
@@ -433,7 +604,28 @@ function ClientProfileView({ clientId }) {
               <p className="section-note">Documents uploaded since are not part of this verification.</p>
             )}
           </div>
-        ) : (
+        )}
+        {verified && activation.accounts.length > 0 && (
+          <div className="activation-prompt">
+            <p>
+              This client has {activation.accounts.length} Pending {activation.accounts.length === 1 ? 'account' : 'accounts'}.
+              Make {activation.accounts.length === 1 ? 'it' : 'them'} Active?
+            </p>
+            <div className="verify-actions">
+              <button type="button" onClick={handleActivate} disabled={activation.busy}>
+                {activation.busy ? 'Making Active…' : 'Make Active'}
+              </button>
+              <button type="button" onClick={() => setActivation(NO_ACTIVATION)} disabled={activation.busy}>Keep Pending</button>
+            </div>
+          </div>
+        )}
+        {activation.error && (
+          <p className="form-error" role="alert">
+            {activation.error} Account statuses can also be changed on <Link to={accountsPath}>Manage accounts and transactions</Link>.
+          </p>
+        )}
+        {activation.message && <p className="success-message" role="status">{activation.message}</p>}
+        {!verified && (
           <form className="verify-form" onSubmit={handleVerify}>
             <p>
               Verify the client once you have checked their identity against the profile. The verification

@@ -64,7 +64,7 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 - **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through an outbox and SQS; audit payloads omit names, email addresses, passwords, and request bodies.
 - **Resiliency**: audit events wait in the outbox while SQS or the Auditor is unavailable, and are sent when it recovers; user requests never wait on either.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.
-- **Activity feed** ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)): `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). The caller's own access token is forwarded in the gRPC metadata, and the auditor checks it and applies the agent rule itself. The auditor lists only changes: creating, updating, deleting or disabling a record, changing a role and resetting a password, not reads, sign-outs, failed attempts or system events. Pages are keyed by sequence number, not offset, so new entries do not shift pages not read yet. Each call has a 2-second deadline and is retried once on `UNAVAILABLE`; a circuit breaker (Resilience4j) opens after half of the last 10 calls failed and fails fast for 30 seconds. An auditor failure returns `503`. Actor names are looked up here in one query per page. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
+- **Activity feed** ([ADR-0021](../../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)): `GET /api/activities` does not store audit data. It reads the auditor's log over internal gRPC (`ListActivities`, stubs generated at build time from the shared contract `proto/audit/v1/audit.proto`). The caller's own access token is forwarded in the gRPC metadata, and the auditor checks it and applies the agent rule itself. The auditor lists only changes: creating, updating, deleting or disabling a record, changing a role and resetting a password, not reads, sign-outs, failed attempts or system events. Pages are keyed by sequence number, not offset, so new entries do not shift pages not read yet. Each call has a 2-second deadline and is retried once on `UNAVAILABLE`. The channel starts connecting when the service starts, without waiting for it: connecting a new task on Fargate took most of the first call's 2 seconds. A circuit breaker (Resilience4j) opens after half of the last 10 calls failed and fails fast for 30 seconds. An auditor failure returns `503`. Actor names are looked up here in one query per page. See "Resiliency scope" in [nfr-notes.md](../../docs/architecture/nfr-notes.md).
 
 ## Configuration
 
@@ -72,7 +72,7 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 |---|---|---|
 | `DB_HOST` / `DB_PORT` | This service's own RDS instance | Postgres connection |
 | `USER_DB_NAME` | `users_db` | Database name |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | Terraform / Secrets Manager | DB credentials. In AWS, the service's own login `user_service`, which cannot change the schema |
 | `AUDITOR_GRPC_TARGET` | The auditor's Service Connect endpoint, e.g. `auditor:50051` | Activity feed reads |
 | `AUDITOR_GRPC_TLS_CA` | ECS task definition / local environment | PEM file of the CA that signed the auditor's certificate, from the project CA (ADR-0021). Unset means plaintext, for local development only |
 | `OIDC_ISSUER_URI` | `https://cognito-idp.<region>.amazonaws.com/<pool-id>` | Resource-server JWT validation |
@@ -84,6 +84,8 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 | `ROOT_ADMIN_EMAIL` | `var.root_admin_email` | Seeded root admin's login |
 
 None of these have defaults — a missing variable fails the container at startup rather than falling back to something wrong. In AWS, all are set by the task definition in `infrastructure/terraform/stacks/crm/services.tf` ([ADR-0042](../../docs/adr/ADR-0042-terraform-deployment.md)).
+
+**Migrations.** Locally and in tests, Spring Boot's Flyway applies `src/main/resources/db/migration` on startup. In AWS, the task's `db-migrate` container applies the same files before the service starts, and the task definition sets `SPRING_FLYWAY_ENABLED=false`, because `user_service` cannot change the schema ([ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md) decision 3, [Schema migrations](../../docs/database/migrations.md)). Never edit a migration once it has been applied; add the next version.
 
 This service's task role is the only one granted Cognito admin permissions (`cognito-idp:AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminUpdateUserAttributes`, `AdminResetUserPassword`), scoped to the single user pool. It also needs `sqs:SendMessage` scoped to the Auditor's `audit-insert` queue when audit publishing is enabled. AWS credentials use the standard SDK provider chain; no credentials are configured in application properties.
 

@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -15,6 +15,8 @@ The spec says audit logs are accessible only to administrators, while the UI moc
 ## 2. Domain name
 
 Needed for the ACM certificate on the internal ALB, at about USD 13/year plus USD 0.50/month for the hosted zone.
+
+**Resolved (2026-10-20)** by [ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8 (Proposed). The domain is registered by hand in Route 53, outside Terraform ([runbook](../runbooks/deploy-aws.md#register-a-domain-once-per-account)). With `domain_name` set, the CRM stack serves the app at `sg.<domain>` and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's hosted zone. The project account's domain is `itsag3t6.com`, already registered there until July 2027; its hosted zone costs USD 0.50/month. A new `.com` would cost about USD 15/year, which AWS credits do not cover.
 
 ## 3. Admin-wide activity view in user-service
 
@@ -44,6 +46,8 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 ## 8. Migrations on startup or as a task
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
+
+**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed), which chose neither. In AWS, the task of each service with a database runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. The container also gives the service its own login without schema rights. user-service and event-alert-service still migrate on startup locally and in their tests.
 
 ## 9. Client ID validation at import
 
@@ -123,7 +127,7 @@ Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-d
 
 ## 23. Admin writes to client data
 
-The code lets admins update, delete and verify any client, and upload its documents: `RequireClientOwner` lets every admin through, as [ADR-0005](../adr/ADR-0005-cognito-security-across-features-1-and-2.md) decision 4, [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) and the [Feature 2 plan](../feature-plans/feature-2_plan.md) describe. The requirements Q&A says admins only read client data: "Admin have read only access to client info" (UM04); "Admin dont have write access on client related activities. Admin can't create new client account, update profile etc." (UM18); "Only Agent hand all client related activities. Admin has read access of it." (CPM31). The Feature 2 owner must decide whether to make admins read-only in client-service and account-service, and record it in an ADR that amends ADR-0005 and ADR-0041.
+The code lets admins update, delete and verify any client, and upload its documents: `RequireClientOwner` lets every admin through, as [ADR-0005](../adr/ADR-0005-cognito-security-across-features-1-and-2.md) decision 4, [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) and the [Feature 2 plan](../feature-plans/feature-2_plan.md) describe. The requirements Q&A says admins only read client data: "Admin have read only access to client info" (UM04); "Admin dont have write access on client related activities. Admin can't create new client account, update profile etc." (UM18); "Only Agent hand all client related activities. Admin has read access of it." (CPM31). The Feature 2 owner must decide whether to make admins read-only in client-service and account-service, and record it in an ADR that amends ADR-0005 and ADR-0041. The account status change added by [ADR-0050](../adr/ADR-0050-accounts-pending-until-client-verified.md) already follows UM18: only agents may make it.
 
 ## 24. Client reassignment
 
@@ -132,3 +136,7 @@ When an agent is disabled, deleted or leaves, an admin assigns their clients to 
 ## 25. Business dashboard panels not served yet
 
 The business dashboard mockup showed panels that dashboard-service does not serve: most active clients by transaction value, ingestion freshness (when transactions were last imported), clients without an account, rejected verifications, and failed or long-pending transactions with their clients. The frontend hides them until they exist. Each needs a contract change to [`docs/api/dashboard-api.yaml`](../api/dashboard-api.yaml) and, where it names clients, a decision on how the transaction rows are joined to client names without moving personal data out of client-service ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md)). The business dashboard owner must decide which are worth building.
+
+## 26. Root user without MFA
+
+The account's root user has no MFA, and the team cannot sign in as root to add one: the account is a member of an AWS Organization the team does not control ([ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md)). Root is the one route to full control that the team's MFA-protected role does not cover. The Organization's administrators must decide between adding MFA to the root user and centrally removing member accounts' root credentials, so that no one can sign in as root.

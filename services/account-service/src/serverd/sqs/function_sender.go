@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"account-service/src/internal/audit"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -32,9 +34,13 @@ type Event struct {
 }
 
 // EndpointPayload records one completed API call without copying user PII from
-// the request or response bodies into the audit queue.
+// the request or response bodies into the audit queue. When the handler
+// recorded what it changed (an account's status, ADR-0050), the attribute and
+// its values before and after are included too.
 type EndpointPayload struct {
 	AttributeName string `json:"attribute_name"`
+	BeforeValue   string `json:"before_value,omitempty"`
+	AfterValue    string `json:"after_value,omitempty"`
 	AgentID       string `json:"agent_id"`
 	ClientID      string `json:"client_id,omitempty"`
 	Endpoint      string `json:"endpoint"`
@@ -78,6 +84,10 @@ func AuditLogger(outbox Outbox) gin.HandlerFunc {
 			}
 		}
 
+		// The handler fills this in when it changes a recorded attribute.
+		ctx, change := audit.WithChange(c.Request.Context())
+		c.Request = c.Request.WithContext(ctx)
+
 		c.Next()
 
 		actorID, ok := c.Get("agent_id")
@@ -97,8 +107,14 @@ func AuditLogger(outbox Outbox) gin.HandlerFunc {
 			log.Printf("audit event not sent: generate event ID: %v", err)
 			return
 		}
+		attribute := "endpoint_call"
+		if change.Attribute != "" {
+			attribute = change.Attribute
+		}
 		payload, err := json.Marshal(EndpointPayload{
-			AttributeName: "endpoint_call",
+			AttributeName: attribute,
+			BeforeValue:   change.Before,
+			AfterValue:    change.After,
 			AgentID:       actor,
 			ClientID:      clientID,
 			Endpoint:      c.FullPath(),

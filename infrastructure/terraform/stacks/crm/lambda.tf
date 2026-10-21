@@ -127,8 +127,9 @@ resource "aws_iam_role_policy" "cognito_triggers_replay" {
 
 # -------------------------------------------------------- transaction ingest
 # ADR-0024: a scheduled, VPC-attached Lambda in Go on provided.al2023 with
-# reserved concurrency 1. Off until the receiver has a Lambda handler that
-# reads its secrets from Secrets Manager at start (infrastructure plan INF-04).
+# reserved concurrency 1. The zip is the receiver's poller, built by
+# `make lambda` in services/sftp (infrastructure plan INF-04); it reads its
+# secrets from Secrets Manager at start.
 
 # The CRM's SSH key for the bank's SFTP server. The public half goes to the
 # sftp-server stack; the private half stays here.
@@ -182,7 +183,7 @@ data "aws_iam_policy_document" "ingest" {
     sid     = "ReadSecretsAtStart"
     actions = ["secretsmanager:GetSecretValue"]
     resources = [
-      local.db_master_secret["transactions"],
+      local.app_login_secret["transaction_ingest"],
       aws_secretsmanager_secret.sftp_client_key.arn,
       aws_secretsmanager_secret.ingest_client.arn,
     ]
@@ -222,13 +223,14 @@ resource "aws_lambda_function" "ingest" {
       DB_PORT                   = "5432"
       DB_NAME                   = module.db["transactions"].db_name
       DB_SSLMODE                = "verify-full"
-      DB_SECRET_ARN             = local.db_master_secret["transactions"]
+      DB_SSLROOTCERT            = "/var/task/rds-ca.pem" # packaged in the zip
+      DB_SECRET_ARN             = local.app_login_secret["transaction_ingest"]
       SFTP_ADDR                 = coalesce(var.sftp_server_address, "unset:22")
       SFTP_USER                 = "reportuser"
       SFTP_REMOTE_DIR           = "/reports"
       SFTP_HOST_KEY_FINGERPRINT = coalesce(var.sftp_host_key_fingerprint, "unset")
       SFTP_PRIVATE_KEY_SECRET   = aws_secretsmanager_secret.sftp_client_key.arn
-      ACCOUNT_SERVICE_BASE_URL  = "${local.alb_scheme}://${aws_lb.internal.dns_name}"
+      ACCOUNT_SERVICE_BASE_URL  = local.alb_base_url
       COGNITO_TOKEN_URL         = "https://${aws_cognito_user_pool_domain.this.domain}.auth.${local.region}.amazoncognito.com/oauth2/token"
       COGNITO_INGEST_SECRET     = aws_secretsmanager_secret.ingest_client.arn
       COGNITO_INGEST_SCOPE      = "crm-accounts/lookup"
@@ -236,7 +238,12 @@ resource "aws_lambda_function" "ingest" {
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.ingest, aws_iam_role_policy.ingest, aws_iam_role_policy_attachment.ingest_vpc]
+  depends_on = [
+    aws_cloudwatch_log_group.ingest,
+    aws_iam_role_policy.ingest,
+    aws_iam_role_policy_attachment.ingest_vpc,
+    aws_secretsmanager_secret_version.app_login,
+  ]
 
   lifecycle {
     precondition {
@@ -244,4 +251,15 @@ resource "aws_lambda_function" "ingest" {
       error_message = "enable_ingest_lambda needs ingest_lambda_zip, sftp_server_address and sftp_host_key_fingerprint."
     }
   }
+}
+
+# EventBridge Scheduler invokes the function asynchronously. Lambda would retry
+# a failed run twice, which would count toward the circuit breaker's failed
+# runs, and would hold a run throttled behind a long one for hours. The next
+# scheduled run picks the files up instead.
+resource "aws_lambda_function_event_invoke_config" "ingest" {
+  count                        = var.enable_ingest_lambda ? 1 : 0
+  function_name                = aws_lambda_function.ingest[0].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 300
 }

@@ -68,6 +68,9 @@ func (c clientController) UpdateClientInformation(w http.ResponseWriter, r *http
 		case errors.Is(err, clientErr.ErrClientNotFound):
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
+		case errors.Is(err, clientErr.ErrDuplicateClient):
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

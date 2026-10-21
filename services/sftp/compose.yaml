@@ -12,7 +12,6 @@ services:
       - "${POSTGRES_PORT:-5437}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-transactions.sql:ro
     networks:
       - backend
     healthcheck:
@@ -22,6 +21,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # Applies receiver/data/ to db with Flyway, from the image transaction-service's
+  # db-migrate container runs in AWS (docs/database/migrations.md), and creates
+  # transaction-service's and the poller's logins. It runs and exits before
+  # receiver-api starts; make db-up and the poller targets run it too. The
+  # passwords are for this local database only: receiver-api and the poller
+  # connect as POSTGRES_USER.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-transactions}
+      FLYWAY_USER: ${POSTGRES_USER:-crm}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/transactions
+      FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD: transaction_service
+      FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD: transaction_ingest
+    networks:
+      - backend
+
+  # Loads init.sql directly: it starts empty every time, so there is no
+  # applied migration for Flyway to check.
   test-db:
     image: postgres:17-alpine
     profiles: ["test"]
@@ -46,6 +71,7 @@ services:
     build:
       context: ./receiver
       dockerfile: Dockerfile
+      target: tools
     working_dir: /workspace
     volumes:
       - ./receiver:/workspace
@@ -108,7 +134,9 @@ services:
         max-file: "3"
 
   receiver-api:
-    build: ./receiver
+    build:
+      context: ./receiver
+      target: tools
     working_dir: /workspace
     volumes:
       - ./receiver:/workspace
@@ -125,8 +153,8 @@ services:
     networks:
       - backend
     depends_on:
-      db:
-        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     logging:
       driver: json-file

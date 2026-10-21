@@ -5,13 +5,21 @@ import bank.dashboard.dto.Panel;
 import bank.dashboard.dto.PanelReason;
 import bank.dashboard.dto.PanelStatus;
 import bank.dashboard.exception.UpstreamUnavailableException;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -24,6 +32,8 @@ class PanelAssemblerTest {
                     new DashboardProperties.Window(30, 365),
                     new DashboardProperties.Cache(60, 1000),
                     new DashboardProperties.Upstream(200, 500, "", "", "")));
+
+    private final List<ListAppender<ILoggingEvent>> appenders = new ArrayList<>();
 
     @Test
     void oneFailingUpstreamCostsOnePanelNotThePage() {
@@ -63,6 +73,42 @@ class PanelAssemblerTest {
         assertThat(panels.get("notBuilt").reason()).isEqualTo(PanelReason.UPSTREAM_NOT_DEPLOYED);
         assertThat(panels.get("broken").reason()).isEqualTo(PanelReason.UPSTREAM_ERROR);
         assertThat(panels.get("refused").reason()).isEqualTo(PanelReason.UPSTREAM_FORBIDDEN);
+    }
+
+    @Test
+    void logsAnUpstreamErrorAsAWarningWithItsCause() {
+        // Its message is the only record of why the panel failed: the
+        // response carries just the reason.
+        List<ILoggingEvent> logged = captureLogs();
+        Map<String, Supplier<Object>> suppliers = new LinkedHashMap<>();
+        suppliers.put("accounts", () -> {
+            throw new UpstreamUnavailableException(PanelReason.UPSTREAM_ERROR, "account-service returned 500");
+        });
+
+        assembler.assemble(suppliers);
+
+        assertThat(logged)
+                .filteredOn(event -> event.getLevel() == Level.WARN)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .containsExactly("Panel 'accounts' unavailable: account-service returned 500");
+    }
+
+    @Test
+    void doesNotWarnAboutExpectedUnavailability() {
+        // Not wired up, refused or mixed currencies is the dashboard working
+        // as designed, and would drown the warnings that matter.
+        List<ILoggingEvent> logged = captureLogs();
+        Map<String, Supplier<Object>> suppliers = new LinkedHashMap<>();
+        for (PanelReason reason : List.of(PanelReason.UPSTREAM_NOT_DEPLOYED, PanelReason.UPSTREAM_FORBIDDEN,
+                PanelReason.MIXED_CURRENCIES, PanelReason.UNSUPPORTED_WINDOW)) {
+            suppliers.put(reason.wireValue(), () -> {
+                throw new UpstreamUnavailableException(reason, "expected");
+            });
+        }
+
+        assembler.assemble(suppliers);
+
+        assertThat(logged).noneMatch(event -> event.getLevel().isGreaterOrEqual(Level.WARN));
     }
 
     @Test
@@ -119,6 +165,21 @@ class PanelAssemblerTest {
 
         assertThat(panels.values()).allSatisfy(p -> assertThat(p.status()).isEqualTo(PanelStatus.OK));
         assertThat(elapsedMs).isLessThan(450);
+    }
+
+    private List<ILoggingEvent> captureLogs() {
+        Logger logger = (Logger) LoggerFactory.getLogger(PanelAssembler.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        appenders.add(appender);
+        return appender.list;
+    }
+
+    @AfterEach
+    void detachAppenders() {
+        Logger logger = (Logger) LoggerFactory.getLogger(PanelAssembler.class);
+        appenders.forEach(logger::detachAppender);
     }
 
     @Test
