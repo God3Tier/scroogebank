@@ -16,6 +16,10 @@
   in `AgentDrafts.jsx` and the tests. When sends then failed with
   `ses_error`, Claude Code made `SesMailChannel` set `FromEmailAddress` and
   log SES's error code, status and message with every address masked.
+  The log then showed `AccessDeniedException` on a recipient's identity
+  (the account is in the SES sandbox), and the owner chose to allow
+  `identity/*` with the `ses:FromAddress` condition kept (ADR-0053
+  decision 9 and ADR-0055 decision 5 amended).
 - Safeguards: synthetic names only in tests. Stored drafts still hold no
   names, and the model's input is unchanged (ADR-0054 decision 2).
 - Human verification required: redeploy engagement-service and the

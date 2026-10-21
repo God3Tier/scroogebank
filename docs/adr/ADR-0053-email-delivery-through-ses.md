@@ -115,7 +115,7 @@ Production access is requested from AWS, which gives an initial response within 
    - The mailbox simulator is used to test bounces and complaints.
    - Production access is requested only if plan open question Q8 decides it is needed.
 9. **IAM.**
-   - The task role may call `ses:SendRawEmail` and `ses:SendEmail` only on the sending identity and the configuration set, with the `ses:FromAddress` condition set to the `no-reply` address.
+   - The task role may call `ses:SendRawEmail` and `ses:SendEmail` only on the sending identity and the configuration set, with the `ses:FromAddress` condition set to the `no-reply` address. (Amended 2026-10-21: on every identity in the account and region instead of only the sending identity, still with the `ses:FromAddress` condition; see the revision history.)
    - It may call `cognito-idp:ListUsers` only on the CRM user pool.
 
 ## Rationale
@@ -192,3 +192,4 @@ Prices to be checked on the SES pricing page.
 - 2026-10-21: accepted by the decision owner.
 - 2026-10-21: decisions 1, 3 and 9 superseded in part by [ADR-0055](ADR-0055-sender-address-without-a-domain.md): without the domain's hosted zone, mail comes from one verified address. This record is otherwise unchanged.
 - 2026-10-21: decision 4 amended after the first deployment. `ListUsers` fails with `InvalidParameterException` when the user lacks a requested attribute, and user-service never sets `name`, so every lookup failed. The service now asks for `email`, `given_name` and `family_name`, which user-service sets on every user. It asks for less than before; the decision is otherwise unchanged.
+- 2026-10-21: decision 9 amended after the first deployment. In the SES sandbox every recipient is a verified identity, and SES also checked the task role against the recipient's identity: sends to clients failed with `AccessDeniedException` on `identity/<recipient>`. The role may now send on every identity in the account and region (`identity/*`) and through the configuration set. The `ses:FromAddress` condition is unchanged, so the role still sends only from its own address; recipients are limited by the service, which mails only the agent and that agent's own clients.

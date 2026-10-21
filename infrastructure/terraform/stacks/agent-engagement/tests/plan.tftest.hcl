@@ -165,11 +165,11 @@ run "prod" {
     condition = alltrue([
       for s in data.aws_iam_policy_document.engagement.statement :
       s.sid != "SendEngagementMail" || (
-        toset(s.resources) == toset(["arn:aws:ses:ap-southeast-1:123456789012:identity/mail.sg.itsag3t6.com", "arn:aws:ses:ap-southeast-1:123456789012:configuration-set/crm-sg-prod-engagement"]) &&
+        toset(s.resources) == toset(["arn:aws:ses:ap-southeast-1:123456789012:identity/*", "arn:aws:ses:ap-southeast-1:123456789012:configuration-set/crm-sg-prod-engagement"]) &&
         anytrue([for c in s.condition : c.variable == "ses:FromAddress" && toset(c.values) == toset(["no-reply@mail.sg.itsag3t6.com"])])
       )
     ])
-    error_message = "SES sends only as the identity, through the configuration set, from the no-reply address (ADR-0053 decision 9)."
+    error_message = "SES sends to any identity in this account and region (sandbox recipients are identities), through the configuration set, only from the no-reply address (ADR-0053 decision 9)."
   }
   assert {
     condition     = !contains(flatten([for s in data.aws_iam_policy_document.engagement.statement : tolist(s.resources)]), "*")
@@ -406,11 +406,11 @@ run "sender_address_without_a_domain" {
     condition = alltrue([
       for s in data.aws_iam_policy_document.engagement.statement :
       s.sid != "SendEngagementMail" || (
-        toset(s.resources) == toset(["arn:aws:ses:ap-southeast-1:123456789012:identity/synthetic.sender@example.test", "arn:aws:ses:ap-southeast-1:123456789012:configuration-set/crm-sg-prod-engagement"]) &&
+        toset(s.resources) == toset(["arn:aws:ses:ap-southeast-1:123456789012:identity/*", "arn:aws:ses:ap-southeast-1:123456789012:configuration-set/crm-sg-prod-engagement"]) &&
         anytrue([for c in s.condition : c.variable == "ses:FromAddress" && toset(c.values) == toset(["synthetic.sender@example.test"])])
       )
     ])
-    error_message = "SES sends only as the sender address identity, through the configuration set, from that address."
+    error_message = "SES sends through the configuration set only from the sender address."
   }
 }
 

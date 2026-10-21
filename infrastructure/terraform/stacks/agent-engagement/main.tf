@@ -253,12 +253,15 @@ data "aws_iam_policy_document" "engagement" {
     resources = [local.crm.audit_queue_arn]
   }
 
-  # Only as the sending identity, through the configuration set, from the
-  # no-reply address or sender_address (ADR-0053 decision 9, ADR-0055).
+  # Only from the no-reply address or sender_address, through the
+  # configuration set (ADR-0053 decision 9, ADR-0055). In the SES sandbox every
+  # recipient is a verified identity that SES also checks the role against, so
+  # the resource is every identity in this account and region; the
+  # ses:FromAddress condition is what keeps the role to its own sender.
   statement {
     sid       = "SendEngagementMail"
     actions   = ["ses:SendEmail", "ses:SendRawEmail"]
-    resources = [data.aws_sesv2_email_identity.mail.arn, data.aws_sesv2_configuration_set.mail.arn]
+    resources = ["arn:${local.partition}:ses:${var.aws_region}:${local.account}:identity/*", data.aws_sesv2_configuration_set.mail.arn]
     condition {
       test     = "StringEquals"
       variable = "ses:FromAddress"

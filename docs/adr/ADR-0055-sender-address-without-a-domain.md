@@ -61,7 +61,7 @@ SES can also verify a single email address as an identity. It sends a verificati
    - Invites and reminders come from `CRM Calendar <sender_address>`.
    - Client emails come from `"<agent name> via Scrooge Bank" <sender_address>`, with `Reply-To` set to the agent, as before.
    - The domain part of `sender_address` becomes `ENGAGEMENT_MAIL_DOMAIN`, the calendar `UID` suffix ([ADR-0052](ADR-0052-calendar-invites-by-email.md)). UIDs stay unique because they start with the event's UUID.
-5. **IAM** (replaces ADR-0053 decision 9 in this mode). The task role may send only as the `sender_address` identity, through the configuration set, with the `ses:FromAddress` condition set to `sender_address`.
+5. **IAM** (replaces ADR-0053 decision 9 in this mode). The task role may send only as the `sender_address` identity, through the configuration set, with the `ses:FromAddress` condition set to `sender_address`. (Amended 2026-10-21 with ADR-0053 decision 9: the resource is every identity in the account and region, so sandbox recipients are allowed; the condition is unchanged.)
 6. **Real addresses** go only in the git-ignored tfvars. Examples use `example.test`.
 
 ## Rationale
@@ -113,3 +113,4 @@ None. An email identity costs nothing, and no hosted zone or domain is needed in
 
 - 2026-10-21: proposed.
 - 2026-10-21 21:14 +08:00: accepted by the decision owner.
+- 2026-10-21: decision 5 amended with ADR-0053 decision 9 (`identity/*`, `ses:FromAddress` unchanged), after sandbox recipients were denied.
