@@ -35,7 +35,8 @@ const PAST_MEETING_DAYS = 92
 
 function generateProblem(error) {
   if (error.status === 404) return 'That client is not one of yours.'
-  if (error.status === 422) return "There is no public holiday in the next 30 days for this client's country. Choose another purpose."
+  // The service says which: a country without holiday data, or no holiday soon.
+  if (error.status === 422) return error.message || "There is no public holiday in the next 30 days for this client's country. Choose another purpose."
   if (error.status === 400) return `Check the request: ${error.message}`
   if (error.status === 503) return 'Client details are unavailable right now. Try again.'
   return 'The draft could not be created. Try again.'

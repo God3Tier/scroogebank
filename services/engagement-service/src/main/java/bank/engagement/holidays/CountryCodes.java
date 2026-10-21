@@ -24,7 +24,8 @@ public final class CountryCodes {
         if (country == null) {
             return Optional.empty();
         }
-        String key = country.strip().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+        // Punctuation is ignored, so "Singapore." and "S.G." match too.
+        String key = country.replaceAll("[^\\p{L}\\s]", "").strip().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
         return Optional.ofNullable(CODES.get(key));
     }
 }

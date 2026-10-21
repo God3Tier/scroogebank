@@ -96,7 +96,8 @@ describe('AgentDrafts', () => {
   })
 
   it('explains a holiday purpose with no holiday', async () => {
-    createDraft.mockRejectedValue(Object.assign(new Error('Unprocessable'), { status: 422 }))
+    createDraft.mockRejectedValue(Object.assign(
+      new Error("The client's country has no public holiday in the next 30 days"), { status: 422 }))
     renderDrafts()
 
     fireEvent.change(await screen.findByLabelText('Client'), { target: { value: 'client-1' } })
@@ -104,6 +105,19 @@ describe('AgentDrafts', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Write draft' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('no public holiday in the next 30 days')
+  })
+
+  it("says when the client's country has no holiday data", async () => {
+    createDraft.mockRejectedValue(Object.assign(new Error(
+      "Public holidays are only available for clients in Singapore. Set the client's country to Singapore or SG, or choose another purpose"),
+    { status: 422 }))
+    renderDrafts()
+
+    fireEvent.change(await screen.findByLabelText('Client'), { target: { value: 'client-1' } })
+    fireEvent.change(screen.getByLabelText('Purpose'), { target: { value: 'HOLIDAY_GREETING' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Write draft' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Set the client's country to Singapore or SG")
   })
 
   it('labels an AI draft, shows its holiday and the text with the names filled in', async () => {

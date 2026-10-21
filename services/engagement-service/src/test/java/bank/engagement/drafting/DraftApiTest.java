@@ -179,8 +179,19 @@ class DraftApiTest extends PostgresIntegrationTest {
         doReturn(new ClientRecord(CLIENT, "Synthetic", "c@example.test", "Malaysia")).when(clients).findOwned(CLIENT);
 
         mvc.perform(post("/api/engagement/drafts").with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON)
-                .content(draft("HOLIDAY_GREETING", "FORMAL", null))).andExpect(status().isUnprocessableEntity());
+                        .content(draft("HOLIDAY_GREETING", "FORMAL", null)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith(
+                        "Public holidays are only available for clients in Singapore")));
         assertThat(create(draft("CHECK_IN", "FORMAL", null)).get("source").asText()).isEqualTo("AI");
+
+        // Singapore, but no holiday in the 30 days from 15 August 2027.
+        doReturn(SYNTHETIC_CLIENT).when(clients).findOwned(CLIENT);
+        clock.set(java.time.Instant.parse("2027-08-15T02:00:00Z"));
+        mvc.perform(post("/api/engagement/drafts").with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON)
+                        .content(draft("HOLIDAY_GREETING", "FORMAL", null)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value("The client's country has no public holiday in the next 30 days"));
     }
 
     @Test

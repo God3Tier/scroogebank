@@ -93,9 +93,14 @@ public class DraftService {
         checkEvent(owner, input, now);
         ClientRecord client = clients.findOwned(input.clientId());
 
-        List<HolidayView> upcoming = CountryCodes.toIso(client.country())
+        Optional<String> countryCode = CountryCodes.toIso(client.country());
+        List<HolidayView> upcoming = countryCode
                 .map(code -> distinctNames(holidays.upcoming(code, today, HOLIDAY_WINDOW_DAYS, MAX_HOLIDAYS * 3)))
                 .orElse(List.of());
+        if (input.purpose().needsHoliday() && countryCode.isEmpty()) {
+            throw ApiException.unprocessable("Public holidays are only available for clients in Singapore. "
+                    + "Set the client's country to Singapore or SG, or choose another purpose");
+        }
         if (input.purpose().needsHoliday() && upcoming.isEmpty()) {
             throw ApiException.unprocessable(
                     "The client's country has no public holiday in the next " + HOLIDAY_WINDOW_DAYS + " days");
