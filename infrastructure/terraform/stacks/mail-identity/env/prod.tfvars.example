@@ -1,0 +1,16 @@
+# Copy to prod.tfvars (git-ignored). Apply once per environment, before the
+# agent-engagement stack, and never destroy it between sessions (ADR-0053
+# decision 2).
+
+legal_entity = "sg"
+environment  = "prod"
+
+# The CRM stack's domain_name; its hosted zone must already exist.
+domain_name = "itsag3t6.com"
+
+# Team inboxes that may receive mail while SES is in the sandbox. Use real
+# team addresses only in the git-ignored prod.tfvars; these are placeholders.
+verified_recipients = [
+  "synthetic.agent@example.test",
+  "synthetic.client@example.test",
+]
