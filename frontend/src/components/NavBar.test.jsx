@@ -28,6 +28,8 @@ describe('NavBar', () => {
 
     expect(screen.getByRole('link', { name: /Agent Home/ })).toHaveAttribute('href', '/agent')
     expect(screen.getByRole('link', { name: /Agent Dashboard/ })).toHaveAttribute('href', '/insights/agent')
+    expect(screen.getByRole('link', { name: /Calendar/ })).toHaveAttribute('href', '/agent/calendar')
+    expect(screen.getByRole('link', { name: /Follow-up Emails/ })).toHaveAttribute('href', '/agent/drafts')
     expect(screen.queryByRole('link', { name: /Admin Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Admin Dashboard/ })).not.toBeInTheDocument()
     expect(screen.getByText('synthetic.agent@example.test')).toBeInTheDocument()
@@ -45,5 +47,7 @@ describe('NavBar', () => {
     expect(screen.getByRole('link', { name: /Admin Dashboard/ })).toHaveAttribute('href', '/insights/admin')
     expect(screen.queryByRole('link', { name: /Agent Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Agent Dashboard/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Calendar/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Follow-up Emails/ })).not.toBeInTheDocument()
   })
 })

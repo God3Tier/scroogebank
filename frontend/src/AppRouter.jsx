@@ -12,6 +12,8 @@ import ClientHealthMonitor from './pages/ClientHealthMonitor.jsx'
 import EventAlerts from './pages/EventAlerts.jsx'
 import AdminBusinessDashboard from './pages/AdminBusinessDashboard.jsx'
 import AgentBusinessDashboard from './pages/AgentBusinessDashboard.jsx'
+import AgentCalendar from './pages/AgentCalendar.jsx'
+import AgentDrafts from './pages/AgentDrafts.jsx'
 
 // Admins open client pages from their dashboard's action items, and may read
 // any client's transactions, so that page is open to both roles. The client
@@ -25,6 +27,8 @@ function AppRouter() {
       <Route path="/auth/callback" element={<SignInCallback />} />
       <Route path="/agent" element={<RequireAuth groups={[AGENT]}><AgentDashboard /></RequireAuth>} />
       <Route path="/agent/alerts" element={<RequireAuth groups={[AGENT]}><EventAlerts /></RequireAuth>} />
+      <Route path="/agent/calendar" element={<RequireAuth groups={[AGENT]}><AgentCalendar /></RequireAuth>} />
+      <Route path="/agent/drafts" element={<RequireAuth groups={[AGENT]}><AgentDrafts /></RequireAuth>} />
       <Route path="/admin" element={<RequireAuth groups={[ADMIN]}><AdminDashboard /></RequireAuth>} />
       <Route path="/agent/client/:clientId/transactions" element={<RequireAuth groups={[ADMIN, AGENT]}><ClientTransactions /></RequireAuth>} />
       <Route path="/clients/:clientId" element={<RequireAuth groups={[ADMIN, AGENT]}><ClientProfile /></RequireAuth>} />
