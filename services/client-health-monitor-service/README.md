@@ -38,6 +38,12 @@ task-stream contract now distinguishes created, attached, duplicate, cooldown
 suppression and daily-cap suppression. Production lease/watermark persistence
 still belongs in health-db.
 
+The offline V1 rule-evaluation harness runs six labelled synthetic scenario
+groups covering positives, healthy controls, exact boundaries, just-below
+thresholds, Unknown classification and sparse history. All labels and severities
+currently match deterministically; this is contract evidence, not a real-client
+accuracy claim.
+
 ## Ownership boundary
 
 - Garvit owns RH-SF00 through RH-SF04: contracts, transaction intake, activity
@@ -67,6 +73,7 @@ Contract documentation and fixtures:
 - `docs/adr/ADR-0051-client-health-explicit-activity-classification.md`
 - `docs/adr/ADR-0052-client-health-versioned-signal-rules.md`
 - `docs/adr/ADR-0053-client-health-run-orchestration-and-task-admission.md`
+- `docs/evaluation/client-health-rule-evaluation.md`
 
 ## Next implementation step
 

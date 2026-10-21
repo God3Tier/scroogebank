@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF03 and RH-SF05 Stage 1 merged, RH-SF04 retry-safe analysis orchestration implemented on its task branch
+- Status: In progress; SF00-SF04 and RH-SF05 Stage 1 merged, offline V1 rule evaluation implemented on its task branch
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/analysis-orchestration`
+- Current task branch: `task/client-health-monitor/rule-evaluation`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `2719439`
+- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `73f48cf`
 - AI-assisted planning: Yes; Cursor
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -494,7 +494,8 @@ Decisions:
 | RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer complete and merged; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; future migration ownership | `task/client-health-monitor/activity-projection` | Provider-independent projection, replay coverage and account/client baselines complete and merged; production DB adapter pending coordinated migration ownership | 2026-10-21 |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; ADR-0052; shared fixtures | `task/client-health-monitor/signal-rules` | V1 recurring-credit, activity-decline and sustained-net-outflow rules complete and merged; Java 25 CI pending | 2026-10-21 |
-| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Deterministic leased replay-to-finding orchestration, success-only watermarking, retry-safe identifiers and explicit task outcomes implemented locally; production run repository pending | 2026-10-21 |
+| RH-SF03-EVAL | Offline labelled rule evaluation | Garvit | rule evaluation harness, labelled synthetic scenarios, evaluation evidence | RH-SF03; ADR-0052 | `task/client-health-monitor/rule-evaluation` | Six labelled positive/negative/boundary/sufficiency scenarios pass deterministically; synthetic-only limitations documented; Java 25 CI pending | 2026-10-21 |
+| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Provider-independent deterministic orchestration complete and merged; production run repository pending | 2026-10-21 |
 | RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy; future migration ownership | `task/client-health-monitor/task-domain` | Stage 1 domain foundation implemented and merged; production persistence and atomic cooldown/cap admission pending | 2026-10-21 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | Planned | N/A |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Planned | N/A |

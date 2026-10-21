@@ -744,3 +744,20 @@
 - Verification: all 47 client-health tests passed with the local Java 24
   compiler override, including success, repeated-run, lease-contention,
   suppression, partial-failure and deterministic-retry scenarios.
+
+## 2026-10-21 — Client Health offline rule evaluation
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: build a deterministic labelled-scenario harness for
+  `relationship-health-v1`, covering positive, healthy-control, exact-boundary,
+  just-below, Unknown-classification and sparse-history cases; render and
+  document fixed-set rule metrics and limitations.
+- Human verification required: treat 1.00 precision/coverage only as agreement
+  with six repository-owned synthetic scenario groups, never as real-client or
+  production accuracy; threshold changes require a new ruleset version.
+- Data: repository-owned synthetic aggregate histories only. No credentials,
+  real client data, AWS calls, Bedrock calls or external services were used.
+- Verification: all six scenario groups and repeated evaluations passed; all 49
+  client-health tests passed with the local Java 24 compiler override. Java 25
+  CI remains required.
