@@ -142,6 +142,65 @@ output "dashboard_inputs" {
   }
 }
 
+# ------------------------------------------ for the agent-engagement stack
+
+output "engagement_inputs" {
+  description = "What the agent-engagement stack reads from this stack's state (ADR-0051, built like ADR-0047). Renaming a key here breaks that stack."
+  value = {
+    name_prefix    = local.name
+    vpc_id         = aws_vpc.this.id
+    app_subnet_ids = local.app_subnet_ids
+    cluster_arn    = aws_ecs_cluster.this.arn
+    cluster_name   = aws_ecs_cluster.this.name
+    namespace_arn  = aws_service_discovery_http_namespace.this.arn
+    alb            = local.alb
+    alb_sg         = local.sg["alb"]
+
+    # engagement-service asks client-service whether the agent owns a client,
+    # with the agent's token (ADR-0053 decision 5).
+    client = { security_group = local.sg["client"], port = local.ports.client, url = "https://${local.sc.client}:${local.ports.client}" }
+
+    ca_pem                = local.ca_pem
+    cognito_issuer        = local.cognito_issuer
+    cognito_web_client_id = aws_cognito_user_pool_client.web.id
+    # Agents' addresses come from ListUsers on this pool (ADR-0053 decision 4).
+    cognito_user_pool_id     = aws_cognito_user_pool.this.id
+    cognito_user_pool_arn    = aws_cognito_user_pool.this.arn
+    audit_queue_url          = aws_sqs_queue.audit.url
+    audit_queue_arn          = aws_sqs_queue.audit.arn
+    audit_producer_role_arns = local.audit_producer_role_arns
+
+    # engagement-db is built like the CRM's databases (data.tf).
+    db = {
+      kms_key_arn           = aws_kms_key.platform.arn
+      subnet_group_name     = aws_db_subnet_group.this.name
+      parameter_group_name  = aws_db_parameter_group.postgres.name
+      instance_class        = local.db_settings.instance_class
+      allocated_storage     = local.db_settings.allocated_storage
+      max_allocated_storage = local.db_settings.max_allocated_storage
+      backup_retention_days = local.db_settings.backup_retention_days
+      deletion_protection   = local.db_settings.deletion_protection
+      skip_final_snapshot   = local.db_settings.skip_final_snapshot
+      backup_tag            = local.enable_backup
+    }
+    db_migrate_image = local.image["db-migrate"]
+
+    # The sending domain is mail.<app_host> (ADR-0053 decision 1); null
+    # without a custom domain, when no mail can be sent.
+    app_host        = local.app_host
+    app_url         = "https://${local.custom_domain ? local.app_host : aws_cloudfront_distribution.this.domain_name}"
+    alarm_topic_arn = aws_sns_topic.alarms.arn
+
+    min_tasks               = local.min_tasks
+    max_tasks               = local.max_tasks
+    use_spot                = local.use_fargate_spot
+    log_retention_days      = local.log_retention_days
+    cpu_architecture        = var.cpu_architecture
+    deletion_protection     = local.deletion_protection
+    github_deploy_role_name = var.enable_github_deploy_role ? aws_iam_role.github_deploy[0].name : null
+  }
+}
+
 # ------------------------------------------- for EDA-D1-02 (alert worker)
 
 # alerts_db_secret_arn is event-alert-service's login, which cannot change the
