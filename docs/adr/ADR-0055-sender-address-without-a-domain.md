@@ -79,7 +79,7 @@ The fallback mirrors the CRM stack's own: a domain when the account has one, a w
 
 - Without a domain, the message is not DKIM-signed by the sender's domain, so DMARC alignment fails. If that domain publishes `p=quarantine` or `p=reject`, as many webmail providers do, mail may go to spam or be refused. The runbook says to check the policy and prefer a domain with `p=none` or no DMARC record.
 - Mail comes from a team member's address, not a `no-reply` address. Bounces still go to SES's MAIL FROM domain, and replies to client emails still go to the agent through `Reply-To`.
-- `sender_address` must be set the same in two stacks.
+- `sender_address` must be the same in two stacks. Runbook step 4a copies it from mail-identity's tfvars into agent-engagement's.
 - In the sandbox, the sender address can also receive mail, as any verified identity can.
 
 ## Security & Privacy Impact
@@ -94,7 +94,7 @@ None. An email identity costs nothing, and no hosted zone or domain is needed in
 
 ## Operational Impact
 
-- Runbook step 4a copies `domain_name` from the CRM stack's tfvars. Without it, the operator sets `sender_address` in both stacks' tfvars and clicks the verification email once.
+- Runbook step 4a copies `domain_name` from the CRM stack's tfvars. Without it, the operator sets `sender_address` in mail-identity's tfvars, step 4a copies it into agent-engagement's, and the operator clicks the verification email once.
 - Troubleshooting rows cover an unverified sender address, mismatched values and mail going to spam.
 
 ## Validation

@@ -257,7 +257,7 @@ cd -
 
 Each address in `verified_recipients`, and `sender_address` without a domain, receives an email from Amazon Web Services; click its link once. In the SES sandbox, mail reaches only those addresses, so seed demo clients and agents with them (synthetic data only). Apply this stack again to add or remove an address.
 
-**The agent-engagement stack.** Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`. Without a domain, also set `sender_address` in its `env/prod.tfvars` to the same address as mail-identity's:
+**The agent-engagement stack.** Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`. It copies `sender_address` from mail-identity's `env/prod.tfvars`, so both stacks use the same address; with a domain there is none, and the stack ignores it anyway:
 
 ```sh
 cd infrastructure/terraform/stacks/agent-engagement
@@ -266,12 +266,16 @@ TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' ../crm/env/prod.tfvars); echo
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
 sed -i -e "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" -e "s/^image_tag *=.*/image_tag = \"${TAG:?no image_tag in crm/env/prod.tfvars: finish step 3}\"/" env/prod.tfvars
+SENDER=$(sed -n 's/^sender_address *= *"\([^"]*\)".*/\1/p' ../mail-identity/env/prod.tfvars)
+sed -i '/^sender_address *=/d' env/prod.tfvars   # mail-identity's, or none
+[ -z "$SENDER" ] || printf 'sender_address = "%s"\n' "$SENDER" >> env/prod.tfvars
+echo "sender: ${SENDER:-none, so mail comes from the domain}"
 terraform init -backend-config=env/prod.s3.tfbackend
 terraform apply -var-file=env/prod.tfvars
 cd -
 ```
 
-It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first. If it stops with `The CRM stack has no domain_name`, set `sender_address`.
+It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first. If it stops with `The CRM stack has no domain_name`, set `sender_address` in mail-identity's `env/prod.tfvars`, apply that stack, and run this block again.
 
 ## 5. Push the images
 
@@ -595,7 +599,7 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | Mail shows `Failed` with `ses_rejected`, and the log says the address is not verified | The SES account is in the sandbox and the recipient is not in mail-identity's `verified_recipients`, or has not clicked its verification email. Add it and apply mail-identity |
 | Every send fails with `ses_rejected` just after mail-identity was created, without a domain | `sender_address` has not clicked its verification email. Click it, or apply mail-identity again to resend it |
 | Every send fails with `ses_rejected` just after mail-identity was created | DKIM is not verified yet (`terraform -chdir=infrastructure/terraform/stacks/mail-identity output dkim_status` is not `SUCCESS`). Wait for SES to find the records, usually within an hour |
-| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, the CRM stack's `domain_name` differs from its `domain_name`, or, without a domain, the two stacks' `sender_address` differ. Apply mail-identity with the same values |
+| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, the CRM stack's `domain_name` differs from its `domain_name`, or, without a domain, the two stacks' `sender_address` differ (the agent-engagement block copies it; check for an edit made since). Apply mail-identity with the same values, and run the agent-engagement block again |
 | Mail sent without a domain lands in spam or is refused | The sender address's domain publishes DMARC `p=quarantine` or `p=reject`, and SES signs with its own DKIM key, so DMARC fails (ADR-0055). Use an address at a domain with `p=none` or no DMARC record, or deploy in the account with the domain |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |
