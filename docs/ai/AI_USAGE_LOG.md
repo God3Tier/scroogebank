@@ -1,5 +1,17 @@
 # AI usage log
 
+## 2026-10-22 — Agent engagement live-check record
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: Claude Code wrote `docs/testing/agent-engagement-live-checks.md` from
+  the owner's reports of the live checks and the fixes made during them,
+  and updated AE-T11 in the feature plan.
+- Safeguards: no account IDs, addresses or client data in the record; results
+  are as the owner reported them, and checks not yet run are listed as such.
+- Human verification required: confirm each result row before the record is
+  shared.
+
 ## 2026-10-21 — Holiday sync from data.gov.sg
 
 - Human owner: Neo Jia Wen.
