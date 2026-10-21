@@ -1,0 +1,7 @@
+# Copy to staging.tfvars (git-ignored). See prod.tfvars.example.
+
+legal_entity = "sg"
+environment  = "staging"
+state_bucket = "crm-tfstate-123456789012"
+image_tag    = "replace-with-the-pushed-tag"
+ai_enabled   = false
