@@ -192,6 +192,18 @@ rows. It is a replaceable adapter, not a second contract.
 - SF02 exposes exact summaries and sufficiency metadata; SF03 alone decides
   signal thresholds and severity.
 
+### RH-SF03 deterministic rule boundary
+
+- Ruleset `relationship-health-v1` is frozen in ADR-0052.
+- Six rolling 30-day account summaries support sustained-period evaluation.
+- Each rule returns zero or more typed account-level outcomes containing
+  client/account IDs, signal type, rule version, severity, exact windows, and
+  the matching `ClientHealthFinding` evidence record.
+- Rules return no confidence percentage and perform no task creation,
+  fingerprinting, cooldown, cap, audit, AI, or persistence behavior.
+- RH-SF04 alone assigns signal IDs/fingerprints, combines all outcomes for one
+  client/run, applies suppression, and invokes `RelationshipTaskPort`.
+
 ## Contract B: Client Assignment V1
 
 ### Purpose

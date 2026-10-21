@@ -711,3 +711,20 @@
   compiler override, including projection, status-transition, rollback,
   classification, currency, coverage, roll-up and synthetic baseline coverage;
   Java 25 CI verification remains required.
+
+## 2026-10-21 — Client Health SF03 deterministic signal rules
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: record ADR-0052; add rolling 30-day period summaries; implement the
+  versioned recurring-credit interruption, customer-activity decline and
+  sustained-net-outflow rules plus typed outcomes for RH-SF04.
+- Human verification required: review project/demo thresholds and severity
+  bands before commit; they are not universal banking standards. Java 25 CI
+  must repeat local verification.
+- Data: repository-owned synthetic baseline scenarios only. No credentials,
+  real client data, AWS calls, Bedrock calls or external services were used.
+- Verification: all 42 client-health tests passed with the local Java 24
+  compiler override, covering positive signals, exact low-severity boundaries,
+  healthy controls, just-below thresholds, insufficient/Unknown activity and
+  deterministic repeatability; Java 25 CI remains required.
