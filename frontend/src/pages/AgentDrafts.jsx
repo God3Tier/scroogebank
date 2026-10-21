@@ -41,9 +41,17 @@ function generateProblem(error) {
   return 'The draft could not be created. Try again.'
 }
 
+function saveProblem(error) {
+  if (error.status === 409) return 'This draft was changed elsewhere. Reload it.'
+  if (error.status === 404) return 'This client is no longer yours, so the draft was not saved.'
+  if (error.status === 422) return error.message || 'The subject or body is too long.'
+  if (error.status === 503) return 'Names could not be looked up right now, so the draft was not saved. Try again.'
+  return 'The draft could not be saved.'
+}
+
 function sendProblem(error) {
   if (error.status === 409) return 'This draft was changed or already sent. Reload it and try again.'
-  if (error.status === 422) return error.message || 'The draft has an empty subject or body, or a placeholder that cannot be filled in.'
+  if (error.status === 422) return error.message || 'The subject or body is empty, or has text in double braces that cannot be filled in.'
   if (error.status === 404) return 'This client is no longer yours, so the email was not sent.'
   if (error.status === 502) return 'The email service did not accept the message. Nothing was sent; try again later.'
   if (error.status === 503) return error.message || 'Sending is unavailable right now. Nothing was sent.'
@@ -148,16 +156,19 @@ function GenerateForm({ clients, now, onCreated }) {
   )
 }
 
+// The agent edits plain text with the client's and their own names written
+// out; the service turns the names back into placeholders when it saves, so
+// no names are stored (ADR-0056).
 function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   const [draft, setDraft] = useState(null)
-  const [values, setValues] = useState({ subjectTemplate: '', bodyTemplate: '' })
+  const [values, setValues] = useState({ subject: '', body: '' })
   const [state, setState] = useState({ busy: false, error: '', message: '' })
 
   const load = useCallback(async () => {
     try {
       const loaded = await getDraft(draftId)
       setDraft(loaded)
-      setValues({ subjectTemplate: loaded.subjectTemplate, bodyTemplate: loaded.bodyTemplate })
+      setValues({ subject: loaded.subject ?? '', body: loaded.body ?? '' })
     } catch {
       setState({ busy: false, error: 'The draft could not be loaded.', message: '' })
     }
@@ -178,7 +189,10 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   }
 
   const editable = draft.status === 'DRAFT'
-  const changed = values.subjectTemplate !== draft.subjectTemplate || values.bodyTemplate !== draft.bodyTemplate
+  // Without the names (client-service or the agent's profile unavailable) the
+  // text cannot be shown or saved without placeholders.
+  const named = draft.subject != null && draft.body != null
+  const changed = named && (values.subject !== draft.subject || values.body !== draft.body)
   const badge = STATUS_BADGES[draft.status]
 
   async function handleSave() {
@@ -189,7 +203,7 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
       setState({ busy: false, error: '', message: 'Saved.' })
       onChanged()
     } catch (error) {
-      setState({ busy: false, error: error.status === 409 ? 'This draft was changed elsewhere. Reload it.' : 'The draft could not be saved.', message: '' })
+      setState({ busy: false, error: saveProblem(error), message: '' })
     }
   }
 
@@ -245,46 +259,32 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
         </p>
       </header>
       <div className="draft-editor__body">
-        <div className="stack-form">
-          <label>Subject
-            <input type="text" maxLength={120} value={values.subjectTemplate} disabled={!editable || state.busy}
-              onChange={(e) => setValues((v) => ({ ...v, subjectTemplate: e.target.value }))} />
-          </label>
-          <label>
-            <span className="draft-editor__body-label">
-              Body
-              <span className="draft-editor__count" aria-hidden="true">{wordCount(values.bodyTemplate)} words</span>
-            </span>
-            <textarea rows={10} maxLength={5000} value={values.bodyTemplate} disabled={!editable || state.busy}
-              onChange={(e) => setValues((v) => ({ ...v, bodyTemplate: e.target.value }))} />
-          </label>
-          <p className="engagement-hint draft-editor__tokens">
-            <span className="material-symbols-outlined" aria-hidden="true">info</span>
-            <span>
-              Placeholders are filled in for the preview and when the email is sent: <code>{'{{client_first_name}}'}</code>, <code>{'{{agent_name}}'}</code>
-            </span>
-          </p>
-        </div>
-        {draft.preview && (
-          <div className="draft-preview" aria-label="Preview">
-            <div className="draft-preview__bar">
-              <h3>
-                <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
-                Preview
-              </h3>
-              <span className="draft-preview__view">Client view</span>
-            </div>
-            <dl className="draft-preview__meta">
-              <dt>To:</dt>
-              <dd>the client&apos;s email on file</dd>
-              <dt>Reply-To:</dt>
-              <dd>your work email</dd>
-            </dl>
-            <div className="draft-preview__message">
-              <p className="draft-preview__subject">{draft.preview.subject}</p>
-              <pre className="draft-preview__body">{draft.preview.body}</pre>
-            </div>
+        <dl className="draft-editor__meta">
+          <dt>To:</dt>
+          <dd>the client&apos;s email on file</dd>
+          <dt>Reply-To:</dt>
+          <dd>your work email</dd>
+        </dl>
+        {named ? (
+          <div className="stack-form">
+            <label>Subject
+              <input type="text" maxLength={120} value={values.subject} disabled={!editable || state.busy}
+                onChange={(e) => setValues((v) => ({ ...v, subject: e.target.value }))} />
+            </label>
+            <label>
+              <span className="draft-editor__body-label">
+                Body
+                <span className="draft-editor__count" aria-hidden="true">{wordCount(values.body)} words</span>
+              </span>
+              <textarea rows={12} maxLength={5000} value={values.body} disabled={!editable || state.busy}
+                onChange={(e) => setValues((v) => ({ ...v, body: e.target.value }))} />
+            </label>
           </div>
+        ) : (
+          <p className="engagement-hint" role="status">
+            <span className="material-symbols-outlined" aria-hidden="true">info</span>
+            <span>The client&apos;s or your name could not be looked up, so this email cannot be shown right now. Try again later.</span>
+          </p>
         )}
         {draft.status === 'SENT' && <p className="success-message" role="status">Sent {formatWhen(draft.sentAt)}.</p>}
         {state.error && <p className="form-error" role="alert">{state.error}</p>}
@@ -300,8 +300,8 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
         <div className="draft-editor__buttons">
           <button type="button" onClick={onClose} disabled={state.busy}>Close</button>
           {editable && <button type="button" className="button--danger" onClick={handleDiscard} disabled={state.busy}>Discard</button>}
-          {editable && <button type="button" onClick={handleSave} disabled={state.busy || !changed}>Save changes</button>}
-          {editable && (
+          {editable && named && <button type="button" onClick={handleSave} disabled={state.busy || !changed}>Save changes</button>}
+          {editable && named && (
             <button type="button" className="button--accent" onClick={handleSend} disabled={state.busy || changed}
               title={changed ? 'Save your changes before sending' : undefined}>
               Send
@@ -393,7 +393,7 @@ function AgentDrafts({ now: fixedNow }) {
                     {list.drafts.map((draft) => (
                       <tr key={draft.id} className={draft.id === openId ? 'drafts-table__row--open' : undefined}>
                         <td>
-                          <span className="drafts-table__client" title={draft.subjectTemplate}>{nameOf(draft.clientId)}</span>
+                          <span className="drafts-table__client">{nameOf(draft.clientId)}</span>
                         </td>
                         <td className="drafts-table__purpose">{PURPOSE_LABELS[draft.purpose] ?? draft.purpose}</td>
                         <td>

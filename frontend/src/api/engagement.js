@@ -34,7 +34,8 @@ export function listDrafts({ status, clientId, limit } = {}) {
   return requestJson(`/api/engagement/drafts${query({ status, clientId, limit })}`)
 }
 
-// Includes the preview with the client's and agent's names filled in.
+// subject and body have the client's and agent's names filled in; both are
+// null when the names cannot be looked up.
 export function getDraft(draftId) {
   return requestJson(`/api/engagement/drafts/${encodeURIComponent(draftId)}`)
 }
@@ -43,10 +44,12 @@ export function createDraft({ clientId, purpose, tone, eventId }) {
   return requestJson('/api/engagement/drafts', { method: 'POST', body: { clientId, purpose, tone, eventId: eventId || null } })
 }
 
-export function updateDraft(draftId, { subjectTemplate, bodyTemplate, version }) {
+// Plain text with the names written out; the service stores them as
+// placeholders (ADR-0056).
+export function updateDraft(draftId, { subject, body, version }) {
   return requestJson(`/api/engagement/drafts/${encodeURIComponent(draftId)}`, {
     method: 'PUT',
-    body: { subjectTemplate, bodyTemplate, version },
+    body: { subject, body, version },
   })
 }
 

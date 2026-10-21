@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,7 +107,7 @@ class DraftApiTest extends PostgresIntegrationTest {
         assertThat(created.get("sourceReason").isNull()).isTrue();
         assertThat(created.at("/holiday/name").asText()).isEqualTo("Deepavali");
         assertThat(created.at("/holiday/date").asText()).isEqualTo("2026-11-08");
-        assertThat(created.get("preview").isNull()).isTrue();
+        assertThat(created.get("subject").asText()).isEqualTo("Happy Deepavali, Synthetic");
         assertThat(created.get("subjectTemplate").asText()).isEqualTo("Happy Deepavali, {{client_first_name}}");
 
         ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
@@ -209,22 +210,23 @@ class DraftApiTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void thePreviewFillsInTheNamesButListingDoesNot() throws Exception {
+    void theNamesAreFilledInButListingDoesNotLookThemUp() throws Exception {
         JsonNode created = create(draft("HOLIDAY_GREETING", "WARM", null));
         String path = "/api/engagement/drafts/" + created.get("id").asText();
 
         mvc.perform(get(path).with(Tokens.agent()))
-                .andExpect(jsonPath("$.preview.subject").value("Happy Deepavali, Synthetic"))
-                .andExpect(jsonPath("$.preview.body").value(org.hamcrest.Matchers.containsString("Synthetic Agent")))
+                .andExpect(jsonPath("$.subject").value("Happy Deepavali, Synthetic"))
+                .andExpect(jsonPath("$.body").value(org.hamcrest.Matchers.containsString("Synthetic Agent")))
                 .andExpect(jsonPath("$.bodyTemplate").value(org.hamcrest.Matchers.containsString("{{agent_name}}")));
         mvc.perform(get("/api/engagement/drafts").with(Tokens.agent()))
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].preview").doesNotExist());
+                .andExpect(jsonPath("$[0].subject").doesNotExist());
 
         doThrow(new ClientServiceUnavailableException("down")).when(clients).findOwned(CLIENT);
         mvc.perform(get(path).with(Tokens.agent()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.preview").doesNotExist());
+                .andExpect(jsonPath("$.subject").doesNotExist())
+                .andExpect(jsonPath("$.body").doesNotExist());
     }
 
     @Test
@@ -232,19 +234,23 @@ class DraftApiTest extends PostgresIntegrationTest {
         JsonNode created = create(draft("HOLIDAY_GREETING", "FORMAL", null));
         String path = "/api/engagement/drafts/" + created.get("id").asText();
         mvc.perform(put(path).with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON).content("""
-                        {"subjectTemplate":"Deepavali wishes, {{client_first_name}}",
-                         "bodyTemplate":"Dear {{client_first_name}},\\n\\nHappy Deepavali!\\n\\n{{agent_name}}",
+                        {"subject":"Deepavali wishes, Synthetic",
+                         "body":"Dear Synthetic,\\n\\nHappy Deepavali!\\n\\nSynthetic Agent",
                          "version":0}
                         """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.version").value(1));
+                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.subject").value("Deepavali wishes, Synthetic"))
+                .andExpect(jsonPath("$.subjectTemplate").value("Deepavali wishes, {{client_first_name}}"));
+        assertThat(jdbc.queryForObject("SELECT body_template FROM email_drafts", String.class))
+                .isEqualTo("Dear {{client_first_name}},\n\nHappy Deepavali!\n\n{{agent_name}}");
 
         mvc.perform(post(path + "/send").with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"version\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SENT"))
                 .andExpect(jsonPath("$.sentAt").exists())
-                .andExpect(jsonPath("$.preview.subject").value("Deepavali wishes, Synthetic"));
+                .andExpect(jsonPath("$.subject").value("Deepavali wishes, Synthetic"));
 
         OutgoingMail mail = channel.sent().getFirst();
         assertThat(mail.to()).isEqualTo("synthetic.client@example.test");
@@ -273,11 +279,32 @@ class DraftApiTest extends PostgresIntegrationTest {
         JsonNode created = create(draft("CHECK_IN", "FORMAL", null));
         mvc.perform(put("/api/engagement/drafts/" + created.get("id").asText()).with(Tokens.agent())
                 .contentType(MediaType.APPLICATION_JSON).content("""
-                        {"subjectTemplate":"Hi","bodyTemplate":"Dear {{client_last_name}}","version":0}
+                        {"subject":"Hi","body":"Dear {{client_last_name}}","version":0}
                         """)).andExpect(status().isOk());
 
         send(created, 1, 422);
         assertThat(channel.sent()).isEmpty();
+    }
+
+    @Test
+    void withoutTheNamesNothingIsSaved() throws Exception {
+        JsonNode created = create(draft("CHECK_IN", "FORMAL", null));
+        String path = "/api/engagement/drafts/" + created.get("id").asText();
+        String edit = """
+                {"subject":"Hi Synthetic","body":"Dear Synthetic","version":0}
+                """;
+
+        doThrow(new ClientServiceUnavailableException("down")).when(clients).findOwned(CLIENT);
+        mvc.perform(put(path).with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON).content(edit))
+                .andExpect(status().isServiceUnavailable());
+        doReturn(SYNTHETIC_CLIENT).when(clients).findOwned(CLIENT);
+        when(agents.find(Tokens.AGENT)).thenReturn(Optional.empty());
+        mvc.perform(put(path).with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON).content(edit))
+                .andExpect(status().isServiceUnavailable());
+
+        assertThat(jdbc.queryForObject("SELECT version FROM email_drafts", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT body_template FROM email_drafts", String.class))
+                .doesNotContain("Synthetic");
     }
 
     @Test

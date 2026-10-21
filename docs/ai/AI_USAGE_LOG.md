@@ -1,5 +1,26 @@
 # AI usage log
 
+## 2026-10-21 — Engagement fixes after the first deployment
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: the owner reported that sending a draft returned 503 and that
+  `{{agent_name}}` was not filled in. Claude Code read the service log the
+  owner pasted (`InvalidParameterException` from Cognito `ListUsers`), found
+  that the service asked for the `name` attribute, which user-service never
+  sets, and changed the lookup to `email`, `given_name` and `family_name`
+  (ADR-0053 decision 4 amended). The owner then asked for drafts without
+  placeholder syntax and chose, from two options Claude Code set out, to fill
+  the names in on read and mark them again on save. Claude Code wrote
+  ADR-0056, changed `DraftService`, `Placeholders`, the contract, the editor
+  in `AgentDrafts.jsx` and the tests.
+- Safeguards: synthetic names only in tests. Stored drafts still hold no
+  names, and the model's input is unchanged (ADR-0054 decision 2).
+- Human verification required: redeploy engagement-service and the
+  frontend together, then open a draft, edit it, save and send it.
+- Outcome: engagement-service `mvn verify` passes; the frontend's lint,
+  176 tests and build pass.
+
 ## 2026-10-21 — Engagement mail from a verified address without a domain
 
 - Human owner: Neo Jia Wen.

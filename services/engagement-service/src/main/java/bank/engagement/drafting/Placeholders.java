@@ -1,5 +1,7 @@
 package bank.engagement.drafting;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -7,7 +9,8 @@ import java.util.regex.Pattern;
 
 /**
  * The two placeholders drafts may hold (ADR-0054 decision 2). They are filled
- * in after generation, so the model never sees who the client is.
+ * in after generation, so the model never sees who the client is, and marked
+ * again when an agent saves, so stored drafts hold no names (ADR-0056).
  */
 final class Placeholders {
 
@@ -34,6 +37,27 @@ final class Placeholders {
         }
         matcher.appendTail(out);
         return out.toString();
+    }
+
+    /**
+     * The reverse of {@link #fill}: turns each whole-word, exact occurrence of a
+     * value back into its placeholder, so agents edit plain text but drafts are
+     * stored without names (ADR-0056). Longer values go first, so an agent
+     * named "Synthetic Agent" is marked before a client named "Synthetic".
+     */
+    static String mark(String text, Map<String, String> values) {
+        String marked = text;
+        List<Map.Entry<String, String>> byLength = values.entrySet().stream()
+                .filter(entry -> entry.getValue() != null && !entry.getValue().isBlank())
+                .sorted(Comparator.comparingInt((Map.Entry<String, String> entry) -> entry.getValue().strip().length())
+                        .reversed())
+                .toList();
+        for (Map.Entry<String, String> entry : byLength) {
+            Pattern word = Pattern.compile("(?<![\\p{L}\\p{N}_{])" + Pattern.quote(entry.getValue().strip())
+                    + "(?![\\p{L}\\p{N}_}])");
+            marked = word.matcher(marked).replaceAll(Matcher.quoteReplacement("{{" + entry.getKey() + "}}"));
+        }
+        return marked;
     }
 
     /** True when text still holds a placeholder or stray braces. */

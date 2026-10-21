@@ -64,11 +64,11 @@ describe('engagement API', () => {
   it('sends drafts with only the fields the contract takes', async () => {
     fetchMock.mockImplementation(async () => jsonResponse({ id: 'draft-1' }, 201))
     await createDraft({ clientId: 'client-1', purpose: 'CHECK_IN', tone: 'WARM', extra: 'ignored' })
-    await updateDraft('draft-1', { subjectTemplate: 'S', bodyTemplate: 'B', version: 2, status: 'SENT' })
+    await updateDraft('draft-1', { subject: 'S', body: 'B', version: 2, status: 'SENT' })
     await sendDraft('draft-1', 3)
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ clientId: 'client-1', purpose: 'CHECK_IN', tone: 'WARM', eventId: null })
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ subjectTemplate: 'S', bodyTemplate: 'B', version: 2 })
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ subject: 'S', body: 'B', version: 2 })
     expect(fetchMock.mock.calls[2][0]).toBe('/api/engagement/drafts/draft-1/send')
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ version: 3 })
   })

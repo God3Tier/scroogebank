@@ -39,6 +39,24 @@ class PlaceholdersTest {
     }
 
     @Test
+    void marksTheNamesBackLongestFirstAndOnlyAsWholeWords() {
+        Map<String, String> values = Map.of("client_first_name", "Synthetic", "agent_name", "Synthetic Agent");
+
+        String marked = Placeholders.mark("Dear Synthetic, Synthetically yours, Synthetic Agent", values);
+
+        assertThat(marked).isEqualTo("Dear {{client_first_name}}, Synthetically yours, {{agent_name}}");
+        assertThat(Placeholders.fill(marked, values)).isEqualTo("Dear Synthetic, Synthetically yours, Synthetic Agent");
+    }
+
+    @Test
+    void markingIsLiteralAndLeavesPlaceholdersAlone() {
+        assertThat(Placeholders.mark("Hi A.B, from {{agent_name}}", Map.of("client_first_name", "A.B")))
+                .isEqualTo("Hi {{client_first_name}}, from {{agent_name}}");
+        assertThat(Placeholders.mark("Hi AxB", Map.of("client_first_name", "A.B"))).isEqualTo("Hi AxB");
+        assertThat(Placeholders.mark("Hi {{agent}}", Map.of("agent_name", "agent"))).isEqualTo("Hi {{agent}}");
+    }
+
+    @Test
     void onlyTheTwoPlaceholdersAreAllowed() {
         assertThat(Placeholders.onlyAllowed("Hi {{client_first_name}} from {{agent_name}}")).isTrue();
         assertThat(Placeholders.onlyAllowed("Hi {{client_last_name}}")).isFalse();

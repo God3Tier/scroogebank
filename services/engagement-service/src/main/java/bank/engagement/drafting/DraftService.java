@@ -55,6 +55,9 @@ public class DraftService {
     static final int HOLIDAY_WINDOW_DAYS = 30;
     static final int MAX_HOLIDAYS = 3;
     static final Duration STALE_SEND = Duration.ofMinutes(2);
+    /** The stored templates' column sizes. */
+    static final int MAX_SUBJECT = 120;
+    static final int MAX_BODY = 5000;
 
     private final EmailDraftRepository repository;
     private final DraftGenerator generator;
@@ -116,7 +119,7 @@ public class DraftService {
             audit.record(AuditAction.DRAFT_GENERATE, owner, data);
             return saved;
         });
-        return view(draft, null);
+        return view(draft, names(owner, client).map(values -> filled(draft, values)).orElse(null));
     }
 
     @Transactional(readOnly = true)
@@ -135,33 +138,56 @@ public class DraftService {
         return drafts.stream().map(draft -> view(draft, null)).toList();
     }
 
-    /** The preview needs client-service; if it cannot answer, the draft is shown without one. */
+    /**
+     * The names need client-service and Cognito; if either cannot answer, the
+     * draft is shown without its filled-in text and cannot be edited.
+     */
     public DraftView get(String owner, UUID id) {
         EmailDraft draft = find(owner, id);
-        DraftView.Preview preview = null;
-        if (draft.getStatus().visible() == DraftStatus.DRAFT) {
-            try {
-                ClientRecord client = clients.findOwned(draft.getClientId());
-                Optional<AgentProfile> agent = agents.find(owner);
-                preview = preview(draft, client, agent.map(AgentProfile::displayName).orElse(null));
-            } catch (ClientNotFoundException | ClientServiceUnavailableException ex) {
-                preview = null;
-            }
+        DraftView.Filled filled;
+        try {
+            ClientRecord client = clients.findOwned(draft.getClientId());
+            filled = names(owner, client).map(values -> filled(draft, values)).orElse(null);
+        } catch (ClientNotFoundException | ClientServiceUnavailableException ex) {
+            filled = null;
         }
-        return view(draft, preview);
+        return view(draft, filled);
     }
 
-    @Transactional
+    /**
+     * Saves the agent's plain text with the client's first name and the
+     * agent's name marked as placeholders again, so the stored draft holds no
+     * names (ADR-0056). Without the names nothing is saved. The lookups run
+     * before the write's transaction, which checks the draft again.
+     */
     public DraftView update(String owner, UUID id, DraftUpdate input) {
         EmailDraft draft = find(owner, id);
+        checkEditable(draft, input.version());
+        ClientRecord client = clients.findOwned(draft.getClientId());
+        Map<String, String> values = names(owner, client)
+                .orElseThrow(() -> ApiException.unavailable("Your name could not be looked up; the draft was not saved"));
+        String subject = Placeholders.mark(input.subject().strip(), values);
+        String body = Placeholders.mark(input.body().strip(), values);
+        if (subject.length() > MAX_SUBJECT || body.length() > MAX_BODY) {
+            throw ApiException.unprocessable("The subject or body is too long");
+        }
+
+        EmailDraft saved = transactions.execute(status -> {
+            EmailDraft current = find(owner, id);
+            checkEditable(current, input.version());
+            current.edit(subject, body, clock.instant());
+            return repository.saveAndFlush(current);
+        });
+        return view(saved, filled(saved, values));
+    }
+
+    private static void checkEditable(EmailDraft draft, int version) {
         if (draft.getStatus() != DraftStatus.DRAFT) {
             throw ApiException.conflict("Only a draft that has not been sent or discarded can be edited");
         }
-        if (input.version() != draft.getVersion()) {
+        if (version != draft.getVersion()) {
             throw ApiException.conflict("The draft was changed by another request; reload and try again");
         }
-        draft.edit(input.subjectTemplate().strip(), input.bodyTemplate().strip(), clock.instant());
-        return view(repository.saveAndFlush(draft), null);
     }
 
     /** Discarding a discarded draft changes nothing. */
@@ -196,7 +222,7 @@ public class DraftService {
         AgentProfile agent = agents.find(owner)
                 .filter(profile -> profile.enabled() && profile.hasEmail())
                 .orElseThrow(() -> ApiException.unavailable("Your email address could not be looked up; nothing was sent"));
-        DraftView.Preview filled = preview(draft, client, agent.displayName());
+        DraftView.Filled filled = filled(draft, values(client, agent.displayName()));
         if (filled.subject().isBlank() || filled.body().isBlank()) {
             throw ApiException.unprocessable("The subject and body must not be empty");
         }
@@ -266,11 +292,26 @@ public class DraftService {
                 .orElseThrow(() -> ApiException.notFound("Draft not found"));
     }
 
-    private static DraftView.Preview preview(EmailDraft draft, ClientRecord client, String agentName) {
+    /** Both names, or empty when the agent or either name cannot be found. */
+    private Optional<Map<String, String>> names(String owner, ClientRecord client) {
+        if (client.firstName() == null || client.firstName().isBlank()) {
+            return Optional.empty();
+        }
+        return agents.find(owner)
+                .map(AgentProfile::displayName)
+                .filter(name -> !name.isBlank())
+                .map(name -> values(client, name));
+    }
+
+    private static Map<String, String> values(ClientRecord client, String agentName) {
         Map<String, String> values = new HashMap<>();
         values.put(Placeholders.CLIENT_FIRST_NAME, client.firstName());
         values.put(Placeholders.AGENT_NAME, agentName);
-        return new DraftView.Preview(Placeholders.fill(draft.getSubjectTemplate(), values),
+        return values;
+    }
+
+    private static DraftView.Filled filled(EmailDraft draft, Map<String, String> values) {
+        return new DraftView.Filled(Placeholders.fill(draft.getSubjectTemplate(), values),
                 Placeholders.fill(draft.getBodyTemplate(), values));
     }
 
@@ -293,10 +334,11 @@ public class DraftService {
         return data;
     }
 
-    private DraftView view(EmailDraft draft, DraftView.Preview preview) {
+    private DraftView view(EmailDraft draft, DraftView.Filled filled) {
         HolidayView holiday = holidays.find(draft.getHolidayId()).orElse(null);
         return new DraftView(draft.getId(), draft.getClientId(), draft.getEventId(), draft.getPurpose(),
-                draft.getTone(), draft.getSubjectTemplate(), draft.getBodyTemplate(), preview, draft.getSource(),
+                draft.getTone(), filled == null ? null : filled.subject(), filled == null ? null : filled.body(),
+                draft.getSubjectTemplate(), draft.getBodyTemplate(), draft.getSource(),
                 draft.getSourceReason(), holiday, draft.getStatus().visible(), draft.getSentAt(), draft.getVersion(),
                 draft.getCreatedAt(), draft.getUpdatedAt());
     }

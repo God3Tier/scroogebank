@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listClients } from '../api/clients.js'
-import { createDraft, discardDraft, getDraft, listDrafts, listEvents, sendDraft } from '../api/engagement.js'
+import { createDraft, discardDraft, getDraft, listDrafts, listEvents, sendDraft, updateDraft } from '../api/engagement.js'
 import AgentDrafts from './AgentDrafts.jsx'
 
 vi.mock('../api/clients.js', () => ({ listClients: vi.fn() }))
@@ -28,7 +28,8 @@ const AI_DRAFT = {
   tone: 'WARM',
   subjectTemplate: 'Happy Deepavali, {{client_first_name}}',
   bodyTemplate: 'Hi {{client_first_name}},\n\nWishing you a bright Deepavali.\n\n{{agent_name}}',
-  preview: { subject: 'Happy Deepavali, Synthetic', body: 'Hi Synthetic,\n\nWishing you a bright Deepavali.\n\nSynthetic Agent' },
+  subject: 'Happy Deepavali, Synthetic',
+  body: 'Hi Synthetic,\n\nWishing you a bright Deepavali.\n\nSynthetic Agent',
   source: 'AI',
   sourceReason: null,
   holiday: { id: 'h1', countryCode: 'SG', date: '2026-11-08', name: 'Deepavali', observed: false },
@@ -105,12 +106,39 @@ describe('AgentDrafts', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('no public holiday in the next 30 days')
   })
 
-  it('labels an AI draft, shows its holiday and the preview', async () => {
+  it('labels an AI draft, shows its holiday and the text with the names filled in', async () => {
     await openDraft()
 
     expect(screen.getByText('AI-generated: review before sending')).toBeInTheDocument()
     expect(screen.getByText('Holiday used: Deepavali (8 Nov)')).toBeInTheDocument()
-    expect(screen.getByText('Happy Deepavali, Synthetic')).toBeInTheDocument()
+    expect(screen.getByLabelText('Subject')).toHaveValue('Happy Deepavali, Synthetic')
+    expect(screen.getByLabelText(/^Body/)).toHaveValue('Hi Synthetic,\n\nWishing you a bright Deepavali.\n\nSynthetic Agent')
+    expect(document.body).not.toHaveTextContent('{{')
+  })
+
+  it('saves the plain text the agent edited', async () => {
+    updateDraft.mockResolvedValue({ ...AI_DRAFT, version: 1 })
+    await openDraft()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Deepavali wishes, Synthetic' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await vi.waitFor(() => expect(updateDraft).toHaveBeenCalledWith('draft-1', {
+      subject: 'Deepavali wishes, Synthetic',
+      body: AI_DRAFT.body,
+      version: 0,
+    }))
+  })
+
+  it('cannot edit or send a draft whose names cannot be looked up', async () => {
+    getDraft.mockResolvedValue({ ...AI_DRAFT, subject: null, body: null })
+    await openDraft()
+
+    expect(screen.getByRole('status')).toHaveTextContent('could not be looked up')
+    expect(screen.queryByLabelText('Subject')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('{{')
   })
 
   it('says why a template was used', async () => {

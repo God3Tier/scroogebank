@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/plan`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders)
 
 ## Context
 
@@ -121,7 +121,7 @@ A cross-region inference profile is an ID passed in place of a model ID. The ser
    - The template is used when AI is disabled, a cap is reached, the model times out or errors, or the screen rejects the output.
    - The draft records `source` (`AI` or `TEMPLATE`) and a reason code. The request still returns 200.
 6. **A person approves every email.**
-   - Drafts are stored with placeholders. The agent edits them, sees a preview with the placeholders filled in, and sends with `POST /drafts/{id}/send`.
+   - Drafts are stored with placeholders. The agent edits them, sees a preview with the placeholders filled in, and sends with `POST /drafts/{id}/send`. (Editing superseded by [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md): the agent edits the text with the names filled in, and the service marks them as placeholders again when saving.)
    - Nothing is ever sent automatically or in bulk.
    - The UI labels AI drafts as AI-generated, to be reviewed before sending, and shows which holiday was used.
    - At send time, the only checks are for unresolved placeholders and an empty body. What the agent writes is the agent's responsibility.
@@ -219,3 +219,4 @@ Nova Micro is Amazon's lowest-priced text model on Bedrock. AWS charges cross-re
 - 2026-10-21: accepted by the decision owner. Before acceptance, decision 3 and Validation were changed so that the model ID is recorded here once chosen, rather than being a condition of acceptance; the model must still run on demand in ap-southeast-1.
 - 2026-10-21: amended before first commit, as decided by the decision owner. No small, current text model runs in-region in Singapore, so decision 3 now names Amazon Nova Micro through its Asia-Pacific geographic profile, with Nova Lite as the only allowed substitute and global profiles still forbidden. Context, Options, Rationale, Consequences, Security, Cost, Operational Impact and Validation changed to match.
 - 2026-10-21: the decision owner confirmed the profile ID `apac.amazon.nova-micro-v1:0` with `aws bedrock get-inference-profile` in the project account. It is a system-defined, active profile named "APAC Nova Micro", last updated by AWS on 2025-07-08. It routes to Nova Micro in six regions: ap-southeast-1 (Singapore), ap-southeast-2 (Sydney), ap-northeast-1 (Tokyo), ap-northeast-2 (Seoul), ap-northeast-3 (Osaka) and ap-south-1 (Mumbai).
+- 2026-10-21: decision 6 superseded in part by [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md): agents edit plain text with the names filled in, and drafts are still stored with placeholders. This record is otherwise unchanged.
