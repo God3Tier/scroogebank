@@ -4,6 +4,7 @@ import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.TaskUpsertResult;
 import bank.clienthealth.task.domain.RelationshipTask;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
@@ -16,9 +17,11 @@ public interface TaskRepository {
     interface Session {
         Optional<ProcessedFinding> findProcessedFinding(String findingId);
         Optional<RelationshipTask> findActiveTask(String clientId);
+        Optional<RelationshipTask> findLatestClosedTask(String clientId);
         Set<String> findFingerprints(String clientId, Collection<String> fingerprints);
         Optional<RelationshipTask> findLatestTaskContainingAny(String clientId, Collection<String> fingerprints);
         Optional<RelationshipTask> findTask(String taskId);
+        boolean tryReserveTaskCreation(String agentSubject, LocalDate singaporeDate, int limit);
         void saveTask(RelationshipTask task, long expectedVersion);
         void saveProcessedFinding(ProcessedFinding processedFinding);
     }
