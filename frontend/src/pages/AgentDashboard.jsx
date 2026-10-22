@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { createClient, deleteClient, listClients } from '../api/clients.js'
+import { validateClient } from '../components/clientValidation.js'
 import { getDashboard, panelData, windowForDays } from '../api/dashboard.js'
 import ActivityFeed from '../components/ActivityFeed.jsx'
 import StatCard from '../components/StatCard.jsx'
@@ -20,9 +21,11 @@ const EMPTY_CLIENT = {
     email: '',
     phone_number: '',
     address: '',
-    city: '',
-    state: '',
-    country: '',
+    // Clients are Singapore residents (brief Appendix 2, Q&A CPM29), and
+    // Singapore is a city-state; the agent can still change these.
+    city: 'Singapore',
+    state: 'Singapore',
+    country: 'Singapore',
     postal_code: '',
 }
 
@@ -160,6 +163,11 @@ function AgentDashboard() {
     // identity document and verifies the client (ADR-0041).
     async function handleCreateClient(event) {
         event.preventDefault()
+        const problem = validateClient(newClient)
+        if (problem) {
+            setCreating({ saving: false, error: problem })
+            return
+        }
         setCreating({ saving: true, error: '' })
         try {
             const created = await createClient({
@@ -231,12 +239,12 @@ function AgentDashboard() {
                         </select>
                     </label>
                     <label>Email:<input type="email" required maxLength={255} value={newClient.email} onChange={setField('email')} /></label>
-                    <label>Phone Number:<input type="tel" required maxLength={20} value={newClient.phone_number} onChange={setField('phone_number')} /></label>
+                    <label>Phone Number:<input type="tel" required maxLength={20} placeholder="+6591234567" value={newClient.phone_number} onChange={setField('phone_number')} /></label>
                     <label>Address:<input type="text" required maxLength={100} value={newClient.address} onChange={setField('address')} /></label>
                     <label>City:<input type="text" required maxLength={50} value={newClient.city} onChange={setField('city')} /></label>
                     <label>State:<input type="text" required maxLength={50} value={newClient.state} onChange={setField('state')} /></label>
                     <label>Country:<input type="text" required maxLength={50} value={newClient.country} onChange={setField('country')} /></label>
-                    <label>Postal Code:<input type="text" required maxLength={10} value={newClient.postal_code} onChange={setField('postal_code')} /></label>
+                    <label>Postal Code:<input type="text" required maxLength={10} placeholder="6 digits in Singapore" value={newClient.postal_code} onChange={setField('postal_code')} /></label>
                     {creating.error && <p className="form-error form-grid__full" role="alert">{creating.error}</p>}
                     <div className="form-actions">
                         <button type="submit" disabled={creating.saving}>{creating.saving ? 'Creating…' : 'Create Profile'}</button>

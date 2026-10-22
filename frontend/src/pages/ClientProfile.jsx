@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import { createAccount, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { fetchDocument, getClient, listDocuments, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
+import { validateClient } from '../components/clientValidation.js'
 
 // One client's profile, identity documents and verification (ADR-0041). The
 // agent may upload the document the client gave them, opens it, compares it
@@ -111,6 +112,11 @@ function ProfileEditor({ client, onSaved, onCancel }) {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    const problem = validateClient(form)
+    if (problem) {
+      setSaving({ busy: false, error: problem })
+      return
+    }
     setSaving({ busy: true, error: '' })
     try {
       await updateClient(client.client_id, { ...form, date_of_birth: `${form.date_of_birth}T00:00:00Z` })
