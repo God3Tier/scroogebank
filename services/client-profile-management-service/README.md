@@ -36,6 +36,22 @@ account-service depends on this rule. Before creating an account it calls `GET /
 
 `GET /aggregates/clients/team-comparison?days=7|30|90` compares the caller's clients onboarded over the last 7, 30 or 90 days (ending today in Singapore) with the team median. The median is computed here so no other agent's figure leaves the service. The group is every agent with a client, not deleted, created in the last 12 months, and the median is withheld when fewer than 5 agents are in it. Other windows are refused, so medians over chosen windows cannot be compared to narrow down one agent's figure (ADR-0038).
 
+## Field validation
+
+Creating or updating a client checks every field against the project brief's Appendix 2 validations and returns 400 with the first problem:
+
+| Field | Rule |
+|---|---|
+| First and last name | 2 to 50 characters, letters and spaces only |
+| Date of birth | An age between 18 and 100 on today's Singapore date |
+| Email | One `@` and a dot in the domain, no spaces, up to 255 characters |
+| Phone number | An optional `+` and 10 to 15 digits, after removing spaces, hyphens, dots and brackets (`+65 9123-4567` is fine; a bare 8-digit Singapore number is not) |
+| Address | 5 to 100 characters |
+| City, state, country | 2 to 50 characters |
+| Postal code | 6 digits when the country is Singapore (`SG`, `SGP`, `Singapore` or `Republic of Singapore`, punctuation ignored); otherwise 4 to 10 letters, digits, spaces or hyphens |
+
+Gender is only required: the brief lists Male, Female, Non-binary and Prefer not to say, while the frontend offers male, female and other, so restricting it needs the Feature 2 owner's decision first. The frontend runs the same checks before sending (`frontend/src/components/clientValidation.js`) and fills in Singapore as the new client's city, state and country.
+
 ## Deleting a client
 
 `DELETE /api/clients/{id}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at` and keeps the row. From then on every endpoint treats the client as missing, for admins and agents alike: reads, updates, verification and a second delete all return 404. A deleted client's email and phone number can be used to onboard a new client. Nothing restores a deleted client, and deleting is not erasure of the client's personal data ([open item 21](../../docs/architecture/open-items.md#21-erasing-soft-deleted-client-data)).

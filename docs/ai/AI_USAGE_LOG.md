@@ -194,6 +194,22 @@
   checked free on every remote branch; every cited ADR and repository path
   checked to exist on `origin/dev`; the OpenAPI file parsed as YAML. Prices
   are estimates still to be checked in the AWS Pricing Calculator.
+## 2026-10-22 — Client field validation and Singapore defaults
+
+- Human owner: Neo Jia Wen (Feature 2 primary developer: Joseph Yau, to review).
+- Tool: Claude Code (Anthropic).
+- Use: on the owner's request, Claude Code added the brief's Appendix 2 field
+  validations to client-service and the client forms, and filled in Singapore
+  as a new client's city, state and country, on
+  `task/base-features/client-validation`.
+- Safeguards: synthetic test data only. Existing stored values are not
+  changed; a profile with an old value is checked again only when edited.
+  Gender values were not restricted, because the brief and the frontend
+  disagree; that is left to the Feature 2 owner.
+- Human verification required: Feature 2 owner review; create and edit a
+  client in a deployed stack.
+- Outcome: client-service `make test` and the frontend's lint, tests and
+  build pass.
 
 ## 2026-10-20 — Activity feed timeout, page names, dashboard budgets, accounts Pending until verified
 
