@@ -3,6 +3,7 @@ package bank.clienthealth.task.application;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEvent.Action;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
 import bank.clienthealth.contract.ClientHealthFinding.PriorityInputs;
@@ -66,6 +67,8 @@ class RelationshipTaskServiceTest {
         assertEquals(RelationshipTask.Action.CREATED, task.history().getFirst().action());
         assertEquals(1, assignmentCalls.get());
         assertEquals(1, repository.taskCount());
+        assertEquals(1, repository.auditEventCount());
+        assertEquals(Action.TASK_CREATED, repository.auditEvents().iterator().next().action());
     }
 
     @Test
@@ -145,6 +148,7 @@ class RelationshipTaskServiceTest {
         assertEquals(Status.COMPLETED, completed.status());
         assertEquals(3, completed.version());
         assertEquals(3, completed.history().size());
+        assertEquals(3, repository.auditEventCount());
     }
 
     @Test
@@ -183,6 +187,8 @@ class RelationshipTaskServiceTest {
         assertEquals(Outcome.CREATED, worsening.outcome());
         assertEquals(2, repository.taskCount());
         assertEquals(3, repository.processedFindingCount());
+        assertEquals(1, repository.auditEvents().stream()
+                .filter(event -> event.action() == Action.SIGNAL_SUPPRESSED).count());
     }
 
     @Test
@@ -203,6 +209,7 @@ class RelationshipTaskServiceTest {
         assertEquals(Outcome.EVIDENCE_ATTACHED, attachment.outcome());
         assertEquals(20, repository.taskCount());
         assertEquals(22, repository.processedFindingCount());
+        assertEquals(22, repository.auditEventCount());
     }
 
     @Test
@@ -250,6 +257,7 @@ class RelationshipTaskServiceTest {
         assertEquals(1, stored.evidence().size());
         assertEquals(1, repository.processedFindingCount());
         assertEquals(1, repository.creationCount(AGENT, LocalDate.of(2026, 9, 29)));
+        assertEquals(1, repository.auditEventCount());
     }
 
     private RelationshipTaskService service(ClientAssignmentPort assignments, bank.clienthealth.task.port.DispositionPolicy policy) {

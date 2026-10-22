@@ -15,7 +15,8 @@ Terraform creates each RDS instance with an empty database, and each service own
   theirs in `src/main/resources/db/migration`, named
   `V<n>__<description>.sql`. Locally and in tests Flyway applies them; Client
   Health migration tests run V1 task persistence followed by V2 evidence
-  constraint tightening against PostgreSQL 17.
+  constraint tightening and V3 relationship-health audit outbox creation
+  against PostgreSQL 17.
 - **In AWS, every one of these services' tasks has a `db-migrate` init container:**
   - it applies the service's migrations before the app starts, and the app starts only if it succeeds;
   - it runs Flyway 11.7.2 from the db-migrate image ([`infrastructure/db-migrate/`](../../infrastructure/db-migrate/Dockerfile)), as that database's master user, against that database only. Flyway locks the database while it migrates, so tasks that start together are safe;

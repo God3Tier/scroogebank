@@ -45,10 +45,16 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
   non-empty and non-overlapping, signal type is one of the three ADR-0052
   signals, fingerprints are lowercase SHA-256, and closed-task cooldown queries
   use a client/update-time index.
+- V3 creates `relationship_health_audit_outbox` with deterministic SHA-256
+  event IDs, allowlisted relationship-health actions, JSON-object payloads,
+  bounded delivery failure categories, lease consistency, and ready/expired
+  lease indexes. Rows are deleted only after gateway acceptance.
 
-The production repository and SF08 audit outbox remain follow-up adapters; task
-state and its audit outbox row must eventually commit atomically under ADR-0020
-and ADR-0053.
+Task creation/evidence/transition/suppression paths now enqueue their redacted
+audit events through `TaskRepository.Session`, so a production JDBC adapter
+must persist task state, processed finding and outbox row in one transaction
+under ADR-0020 and ADR-0053. The JDBC repository and SQS/Auditor adapters remain
+follow-up work.
 
 ## Why one RDS instance per service: balancing cost and isolation
 

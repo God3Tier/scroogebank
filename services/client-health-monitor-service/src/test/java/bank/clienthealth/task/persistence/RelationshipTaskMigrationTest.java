@@ -32,12 +32,13 @@ class RelationshipTaskMigrationTest {
         flyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load();
-        assertEquals(2, flyway.migrate().migrationsExecuted);
+        assertEquals(3, flyway.migrate().migrationsExecuted);
     }
 
     @BeforeEach
     void clearTables() throws SQLException {
-        execute("TRUNCATE processed_client_health_findings, relationship_task_history, "
+        execute("TRUNCATE relationship_health_audit_outbox, "
+                + "processed_client_health_findings, relationship_task_history, "
                 + "relationship_task_evidence, task_assignment_snapshots, relationship_tasks, "
                 + "agent_daily_task_admissions "
                 + "RESTART IDENTITY CASCADE");
@@ -57,11 +58,12 @@ class RelationshipTaskMigrationTest {
                               'relationship_task_evidence',
                               'relationship_task_history',
                               'agent_daily_task_admissions',
-                              'processed_client_health_findings')
+                              'processed_client_health_findings',
+                              'relationship_health_audit_outbox')
                         """)) {
             try (var result = statement.executeQuery()) {
                 result.next();
-                assertEquals(6, result.getInt(1));
+                assertEquals(7, result.getInt(1));
             }
         }
     }
@@ -162,6 +164,53 @@ class RelationshipTaskMigrationTest {
                 "task-1", "client-1", "d".repeat(64),
                 "TRANSACTION_ACTIVITY_DECLINE",
                 baselineFrom, comparisonTo, comparisonFrom, comparisonTo));
+    }
+
+    @Test
+    void enforcesAuditOutboxContractAndLeaseState() throws SQLException {
+        execute("""
+                INSERT INTO relationship_health_audit_outbox
+                    (event_id, event_type, action, source_service, actor_id, payload,
+                     created_at, next_attempt_at)
+                VALUES (repeat('a', 64), 'RELATIONSHIP_HEALTH', 'TASK_CREATED',
+                        'RELATIONSHIP_HEALTH_SERVICE', 'SYSTEM', '{}'::jsonb, now(), now())
+                """);
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_health_audit_outbox
+                    (event_id, event_type, action, source_service, actor_id, payload,
+                     created_at, next_attempt_at)
+                VALUES (repeat('a', 64), 'RELATIONSHIP_HEALTH', 'TASK_CREATED',
+                        'RELATIONSHIP_HEALTH_SERVICE', 'SYSTEM', '{}'::jsonb, now(), now())
+                """));
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_health_audit_outbox
+                    (event_id, event_type, action, source_service, actor_id, payload,
+                     created_at, next_attempt_at)
+                VALUES ('bad-id', 'RELATIONSHIP_HEALTH', 'TASK_CREATED',
+                        'RELATIONSHIP_HEALTH_SERVICE', 'SYSTEM', '{}'::jsonb, now(), now())
+                """));
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_health_audit_outbox
+                    (event_id, event_type, action, source_service, actor_id, payload,
+                     created_at, next_attempt_at)
+                VALUES (repeat('b', 64), 'RELATIONSHIP_HEALTH', 'UNKNOWN_ACTION',
+                        'RELATIONSHIP_HEALTH_SERVICE', 'SYSTEM', '{}'::jsonb, now(), now())
+                """));
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_health_audit_outbox
+                    (event_id, event_type, action, source_service, actor_id, payload,
+                     created_at, next_attempt_at, lease_token)
+                VALUES (repeat('c', 64), 'RELATIONSHIP_HEALTH', 'TASK_CREATED',
+                        'RELATIONSHIP_HEALTH_SERVICE', 'SYSTEM', '{}'::jsonb,
+                        now(), now(), 'lease-without-expiry')
+                """));
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_health_audit_outbox
+                    (event_id, event_type, action, source_service, actor_id, payload,
+                     created_at, next_attempt_at)
+                VALUES (repeat('d', 64), 'RELATIONSHIP_HEALTH', 'TASK_CREATED',
+                        'RELATIONSHIP_HEALTH_SERVICE', 'SYSTEM', '[]'::jsonb, now(), now())
+                """));
     }
 
     private void insertTask(String taskId, String clientId, String status, long version)

@@ -52,9 +52,10 @@ accuracy claim.
 
 RH-SF08 currently provides a deterministic redacted Auditor envelope, task and
 suppression event mapping, transactional-enqueue/delivery ports, and a bounded
-leased relay that continues after individual delivery failures. It deliberately
-contains no Flyway/JDBC or SQS implementation yet: those wait for the corrected
-SF05 V1 migration and Auditor-owner contract approval.
+leased relay that continues after individual delivery failures. V3 creates the
+health-db outbox, and task creation/evidence/transition/suppression paths enqueue
+through the same repository transaction boundary. The production JDBC
+repository, SQS gateway and Auditor allowlist remain pending.
 
 ## Ownership boundary
 
@@ -105,6 +106,6 @@ projection/run repositories, and Java 25 CI. Swayam's RH-SF05 task stream must
 implement ADR-0053's atomic 30-day severity-worsening cooldown and 20-new-task
 Singapore-day cap before production orchestration is complete.
 
-RH-SF08 production follow-up adds the outbox table/repository in the same
-transaction as SF05 task writes, then an IAM-scoped SQS gateway and the
-Auditor's reviewed `RELATIONSHIP_HEALTH_SERVICE` allowlist.
+RH-SF08 production follow-up implements the JDBC task/outbox repository against
+V1-V3, then an IAM-scoped SQS gateway and the Auditor's reviewed
+`RELATIONSHIP_HEALTH_SERVICE` allowlist.
