@@ -44,6 +44,7 @@ func (s Controller) ListActivities(ctx context.Context, req *auditv1.ListActivit
 
 	filter := models.ActivityFilter{
 		ActorId:          actor,
+		ClientID:         req.ClientId,
 		BeforeSequenceNo: before,
 		// One extra row shows whether another page exists.
 		Limit: int(req.PageSize) + 1,

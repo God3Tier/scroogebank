@@ -80,11 +80,11 @@ func TestListActivities(t *testing.T) {
 		},
 		"passes filters and returns the last page": {
 			request: &auditv1.ListActivitiesRequest{
-				PageSize: 2, ActorId: "agent-sub-1",
+				PageSize: 2, ActorId: "agent-sub-1", ClientId: "client-1",
 				From: timestamppb.New(from), To: timestamppb.New(to), PageToken: "9",
 			},
 			wantFilter: &models.ActivityFilter{
-				ActorId: "agent-sub-1", From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
+				ActorId: "agent-sub-1", ClientID: "client-1", From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
 			},
 			serviceLogs: []models.AuditLog{entry(8), entry(7)},
 			wantResponse: &auditv1.ListActivitiesResponse{

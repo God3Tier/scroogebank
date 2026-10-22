@@ -6,6 +6,7 @@ import "time"
 // zero value in any field means "no restriction" on that field.
 type ActivityFilter struct {
 	ActorId          string
+	ClientID         string
 	From             time.Time // inclusive
 	To               time.Time // exclusive
 	BeforeSequenceNo int64     // only entries with a lower sequence_no
