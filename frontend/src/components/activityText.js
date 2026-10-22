@@ -2,8 +2,9 @@
 // names, because audit events hold no client personal data (ADR-0021 decision
 // 3, ADR-0030). What an entry says depends on the service that recorded it:
 // client-service and account-service (source CRM) record the route they
-// served, user-service the kind of record and the user's role, and the
-// Cognito triggers a user's own password reset.
+// served, user-service the kind of record and the user's role, the Cognito
+// triggers a user's own password reset, and engagement-service an agent's
+// meetings and sent follow-up emails, by ID only.
 //
 // describeActivity returns:
 //   text      what was done, in lower case, to follow the actor's name
@@ -52,7 +53,29 @@ export function describeActivity({ sourceService, action, payload }) {
   if (sourceService === 'COGNITO_TRIGGERS' && verb === 'PASSWORD_RESET') {
     return activity({ text: 'reset their own password', icon: 'lock_reset', tone: 'change' })
   }
+  if (sourceService === 'ENGAGEMENT') return describeEngagement(verb, details)
   return fallback(verb)
+}
+
+const ENGAGEMENT_ACTIONS = {
+  EVENT_CREATE: { text: 'scheduled a meeting', icon: 'event_available', tone: 'create' },
+  EVENT_UPDATE: { text: 'changed a meeting', icon: 'edit_calendar', tone: 'change' },
+  EVENT_CANCEL: { text: 'cancelled a meeting', icon: 'event_busy', tone: 'remove' },
+  EMAIL_SEND: { text: 'sent a follow-up email', icon: 'outgoing_mail', tone: 'create' },
+}
+
+// engagement-service's payload is { event_id, event_version, occurred_at,
+// data }, and data holds IDs only (ADR-0051).
+function describeEngagement(verb, details) {
+  const known = ENGAGEMENT_ACTIONS[verb]
+  if (!known) return fallback(verb)
+  const data = details.data && typeof details.data === 'object' ? details.data : {}
+  const clientId = data.clientId || null
+  return activity({
+    ...known,
+    record: clientId ? { label: 'Client', id: clientId } : null,
+    clientId,
+  })
 }
 
 function describeCrm(verb, details) {

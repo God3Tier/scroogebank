@@ -129,14 +129,18 @@ Every page reads the deployed services except Client Health Monitor, whose servi
 
 | Page | Data |
 |---|---|
-| `/agent` | My Clients and the client list from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit (on the client page) and Delete through client-service |
+| `/agent` | My Clients and the client list from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit (on the client page) and Delete through client-service; Upcoming meetings (the next 7 days) from `GET /api/engagement/events`, with client names from `GET /api/clients`, hidden when engagement-service is unavailable |
 | `/admin` | Admin and agent totals and lists from `GET /api/users`; Create Admin / Agent with `POST /api/users` (Cognito e-mails the temporary password); Disable with `PATCH /api/users/{id}/disable` (users are never deleted, and the root admin cannot be disabled); All Transactions from `GET /api/transactions`, 20 at a time |
 | `/clients/:id` | client-service: profile, edit, documents, verification. Open account with `POST /api/accounts` on account-service |
 | `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions` |
 | `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)) |
 | `/agent/client-health` | Synthetic, from `src/data/clientHealthTasks.js` |
+| `/agent/calendar` | engagement-service ([`docs/api/engagement-api.yaml`](../docs/api/engagement-api.yaml)): the month's meetings and Singapore public holidays, up to the last month the holiday list covers ([ADR-0057](../docs/adr/ADR-0057-holiday-sync-from-data-gov-sg.md)); create, edit and cancel meetings, each emailed to the agent as a calendar invite ([ADR-0052](../docs/adr/ADR-0052-calendar-invites-by-email.md)); notification preferences. Times are shown and entered in Singapore time |
+| `/agent/drafts` | engagement-service: AI or template follow-up drafts ([ADR-0054](../docs/adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)), edited as plain text with the names filled in ([ADR-0056](../docs/adr/ADR-0056-drafts-edited-as-plain-text.md)), sent after a confirmation, or discarded. Client names come from `GET /api/clients` |
 
 Locally, `vite.config.js` sends each `/api` path to the service that owns it, in the same order as the deployed load balancer's rules.
+
+The calendar, follow-up emails and upcoming-meetings layouts follow the Stitch screens "Agent Calendar", "Follow-up Emails" and "Agent Dashboard - Upcoming Meetings" in the project "Scrooge Global Bank CRM" (design system: Institutional Precision). Their styles are in `src/styles/engagement.css`. Stitch's sample data, search bar and status badges are not part of the pages.
 
 ## Business dashboards
 

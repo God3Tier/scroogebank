@@ -11,6 +11,10 @@ vi.mock('../api/dashboard.js', async (importOriginal) => ({
   ...(await importOriginal()),
   getDashboard: vi.fn(),
 }))
+vi.mock('../api/engagement.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listEvents: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('../api/activities.js', () => ({
   listActivities: vi.fn().mockResolvedValue({ content: [], nextCursor: null }),
 }))

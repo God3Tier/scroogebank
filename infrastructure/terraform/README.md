@@ -7,6 +7,8 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `bootstrap/` | Account-wide: the state bucket, CloudTrail, AWS Budgets, the GitHub OIDC provider (off) | Local, applied once per account |
 | `stacks/crm/` | One legal entity's whole stack (ADR-0026): network, edge, API entry, Cognito, ECS services, databases, audit pipeline, alarms, backups | `crm/<entity>/<environment>.tfstate` |
 | `stacks/business-dashboard/` | dashboard-service (X-factor 2), inside one CRM stack's network and cluster; reads that stack's `dashboard_inputs` output (ADR-0047) | `business-dashboard/<entity>/<environment>.tfstate` |
+| `stacks/mail-identity/` | The SES sending identity for agent engagement: domain identity, DKIM, MAIL FROM and DMARC records, configuration set and sandbox recipients. Long-lived: never destroyed between sessions (ADR-0053) | `mail-identity/<entity>/<environment>.tfstate` |
+| `stacks/agent-engagement/` | engagement-service and engagement-db, inside one CRM stack's network and cluster; reads that stack's `engagement_inputs` output and the mail identity (ADR-0051) | `agent-engagement/<entity>/<environment>.tfstate` |
 | `stacks/sftp-server/` | The simulated core banking SFTP server, an external system with its own stack (ADR-0024) | `sftp-server/<environment>.tfstate` |
 | `modules/postgres/` | One RDS PostgreSQL instance for one service (ADR-0023) | |
 | `modules/ecs-service/` | One Fargate service or scheduled task, with its roles, logs, Service Connect, ALB rules, auto scaling, TLS files and database migrations | |
@@ -26,7 +28,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 
 ## What each stack deploys
 
-The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `crm`, `business-dashboard`, `sftp-server`, then `crm` again with the SFTP server's address. Destroy `business-dashboard` before `crm`. Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
+The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `mail-identity` (once), `crm`, `business-dashboard`, `agent-engagement`, `sftp-server`, then `crm` again with the SFTP server's address. Destroy `business-dashboard` and `agent-engagement` before `crm`; keep `mail-identity`. Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
 
 ### `bootstrap`
 
@@ -69,6 +71,30 @@ dashboard-service, the business dashboard (ADR-0033), for one CRM stack (ADR-004
 
 Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`. The plan fails until you do.
 
+### `stacks/mail-identity`
+
+The SES identity agent engagement sends from (ADR-0053 decision 2). Apply it once per environment, before `agent-engagement`, and keep it: a new identity needs DKIM verification again, and each sandbox recipient must click its verification email again. It contains:
+
+- with `domain_name`: the domain identity `mail.<app host>` (`mail.sg.itsag3t6.com` in prod) with Easy DKIM, its three DKIM CNAMEs, the MAIL FROM domain `bounce.<sending domain>` with its MX and SPF records, and a DMARC record at `p=none`, all in the existing hosted zone;
+- without `domain_name`, in an account with no hosted zone: an email identity for `sender_address`, the one address mail then comes from, and no DNS records (ADR-0055). The agent-engagement stack takes the same `sender_address`;
+- the configuration set `<prefix>-engagement`, which requires TLS and publishes sends, deliveries, bounces, complaints and rejects to CloudWatch;
+- an email identity for each of `verified_recipients`, the team inboxes the SES sandbox may send to. Real addresses go only in the git-ignored tfvars.
+
+### `stacks/agent-engagement`
+
+engagement-service (ADR-0051) for one CRM stack, built like the business dashboard's. It reads the CRM stack's `engagement_inputs` output and looks up the mail identity by name, so apply `mail-identity` and the CRM stack first; the plan fails if the identity or the configuration set is missing. It contains:
+
+- the engagement-service ECR repository;
+- the service on Fargate (1 vCPU, 2 GB, 1 to 2 tasks and 0 while stopped), behind the internal ALB at `/api/engagement/*` (priority 70) over HTTPS, as a Service Connect client only, with its db-migrate container applying `services/engagement-service`'s migrations;
+- engagement-db, a single-AZ `db.t4g.micro` built like the CRM's databases and tagged for backup in prod, and the service's own login;
+- its TLS certificate, self-signed, in a Secrets Manager secret;
+- its security groups, and a rule on the CRM's client group that lets it call client-service;
+- a task role that may send to the audit queue, send mail only as the identity through the configuration set from the `no-reply` address, call `cognito-idp:ListUsers` on the pool, and invoke Nova Micro's Asia-Pacific profile and its model in the six regions ADR-0054 lists;
+- alarms on dispatcher lag (the service logs `mail_dispatch_lagging`), the holiday list (`holiday_coverage_short` or `holiday_sync_mismatch`, ADR-0057) and the SES bounce rate, to the CRM's alarm topic;
+- a policy on the CRM's GitHub deploy role, when that role exists.
+
+`ai_enabled` (default `false`) is the AI drafting kill switch, and `mail_enabled` turns SES sending off. Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. engagement-db is not paused by `running`; `scripts/aws-session.sh` stops and starts it with the CRM's databases. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`.
+
 ### `stacks/sftp-server`
 
 Stands in for the bank's core banking system, Feature 3's external server. It has its own VPC and contains:
@@ -102,7 +128,7 @@ To restore one, uncomment it, and for the DR vault the prod assertion in `stacks
 | Alert worker, its 4-hourly schedule, AgentCore web search in Tokyo and Bedrock access | INF-06 (EDA-D1-02), blocked until the alerts ADRs are accepted |
 | Health monitor, its daily analysis task and health-db | INF-07: the service does not run yet |
 | GitHub deploy role (`enable_github_deploy_role`) and deploy workflows. `.github/workflows/ci.yml` builds and tests every pull request, but nothing pushes images or applies Terraform | INF-09: deferred while deployments are run by hand |
-| SES e-mail for client verification | [Open item 19](../../docs/architecture/open-items.md#19-client-verification-request-feature-2): agents check ID documents by hand for now |
+| SES e-mail for client verification | [Open item 19](../../docs/architecture/open-items.md#19-client-verification-request-feature-2): agents check ID documents by hand for now. SES itself is deployed for agent engagement (`stacks/mail-identity`) |
 
 ## Checks
 
@@ -113,6 +139,6 @@ terraform validate
 terraform test      # plans each mode against mocked providers; no AWS account needed
 ```
 
-The CRM test also checks that every service with a database migrates it, and that each service and the ingest Lambda read their own login's secret, never the master secret. `stacks/business-dashboard/` runs the same way; its test stands in for the CRM stack's state, and checks the rules on the CRM's groups and that the plan fails while the audit queue does not allow its role. `modules/ecs-service/` has its own for how a Java service serves TLS, for the db-migrate container and for the redeploy on a start or stop, `bootstrap/` one for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
+The CRM test also checks that every service with a database migrates it, and that each service and the ingest Lambda read their own login's secret, never the master secret. `stacks/business-dashboard/` runs the same way; its test stands in for the CRM stack's state, and checks the rules on the CRM's groups and that the plan fails while the audit queue does not allow its role. `stacks/agent-engagement/` does the same, and also checks the task role's SES, Bedrock and Cognito permissions, the switches and that a global inference profile is refused. `stacks/mail-identity/` checks the sending, MAIL FROM and DMARC names ADR-0053 fixes. `modules/ecs-service/` has its own for how a Java service serves TLS, for the db-migrate container and for the redeploy on a start or stop, `bootstrap/` one for the budget alerts, and `stacks/sftp-server/` one for `host_key_file`. The sftp-server test writes throwaway keys under its `.terraform/` folder and deletes them when it finishes.
 
 Real `*.tfvars` and `*.s3.tfbackend` files are git-ignored; copy the `.example` files next to them.

@@ -21,9 +21,9 @@ alarm_email      = "you@example.edu"
 # Delete this line in an account without this domain's hosted zone.
 domain_name = "itsag3t6.com"
 
-# dashboard-service's task role, from the business-dashboard stack (ADR-0047).
-# Put in your account ID.
-extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-staging-dashboard-service-task"]
+# The task roles of dashboard-service (business-dashboard stack, ADR-0047) and
+# engagement-service (agent-engagement stack, ADR-0051). Put in your account ID.
+extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-staging-dashboard-service-task", "arn:aws:iam::123456789012:role/crm-sg-staging-engagement-service-task"]
 
 # Optional while testing the frontend from Vite against the staging user pool.
 local_dev_origins = ["http://localhost:5173"]

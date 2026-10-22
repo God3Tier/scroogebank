@@ -151,6 +151,7 @@ build() { docker build --platform linux/amd64 -t "crm/$1:$TAG" -f "$2" "$3"; }
 build user-service        services/user-service/Dockerfile        .
 build dashboard-service   services/dashboard-service/Dockerfile   .
 build event-alert-service services/event-alert-service/Dockerfile .
+build engagement-service  services/engagement-service/Dockerfile  .
 build auditor             services/auditor/Dockerfile             .
 build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
 build account-service     services/account-service/Dockerfile     services/account-service
@@ -158,11 +159,11 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 build db-migrate          infrastructure/db-migrate/Dockerfile    .
 ```
 
-`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's and event-alert-service's migrations reach AWS only through it.
+`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's and engagement-service's migrations reach AWS only through it.
 
 ## 3. Create the CRM stack, stopped
 
-In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag, the domain (when this account has its zone) and the business dashboard's audit role in `env/prod.tfvars`. The role is dashboard-service's, from the business-dashboard stack (step 4); the audit queue refuses its events, and that stack refuses to plan, until it is listed here ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)):
+In the same terminal as step 2, so `TAG` is still set (in a new one, set it again as in step 2), write the backend file from the bootstrap stack's `state_bucket` output, and put the image tag, the domain (when this account has its zone) and the audit roles of the stacks deployed beside this one in `env/prod.tfvars`. The roles are dashboard-service's, from the business-dashboard stack (step 4, [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)), and engagement-service's, from the agent-engagement stack (step 4a, [ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md)); the audit queue refuses their events, and those stacks refuse to plan, until they are listed here:
 
 ```sh
 cd infrastructure/terraform/stacks/crm
@@ -172,7 +173,7 @@ sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: fin
 sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/prod.tfvars
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 sed -i '/^extra_audit_producer_role_arns *=/d' env/prod.tfvars   # replaces an older line
-printf '%s\n' "extra_audit_producer_role_arns = [\"arn:aws:iam::${ACCOUNT:?not signed in}:role/crm-sg-prod-dashboard-service-task\"]" >> env/prod.tfvars
+printf '%s\n' "extra_audit_producer_role_arns = [\"arn:aws:iam::${ACCOUNT:?not signed in}:role/crm-sg-prod-dashboard-service-task\", \"arn:aws:iam::${ACCOUNT}:role/crm-sg-prod-engagement-service-task\"]" >> env/prod.tfvars
 DOMAIN=$(aws route53 list-hosted-zones-by-name --dns-name itsag3t6.com \
   --query 'HostedZones[?Name==`"itsag3t6.com."` && Config.PrivateZone==`false`].Name' --output text | sed 's/\.$//')
 sed -i '/^domain_name *=/d' env/prod.tfvars   # replaces an older line
@@ -181,7 +182,7 @@ echo "domain: ${DOMAIN:-none, so the app uses its *.cloudfront.net address}"
 grep -E '^(image_tag|root_admin_email|alarm_email|enable_ingest_lambda|extra_audit_producer_role_arns|domain_name)' env/prod.tfvars
 ```
 
-The role's name starts with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack.
+The roles' names start with the stack's prefix, `crm-<legal_entity>-<environment>`; change `crm-sg-prod` for another stack.
 
 `DOMAIN` is `itsag3t6.com` in the project account, which has that domain's public hosted zone. In an account without it, such as a personal one, `DOMAIN` is empty and no `domain_name` line is written, so the same commands deploy without a domain. To use a domain you registered yourself, replace the lookup with `DOMAIN=yourdomain.com`. If the `echo` line says `none` in the project account, the hosted zone is missing ([Register a domain](#register-a-domain-once-per-account)) or the lookup failed (check for an error above it). Fix that first, since the stack would otherwise deploy without the domain.
 
@@ -233,9 +234,56 @@ cd -
 
 It takes the task count from the CRM stack, so, like step 3, this apply starts no task. If the plan stops with `The audit queue does not allow arn:aws:iam::…`, the CRM stack was applied without that ARN in `extra_audit_producer_role_arns`: run step 3's first block again, apply the CRM stack, then this step.
 
+## 4a. Create the mail identity (once) and the agent-engagement stack, stopped
+
+Agent engagement ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)) sends calendar invites, reminders and client emails through SES. With the CRM stack's `domain_name`, mail comes from `no-reply@mail.<app host>`, signed with the domain's DKIM. In an account without the domain's hosted zone, mail comes from one verified address you choose, `sender_address`, with no DNS records ([ADR-0055](../adr/ADR-0055-sender-address-without-a-domain.md)). Receivers check that address's domain's DMARC policy, so mail from an address at a domain that publishes `p=quarantine` or `p=reject` (many webmail providers do) may go to spam or be refused. Check with `nslookup -type=TXT _dmarc.<domain>`, and prefer a domain with `p=none` or no DMARC record.
+
+**The mail identity, once per environment.** This stack is long-lived: never destroy it between sessions or in a teardown you mean to redeploy from ([ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) decision 2). The commands set `domain_name` as step 3 does, when this account has the zone. Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand, and, without a domain, `sender_address` too: real addresses only there, never in the example:
+
+```sh
+cd infrastructure/terraform/stacks/mail-identity
+STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # then set verified_recipients
+DOMAIN=$(sed -n 's/^domain_name *= *"\([^"]*\)".*/\1/p' ../crm/env/prod.tfvars)
+sed -i '/^domain_name *=/d' env/prod.tfvars   # the CRM stack's, or none
+[ -z "$DOMAIN" ] || printf 'domain_name = "%s"\n' "$DOMAIN" >> env/prod.tfvars
+echo "domain: ${DOMAIN:-none, so set sender_address in env/prod.tfvars}"
+terraform init -backend-config=env/prod.s3.tfbackend
+terraform apply -var-file=env/prod.tfvars
+terraform output dkim_status   # with a domain: PENDING until SES finds the DKIM records, usually within an hour
+cd -
+```
+
+Each address in `verified_recipients`, and `sender_address` without a domain, receives an email from Amazon Web Services; click its link once. In the SES sandbox, mail reaches only those addresses. **That includes the agents, not only the clients:** invites and reminders go to the agent's Cognito email (the address they sign in with), and follow-up emails go to the client's email in client-service, so list both, or give agents and demo clients addresses that are already listed (synthetic data only). An unlisted address fails with `ses_rejected` (`Email address is not verified`), and that mail is not retried. Apply this stack again to add or remove an address. To see what is verified:
+
+```sh
+aws sesv2 list-email-identities --query 'EmailIdentities[].[IdentityName,VerificationStatus]' --output table
+```
+
+**The agent-engagement stack.** Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`. It copies `sender_address` from mail-identity's `env/prod.tfvars`, so both stacks use the same address; with a domain there is none, and the stack ignores it anyway:
+
+```sh
+cd infrastructure/terraform/stacks/agent-engagement
+STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' ../crm/env/prod.tfvars); echo "$TAG"
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
+sed -i -e "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" -e "s/^image_tag *=.*/image_tag = \"${TAG:?no image_tag in crm/env/prod.tfvars: finish step 3}\"/" env/prod.tfvars
+SENDER=$(sed -n 's/^sender_address *= *"\([^"]*\)".*/\1/p' ../mail-identity/env/prod.tfvars)
+sed -i '/^sender_address *=/d' env/prod.tfvars   # mail-identity's, or none
+[ -z "$SENDER" ] || printf 'sender_address = "%s"\n' "$SENDER" >> env/prod.tfvars
+echo "sender: ${SENDER:-none, so mail comes from the domain}"
+terraform init -backend-config=env/prod.s3.tfbackend
+terraform apply -var-file=env/prod.tfvars
+cd -
+```
+
+It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first. If it stops with `The CRM stack has no domain_name`, set `sender_address` in mail-identity's `env/prod.tfvars`, apply that stack, and run this block again.
+
 ## 5. Push the images
 
-Steps 3 and 4 created the ECR repositories: the CRM stack's in step 3, dashboard-service's in step 4. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys:
+Steps 3, 4 and 4a created the ECR repositories: the CRM stack's in step 3, dashboard-service's in step 4, engagement-service's in step 4a. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys:
 
 ```sh
 TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' infrastructure/terraform/stacks/crm/env/prod.tfvars); echo "$TAG"
@@ -248,6 +296,9 @@ for s in user-service event-alert-service auditor client-service account-service
 
 DASHBOARD=$(terraform -chdir=infrastructure/terraform/stacks/business-dashboard output -raw ecr_repository)
 docker tag "crm/dashboard-service:$TAG" "$DASHBOARD:$TAG" && docker push "$DASHBOARD:$TAG"
+
+ENGAGEMENT=$(terraform -chdir=infrastructure/terraform/stacks/agent-engagement output -raw ecr_repository)
+docker tag "crm/engagement-service:$TAG" "$ENGAGEMENT:$TAG" && docker push "$ENGAGEMENT:$TAG"
 ```
 
 ## 6. Start the stacks
@@ -257,6 +308,7 @@ cd infrastructure/terraform/stacks/crm
 terraform apply -var-file=env/prod.tfvars -var running=true
 cd -
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars   # takes running=true from the CRM stack
+terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars     # the same
 ```
 
 The databases need nothing by hand. Each service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate.
@@ -281,13 +333,14 @@ cd -
    ```sh
    STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)   # crm-<legal_entity>-<environment>
    aws ecs describe-services --cluster "$STACK" \
-     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service \
+     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service engagement-service \
      --query 'services[].[serviceName,runningCount,desiredCount]' --output table
    ```
 
    A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); for a `db-migrate` failure, its `db-migrate/…` log stream gives Flyway's reason ([Troubleshooting](#troubleshooting)).
 2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
+4. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
 
 ## 9. The external SFTP server and the ingest Lambda
 
@@ -463,16 +516,19 @@ Run it again after opening, closing or deleting accounts, and after the sftp-ser
 # stop
 terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tfvars -var running=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars
 scripts/aws-session.sh stop
 # start
 scripts/aws-session.sh start
 terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tfvars -var running=true
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars
 ```
 
 - Stopping scales every service to 0, pauses the schedules, removes the NAT gateway (its Elastic IP stays) and stops the databases and the SFTP server.
-- The business-dashboard stack reads `running` from the CRM stack's state, so apply it after the CRM stack every time. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
+- The business-dashboard and agent-engagement stacks read `running` from the CRM stack's state, so apply them after the CRM stack every time. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
 - Starting and stopping each redeploy every service, for Service Connect (step 3), so each plan shows every `aws_ecs_service` updating in place. A stop briefly starts one new task per service, which the scale to 0 stops within seconds.
+- The script also stops and starts engagement-db when the agent-engagement stack exists. While stopped, no invite or reminder is sent; a reminder whose meeting starts in the meantime is recorded as missed (ADR-0051 decision 6).
 - Starting takes several minutes, mostly the databases.
 - RDS starts a stopped instance again after 7 days, so stop it again after a longer break.
 - For the high-availability demo week, add `-var high_availability=true`.
@@ -490,9 +546,13 @@ terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=e
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply   -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard destroy -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply   -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/agent-engagement destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
 
+- **Destroy agent-engagement before crm too,** for the same reasons: its rule sits on client-service's group, it runs in the CRM's cluster, and engagement-db uses the CRM's subnet group, parameter group and KMS key. Its apply after the CRM's `deletion_protection=false` apply turns off engagement-db's deletion protection and final snapshot.
+- **Keep mail-identity** unless you are giving up SES for good: it costs nothing while idle, and a new identity needs DKIM verification and every inbox's verification click again. To remove it, `terraform -chdir=infrastructure/terraform/stacks/mail-identity destroy -var-file=env/prod.tfvars`, before destroying `bootstrap`.
 - **Destroy business-dashboard before crm.** Its rules sit on the CRM stack's security groups and its service runs in the CRM's cluster, so the CRM stack cannot be destroyed while it exists. Its apply after the CRM's `deletion_protection=false` apply lets its destroy empty dashboard-service's image repository.
 
 - **Prod first needs its protections lifted:** apply once with `-var deletion_protection=false`. That turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots, so the stack can be created again straight away; take a manual snapshot first if you want to keep any data. Staging has none to lift.
@@ -509,9 +569,10 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 - **Starting over** gives a new user pool and empty databases, so you can change `root_admin_email` then.
 - **The domain and its hosted zone stay** ([Register a domain](#register-a-domain-once-per-account)): they are outside Terraform, so destroying `bootstrap` leaves them too. The certificates and DNS records go with the crm stack. The zone costs USD 0.50 a month while it exists; delete it only when you give up the domain, since a later deployment would then need a new zone and the domain's name servers changed to it.
 - **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). Before destroying, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), or wait 7 days.
-- **Destroy `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
+- **Destroy `mail-identity`, then `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
 
   ```sh
+  terraform -chdir=infrastructure/terraform/stacks/mail-identity destroy -var-file=env/prod.tfvars
   cd infrastructure/terraform/bootstrap
   bucket=$(terraform output -raw state_bucket); echo "${bucket:?no state_bucket output}"
   aws s3api delete-objects --bucket "$bucket" --delete "$(aws s3api list-object-versions --bucket "$bucket" \
@@ -538,6 +599,15 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
 | A service's tasks stop with `CannotPullContainerError: ... not found` | `image_tag` in `env/prod.tfvars` is not a tag you pushed (the example's `replace-with-the-pushed-tag`, for instance), or that service's image was never pushed (step 5). Push it, set the tag and apply again. A failed deployment rolls back to the previous one, which keeps failing if it had the same problem, until the next apply |
 | The producer writes no files; its log says `lists no CRM accounts` | Its account list is empty: the sync has not run since the instance was created, or the CRM has no open accounts. Open one and run `scripts/sync-producer-accounts.sh` (9.5) |
 | `sync-producer-accounts.sh` stops with `could not read the accounts query's output` | The query ran, but its log could not be fetched in time. The producer's list is unchanged; run the script again |
+| A meeting's invite stays `Queued` | engagement-service is not running (the stack is stopped, or the agent-engagement stack was not applied after the CRM's start), or `mail_enabled = false`. Mail waiting over 5 minutes raises the `engagement-dispatch-lagging` alarm |
+| Invites or reminders show `Failed` with `agent_email_unavailable` | Cognito has no `email` for that agent, or `COGNITO_USER_POOL_ID` is wrong. Check the user in the pool |
+| Mail shows `Failed` with `ses_rejected`, and the log says the address is not verified | The SES account is in the sandbox and the recipient is not a verified identity, or has not clicked its verification email. For an invite or reminder the recipient is the **agent's** Cognito email; for a follow-up email it is the client's. Add it to mail-identity's `verified_recipients`, apply mail-identity and click the link, then edit or create the meeting again: failed mail is not retried |
+| The `engagement-holiday-data` alarm fires | engagement-service logged `holiday_coverage_short` (from October, no public holidays for next year yet) or `holiday_sync_mismatch` (a stored holiday that MOM's data.gov.sg list no longer has). Search the log for those words. For a short list, check whether MOM has published next year on data.gov.sg; the next daily sync or start adds it, and `holiday_sync_failed` in the log means data.gov.sg could not be read. For a mismatch, correct the row in a new migration (ADR-0057) |
+| Mail fails with `ses_error`, or a draft send says the email service did not accept the message | engagement-service logs `SES refused the message (<code>): <AWS error> <status> <message>`, with addresses shown as `<from>` and `<address>`. `AccessDenied 403` names the resource the task role may not use. The `SendEngagementMail` policy allows every identity in the account and region (`identity/*`) and the configuration set, from the sender address only: apply the agent-engagement stack if it is older, and check the configuration set's name. With no such line, the log says `SES could not be reached`: check the NAT gateway |
+| Every send fails with `ses_rejected` just after mail-identity was created, without a domain | `sender_address` has not clicked its verification email. Click it, or apply mail-identity again to resend it |
+| Every send fails with `ses_rejected` just after mail-identity was created | DKIM is not verified yet (`terraform -chdir=infrastructure/terraform/stacks/mail-identity output dkim_status` is not `SUCCESS`). Wait for SES to find the records, usually within an hour |
+| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, the CRM stack's `domain_name` differs from its `domain_name`, or, without a domain, the two stacks' `sender_address` differ (the agent-engagement block copies it; check for an edit made since). Apply mail-identity with the same values, and run the agent-engagement block again |
+| Mail sent without a domain lands in spam or is refused | The sender address's domain publishes DMARC `p=quarantine` or `p=reject`, and SES signs with its own DKIM key, so DMARC fails (ADR-0055). Use an address at a domain with `p=none` or no DMARC record, or deploy in the account with the domain |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |
 | A service logs `UnknownHostException: auditor` (or another service's name), and the activity feed or a dashboard panel says it is unavailable | The calling service's latest deployment was made before the service it calls existed. Either the stack's first apply had `running=true` instead of creating it stopped (step 3), or the called service was created or replaced since the stack last started. Redeploy the calling service: `aws ecs update-service --cluster "$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)" --service <service> --force-new-deployment`. The next stop and start also fixes it |

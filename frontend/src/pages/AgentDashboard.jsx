@@ -6,6 +6,7 @@ import { validateClient } from '../components/clientValidation.js'
 import { getDashboard, panelData, windowForDays } from '../api/dashboard.js'
 import ActivityFeed from '../components/ActivityFeed.jsx'
 import StatCard from '../components/StatCard.jsx'
+import UpcomingMeetings from '../components/engagement/UpcomingMeetings.jsx'
 import { formatNumber } from '../components/dashboard/format.js'
 
 const CLIENT_PAGE = 20
@@ -205,6 +206,8 @@ function AgentDashboard() {
                     caption={`Last ${TRANSACTION_DAYS} days`}
                 />
             </div>
+
+            <UpcomingMeetings />
 
             <div className="action-bar">
                 <button onClick={() => navigate('/agent/alerts')}>

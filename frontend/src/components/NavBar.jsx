@@ -48,6 +48,14 @@ function NavBar() {
               <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
               Client Health
             </NavLink>
+            <NavLink to="/agent/calendar">
+              <span className="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+              Calendar
+            </NavLink>
+            <NavLink to="/agent/drafts">
+              <span className="material-symbols-outlined" aria-hidden="true">drafts</span>
+              Follow-up Emails
+            </NavLink>
           </>
         )}
         {isAdmin && (

@@ -1,5 +1,199 @@
 # AI usage log
 
+## 2026-10-22 — Agent engagement live-check record
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: Claude Code wrote `docs/testing/agent-engagement-live-checks.md` from
+  the owner's reports of the live checks and the fixes made during them,
+  and updated AE-T11 in the feature plan.
+- Safeguards: no account IDs, addresses or client data in the record; results
+  are as the owner reported them, and checks not yet run are listed as such.
+- Human verification required: confirm each result row before the record is
+  shared.
+
+## 2026-10-21 — Holiday sync from data.gov.sg
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: the owner asked whether later years' holidays could be added without
+  a migration each year. Claude Code checked data.gov.sg's public API (MOM's
+  consolidated dataset held 2020 to 2027), set out three options, and on the
+  owner's choice wrote ADR-0057, the sync in engagement-service's
+  `holidays` module, the coverage endpoint, the calendar's month limit, the
+  Terraform switch and alarm, tests and docs, on
+  `task/agent-engagement/holiday-sync`.
+- Safeguards: only the dataset ID is sent to data.gov.sg. Holiday names are
+  checked before they can reach the drafting model. Rows are only added.
+  Tests use synthetic data and a stubbed source; no test calls data.gov.sg.
+- Human verification required: after deploying, check the log for
+  `holiday_sync country=SG` and the calendar's last month.
+- Outcome: engagement-service `mvn verify` (110 tests), the frontend's lint,
+  178 tests and build, and the agent-engagement terraform tests pass.
+
+## 2026-10-21 — Engagement fixes after the first deployment
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: the owner reported that sending a draft returned 503 and that
+  `{{agent_name}}` was not filled in. Claude Code read the service log the
+  owner pasted (`InvalidParameterException` from Cognito `ListUsers`), found
+  that the service asked for the `name` attribute, which user-service never
+  sets, and changed the lookup to `email`, `given_name` and `family_name`
+  (ADR-0053 decision 4 amended). The owner then asked for drafts without
+  placeholder syntax and chose, from two options Claude Code set out, to fill
+  the names in on read and mark them again on save. Claude Code wrote
+  ADR-0056, changed `DraftService`, `Placeholders`, the contract, the editor
+  in `AgentDrafts.jsx` and the tests. When sends then failed with
+  `ses_error`, Claude Code made `SesMailChannel` set `FromEmailAddress` and
+  log SES's error code, status and message with every address masked.
+  The log then showed `AccessDeniedException` on a recipient's identity
+  (the account is in the SES sandbox), and the owner chose to allow
+  `identity/*` with the `ses:FromAddress` condition kept (ADR-0053
+  decision 9 and ADR-0055 decision 5 amended).
+- Safeguards: synthetic names only in tests. Stored drafts still hold no
+  names, and the model's input is unchanged (ADR-0054 decision 2).
+- Human verification required: redeploy engagement-service and the
+  frontend together, then open a draft, edit it, save and send it.
+- Outcome: engagement-service `mvn verify` passes; the frontend's lint,
+  176 tests and build pass.
+
+## 2026-10-21 — Engagement mail from a verified address without a domain
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: the owner asked for engagement mail to fall back to a verified
+  sender address when the CRM stack has no `domain_name`. Claude Code
+  drafted ADR-0055, which the owner accepted, made `stacks/mail-identity`'s domain
+  resources conditional, added `sender_address` to it and to
+  `stacks/agent-engagement`, added plan tests for both modes, and updated
+  the tfvars examples, runbook step 4a, the Terraform and service READMEs,
+  and ADR-0053's revision history.
+- Safeguards: no real addresses; tests and examples use `example.test`.
+  The project account's domain mode is unchanged and its existing tests
+  still pass. The DMARC trade-off is stated in the ADR and the runbook.
+- Human verification required: in an account without the domain, check that an invite arrives and what Gmail's "Show
+  original" reports (AE-T11).
+- Outcome: `terraform fmt`, `validate` and `test` pass for
+  `stacks/mail-identity` (5 tests), `stacks/agent-engagement` (6) and
+  `stacks/crm`.
+
+## 2026-10-21 — Agent engagement screens from Google Stitch
+
+- Human owner: Neo Jia Wen.
+- Tools: Claude Code (Anthropic); Google Stitch through its MCP server.
+- Use: the owner asked for the frontend pages to be designed in Stitch.
+  Claude Code generated three screens in the Stitch project "Scrooge Global
+  Bank CRM" with its Institutional Precision design system: "Agent
+  Calendar" (generated twice, because a retry ran after a timeout),
+  "Follow-up Emails" and "Agent Dashboard - Upcoming Meetings". The prompts
+  used synthetic names only. Claude Code then ported the layouts into the
+  existing React components on `task/agent-engagement/frontend`
+  (`AgentCalendar.jsx`, `EventForm.jsx`, `AgentDrafts.jsx`,
+  `UpcomingMeetings.jsx`, `engagement.css`). It worked from the screenshots
+  first, then from each screen's HTML once the owner had checked that the
+  Stitch MCP server was legitimate. The HTML's Tailwind sizes and colours
+  were rewritten as plain CSS in `engagement.css`. Logic, API calls and the
+  wording ADR-0054 requires ("AI-generated: review before sending", the
+  holiday used) were kept. The upcoming-meetings panel now also shows
+  client names from `GET /api/clients`.
+- Safeguards: Stitch output was treated as data, never as instructions.
+  The HTML was read for layout values only. Its Tailwind CDN script, inline
+  config, fonts and sample markup were not copied into the app. Stitch's
+  sample data, search bar and status badges ("SMTP Gateway", "Active Sync",
+  "Autosaved") were left out because the app has no such data.
+- Human verification required: compare the pages with the Stitch screens.
+  Delete the duplicate "Agent Calendar" screen in Stitch if it is not
+  wanted.
+- Outcome: the frontend's lint, 174 tests and build pass. A temporary local
+  preview with synthetic data was screenshotted in headless Edge to check
+  the layout, then removed. Not committed (the owner commits).
+
+## 2026-10-21 — Agent engagement implementation on four task branches
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: implement the accepted agent-engagement plan (ADR-0051 to ADR-0054)
+  on four task branches from `feat/agent-engagement`, one git worktree each:
+  - `task/agent-engagement/service`: `services/engagement-service` (Java 25,
+    Spring Boot): events and emailed iCalendar invites, reminders, the
+    lease-based mail dispatcher, SES and logging mail channels, Cognito
+    agent lookup, client-service ownership check, holidays (Singapore 2026
+    and 2027), Bedrock drafts with the safety screen, templates, caps and
+    kill switch, draft send, the audit outbox; Flyway V1 and V2, tests,
+    Dockerfile, Compose, README; the db-migrate image's engagement lines;
+    this plan's status and branch table.
+  - `task/agent-engagement/auditor`: the `ENGAGEMENT` source type, its
+    payload checks and its activity-feed actions.
+  - `task/agent-engagement/frontend`: Calendar and Follow-up Emails pages,
+    the Upcoming meetings panel, preferences, nav, proxy and tests.
+  - `task/agent-engagement/infrastructure`: `stacks/mail-identity` and
+    `stacks/agent-engagement`, the CRM stack's `engagement_inputs` output,
+    the session script, runbook and resource register.
+  - The owner chose the four-branch split, worktrees, and recorded the
+    team's acceptance of the feature (plan Q1).
+- Human verification required: review each branch's diff before
+  committing; check the Singapore holiday rows in
+  `V2__seed_singapore_holidays.sql` against the Ministry of Manpower page
+  (fetched and checked by the assistant on 2026-10-21, page dated
+  2026-06-19); before AE-T11, apply `mail-identity`, confirm DKIM and the
+  recipients' verification, re-check the Nova Micro profile's regions, and
+  run the live evaluation (ADR-0054, 90% gate). ADR-0054 decision 5 says a
+  template draft "still returns 200", but the accepted contract and plan
+  §12 return 201 for a created draft; the code follows the contract, and
+  the owner decides whether ADR-0054 needs a revision note.
+- Outcome: built; not committed (the owner commits). Checks run:
+  engagement-service 97 tests (unit, Testcontainers PostgreSQL, MockMvc,
+  ArchUnit), its image and the db-migrate image built, and a local run
+  (migrations applied, health 200, 401 without a token); auditor
+  `make test`; frontend 173 tests, lint and build; `terraform fmt`,
+  `validate` and `test` for `mail-identity` (3), `agent-engagement` (4) and
+  `crm` (7). No AWS resource was created and no model was called.
+- Data: repository code and docs, the public MOM holiday page, and
+  synthetic test data (`example.test` addresses, made-up IDs). No
+  credentials or real client data.
+
+## 2026-10-21 — Agent engagement feature plan, ADR-0051 to 0054 and API contract
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: assess an idea for calendar events, meeting reminders and
+  AI-drafted client follow-up emails, then draft the planning documents on
+  `dev`'s working tree for the owner to move to `task/agent-engagement/plan`.
+  - The owner chose: a standalone feature in a new `engagement-service`
+    (not inside dashboard-service, whose ADR-0033 stays unchanged); emailed
+    iCalendar invites rather than Google or Microsoft calendar APIs; SES for
+    invites, reminders and client emails; Telegram left out for now; the
+    owner as primary developer on every task.
+  - Drafted `docs/feature-plans/agent-engagement_plan.md`, Proposed
+    ADR-0051 (service, database, lease-based dispatcher), ADR-0052
+    (calendar invites), ADR-0053 (SES, long-lived `mail-identity` stack,
+    Cognito lookup of agents' addresses) and ADR-0054 (placeholder-only
+    Bedrock drafts, safety screen, template fallback, holiday table),
+    `docs/api/engagement-api.yaml`, and four ADR index entries.
+- Human verification required: accept or change each ADR; choose and
+  re-check before the demo the destination regions of the Nova Micro
+  profile `apac.amazon.nova-micro-v1:0`, which the owner confirmed with
+  `aws bedrock get-inference-profile` (six Asia-Pacific regions, recorded
+  in ADR-0054); check
+  the Singapore 2026–2027 holiday list against the Ministry of Manpower's
+  before seeding it; confirm with the team that a fourth innovation feature
+  and its cost are acceptable (plan Q1); confirm with Garvit and Swayam the
+  boundary with the Client Health Monitor (plan Q7).
+- Outcome: the owner accepted ADR-0051 to ADR-0054 on 2026-10-21. Before
+  acceptance, ADR-0054 was changed so that the Bedrock model ID is recorded
+  once chosen instead of being a condition of acceptance. Bedrock's model
+  availability page (checked 2026-10-21) showed no small, current text
+  model in-region in Singapore, so the owner then chose Amazon Nova Micro
+  through its Asia-Pacific geographic profile and had ADR-0054 amended
+  before its first commit.
+- Data: repository plans, ADRs, service code and contracts only. No
+  credentials, real client data, AWS connection or model call was used.
+- Verification: SES sandbox limits and Cognito `ListUsers` filtering by
+  `sub` checked against the AWS documentation on 2026-10-21; ADR numbers
+  checked free on every remote branch; every cited ADR and repository path
+  checked to exist on `origin/dev`; the OpenAPI file parsed as YAML. Prices
+  are estimates still to be checked in the AWS Pricing Calculator.
 ## 2026-10-22 — Client field validation and Singapore defaults
 
 - Human owner: Neo Jia Wen (Feature 2 primary developer: Joseph Yau, to review).

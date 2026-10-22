@@ -146,6 +146,21 @@ user's attributes. Each action must come from its own trigger source:
 | `LOGIN` | `PostAuthentication_Authentication` |
 | `PASSWORD_RESET` (a user's own forgotten-password reset) | `PostConfirmation_ConfirmForgotPassword` |
 
+engagement-service (`services/engagement-service`, [ADR-0051](../../docs/adr/ADR-0051-engagement-service-and-mail-dispatcher.md))
+sends `source_service=ENGAGEMENT` with `event_type=ENGAGEMENT`. The actor is
+the agent's Cognito `sub`, or `system` for the emails its dispatcher sends.
+The payload is the same envelope event-alert-service uses: `event_id`,
+`event_version` (1 or more), `occurred_at` and a `data` object, which holds
+IDs, statuses and changed field names, never event titles, email bodies or
+addresses. The actions are:
+
+| Area | `action` |
+|---|---|
+| Calendar events | `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL` |
+| Emails the dispatcher sends | `INVITE_SENT`, `INVITE_FAILED`, `REMINDER_SENT`, `REMINDER_FAILED`, `REMINDER_MISSED` |
+| Client follow-up drafts | `DRAFT_GENERATE`, `DRAFT_DISCARD`, `EMAIL_SEND`, `EMAIL_SEND_FAILED` |
+| Notification preferences | `PREFERENCES_UPDATE` |
+
 The auditor long-polls the queue (up to 20s), so it should pick the message
 up, store it, and delete it shortly after.
 
@@ -313,7 +328,7 @@ make proto
 
 | RPC | Purpose |
 |---|---|
-| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
+| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` and an agent's calendar changes and sent client emails from `ENGAGEMENT` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views, engagement reminders, invites and drafts, and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
 
 user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
 
