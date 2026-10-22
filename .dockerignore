@@ -6,6 +6,9 @@
 !pom.xml
 !services/*/pom.xml
 !services/*/src/
+# Lombok reads these at compile time: without engagement-service's, @Value is
+# not copied onto its constructors and the service fails to start.
+!services/*/lombok.config
 # The shared gRPC contracts (ADR-0021): user-service generates its auditor
 # client from them, and the auditor its server.
 !proto/
