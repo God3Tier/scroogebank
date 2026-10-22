@@ -3,7 +3,7 @@
 > **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-22.
 > Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack), [ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) (every deployment ends with a full teardown; proposed).
 
-**Every deployment starts from an empty account and ends with [Tear down](#tear-down)**, which destroys every Terraform stack, `bootstrap` and `mail-identity` included ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). That way everyone starts from the same state. Only what is created by hand stays between deployments: the `crm-infra-admin` role and your IAM user ([AWS access](#aws-access)), and the domain with its hosted zone ([Register a domain](#register-a-domain-once-per-account)). One deployment runs at a time; [Check the account is empty](#check-the-account-is-empty) tells you whether one is in progress.
+**Every deployment starts from an empty account and ends with [Tear down](#tear-down)**, which destroys every Terraform stack, `bootstrap` and `mail-identity` included ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). That way everyone starts from the same state. Only what is created by hand stays between deployments: the `crm-infra-admin` role and your IAM user ([AWS access](#aws-access)), the budget alerts, and the domain with its hosted zone ([Register a domain](#register-a-domain-once-per-account)). One deployment runs at a time; [Check the account is empty](#check-the-account-is-empty) tells you whether one is in progress.
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
 
@@ -125,7 +125,7 @@ aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Va
 
 ```sh
 cd infrastructure/terraform/bootstrap
-[ -f terraform.tfvars ] || cp terraform.tfvars.example terraform.tfvars   # keeps an existing file; set budget_emails and budget_start_date
+[ -f terraform.tfvars ] || cp terraform.tfvars.example terraform.tfvars   # keeps an existing file
 terraform init
 terraform apply                  # type yes; it must end with "Apply complete!"
 terraform output -raw state_bucket   # steps 3, 4 and 9.1 read this output themselves
@@ -138,12 +138,7 @@ This stack keeps its state in a local `terraform.tfstate` (git-ignored), on your
 
 Bootstrap creates no GuardDuty detector: the account already has one, and a second fails. The crm stack also leaves out the cross-Region backup copy and WAF request logging, which the account's service control policy refuses. The [Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account) lists what each omission means.
 
-**Budget alerts.** AWS Budgets e-mails `budget_emails` directly; there is no subscription to confirm.
-
-- `crm-total` counts all spending since `budget_start_date` against the USD 300 project limit. It e-mails when actual cost passes 50, 70, 85, 95 and 100%, and when the forecast passes 100%.
-- `crm-bedrock` e-mails when a month's Bedrock cost passes 50, 80 and 100% of `bedrock_budget_usd`.
-- Both count cost before credits, so they still fire when credits cover the bill.
-- Each threshold e-mails once per budget period. Cost data refreshes a few times a day, so an alert can arrive hours after the spend.
+**Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
 
 ## 2. Build the Lambda zip and the images
 
@@ -617,7 +612,7 @@ cd -
 ```
 
 - `delete-objects` takes at most 1,000 versions per call. Old versions expire after 90 days, so the bucket rarely holds that many.
-- Destroying `bootstrap` also removes the budgets and the CloudTrail trail and its bucket. CloudTrail's 90-day event history still shows who did what.
+- Destroying `bootstrap` also removes the CloudTrail trail and its bucket; the budget alerts stay, as they are outside Terraform. CloudTrail's 90-day event history still shows who did what.
 - The verified inboxes and DKIM go with `mail-identity`. The next deployment verifies them again (step 4a).
 
 **4. Check the account is empty:** run the commands in [Check the account is empty](#check-the-account-is-empty). Each must print nothing. Anything left is the next person's problem, so remove it now: a listed stack resource means a destroy above stopped part way; run it again and fix the error it reports.

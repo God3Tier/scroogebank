@@ -4,7 +4,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 
 | Directory | What it holds | State |
 |---|---|---|
-| `bootstrap/` | Account-wide: the state bucket, CloudTrail, AWS Budgets, the GitHub OIDC provider (off) | Local, applied at the start of every deployment and destroyed at its end (ADR-0058) |
+| `bootstrap/` | Account-wide: the state bucket, CloudTrail, the GitHub OIDC provider (off) | Local, applied at the start of every deployment and destroyed at its end (ADR-0058) |
 | `stacks/crm/` | One legal entity's whole stack (ADR-0026): network, edge, API entry, Cognito, ECS services, databases, audit pipeline, alarms, backups | `crm/<entity>/<environment>.tfstate` |
 | `stacks/business-dashboard/` | dashboard-service (X-factor 2), inside one CRM stack's network and cluster; reads that stack's `dashboard_inputs` output (ADR-0047) | `business-dashboard/<entity>/<environment>.tfstate` |
 | `stacks/mail-identity/` | The SES sending identity for agent engagement: domain identity, DKIM, MAIL FROM and DMARC records, configuration set and sandbox recipients. Created and destroyed with every deployment (ADR-0058) | `mail-identity/<entity>/<environment>.tfstate` |
@@ -36,9 +36,8 @@ What every stack in the account shares:
 
 - **State bucket:** the S3 bucket for Terraform state. It is versioned, encrypted and TLS-only.
 - **CloudTrail:** management events, kept for 90 days, and data events on the audit anchor buckets.
-- **Budgets:** `crm-total` measures spending against the USD 300 project limit, and `crm-bedrock` against USD 25 a month. Both count cost before credits.
 
-The GitHub OIDC provider (`enable_github_oidc`) is off until CI deploys. GuardDuty is not created here: the account already has a detector ([Left out of the account](#left-out-of-the-account)).
+The GitHub OIDC provider (`enable_github_oidc`) is off until CI deploys. GuardDuty is not created here: the account already has a detector ([Left out of the account](#left-out-of-the-account)). Nor are the budget alerts: they are made by hand in the Billing console, so they survive every teardown (ADR-0058 decision 7).
 
 Two account-wide things are made by hand, outside Terraform, so no destroy removes them: the deploy role `crm-infra-admin` (ADR-0046), and the domain with the Route 53 hosted zone that registering it creates ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)).
 

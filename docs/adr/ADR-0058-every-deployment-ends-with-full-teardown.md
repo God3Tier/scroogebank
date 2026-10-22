@@ -6,7 +6,7 @@
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: TBD (drafted on `dev`)
 - Related issue/PR: TBD
-- Supersedes: [ADR-0053](ADR-0053-email-delivery-through-ses.md) decision 2 (mail-identity is long-lived); [ADR-0042](ADR-0042-terraform-deployment.md) decision 1 in part (bootstrap applied once per account); [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) in part (prod stopped, not destroyed, between sessions)
+- Supersedes: [ADR-0053](ADR-0053-email-delivery-through-ses.md) decision 2 (mail-identity is long-lived); [ADR-0042](ADR-0042-terraform-deployment.md) decision 1 in part (bootstrap applied once per account, and holding AWS Budgets); [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) in part (prod stopped, not destroyed, between sessions)
 - Superseded by: N/A
 
 ## Context
@@ -30,7 +30,7 @@ So a deployment's starting point depended on who deployed last and what they lef
 
 - **Tear down every Terraform stack at the end of each deployment, `mail-identity` and `bootstrap` included (chosen).**
   - Pros: every deployment starts from the same empty account; no local state outlives the deployment that created it; nothing bills between deployments.
-  - Cons: each deployment repeats the SES verification (DKIM, and every inbox clicks its link again) and recreates the state bucket, budgets and CloudTrail.
+  - Cons: each deployment repeats the SES verification (DKIM, and every inbox clicks its link again) and recreates the state bucket and CloudTrail.
 - **Tear down everything except `mail-identity` (ADR-0053 as accepted).**
   - Pros: no repeated SES verification.
   - Cons: the account is never empty; whoever created the identity holds its tfvars, and its state is in a bucket that `bootstrap`'s teardown would delete.
@@ -43,12 +43,13 @@ So a deployment's starting point depended on who deployed last and what they lef
 
 ## Decision
 
-1. **The starting state is an empty account.** Before step 1, the account holds no resource from this repository's Terraform. Only what is created by hand stays: the `crm-infra-admin` role, the `crm-deployers` group and its users (ADR-0046), and the registered domain with its hosted zone (ADR-0042 decision 8).
+1. **The starting state is an empty account.** Before step 1, the account holds no resource from this repository's Terraform. Only what is created by hand stays: the `crm-infra-admin` role, the `crm-deployers` group and its users (ADR-0046), the budget alerts (decision 7), and the registered domain with its hosted zone (ADR-0042 decision 8).
 2. **Every deployment ends with a full teardown**, in this order: `sftp-server`, `business-dashboard`, `agent-engagement`, `crm`, `mail-identity`, then `bootstrap`, after which the remaining secrets are hard-deleted and the state bucket emptied. The runbook's last step checks that the account is empty again.
 3. **`mail-identity` is created in every deployment** (supersedes ADR-0053 decision 2). Its identities, DKIM records and recipient verifications are recreated each time.
 4. **`bootstrap` is applied at the start of every deployment** (supersedes ADR-0042 decision 1 in part). Its local state lives on the deployer's machine only for that deployment.
 5. **Stopping is a pause within one deployment** (amends ADR-0029). `running = false` and `scripts/aws-session.sh stop` may pause a deployment overnight or between test sessions, but the deployment still ends with decision 2.
 6. **One deployment at a time.** If the state bucket `crm-tfstate-<account>` exists when someone starts, another deployment is in progress: they ask in the team channel rather than apply.
+7. **The budget alerts are made by hand, outside Terraform** (supersedes ADR-0042 decision 1 in part). ADR-0029's alerts must watch spending across every deployment and teardown, so the account owner keeps them in the Billing console, and `bootstrap` no longer creates `crm-total` or `crm-bedrock`.
 
 ## Rationale
 
@@ -60,6 +61,7 @@ A single starting state makes every step of the runbook apply the same way for e
 
 - Every deployment follows the same steps, from the same state.
 - No deployment depends on state kept on another person's machine.
+- The budget alerts keep counting across teardowns, so no spending goes unwatched between deployments.
 - Nothing bills between deployments, apart from the hosted zone (USD 0.50 a month).
 
 ### Negative / Trade-offs
@@ -69,6 +71,7 @@ A single starting state makes every step of the runbook apply the same way for e
 - The CloudTrail trail and its bucket are destroyed with `bootstrap`; CloudTrail's 90-day event history still records each session.
 - A deployment takes longer to start, and a teardown longer to finish.
 - Two people cannot deploy at the same time in the account.
+- The budget alerts are no longer reviewed or tested as code; their thresholds and the cost-before-credits setting are kept by hand.
 
 ## Security & Privacy Impact
 
@@ -82,6 +85,7 @@ Removes the stopped-stack cost of about USD 65 a month (ADR-0042 "Cost Impact").
 
 - [deploy-aws.md](../runbooks/deploy-aws.md): an empty-account check before step 1, `bootstrap` and `mail-identity` applied every deployment, "Between sessions" reframed as a pause, and a full teardown with a final check.
 - [infrastructure/terraform/README.md](../../infrastructure/terraform/README.md) and the `bootstrap` and `mail-identity` header comments say the same.
+- `bootstrap` drops the two budgets, their variables and `tests/budgets.tftest.hcl`. The deployer whose local state still tracks them runs `terraform state rm` on them once, so Terraform forgets them without deleting them.
 
 ## Validation
 
@@ -94,3 +98,4 @@ Removes the stopped-stack cost of about USD 65 a month (ADR-0042 "Cost Impact").
 ## Revision history
 
 - 2026-10-22 20:33 +08:00: proposed.
+- 2026-10-22: decision 7 added while Proposed, as decided by the decision owner: the budget alerts move out of `bootstrap` into the Billing console.
