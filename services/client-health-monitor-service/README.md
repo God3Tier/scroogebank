@@ -16,7 +16,7 @@ contract-faithful mock supplies six deterministic months for the three positive
 signals plus healthy and non-completed controls.
 
 It is intentionally not a runnable application yet. No Spring Boot API,
-health-db adapter/migrations, Bedrock adapter, transaction HTTP adapter, or
+health-db repository adapter, Bedrock adapter, transaction HTTP adapter, or
 deployment configuration has been implemented.
 
 RH-SF02 atomically applies complete replays by transaction ID, permits only
@@ -37,6 +37,12 @@ watermark only after every task handoff returns an explicit outcome. The
 task-stream contract now distinguishes created, attached, duplicate, cooldown
 suppression and daily-cap suppression. Production lease/watermark persistence
 still belongs in health-db.
+
+RH-SF05 task persistence migrations now create tasks, assignment snapshots,
+evidence, history, daily admissions and idempotent processed-finding outcomes.
+V2 enforces strict non-overlapping evidence windows, the three supported signal
+types, SHA-256 fingerprints and the closed-task cooldown query index. The JDBC
+repository adapter remains pending.
 
 The offline V1 rule-evaluation harness runs six labelled synthetic scenario
 groups covering positives, healthy controls, exact boundaries, just-below

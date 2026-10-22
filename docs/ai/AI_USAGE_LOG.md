@@ -780,3 +780,21 @@
   suppression mapping, duplicate enqueue, continue-after-failure and retry
   release behavior passed; all 54 Client Health tests passed locally with the
   Java 24 compiler override. Java 25 CI remains required.
+
+## 2026-10-22 — Client Health SF05 persistence review fixes
+
+- Human owner: Garvit; original V1 schema/admission implementation by Swayam.
+- Tool: Cursor.
+- Use: review merged PR #131 against ADR-0053 and the frozen evidence contract;
+  add an immutable V2 migration for strict non-overlapping windows, supported
+  signal types, SHA-256 fingerprints and closed-task cooldown indexing; align
+  migration tests and database/service/feature documentation.
+- Human verification required: do not rewrite merged V1; production JDBC
+  repository and SF08 atomic outbox integration remain separate work.
+- Data: repository schema and synthetic PostgreSQL test rows only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: 57 Client Health tests compiled and completed locally with the
+  Java 24 override; 51 passed and six Testcontainers migration tests were
+  skipped because local Docker was unavailable. Java 25 CI with Docker must run
+  V1-to-V2 migration, rerun idempotency, valid evidence and malformed
+  window/type/fingerprint cases before merge.
