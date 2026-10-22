@@ -3,6 +3,7 @@ package bank.clienthealth.contract;
 import static bank.clienthealth.contract.ClientHealthFinding.SCHEMA_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
@@ -128,6 +129,20 @@ class ClientHealthFindingTest {
                 "task-1",
                 TaskUpsertResult.Outcome.CREATED,
                 0));
+    }
+
+    @Test
+    void acceptsOnlyExplicitTasklessSuppressionResults() {
+        TaskUpsertResult suppressed = TaskUpsertResult.suppressed(
+                TaskUpsertResult.Outcome.SUPPRESSED_COOLDOWN);
+
+        assertEquals(TaskUpsertResult.Outcome.SUPPRESSED_COOLDOWN, suppressed.outcome());
+        assertNull(suppressed.taskId());
+        assertEquals(0, suppressed.taskVersion());
+        assertThrows(IllegalArgumentException.class, () -> TaskUpsertResult.suppressed(
+                TaskUpsertResult.Outcome.CREATED));
+        assertThrows(IllegalArgumentException.class, () -> new TaskUpsertResult(
+                "task-1", TaskUpsertResult.Outcome.SUPPRESSED_DAILY_CAP, 1));
     }
 
     private static ClientHealthFinding finding(

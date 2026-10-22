@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF02 and RH-SF05 Stage 1 merged, RH-SF03 versioned deterministic rules implemented on its task branch
+- Status: In progress; SF00-SF04 and RH-SF05 Stage 1 merged, offline V1 rule evaluation implemented on its task branch
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/signal-rules`
+- Current task branch: `task/client-health-monitor/rule-evaluation`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `2d89d6b`
+- Last repository sync: 2026-10-21 from `origin/feat/client-health-monitor` at `73f48cf`
 - AI-assisted planning: Yes; Cursor
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -162,11 +162,14 @@ defaults, not universal banking standards.
 - New evidence updates the active task instead of creating another.
 - Signal fingerprint includes client, account, signal type, rule version, and analysis window.
 - Permit at most one active occurrence for the same fingerprint.
-- Apply a configurable cooldown after completion/dismissal.
-- Permit a new task during cooldown only under an accepted worsening rule.
+- Apply a 30-day configurable cooldown after completion/dismissal under ADR-0053.
+- Permit a new task during cooldown only when highest severity strictly increases.
 - Require matched, complete data and minimum history.
 - Exclude Pending transactions from activity/net-flow calculations.
-- Apply a configurable daily task cap per agent.
+- Apply a 20-new-task daily cap per Agent/Singapore day; evidence attachment to
+  active tasks remains allowed.
+- SF04 owns run leases, deterministic IDs/fingerprints and success-only
+  watermarks; SF05 atomically owns assignment-aware cooldown/cap admission.
 
 ## Task lifecycle
 
@@ -490,9 +493,10 @@ Decisions:
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
 | RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer complete and merged; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; future migration ownership | `task/client-health-monitor/activity-projection` | Provider-independent projection, replay coverage and account/client baselines complete and merged; production DB adapter pending coordinated migration ownership | 2026-10-21 |
-| RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; ADR-0052; shared fixtures | `task/client-health-monitor/signal-rules` | V1 recurring-credit, activity-decline and sustained-net-outflow rules implemented locally with labelled positive/boundary/control tests; Java 25 CI pending | 2026-10-21 |
-| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |
-| RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; future migration ownership | `task/client-health-monitor/task-domain` | Stage 1 domain foundation implemented and merged; production persistence pending | 2026-10-16 |
+| RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; ADR-0052; shared fixtures | `task/client-health-monitor/signal-rules` | V1 recurring-credit, activity-decline and sustained-net-outflow rules complete and merged; Java 25 CI pending | 2026-10-21 |
+| RH-SF03-EVAL | Offline labelled rule evaluation | Garvit | rule evaluation harness, labelled synthetic scenarios, evaluation evidence | RH-SF03; ADR-0052 | `task/client-health-monitor/rule-evaluation` | Six labelled positive/negative/boundary/sufficiency scenarios pass deterministically; synthetic-only limitations documented; Java 25 CI pending | 2026-10-21 |
+| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Provider-independent deterministic orchestration complete and merged; production run repository pending | 2026-10-21 |
+| RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy; future migration ownership | `task/client-health-monitor/task-domain` | Stage 1 domain foundation implemented and merged; production persistence and atomic cooldown/cap admission pending | 2026-10-21 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | Planned | N/A |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Planned | N/A |
 | RH-SF08 | Audit outbox and adapter | TBD | outbox/publisher/auditor contract | Auditor owner; task transactions | TBD | Unassigned | N/A |
@@ -568,7 +572,7 @@ The feature branch never merges directly into `main`.
 ## Open questions
 
 1. V1 thresholds/severity are accepted in ADR-0052; deterministic rules expose no confidence percentage.
-2. Daily task cap, cooldown, and worsening rule.
+2. Daily cap, cooldown, worsening and suppression ownership are accepted in ADR-0053.
 3. Completion/dismissal reason codes.
 4. Transaction integration uses the internal pull/replay API accepted in ADR-0044; Feature 3 owner approval and provider implementation remain pending.
 5. Assignment lookup versus assignment event.

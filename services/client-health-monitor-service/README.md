@@ -7,6 +7,7 @@ Stage 1 task domain, and the provider-independent RH-SF01 transaction replay
 boundary. RH-SF02 adds the service-owned activity projection, replay-coverage
 tracking, and deterministic account/client baselines. RH-SF03 adds the immutable
 `relationship-health-v1` ruleset and typed outcomes for all three MVP signals.
+RH-SF04 adds leased, retry-safe replay-to-finding orchestration.
 
 RH-SF01 currently validates the minimum matched transaction projection, follows
 bounded cursor pages, de-duplicates identical rows, rejects conflicting or
@@ -29,6 +30,19 @@ activity decline, and two-period material net outflow under ADR-0052. Outcomes
 carry the exact account, rule version, severity, windows, and typed evidence
 needed by RH-SF04. Rules do not create tasks, apply cooldown/caps, call Bedrock,
 or expose a pseudo-confidence percentage.
+
+RH-SF04 uses deterministic daily run, finding, signal, correlation and evidence
+identifiers; combines every signal for one client/run; and advances its
+watermark only after every task handoff returns an explicit outcome. The
+task-stream contract now distinguishes created, attached, duplicate, cooldown
+suppression and daily-cap suppression. Production lease/watermark persistence
+still belongs in health-db.
+
+The offline V1 rule-evaluation harness runs six labelled synthetic scenario
+groups covering positives, healthy controls, exact boundaries, just-below
+thresholds, Unknown classification and sparse history. All labels and severities
+currently match deterministically; this is contract evidence, not a real-client
+accuracy claim.
 
 ## Ownership boundary
 
@@ -58,6 +72,8 @@ Contract documentation and fixtures:
 - `tests/fixtures/client-health-monitor/`
 - `docs/adr/ADR-0051-client-health-explicit-activity-classification.md`
 - `docs/adr/ADR-0052-client-health-versioned-signal-rules.md`
+- `docs/adr/ADR-0053-client-health-run-orchestration-and-task-admission.md`
+- `docs/evaluation/client-health-rule-evaluation.md`
 
 ## Next implementation step
 
@@ -71,6 +87,8 @@ For RH-SF02, coordinate health-db migration ownership with Swayam before adding
 the production projection repository. The current repository port and in-memory
 tests intentionally keep database technology out of the rule-facing domain.
 
-The next Garvit-owned step is RH-SF04: turn deterministic rule outcomes into
-idempotent `ClientHealthFinding` records while applying run leases, signal
-fingerprints, cooldown/worsening behavior, and per-agent caps.
+Garvit's provider-independent RH-SF01-SF04 stream is now implemented. Remaining
+integration work includes the real Feature 3 replay adapter, production
+projection/run repositories, and Java 25 CI. Swayam's RH-SF05 task stream must
+implement ADR-0053's atomic 30-day severity-worsening cooldown and 20-new-task
+Singapore-day cap before production orchestration is complete.

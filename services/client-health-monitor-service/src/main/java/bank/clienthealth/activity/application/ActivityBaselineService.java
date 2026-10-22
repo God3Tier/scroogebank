@@ -30,11 +30,20 @@ public final class ActivityBaselineService {
         this.repository = Objects.requireNonNull(repository);
     }
 
+    public static Instant analysisCutoff(LocalDate analysisDate) {
+        return Objects.requireNonNull(analysisDate, "analysisDate is required")
+                .atTime(ANALYSIS_TIME).atZone(ANALYSIS_ZONE).toInstant();
+    }
+
+    public static Instant historyStart(LocalDate analysisDate) {
+        return Objects.requireNonNull(analysisDate, "analysisDate is required")
+                .minusMonths(6).atTime(ANALYSIS_TIME).atZone(ANALYSIS_ZONE).toInstant();
+    }
+
     public BaselineResult calculate(LocalDate analysisDate) {
         Objects.requireNonNull(analysisDate, "analysisDate is required");
-        Instant cutoff = analysisDate.atTime(ANALYSIS_TIME).atZone(ANALYSIS_ZONE).toInstant();
-        Instant historyStart = analysisDate.minusMonths(6)
-                .atTime(ANALYSIS_TIME).atZone(ANALYSIS_ZONE).toInstant();
+        Instant cutoff = analysisCutoff(analysisDate);
+        Instant historyStart = historyStart(analysisDate);
         Instant comparisonStart = analysisDate.minusDays(30)
                 .atTime(ANALYSIS_TIME).atZone(ANALYSIS_ZONE).toInstant();
         Instant baselineStart = analysisDate.minusDays(120)
