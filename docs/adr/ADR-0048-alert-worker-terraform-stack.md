@@ -1,8 +1,8 @@
 # ADR-0048: The alert worker in its own Terraform stack
 
-- Status: Proposed
+- Status: Accepted
 - Decision date/time: 2026-10-20 (Asia/Singapore)
-- Decision owner(s): Hayyun (proposer). Azeez reviews as owner of EDA-D1-02; Neo Jia Wen reviews as infrastructure owner, because this adds a stack that reads the CRM stack's state
+- Decision owner(s): Hayyun (proposer), confirmed accepted 2026-10-21 after team discussion with Azeez (owner of EDA-D1-02) and Neo Jia Wen (infrastructure owner)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `task/event-driven-alerts/search-infra`
 - Related issue/PR: TBD
@@ -100,3 +100,4 @@ At 0.5 vCPU and 1 GB, a run of about two minutes six times a day is about 6 task
 ## Revision history
 
 - 2026-10-20: proposed.
+- 2026-10-21: accepted by Hayyun after discussion with Azeez and Neo Jia Wen.

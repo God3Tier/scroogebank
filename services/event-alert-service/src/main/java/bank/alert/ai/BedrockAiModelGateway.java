@@ -1,6 +1,10 @@
 package bank.alert.ai;
 
 import bank.alert.config.AiProperties;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import software.amazon.awssdk.core.document.Document;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.model.AccessDeniedException;
@@ -11,18 +15,28 @@ import software.amazon.awssdk.services.bedrockruntime.model.ConverseResponse;
 import software.amazon.awssdk.services.bedrockruntime.model.Message;
 import software.amazon.awssdk.services.bedrockruntime.model.ModelNotReadyException;
 import software.amazon.awssdk.services.bedrockruntime.model.ModelTimeoutException;
-import software.amazon.awssdk.services.bedrockruntime.model.OutputFormatType;
 import software.amazon.awssdk.services.bedrockruntime.model.ResourceNotFoundException;
 import software.amazon.awssdk.services.bedrockruntime.model.ServiceUnavailableException;
+import software.amazon.awssdk.services.bedrockruntime.model.SpecificToolChoice;
 import software.amazon.awssdk.services.bedrockruntime.model.SystemContentBlock;
 import software.amazon.awssdk.services.bedrockruntime.model.ThrottlingException;
+import software.amazon.awssdk.services.bedrockruntime.model.Tool;
+import software.amazon.awssdk.services.bedrockruntime.model.ToolChoice;
+import software.amazon.awssdk.services.bedrockruntime.model.ToolConfiguration;
+import software.amazon.awssdk.services.bedrockruntime.model.ToolInputSchema;
+import software.amazon.awssdk.services.bedrockruntime.model.ToolSpecification;
+import software.amazon.awssdk.services.bedrockruntime.model.ToolUseBlock;
 import software.amazon.awssdk.services.bedrockruntime.model.ValidationException;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 public final class BedrockAiModelGateway implements AiModelGateway {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private final BedrockRuntimeClient client;
     private final AiProperties properties;
 
@@ -45,6 +59,14 @@ public final class BedrockAiModelGateway implements AiModelGateway {
             throw failure("MODEL_NOT_ALLOWED", false);
         }
 
+        String toolName = schemaName(request);
+        Document schema;
+        try {
+            schema = toDocument(MAPPER.readTree(request.outputSchema()));
+        } catch (JsonProcessingException exception) {
+            throw failure("INVALID_TOOL_SCHEMA", false);
+        }
+
         ConverseRequest converseRequest = ConverseRequest.builder()
                 .modelId(request.model())
                 .system(SystemContentBlock.fromText(systemText(request)))
@@ -55,12 +77,18 @@ public final class BedrockAiModelGateway implements AiModelGateway {
                 .inferenceConfig(config -> config
                         .maxTokens(request.maximumOutputTokens())
                         .temperature(0.0F))
-                .outputConfig(config -> config.textFormat(format -> format
-                        .type(OutputFormatType.JSON_SCHEMA)
-                        .structure(structure -> structure.jsonSchema(schema -> schema
-                                .name(schemaName(request))
-                                .description("Closed JSON output for " + request.operation())
-                                .schema(request.outputSchema())))))
+                .toolConfig(ToolConfiguration.builder()
+                        .tools(Tool.builder()
+                                .toolSpec(ToolSpecification.builder()
+                                        .name(toolName)
+                                        .description("Closed JSON output for " + request.operation())
+                                        .inputSchema(ToolInputSchema.builder().json(schema).build())
+                                        .build())
+                                .build())
+                        .toolChoice(ToolChoice.builder()
+                                .tool(SpecificToolChoice.builder().name(toolName).build())
+                                .build())
+                        .build())
                 .overrideConfiguration(config -> config
                         .apiCallTimeout(timeout)
                         .apiCallAttemptTimeout(timeout))
@@ -71,10 +99,18 @@ public final class BedrockAiModelGateway implements AiModelGateway {
             if (response.output() == null || response.output().message() == null) {
                 throw failure("EMPTY_MODEL_RESPONSE", true);
             }
-            String output = response.output().message().content().stream()
-                    .map(ContentBlock::text)
+            ToolUseBlock toolUse = response.output().message().content().stream()
+                    .map(ContentBlock::toolUse)
                     .filter(Objects::nonNull)
-                    .collect(Collectors.joining());
+                    .findFirst()
+                    .orElse(null);
+            if (toolUse == null) throw failure("EMPTY_MODEL_RESPONSE", true);
+            String output;
+            try {
+                output = MAPPER.writeValueAsString(fromDocument(toolUse.input()));
+            } catch (JsonProcessingException exception) {
+                throw failure("INVALID_TOOL_SCHEMA", false);
+            }
             if (output.isBlank()) throw failure("EMPTY_MODEL_RESPONSE", true);
             int inputTokens = response.usage() == null || response.usage().inputTokens() == null
                     ? 0 : response.usage().inputTokens();
@@ -115,5 +151,37 @@ public final class BedrockAiModelGateway implements AiModelGateway {
 
     private static AiProviderException failure(String code, boolean retryable) {
         return new AiProviderException(code, retryable, "model invocation failed safely");
+    }
+
+    private static Document toDocument(JsonNode node) {
+        if (node.isObject()) {
+            Document.MapBuilder builder = Document.mapBuilder();
+            node.fields().forEachRemaining(entry -> builder.putDocument(entry.getKey(), toDocument(entry.getValue())));
+            return builder.build();
+        }
+        if (node.isArray()) {
+            Document.ListBuilder builder = Document.listBuilder();
+            node.forEach(element -> builder.addDocument(toDocument(element)));
+            return builder.build();
+        }
+        if (node.isTextual()) return Document.fromString(node.textValue());
+        if (node.isBoolean()) return Document.fromBoolean(node.booleanValue());
+        if (node.isNumber()) return Document.fromNumber(node.asText());
+        return Document.fromNull();
+    }
+
+    private static Object fromDocument(Document document) {
+        if (document.isMap()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            document.asMap().forEach((key, value) -> result.put(key, fromDocument(value)));
+            return result;
+        }
+        if (document.isList()) {
+            return document.asList().stream().map(BedrockAiModelGateway::fromDocument).collect(Collectors.toList());
+        }
+        if (document.isString()) return document.asString();
+        if (document.isBoolean()) return document.asBoolean();
+        if (document.isNumber()) return document.asNumber().bigDecimalValue();
+        return null;
     }
 }

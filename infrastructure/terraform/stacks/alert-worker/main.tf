@@ -35,8 +35,17 @@ locals {
   # alert.ai.model), and the foundation model behind it. A global profile can
   # route to any Region, so the model ARN is Region-wildcarded and tied to the
   # profile by the bedrock:InferenceProfileArn condition.
-  bedrock_profile_id  = "global.openai.gpt-5.6-luna"
-  bedrock_model_id    = "openai.gpt-5.6-luna"
+  #
+  # TEMPORARY (2026-10-22, Hayyun): the real pin "global.openai.gpt-5.6-luna"
+  # cannot be invoked in this account -- the AWS Marketplace subscription
+  # third-party Bedrock models require cannot be completed from this member
+  # account (needs the AWS Organization's management account). Swapped here
+  # to a native Amazon model, which needs no Marketplace subscription, so the
+  # mock-data pipeline test can exercise a real AI call end-to-end. Matched by
+  # the ALERT_AI_MODEL env var below, which overrides application.yml's
+  # pinned default for this task only. Revert both before merging.
+  bedrock_profile_id  = "global.amazon.nova-2-lite-v1:0"
+  bedrock_model_id    = "amazon.nova-2-lite-v1:0"
   bedrock_profile_arn = "arn:${local.partition}:bedrock:${var.bedrock_region}:${local.account_id}:inference-profile/${local.bedrock_profile_id}"
 
   use_agentcore = var.ingestion_enabled && var.agentcore_gateway_arn != null
@@ -114,6 +123,9 @@ module "event_alert_worker" {
     ALERT_CLOUDWATCH_NAMESPACE       = var.cloudwatch_namespace
     },
     var.agentcore_gateway_url == null ? {} : { ALERT_AGENTCORE_GATEWAY_URL = var.agentcore_gateway_url },
+    # TEMPORARY (2026-10-22, Hayyun): overrides application.yml's pinned
+    # model to match the local.bedrock_profile_id swap above. Revert together.
+    !var.ai_enabled ? {} : { ALERT_AI_MODEL = local.bedrock_profile_id },
   )
   secrets = {
     EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"

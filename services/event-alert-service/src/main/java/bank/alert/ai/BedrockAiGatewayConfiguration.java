@@ -5,6 +5,7 @@ import bank.alert.config.BedrockAiProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
@@ -21,6 +22,7 @@ public class BedrockAiGatewayConfiguration {
     }
 
     @Bean
+    @Primary
     AiModelGateway bedrockAiModelGateway(BedrockRuntimeClient client, AiProperties properties) {
         return new BedrockAiModelGateway(client, properties);
     }
