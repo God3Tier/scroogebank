@@ -31,6 +31,25 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 - **No cache tier.** Database indexes, CloudFront caching of static files and in-process caching (Cognito signing keys, reference data) are enough at project scale. The spec asks for caching only "if needed" (NFR 1).
 - **Identity documents** (synthetic NRIC only) are uploaded through client-service, encrypted with the client's data key, and kept for audit in a private SSE-KMS S3 bucket ([ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md)). `client_documents` holds each document's ID, client, detected type, size, uploader and time, and whether it was a verification's evidence; never the file or its name. Uploading changes nothing else: the agent checks the documents and then verifies the client, which sets `verification_status`, `verified_by_agent_id`, `verified_at` and `verified_with_documents`. Documents are optional, so `verified_with_documents` is false for a verification without one.
 
+## Client Health task persistence
+
+`client-health-monitor-service` owns additive Flyway migrations under
+`services/client-health-monitor-service/src/main/resources/db/migration`.
+
+- V1 creates relationship tasks, immutable assignment snapshots, evidence,
+  status history, per-Agent/Singapore-day task-admission counts, and processed
+  finding outcomes. One partial unique index permits only one OPEN/IN_REVIEW
+  task per client. Processed findings persist created, attached, duplicate,
+  cooldown-suppressed and daily-cap-suppressed outcomes idempotently.
+- V2 tightens the accepted evidence contract: baseline/comparison windows are
+  non-empty and non-overlapping, signal type is one of the three ADR-0052
+  signals, fingerprints are lowercase SHA-256, and closed-task cooldown queries
+  use a client/update-time index.
+
+The production repository and SF08 audit outbox remain follow-up adapters; task
+state and its audit outbox row must eventually commit atomically under ADR-0020
+and ADR-0053.
+
 ## Why one RDS instance per service: balancing cost and isolation
 
 Three database layouts were compared. Prices are rough ap-southeast-1 figures in USD/month; verify them with the AWS Pricing Calculator.

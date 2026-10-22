@@ -32,7 +32,7 @@ class RelationshipTaskMigrationTest {
         flyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load();
-        assertEquals(1, flyway.migrate().migrationsExecuted);
+        assertEquals(2, flyway.migrate().migrationsExecuted);
     }
 
     @BeforeEach
@@ -82,12 +82,12 @@ class RelationshipTaskMigrationTest {
     void preservesFingerprintUniquenessAcrossClientHistory() throws SQLException {
         insertTask("task-1", "client-1", "COMPLETED", 2);
         insertTask("task-2", "client-1", "OPEN", 1);
-        insertEvidence("task-1", "client-1", "fingerprint-1");
+        insertEvidence("task-1", "client-1", "a".repeat(64));
 
         assertThrows(SQLException.class,
-                () -> insertEvidence("task-2", "client-1", "fingerprint-1"));
+                () -> insertEvidence("task-2", "client-1", "a".repeat(64)));
         assertThrows(SQLException.class,
-                () -> insertEvidence("missing-task", "client-2", "fingerprint-2"));
+                () -> insertEvidence("missing-task", "client-2", "b".repeat(64)));
     }
 
     @Test
@@ -134,6 +134,36 @@ class RelationshipTaskMigrationTest {
                 "UPDATE agent_daily_task_admissions SET created_task_count = 21"));
     }
 
+    @Test
+    void rejectsInvalidEvidenceWindowsTypesAndFingerprints() throws SQLException {
+        insertTask("task-1", "client-1", "OPEN", 1);
+        Instant baselineFrom = Instant.parse("2026-05-01T00:00:00Z");
+        Instant baselineTo = Instant.parse("2026-08-01T00:00:00Z");
+        Instant comparisonFrom = baselineTo;
+        Instant comparisonTo = Instant.parse("2026-09-01T00:00:00Z");
+
+        assertThrows(SQLException.class, () -> insertEvidence(
+                "task-1", "client-1", "not-a-sha256",
+                "SUSTAINED_NET_OUTFLOW",
+                baselineFrom, baselineTo, comparisonFrom, comparisonTo));
+        assertThrows(SQLException.class, () -> insertEvidence(
+                "task-1", "client-1", "a".repeat(64),
+                "UNKNOWN_SIGNAL",
+                baselineFrom, baselineTo, comparisonFrom, comparisonTo));
+        assertThrows(SQLException.class, () -> insertEvidence(
+                "task-1", "client-1", "b".repeat(64),
+                "TRANSACTION_ACTIVITY_DECLINE",
+                baselineFrom, baselineFrom, comparisonFrom, comparisonTo));
+        assertThrows(SQLException.class, () -> insertEvidence(
+                "task-1", "client-1", "c".repeat(64),
+                "TRANSACTION_ACTIVITY_DECLINE",
+                baselineFrom, baselineTo, comparisonFrom, comparisonFrom));
+        assertThrows(SQLException.class, () -> insertEvidence(
+                "task-1", "client-1", "d".repeat(64),
+                "TRANSACTION_ACTIVITY_DECLINE",
+                baselineFrom, comparisonTo, comparisonFrom, comparisonTo));
+    }
+
     private void insertTask(String taskId, String clientId, String status, long version)
             throws SQLException {
         try (Connection connection = connection();
@@ -155,6 +185,27 @@ class RelationshipTaskMigrationTest {
 
     private void insertEvidence(String taskId, String clientId, String fingerprint)
             throws SQLException {
+        insertEvidence(
+                taskId,
+                clientId,
+                fingerprint,
+                "SUSTAINED_NET_OUTFLOW",
+                Instant.parse("2026-05-01T00:00:00Z"),
+                Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-09-01T00:00:00Z"));
+    }
+
+    private void insertEvidence(
+            String taskId,
+            String clientId,
+            String fingerprint,
+            String signalType,
+            Instant baselineFrom,
+            Instant baselineTo,
+            Instant comparisonFrom,
+            Instant comparisonTo
+    ) throws SQLException {
         try (Connection connection = connection();
                 PreparedStatement statement = connection.prepareStatement("""
                         INSERT INTO relationship_task_evidence
@@ -164,14 +215,17 @@ class RelationshipTaskMigrationTest {
                              baseline_to, comparison_from, comparison_to, evidence_payload,
                              fingerprint)
                         VALUES (?, ?, 'finding-1', 'run-1', 'rules-1', 'correlation-1',
-                                now(), now(), 'signal-1', 'account-1',
-                                'SUSTAINED_NET_OUTFLOW', 'rule-1', 'HIGH',
-                                now() - interval '30 days', now() - interval '15 days',
-                                now() - interval '14 days', now(), '{}'::jsonb, ?)
+                                now(), now(), 'signal-1', 'account-1', ?, 'rule-1', 'HIGH',
+                                ?, ?, ?, ?, '{}'::jsonb, ?)
                         """)) {
             statement.setString(1, taskId);
             statement.setString(2, clientId);
-            statement.setString(3, fingerprint);
+            statement.setString(3, signalType);
+            statement.setTimestamp(4, Timestamp.from(baselineFrom));
+            statement.setTimestamp(5, Timestamp.from(baselineTo));
+            statement.setTimestamp(6, Timestamp.from(comparisonFrom));
+            statement.setTimestamp(7, Timestamp.from(comparisonTo));
+            statement.setString(8, fingerprint);
             statement.executeUpdate();
         }
     }
