@@ -614,15 +614,18 @@ Validation:
 
 ### Current transport
 
-Proposed queue target:
+Queue target accepted in ADR-0020:
 
 ```text
 audit-insert
 ```
 
-The transport exists, but this feature's service type/action/payload require Auditor-owner approval and implementation.
+The provider-independent Client Health envelope/factory and leased outbox relay
+are implemented in RH-SF08. The feature's service type/action/payload still
+require Auditor-owner approval before shared Auditor files or SQS adapters
+change.
 
-### Proposed envelope
+### Envelope
 
 ```json
 {
@@ -668,6 +671,12 @@ Requirements:
 
 - `event_id` is stable across retries.
 - Business change and outbox event commit atomically.
+- `client_ref` is a one-way lowercase SHA-256 reference; raw client IDs, notes,
+  descriptions, evidence amounts and transaction data are excluded.
+- Before/after states contain only task status, severity and version.
+- Delivery leases a bounded batch, continues after one failure, deletes only
+  after gateway acceptance, and releases failures with bounded redacted retry
+  categories/backoff.
 - Producer sends through IAM-authorized SQS access.
 - Rejected events remain diagnosable through the Auditor DLQ.
 - Payload contains no raw transactions or unnecessary PII.

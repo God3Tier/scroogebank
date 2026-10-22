@@ -761,3 +761,22 @@
 - Verification: all six scenario groups and repeated evaluations passed; all 49
   client-health tests passed with the local Java 24 compiler override. Java 25
   CI remains required.
+
+## 2026-10-22 — Client Health SF08 audit/outbox foundation
+
+- Human owner: Garvit; Auditor-owner review remains required for shared files.
+- Tool: Cursor.
+- Use: implement a deterministic redacted relationship-health audit envelope,
+  task/suppression/run event mapping, transactional outbox and delivery ports,
+  and a bounded leased relay with idempotent enqueue semantics and redacted
+  retry categories.
+- Human verification required: do not add or deploy the Flyway/JDBC outbox,
+  SQS gateway, IAM policy or Auditor allowlist until SF05 V1 is corrected and
+  the Auditor owner accepts the service/action/payload contract.
+- Data: repository-owned synthetic opaque identifiers and task states only. No
+  credentials, real client data, AWS calls, SQS calls or external services were
+  used.
+- Verification: deterministic IDs, client-reference hashing, note exclusion,
+  suppression mapping, duplicate enqueue, continue-after-failure and retry
+  release behavior passed; all 54 Client Health tests passed locally with the
+  Java 24 compiler override. Java 25 CI remains required.
