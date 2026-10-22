@@ -3,11 +3,11 @@
 # the existing hosted zone, the configuration set, and the team inboxes used
 # as demo recipients. Without domain_name, in an account with no hosted zone,
 # the identity is the single verified address sender_address instead, with no
-# DNS records (ADR-0055). This stack is long-lived: apply it once per
-# environment and never destroy it between sessions, because a new identity
-# needs verifying again and every inbox must click its verification email
-# again. stacks/agent-engagement reads the identity and the configuration set
-# by name.
+# DNS records (ADR-0055). Like every stack, it is created in each deployment
+# and destroyed in its teardown (ADR-0058, superseding ADR-0053 decision 2),
+# so each deployment verifies the identity and every inbox again.
+# stacks/agent-engagement reads the identity and the configuration set by
+# name.
 
 locals {
   name    = "crm-${var.legal_entity}-${var.environment}"

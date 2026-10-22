@@ -4,10 +4,10 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 
 | Directory | What it holds | State |
 |---|---|---|
-| `bootstrap/` | Account-wide: the state bucket, CloudTrail, AWS Budgets, the GitHub OIDC provider (off) | Local, applied once per account |
+| `bootstrap/` | Account-wide: the state bucket, CloudTrail, AWS Budgets, the GitHub OIDC provider (off) | Local, applied at the start of every deployment and destroyed at its end (ADR-0058) |
 | `stacks/crm/` | One legal entity's whole stack (ADR-0026): network, edge, API entry, Cognito, ECS services, databases, audit pipeline, alarms, backups | `crm/<entity>/<environment>.tfstate` |
 | `stacks/business-dashboard/` | dashboard-service (X-factor 2), inside one CRM stack's network and cluster; reads that stack's `dashboard_inputs` output (ADR-0047) | `business-dashboard/<entity>/<environment>.tfstate` |
-| `stacks/mail-identity/` | The SES sending identity for agent engagement: domain identity, DKIM, MAIL FROM and DMARC records, configuration set and sandbox recipients. Long-lived: never destroyed between sessions (ADR-0053) | `mail-identity/<entity>/<environment>.tfstate` |
+| `stacks/mail-identity/` | The SES sending identity for agent engagement: domain identity, DKIM, MAIL FROM and DMARC records, configuration set and sandbox recipients. Created and destroyed with every deployment (ADR-0058) | `mail-identity/<entity>/<environment>.tfstate` |
 | `stacks/agent-engagement/` | engagement-service and engagement-db, inside one CRM stack's network and cluster; reads that stack's `engagement_inputs` output and the mail identity (ADR-0051) | `agent-engagement/<entity>/<environment>.tfstate` |
 | `stacks/sftp-server/` | The simulated core banking SFTP server, an external system with its own stack (ADR-0024) | `sftp-server/<environment>.tfstate` |
 | `modules/postgres/` | One RDS PostgreSQL instance for one service (ADR-0023) | |
@@ -28,7 +28,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 
 ## What each stack deploys
 
-The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `mail-identity` (once), `crm`, `business-dashboard`, `agent-engagement`, `sftp-server`, then `crm` again with the SFTP server's address. Destroy `business-dashboard` and `agent-engagement` before `crm`; keep `mail-identity`. Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
+The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `mail-identity`, `crm`, `business-dashboard`, `agent-engagement`, `sftp-server`, then `crm` again with the SFTP server's address. Every deployment ends by destroying every stack (ADR-0058): `sftp-server`, `business-dashboard` and `agent-engagement` before `crm`, then `mail-identity`, then `bootstrap` ([runbook, Tear down](../../docs/runbooks/deploy-aws.md#tear-down)). Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
 
 ### `bootstrap`
 
@@ -73,7 +73,7 @@ Its tasks follow the CRM stack's `running`: apply this stack again after every C
 
 ### `stacks/mail-identity`
 
-The SES identity agent engagement sends from (ADR-0053 decision 2). Apply it once per environment, before `agent-engagement`, and keep it: a new identity needs DKIM verification again, and each sandbox recipient must click its verification email again. It contains:
+The SES identity agent engagement sends from (ADR-0053 decision 2). Apply it in every deployment, before `agent-engagement`, and destroy it after `crm` in the teardown (ADR-0058): each new identity needs DKIM verification again, and each sandbox recipient must click its verification email again. It contains:
 
 - with `domain_name`: the domain identity `mail.<app host>` (`mail.sg.itsag3t6.com` in prod) with Easy DKIM, its three DKIM CNAMEs, the MAIL FROM domain `bounce.<sending domain>` with its MX and SPF records, and a DMARC record at `p=none`, all in the existing hosted zone;
 - without `domain_name`, in an account with no hosted zone: an email identity for `sender_address`, the one address mail then comes from, and no DNS records (ADR-0055). The agent-engagement stack takes the same `sender_address`;

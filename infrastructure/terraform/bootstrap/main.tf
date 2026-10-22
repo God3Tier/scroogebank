@@ -1,7 +1,8 @@
-# Account-wide resources, applied once per AWS account before any CRM stack
-# (docs/runbooks/deploy-aws.md step 1). Its own state is local: it creates the
-# bucket the other stacks keep their state in. Keep terraform.tfstate from
-# this directory somewhere safe, or import the resources again if it is lost.
+# Account-wide resources, applied at the start of every deployment before any
+# CRM stack and destroyed last in its teardown (docs/runbooks/deploy-aws.md
+# step 1, ADR-0058). Its own state is local: it creates the bucket the other
+# stacks keep their state in. Keep terraform.tfstate from this directory until
+# the teardown, or import the resources again if it is lost.
 
 terraform {
   required_version = ">= 1.10.0"

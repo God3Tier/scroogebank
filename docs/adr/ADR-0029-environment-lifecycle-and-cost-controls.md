@@ -7,7 +7,7 @@
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) in part, if accepted (prod is destroyed at the end of every deployment; stopping is only a pause within one)
 
 ## Context
 
