@@ -1,7 +1,8 @@
-# Account-wide resources, applied once per AWS account before any CRM stack
-# (docs/runbooks/deploy-aws.md step 1). Its own state is local: it creates the
-# bucket the other stacks keep their state in. Keep terraform.tfstate from
-# this directory somewhere safe, or import the resources again if it is lost.
+# Account-wide resources, applied at the start of every deployment before any
+# CRM stack and destroyed last in its teardown (docs/runbooks/deploy-aws.md
+# step 1, ADR-0058). Its own state is local: it creates the bucket the other
+# stacks keep their state in. Keep terraform.tfstate from this directory until
+# the teardown, or import the resources again if it is lost.
 
 terraform {
   required_version = ">= 1.10.0"
@@ -268,73 +269,6 @@ resource "aws_cloudtrail" "account" {
 # detection (ADR-0042 revision of 2026-10-16).
 
 # --------------------------------------------------------------- budgets
-# ADR-0029: alerts at 50, 70, 85, 95 and 100% of the USD 300 hard limit, and a
-# separate one for Bedrock.
-#
-# Both count cost before credits. By default AWS Budgets subtracts credits,
-# so on an account whose credits cover the bill, the cost stays near 0 and no
-# alert would ever fire.
-
-resource "aws_budgets_budget" "total" {
-  name         = "crm-total"
-  budget_type  = "COST"
-  limit_amount = tostring(var.total_budget_usd)
-  limit_unit   = "USD"
-
-  # The USD 300 is a limit for the whole project, not for each month, so this
-  # is one yearly period from the project's start, not a monthly one that
-  # resets.
-  time_unit         = "ANNUALLY"
-  time_period_start = "${var.budget_start_date}_00:00"
-
-  cost_types {
-    include_credit = false
-  }
-
-  dynamic "notification" {
-    for_each = [50, 70, 85, 95, 100]
-    content {
-      comparison_operator        = "GREATER_THAN"
-      threshold                  = notification.value
-      threshold_type             = "PERCENTAGE"
-      notification_type          = "ACTUAL"
-      subscriber_email_addresses = var.budget_emails
-    }
-  }
-
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = var.budget_emails
-  }
-}
-
-resource "aws_budgets_budget" "bedrock" {
-  name         = "crm-bedrock"
-  budget_type  = "COST"
-  limit_amount = tostring(var.bedrock_budget_usd)
-  limit_unit   = "USD"
-  time_unit    = "MONTHLY"
-
-  cost_filter {
-    name   = "Service"
-    values = ["Amazon Bedrock"]
-  }
-
-  cost_types {
-    include_credit = false
-  }
-
-  dynamic "notification" {
-    for_each = [50, 80, 100]
-    content {
-      comparison_operator        = "GREATER_THAN"
-      threshold                  = notification.value
-      threshold_type             = "PERCENTAGE"
-      notification_type          = "ACTUAL"
-      subscriber_email_addresses = var.budget_emails
-    }
-  }
-}
+# Not managed here. The ADR-0029 budget alerts are made by hand in the Billing
+# console, so they survive every teardown, this stack's included (ADR-0058
+# decision 7).

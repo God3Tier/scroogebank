@@ -6,7 +6,7 @@ Branch: `feat/agent-engagement`, up to `895bc93`
 
 Owner: Neo Jia Wen
 
-Status: **in progress.** Most checks passed in a personal AWS account. The project account, Outlook and the full Nova evaluation are still to do (see [Still to do](#still-to-do)).
+Status: **in progress.** Most checks passed in a personal AWS account, including Outlook on 2026-10-22. The project account and the full Nova evaluation are still to do (see [Still to do](#still-to-do)).
 
 ## Environment
 
@@ -30,7 +30,7 @@ Reported by the owner after running the [deploy runbook](../runbooks/deploy-aws.
 |---|---|---|
 | 1 | Holiday sync: log `holiday_sync country=SG …`; calendar stops at December 2027 and shows the 2027 holidays | Passed |
 | 2 | Sender address: From `CRM Calendar <sender_address>`; SPF and DKIM pass for `amazonses.com`; delivered to the inbox | Passed, Gmail. DMARC alignment does not apply in this mode (ADR-0055) |
-| 3 | Invites: create adds the entry, a time change moves it, cancel removes it | Passed in **Gmail only** |
+| 3 | Invites: create adds the entry, a time change moves it, cancel removes it | Passed in Gmail and Outlook (see [Outlook](#outlook)) |
 | 4 | Reminders arrive within 2 minutes of their due time | Passed |
 | 5 | Drafts: template label and holiday shown; names filled in with no `{{`; edit, save and reopen; send to the client with `Reply-To` the agent; second send returns 409 | Passed |
 | 5a | AI drafts with `ai_enabled = true` are labelled AI-generated | Passed for the drafts tried; the 24-case evaluation is not finished |
@@ -38,6 +38,21 @@ Reported by the owner after running the [deploy runbook](../runbooks/deploy-aws.
 | 7 | Audit: the activity feed and the auditor show the `ENGAGEMENT` events | Passed |
 | 8 | Failures: an unverified recipient fails with `ses_rejected`, logged with addresses masked | Passed (seen while testing, below) |
 | 9 | Operations: no email addresses in the service's logs; no dispatcher-lag alarm | Passed |
+
+### Outlook
+
+Checked on 2026-10-22 with an Outlook.com agent inbox ([ADR-0052](../adr/ADR-0052-calendar-invites-by-email.md) Validation).
+
+| Check | Result |
+|---|---|
+| Create | Shown as a meeting invite; the entry is added once the agent accepts it, not automatically |
+| Times | Shown in Singapore time |
+| Time change | The accepted entry moves |
+| Title change | The accepted entry updates |
+| Cancel | The entry is shown as cancelled |
+| Folder | Reminder emails land in the inbox |
+| Accept and decline buttons | No error for the agent; the replies to the organizer address are not processed, by design |
+| Reminders | Received |
 
 ## Problems found and fixed
 
@@ -69,8 +84,7 @@ Results: engagement-service 112 tests; frontend lint, 181 tests and build; mail-
 
 1. **Redeploy `895bc93`**, then repeat the holiday-greeting draft for a client whose country is `Singapore`.
 2. **Nova evaluation** ([ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md) Validation): 24 drafts, the 12 combinations of purpose, tone and holiday (8 for a Singapore client, 4 for a client without holiday data) twice each, split across two agents because of the 20-a-day cap. Pass: at least 22 AI-generated. Record each draft's purpose, tone, client, label and reason here.
-3. **Outlook:** create, move and cancel a meeting with an Outlook.com agent inbox (ADR-0052).
-4. **Project account, domain mode:** mail-identity creates the `mail.sg.itsag3t6.com` identity and its records; check `dkim_status` is `SUCCESS` and that Gmail shows DKIM and **DMARC** passing for `mail.sg.itsag3t6.com`. Verify the agents' and clients' inboxes again there (identities are per account), run the Bedrock `converse` check, and repeat a short smoke test.
-5. **Cost:** the session's cost against plan §14.
-6. **Q8:** decide whether the sandbox is enough for the demo. It worked here with every recipient verified.
-7. Tear down the personal account's stacks when finished.
+3. **Project account, domain mode:** mail-identity creates the `mail.sg.itsag3t6.com` identity and its records; check `dkim_status` is `SUCCESS` and that Gmail shows DKIM and **DMARC** passing for `mail.sg.itsag3t6.com`. Verify the agents' and clients' inboxes again there (identities are per account), run the Bedrock `converse` check, and repeat a short smoke test.
+4. **Cost:** the session's cost against plan §14.
+5. **Q8:** decide whether the sandbox is enough for the demo. It worked here with every recipient verified.
+6. Tear down the personal account's stacks when finished.

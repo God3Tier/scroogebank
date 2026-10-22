@@ -1,7 +1,9 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
-> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.
-> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack).
+> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-22.
+> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack), [ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) (every deployment ends with a full teardown; proposed).
+
+**Every deployment starts from an empty account and ends with [Tear down](#tear-down)**, which destroys every Terraform stack, `bootstrap` and `mail-identity` included ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). That way everyone starts from the same state. Only what is created by hand stays between deployments: the `crm-infra-admin` role and your IAM user ([AWS access](#aws-access)), the budget alerts, and the domain with its hosted zone ([Register a domain](#register-a-domain-once-per-account)). One deployment runs at a time; [Check the account is empty](#check-the-account-is-empty) tells you whether one is in progress.
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
 
@@ -11,7 +13,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 - **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
 - **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
-- **Cost.** Keep `running = false` and the databases stopped whenever no one is testing. Prod costs about USD 360 a month left running at one task per service and about USD 65 a month stopped; two 10-hour sessions a week come to about USD 100 a month (ADR-0042 "Cost Impact").
+- **Cost.** A deployment bills from step 1 until its teardown. Prod costs about USD 360 a month left running at one task per service, and about USD 65 a month even when stopped ([Pausing a deployment](#pausing-a-deployment)), so tear it down when you are done rather than leaving it stopped (ADR-0042 "Cost Impact").
 
 ## AWS access
 
@@ -80,7 +82,7 @@ Terraform cannot ask for an MFA code, so it gets the session's credentials from 
 
 ## Register a domain (once per account)
 
-**NOTE**: if using the project account, this section has already been manually set up for you. Proceed to step 1 - bootstrapping the account.
+**NOTE**: if using the project account, this section has already been manually set up for you. Proceed to [Check the account is empty](#check-the-account-is-empty).
 
 The CRM stack serves the app at `https://<legal_entity>.<domain>` (`sg.<domain>` for prod) and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's Route 53 zone ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). The domain is registered by hand, outside Terraform, like the `crm-infra-admin` role: destroying a stack, `bootstrap` included, never removes the domain or its zone, so every later deployment reuses them.
 
@@ -104,29 +106,39 @@ Registration usually finishes within minutes, and Route 53 e-mails when it does.
 
 Without a domain, the app keeps its `*.cloudfront.net` address and the internal ALB listens on HTTP inside the VPC.
 
-## 1. Bootstrap the account (once per account)
+## Check the account is empty
+
+Before step 1, check that no earlier deployment is still in the account. Each line prints nothing in an empty account:
+
+```sh
+aws s3api list-buckets --query 'Buckets[?starts_with(Name, `crm-`) || starts_with(Name, `core-banking-`)].Name' --output text
+aws ecs list-clusters --query 'clusterArns' --output text
+aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier' --output text
+aws sesv2 list-email-identities --query 'EmailIdentities[].IdentityName' --output text
+aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values=crm- --query 'SecretList[].Name' --output text
+```
+
+- **`crm-tfstate-<account>` is listed, or a cluster or database:** another deployment is in progress, or its teardown did not finish. Ask the team who it belongs to, and do not apply anything: your stacks would share its state bucket and names. Its owner finishes [Tear down](#tear-down).
+- **Only secrets are listed:** a teardown skipped the hard delete. Run the secrets loop in [Tear down](#tear-down) with `STACK=crm-sg-prod`, then check again.
+
+## 1. Bootstrap the account
 
 ```sh
 cd infrastructure/terraform/bootstrap
-[ -f terraform.tfvars ] || cp terraform.tfvars.example terraform.tfvars   # keeps an existing file; set budget_emails and budget_start_date
+[ -f terraform.tfvars ] || cp terraform.tfvars.example terraform.tfvars   # keeps an existing file
 terraform init
 terraform apply                  # type yes; it must end with "Apply complete!"
 terraform output -raw state_bucket   # steps 3, 4 and 9.1 read this output themselves
 cd -
 ```
 
-`terraform output` reads the state that a finished apply writes, so "No outputs found" means the apply has not completed in this directory: run it again and fix the error it reports. A missing variable, such as a `terraform.tfvars` copied before `budget_start_date` existed, makes it stop and ask for the value.
+`terraform output` reads the state that a finished apply writes, so "No outputs found" means the apply has not completed in this directory: run it again and fix the error it reports. A missing variable, such as one added since your `terraform.tfvars` was copied, makes it stop and ask for the value.
 
-This stack keeps its state in a local `terraform.tfstate` (git-ignored). Keep that file; if it is lost, `terraform import` the bucket again before the next apply.
+This stack keeps its state in a local `terraform.tfstate` (git-ignored), on your machine only. Keep that file until your teardown has destroyed `bootstrap`; if it is lost before then, `terraform import` the state bucket again, or no one can destroy the stack. A `terraform.tfstate` left from an earlier deployment of yours holds no resources once that deployment was torn down, so the apply creates everything again.
 
 Bootstrap creates no GuardDuty detector: the account already has one, and a second fails. The crm stack also leaves out the cross-Region backup copy and WAF request logging, which the account's service control policy refuses. The [Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account) lists what each omission means.
 
-**Budget alerts.** AWS Budgets e-mails `budget_emails` directly; there is no subscription to confirm.
-
-- `crm-total` counts all spending since `budget_start_date` against the USD 300 project limit. It e-mails when actual cost passes 50, 70, 85, 95 and 100%, and when the forecast passes 100%.
-- `crm-bedrock` e-mails when a month's Bedrock cost passes 50, 80 and 100% of `bedrock_budget_usd`.
-- Both count cost before credits, so they still fire when credits cover the bill.
-- Each threshold e-mails once per budget period. Cost data refreshes a few times a day, so an alert can arrive hours after the spend.
+**Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). `Team-Created-Budget` e-mails when actual cost passes 10, 20, 40, 60, 80 and 100% of USD 200, and a Bedrock budget at 50, 80 and 100% of USD 25 a month. Both count cost after credits, since the project account has none; in an account with credits, such as a personal one, exclude the `Credit` and `Refund` charge types, or the budget never alerts. This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
 
 ## 2. Build the Lambda zip and the images
 
@@ -170,6 +182,7 @@ cd infrastructure/terraform/stacks/crm
 STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
 sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
 [ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
+sed -i -E '/^(enable_ingest_lambda|ingest_lambda_zip|sftp_server_address|sftp_host_key_fingerprint) *=/d' env/prod.tfvars   # step 9.3 adds them back
 sed -i "s/^image_tag *=.*/image_tag = \"${TAG:?set TAG as in step 2}\"/" env/prod.tfvars
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 sed -i '/^extra_audit_producer_role_arns *=/d' env/prod.tfvars   # replaces an older line
@@ -186,7 +199,7 @@ The roles' names start with the stack's prefix, `crm-<legal_entity>-<environment
 
 `DOMAIN` is `itsag3t6.com` in the project account, which has that domain's public hosted zone. In an account without it, such as a personal one, `DOMAIN` is empty and no `domain_name` line is written, so the same commands deploy without a domain. To use a domain you registered yourself, replace the lookup with `DOMAIN=yourdomain.com`. If the `echo` line says `none` in the project account, the hosted zone is missing ([Register a domain](#register-a-domain-once-per-account)) or the lookup failed (check for an error above it). Fix that first, since the stack would otherwise deploy without the domain.
 
-**In a new account, check for an old `env/prod.tfvars`.** The `cp` line keeps an existing file, so one from an earlier deployment still has step 9.3's `enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint` lines. Delete those four lines before the apply. They point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]").
+**The second `sed` line deletes step 9.3's four lines** (`enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint`), which an `env/prod.tfvars` from an earlier deployment still has, since the `cp` line keeps an existing file. Their commented-out copies from the example file stay. Those lines point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they would make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). If you run this block again after step 9.3, for example to fix the audit roles, run step 9.3's item 2 again before the next apply, or that apply deletes the ingest Lambda.
 
 Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs. dashboard-service's image tag is set in the business-dashboard stack, so an `image_tags` entry for it here does nothing.
 
@@ -234,11 +247,11 @@ cd -
 
 It takes the task count from the CRM stack, so, like step 3, this apply starts no task. If the plan stops with `The audit queue does not allow arn:aws:iam::…`, the CRM stack was applied without that ARN in `extra_audit_producer_role_arns`: run step 3's first block again, apply the CRM stack, then this step.
 
-## 4a. Create the mail identity (once) and the agent-engagement stack, stopped
+## 4a. Create the mail identity and the agent-engagement stack, stopped
 
 Agent engagement ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)) sends calendar invites, reminders and client emails through SES. With the CRM stack's `domain_name`, mail comes from `no-reply@mail.<app host>`, signed with the domain's DKIM. In an account without the domain's hosted zone, mail comes from one verified address you choose, `sender_address`, with no DNS records ([ADR-0055](../adr/ADR-0055-sender-address-without-a-domain.md)). Receivers check that address's domain's DMARC policy, so mail from an address at a domain that publishes `p=quarantine` or `p=reject` (many webmail providers do) may go to spam or be refused. Check with `nslookup -type=TXT _dmarc.<domain>`, and prefer a domain with `p=none` or no DMARC record.
 
-**The mail identity, once per environment.** This stack is long-lived: never destroy it between sessions or in a teardown you mean to redeploy from ([ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) decision 2). The commands set `domain_name` as step 3 does, when this account has the zone. Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand, and, without a domain, `sender_address` too: real addresses only there, never in the example:
+**The mail identity.** Like every stack, it is created in each deployment and destroyed in its teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 3), so the verification below is repeated every time. Apply it early: DKIM can take up to an hour, and each inbox must click a new link. The commands set `domain_name` as step 3 does, when this account has the zone. Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand, and, without a domain, `sender_address` too: real addresses only there, never in the example:
 
 ```sh
 cd infrastructure/terraform/stacks/mail-identity
@@ -255,7 +268,7 @@ terraform output dkim_status   # with a domain: PENDING until SES finds the DKIM
 cd -
 ```
 
-Each address in `verified_recipients`, and `sender_address` without a domain, receives an email from Amazon Web Services; click its link once. In the SES sandbox, mail reaches only those addresses. **That includes the agents, not only the clients:** invites and reminders go to the agent's Cognito email (the address they sign in with), and follow-up emails go to the client's email in client-service, so list both, or give agents and demo clients addresses that are already listed (synthetic data only). An unlisted address fails with `ses_rejected` (`Email address is not verified`), and that mail is not retried. Apply this stack again to add or remove an address. To see what is verified:
+Each address in `verified_recipients`, and `sender_address` without a domain, receives an email from Amazon Web Services; click its link. The link from an earlier deployment no longer works, since that identity was destroyed. In the SES sandbox, mail reaches only those addresses. **That includes the agents, not only the clients:** invites and reminders go to the agent's Cognito email (the address they sign in with), and follow-up emails go to the client's email in client-service, so list both, or give agents and demo clients addresses that are already listed (synthetic data only). An unlisted address fails with `ses_rejected` (`Email address is not verified`), and that mail is not retried. Apply this stack again to add or remove an address. To see what is verified:
 
 ```sh
 aws sesv2 list-email-identities --query 'EmailIdentities[].[IdentityName,VerificationStatus]' --output table
@@ -340,7 +353,19 @@ cd -
    A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); for a `db-migrate` failure, its `db-migrate/…` log stream gives Flyway's reason ([Troubleshooting](#troubleshooting)).
 2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
-4. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
+4. **Sign-in audit (Cognito triggers):** the sign-in in item 2 ran the trigger. Read its log:
+
+   ```sh
+   MSYS_NO_PATHCONV=1 aws logs tail "/aws/lambda/$STACK-cognito-triggers" --since 30m
+   ```
+
+   1. **Login:** each sign-in logs `AUDIT_SENT` with `"action":"LOGIN"`.
+   2. **Password reset:** sign out and use "Forgot password". The reset logs `AUDIT_SENT` with `"action":"PASSWORD_RESET"`, and it shows in the activity feed.
+   3. **Failures:** `AUDIT_SEND_FAILED` means the user signed in but the event was not sent. Its `error` field says why ([Replaying failed events](../../services/cognito-triggers/README.md#replaying-failed-events)).
+   4. **Cold start:** the `REPORT` line's `Init Duration` plus `Duration` should be well under Cognito's 5-second limit.
+
+   Test with real sign-ins, not `aws lambda invoke` with the sample LOGIN or PASSWORD_RESET events: those would put a made-up user's login into the audit chain, and it cannot be removed. `confirm-sign-up.json` is safe to invoke, since the trigger ignores that event.
+5. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
 
 ## 9. The external SFTP server and the ingest Lambda
 
@@ -510,7 +535,9 @@ The producer writes transactions only for the accounts in its list, and nothing 
 
 Run it again after opening, closing or deleting accounts, and after the sftp-server stack replaces the instance, which starts with an empty list. Stopping the instance between sessions keeps the list. To see the list on the server, open a Session Manager shell (9.4) and run `cat /etc/producer/account-ids`; `sudo docker logs --tail 5 producer` says when a run published nothing.
 
-## Between sessions
+## Pausing a deployment
+
+To pause a deployment that runs over several sessions, such as overnight, stop it and start it again later. A pause is not the end of a deployment: when you are done, [tear it down](#tear-down), so the next person starts from an empty account.
 
 ```sh
 # stop
@@ -530,7 +557,7 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-fil
 - Starting and stopping each redeploy every service, for Service Connect (step 3), so each plan shows every `aws_ecs_service` updating in place. A stop briefly starts one new task per service, which the scale to 0 stops within seconds.
 - The script also stops and starts engagement-db when the agent-engagement stack exists. While stopped, no invite or reminder is sent; a reminder whose meeting starts in the meantime is recorded as missed (ADR-0051 decision 6).
 - Starting takes several minutes, mostly the databases.
-- RDS starts a stopped instance again after 7 days, so stop it again after a longer break.
+- RDS starts a stopped instance again after 7 days. A deployment paused that long should be torn down instead.
 - For the high-availability demo week, add `-var high_availability=true`.
 
 ## Operations
@@ -540,8 +567,12 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-fil
 
 ## Tear down
 
+Every deployment ends here, and destroys every stack ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). Run the four parts in order, in one terminal, from the repository root. Take a manual snapshot first only if you need data from this deployment: nothing survives it.
+
+**1. The app stacks:**
+
 ```sh
-STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster); echo "$STACK"   # the secrets step below needs it after the outputs are gone
+STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster); echo "$STACK"   # part 2 needs it after the outputs are gone
 terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply   -var-file=env/prod.tfvars
@@ -551,12 +582,13 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement destroy -var-f
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
 
-- **Destroy agent-engagement before crm too,** for the same reasons: its rule sits on client-service's group, it runs in the CRM's cluster, and engagement-db uses the CRM's subnet group, parameter group and KMS key. Its apply after the CRM's `deletion_protection=false` apply turns off engagement-db's deletion protection and final snapshot.
-- **Keep mail-identity** unless you are giving up SES for good: it costs nothing while idle, and a new identity needs DKIM verification and every inbox's verification click again. To remove it, `terraform -chdir=infrastructure/terraform/stacks/mail-identity destroy -var-file=env/prod.tfvars`, before destroying `bootstrap`.
 - **Destroy business-dashboard before crm.** Its rules sit on the CRM stack's security groups and its service runs in the CRM's cluster, so the CRM stack cannot be destroyed while it exists. Its apply after the CRM's `deletion_protection=false` apply lets its destroy empty dashboard-service's image repository.
+- **Destroy agent-engagement before crm too,** for the same reasons: its rule sits on client-service's group, it runs in the CRM's cluster, and engagement-db uses the CRM's subnet group, parameter group and KMS key. Its apply after the CRM's `deletion_protection=false` apply turns off engagement-db's deletion protection and final snapshot.
+- **Prod first needs its protections lifted:** the first crm apply above, with `-var deletion_protection=false`, turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots. Staging has none to lift.
+- **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). If the crm destroy stops on it, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), and run the destroy again.
+- **The certificates and DNS records go with the crm stack.** The domain and its hosted zone stay: they are outside Terraform ([Register a domain](#register-a-domain-once-per-account)).
 
-- **Prod first needs its protections lifted:** apply once with `-var deletion_protection=false`. That turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots, so the stack can be created again straight away; take a manual snapshot first if you want to keep any data. Staging has none to lift.
-- **Then hard delete any secret still pending deletion.** The stacks' secrets have fixed names (`crm-<entity>-<environment>/...`, which includes business-dashboard's `.../tls/dashboard`), so a secret still in its recovery window makes the next apply fail with `a secret with this name is already scheduled for deletion`. Secrets are left like this when destroy runs without the `deletion_protection=false` apply first. This deletes them at once, and does nothing if there are none. It uses `STACK` from the block above; in a new terminal the destroyed stack has no outputs, so set `STACK=crm-<legal_entity>-<environment>` (`crm-sg-prod` by default) instead:
+**2. Hard delete any secret still pending deletion.** The stacks' secrets have fixed names (`crm-<entity>-<environment>/...`, which includes business-dashboard's `.../tls/dashboard`), so a secret still in its recovery window makes the next deployment's apply fail with `a secret with this name is already scheduled for deletion`. Secrets are left like this when destroy runs without the `deletion_protection=false` apply first. This deletes them at once, and does nothing if there are none. It uses `STACK` from part 1; in a new terminal the destroyed stack has no outputs, so set `STACK=crm-<legal_entity>-<environment>` (`crm-sg-prod` by default) instead:
 
   ```sh
   for s in $(aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Values="${STACK:?set STACK}/" \
@@ -566,21 +598,26 @@ terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.
   ```
 
   A hard-deleted secret cannot be restored. The databases' master secrets (`rds!db-...`) are deleted with their instances and never conflict.
-- **Starting over** gives a new user pool and empty databases, so you can change `root_admin_email` then.
-- **The domain and its hosted zone stay** ([Register a domain](#register-a-domain-once-per-account)): they are outside Terraform, so destroying `bootstrap` leaves them too. The certificates and DNS records go with the crm stack. The zone costs USD 0.50 a month while it exists; delete it only when you give up the domain, since a later deployment would then need a new zone and the domain's name servers changed to it.
-- **The audit anchor bucket keeps each anchor locked for 7 days** (Object Lock, governance mode). Before destroying, remove the object versions as an administrator with `s3:BypassGovernanceRetention` (`aws s3api delete-object --bypass-governance-retention --version-id ...`), or wait 7 days.
-- **Destroy `mail-identity`, then `bootstrap` last, if at all.** Its state bucket holds the other stacks' state, so first destroy every stack that keeps its state there (`terraform state list` prints nothing in each). The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
 
-  ```sh
-  terraform -chdir=infrastructure/terraform/stacks/mail-identity destroy -var-file=env/prod.tfvars
-  cd infrastructure/terraform/bootstrap
-  bucket=$(terraform output -raw state_bucket); echo "${bucket:?no state_bucket output}"
-  aws s3api delete-objects --bucket "$bucket" --delete "$(aws s3api list-object-versions --bucket "$bucket" \
-    --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}, Quiet: `true`}' --output json)"
-  terraform destroy # If this fails, manually empty bucket in AWS Console S3
-  ```
+**3. The mail identity, then `bootstrap`.** `bootstrap`'s state bucket holds every other stack's state, so it goes last, once `terraform state list` prints nothing in each of them. The bucket is versioned and has no `force_destroy`, so `terraform destroy` stops with `BucketNotEmpty` until every object version and delete marker is deleted:
 
-  `delete-objects` takes at most 1,000 versions per call. Old versions expire after 90 days, so the bucket rarely holds that many.
+```sh
+terraform -chdir=infrastructure/terraform/stacks/mail-identity destroy -var-file=env/prod.tfvars
+cd infrastructure/terraform/bootstrap
+bucket=$(terraform output -raw state_bucket); echo "${bucket:?no state_bucket output}"
+aws s3api delete-objects --bucket "$bucket" --delete "$(aws s3api list-object-versions --bucket "$bucket" \
+  --query '{Objects: [Versions, DeleteMarkers][][].{Key: Key, VersionId: VersionId}, Quiet: `true`}' --output json)"
+terraform destroy # If this fails, manually empty bucket in AWS Console S3
+cd -
+```
+
+- `delete-objects` takes at most 1,000 versions per call. Old versions expire after 90 days, so the bucket rarely holds that many.
+- Destroying `bootstrap` also removes the CloudTrail trail and its bucket; the budget alerts stay, as they are outside Terraform. CloudTrail's 90-day event history still shows who did what.
+- The verified inboxes and DKIM go with `mail-identity`. The next deployment verifies them again (step 4a).
+
+**4. Check the account is empty:** run the commands in [Check the account is empty](#check-the-account-is-empty). Each must print nothing. Anything left is the next person's problem, so remove it now: a listed stack resource means a destroy above stopped part way; run it again and fix the error it reports.
+
+The next deployment starts with a new user pool and empty databases, so `root_admin_email` can change then.
 
 ## Troubleshooting
 
