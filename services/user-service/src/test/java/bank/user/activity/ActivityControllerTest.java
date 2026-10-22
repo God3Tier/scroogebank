@@ -58,7 +58,7 @@ class ActivityControllerTest {
     void adminGetsAnAgentsActivityInAWindow() throws Exception {
         Instant from = Instant.parse("2026-09-01T00:00:00Z");
         Instant to = Instant.parse("2026-09-30T00:00:00Z");
-        ActivityQuery query = new ActivityQuery("agent-sub-7", from, to, 10, "42");
+        ActivityQuery query = new ActivityQuery("agent-sub-7", null, from, to, 10, "42");
         when(activityService.list(query, "token")).thenReturn(new ActivityPage(List.of(new ActivityResponse(
                 "entry-41", "CRM", "UPDATE", "agent-sub-7", "Alice Tan", from, null)), "41"));
 
@@ -81,7 +81,7 @@ class ActivityControllerTest {
         mvc.perform(get("/api/activities").with(admin()))
                 .andExpect(status().isOk());
 
-        verify(activityService).list(new ActivityQuery(null, null, null, 20, null), "token");
+        verify(activityService).list(new ActivityQuery(null, null, null, null, 20, null), "token");
     }
 
     @Test
@@ -91,7 +91,7 @@ class ActivityControllerTest {
         mvc.perform(get("/api/activities").with(agent()))
                 .andExpect(status().isOk());
 
-        verify(activityService).list(new ActivityQuery("agent-sub", null, null, 20, null), "token");
+        verify(activityService).list(new ActivityQuery("agent-sub", null, null, null, 20, null), "token");
     }
 
     @Test
@@ -101,7 +101,30 @@ class ActivityControllerTest {
         mvc.perform(get("/api/activities").param("agentId", "agent-sub").with(agent()))
                 .andExpect(status().isOk());
 
-        verify(activityService).list(new ActivityQuery("agent-sub", null, null, 20, null), "token");
+        verify(activityService).list(new ActivityQuery("agent-sub", null, null, null, 20, null), "token");
+    }
+
+    @Test
+    void agentCanFilterTheirActivityByClientAndTimeWindow() throws Exception {
+        when(activityService.list(any(), any())).thenReturn(new ActivityPage(List.of(), null));
+
+        mvc.perform(get("/api/activities")
+                        .param("clientId", "00000000-0000-0000-0000-000000000123")
+                        .param("from", "2026-09-01T00:00:00Z")
+                        .param("to", "2026-09-30T00:00:00Z")
+                        .with(agent()))
+                .andExpect(status().isOk());
+
+        verify(activityService).list(new ActivityQuery("agent-sub", "00000000-0000-0000-0000-000000000123",
+                Instant.parse("2026-09-01T00:00:00Z"), Instant.parse("2026-09-30T00:00:00Z"), 20, null), "token");
+    }
+
+    @Test
+    void invalidClientIdIsBadRequest() throws Exception {
+        mvc.perform(get("/api/activities").param("clientId", "not-a-uuid").with(agent()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("clientId: must be a UUID"));
+        verifyNoInteractions(activityService);
     }
 
     @Test

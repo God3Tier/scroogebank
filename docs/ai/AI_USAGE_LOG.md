@@ -1,5 +1,37 @@
 # AI usage log
 
+## 2026-10-22 — Matched transaction activity API
+
+- Human owner: Joseph Yau (Feature 3); Garvit, Swayam, and security/platform
+  review remain required before the proposed contract is accepted.
+- Tool: OpenAI Codex.
+- Use: implement the proposed Client Health Monitor transaction read path with
+  SQLBoiler, Mockery, Cognito service-token verification, bounded date ranges,
+  keyset pagination, matched-row filtering, and stable synthetic source IDs;
+  update the feature plan, proposed ADR, API/schema docs, and run instructions.
+- Data: synthetic transaction fixtures only. No credentials, real client data,
+  or production banking data were supplied.
+- Verification: pending full receiver/producer test run and SQLBoiler/Mockery
+  regeneration; contract-owner and end-to-end review are still required.
+
+## 2026-10-14 — Auditor service layering and style
+
+- Human owner: Joseph Yau; Hayyun review requested in the auditor feature plan.
+- Tool: OpenAI Codex.
+- Use: repository inspection and changes to keep HTTP JSON DTOs in the auditor
+  controller, keep the S3 anchor document in the storage adapter, use SQLBoiler
+  for the audit-chain head lookup, document the narrowly scoped raw SQL needed
+  for advisory locking and idempotent findings, add the auditor Mockery
+  configuration, and update the feature plan and service README.
+- Human verification required: review the changed API mapping and Hayyun's
+  auditor ownership/review requirement before integration.
+- Data: repository source and synthetic fixtures only. No secrets, real client
+  data, or confidential bank data were supplied.
+- Verification: `gofmt`, `git diff --check`, protobuf/SQLBoiler/Mockery
+  generation, and focused controller/audit plus anchor repository tests passed.
+  The full `make test` runner was terminated with exit 143 during dependency
+  setup, so the complete suite remains unverified.
+
 ## 2026-09-27 — EDA-D1-01 AgentCore Web Search spike
 
 - Human owner: Azeez
@@ -316,3 +348,4 @@
   ADR-0006 through ADR-0016; checked Markdown structure, Mermaid participants,
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
+- 2026-10-22 — Joseph Yau — Codex — Added client filtering to the authenticated, paged auditor activity query and corresponding user-service query parameters. Files: `proto/audit/v1/audit.proto`, auditor activity controller/model/repository and tests, user-service activity controller/service/record and tests, API contract, proposed ADR, and auditor feature plan. Protobuf generation, all auditor tests, SQL-backed activity query tests, focused user-service tests, and formatting checks passed; proposed ADR-0042 still needs human acceptance/review.
