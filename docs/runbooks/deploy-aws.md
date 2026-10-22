@@ -132,13 +132,13 @@ terraform output -raw state_bucket   # steps 3, 4 and 9.1 read this output thems
 cd -
 ```
 
-`terraform output` reads the state that a finished apply writes, so "No outputs found" means the apply has not completed in this directory: run it again and fix the error it reports. A missing variable, such as a `terraform.tfvars` copied before `budget_start_date` existed, makes it stop and ask for the value.
+`terraform output` reads the state that a finished apply writes, so "No outputs found" means the apply has not completed in this directory: run it again and fix the error it reports. A missing variable, such as one added since your `terraform.tfvars` was copied, makes it stop and ask for the value.
 
 This stack keeps its state in a local `terraform.tfstate` (git-ignored), on your machine only. Keep that file until your teardown has destroyed `bootstrap`; if it is lost before then, `terraform import` the state bucket again, or no one can destroy the stack. A `terraform.tfstate` left from an earlier deployment of yours holds no resources once that deployment was torn down, so the apply creates everything again.
 
 Bootstrap creates no GuardDuty detector: the account already has one, and a second fails. The crm stack also leaves out the cross-Region backup copy and WAF request logging, which the account's service control policy refuses. The [Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account) lists what each omission means.
 
-**Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). They e-mail when actual cost passes 10, 20, 40, 60, 80 and 100% of the limit. This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
+**Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). `Team-Created-Budget` e-mails when actual cost passes 10, 20, 40, 60, 80 and 100% of USD 200, and a Bedrock budget at 50, 80 and 100% of USD 25 a month. Both count cost after credits, since the project account has none; in an account with credits, such as a personal one, exclude the `Credit` and `Refund` charge types, or the budget never alerts. This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
 
 ## 2. Build the Lambda zip and the images
 

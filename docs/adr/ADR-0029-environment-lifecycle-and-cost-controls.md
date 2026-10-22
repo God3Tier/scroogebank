@@ -7,7 +7,7 @@
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) in part, if accepted (prod is destroyed at the end of every deployment; stopping is only a pause within one; budget alerts at 10, 20, 40, 60, 80 and 100%, made by hand)
+- Superseded by: [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) in part, if accepted (prod is destroyed at the end of every deployment; stopping is only a pause within one; budget alerts made by hand: USD 200 at 10, 20, 40, 60, 80 and 100%, and a Bedrock budget)
 
 ## Context
 
@@ -51,7 +51,7 @@ The project has a USD 300 hard spending limit and a USD 100 protected contingenc
 
 - **Between sessions ECS scales to 0 and RDS is stopped (stop model); the ALB and NAT gateways stay up**, so the NAT gateway keeps its Elastic IP on the SFTP server's allow-list. Stopped RDS instances still bill for storage.
 - **Multi-AZ standbys and the second NAT gateway run only in the high-availability demo week** (roughly USD 19 extra). Outside that week, the databases run single-AZ with one NAT gateway.
-- **AWS Budgets alerts** at 50, 70, 85, 95 and 100% of USD 300, plus a separate Bedrock alert. (Thresholds superseded by [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7, if accepted: 10, 20, 40, 60, 80 and 100%.)
+- **AWS Budgets alerts** at 50, 70, 85, 95 and 100% of USD 300, plus a separate Bedrock alert. (Superseded by [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7, if accepted: USD 200 at 10, 20, 40, 60, 80 and 100%, and USD 25 a month for Bedrock at 50, 80 and 100%, made by hand in the Billing console.)
 - **First levers if spend runs ahead:**
   - fewer prod days;
   - a shorter demo week;
