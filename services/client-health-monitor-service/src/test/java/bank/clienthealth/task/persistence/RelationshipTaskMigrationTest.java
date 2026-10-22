@@ -38,7 +38,8 @@ class RelationshipTaskMigrationTest {
     @BeforeEach
     void clearTables() throws SQLException {
         execute("TRUNCATE processed_client_health_findings, relationship_task_history, "
-                + "relationship_task_evidence, task_assignment_snapshots, relationship_tasks "
+                + "relationship_task_evidence, task_assignment_snapshots, relationship_tasks, "
+                + "agent_daily_task_admissions "
                 + "RESTART IDENTITY CASCADE");
     }
 
@@ -55,11 +56,12 @@ class RelationshipTaskMigrationTest {
                               'task_assignment_snapshots',
                               'relationship_task_evidence',
                               'relationship_task_history',
+                              'agent_daily_task_admissions',
                               'processed_client_health_findings')
                         """)) {
             try (var result = statement.executeQuery()) {
                 result.next();
-                assertEquals(5, result.getInt(1));
+                assertEquals(6, result.getInt(1));
             }
         }
     }
@@ -120,6 +122,16 @@ class RelationshipTaskMigrationTest {
         assertThrows(SQLException.class, () -> execute(
                 "INSERT INTO processed_client_health_findings VALUES "
                         + "('finding-1', 'task-1', '{}'::jsonb, 'DUPLICATE', 1, now())"));
+
+        execute("INSERT INTO processed_client_health_findings VALUES "
+                + "('finding-2', NULL, '{}'::jsonb, 'SUPPRESSED_COOLDOWN', 0, now())");
+        assertThrows(SQLException.class, () -> execute(
+                "INSERT INTO processed_client_health_findings VALUES "
+                        + "('finding-3', 'task-1', '{}'::jsonb, 'SUPPRESSED_DAILY_CAP', 1, now())"));
+        execute("INSERT INTO agent_daily_task_admissions VALUES "
+                + "('agent-1', DATE '2026-10-22', 20, now())");
+        assertThrows(SQLException.class, () -> execute(
+                "UPDATE agent_daily_task_admissions SET created_task_count = 21"));
     }
 
     private void insertTask(String taskId, String clientId, String status, long version)

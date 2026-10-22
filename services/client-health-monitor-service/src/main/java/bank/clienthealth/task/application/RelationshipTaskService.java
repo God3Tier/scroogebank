@@ -11,13 +11,19 @@ import bank.clienthealth.task.port.DispositionPolicy;
 import bank.clienthealth.task.port.TaskRepository;
 import bank.clienthealth.task.port.TaskRepository.ProcessedFinding;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.function.Supplier;
 
 /** Application service consumed by analysis now and by the task API later. */
 public final class RelationshipTaskService implements RelationshipTaskPort {
     private static final int MAX_ATTEMPTS = 3;
+    private static final int DAILY_TASK_CAP = 20;
+    private static final Duration COOLDOWN = Duration.ofDays(30);
+    private static final ZoneId SINGAPORE = ZoneId.of("Asia/Singapore");
 
     private final TaskRepository repository;
     private final ClientAssignmentPort assignments;
@@ -79,9 +85,25 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
                 session.saveTask(updated, current.version());
                 result = new TaskUpsertResult(updated.taskId(), Outcome.EVIDENCE_ATTACHED, updated.version());
             } else {
-                RelationshipTask created = RelationshipTask.create(taskIds.get(), finding, unseen, assignment, now);
-                session.saveTask(created, 0);
-                result = new TaskUpsertResult(created.taskId(), Outcome.CREATED, created.version());
+                var latestClosed = session.findLatestClosedTask(finding.clientId());
+                boolean inCooldown = latestClosed
+                        .filter(task -> now.isBefore(task.updatedAt().plus(COOLDOWN)))
+                        .filter(task -> finding.priorityInputs().highestSeverity().compareTo(task.severity()) <= 0)
+                        .isPresent();
+                if (inCooldown) {
+                    result = TaskUpsertResult.suppressed(Outcome.SUPPRESSED_COOLDOWN);
+                } else {
+                    LocalDate singaporeDate = LocalDate.ofInstant(now, SINGAPORE);
+                    if (!session.tryReserveTaskCreation(
+                            assignment.agentSubject(), singaporeDate, DAILY_TASK_CAP)) {
+                        result = TaskUpsertResult.suppressed(Outcome.SUPPRESSED_DAILY_CAP);
+                    } else {
+                        RelationshipTask created = RelationshipTask.create(
+                                taskIds.get(), finding, unseen, assignment, now);
+                        session.saveTask(created, 0);
+                        result = new TaskUpsertResult(created.taskId(), Outcome.CREATED, created.version());
+                    }
+                }
             }
             session.saveProcessedFinding(new ProcessedFinding(finding, result, now));
             return result;

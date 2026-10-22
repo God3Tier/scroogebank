@@ -123,16 +123,32 @@ CREATE TABLE relationship_task_history (
 CREATE INDEX ix_relationship_task_history_occurred
     ON relationship_task_history (task_id, occurred_at DESC);
 
+CREATE TABLE agent_daily_task_admissions (
+    agent_subject TEXT NOT NULL,
+    singapore_date DATE NOT NULL,
+    created_task_count INTEGER NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (agent_subject, singapore_date),
+    CONSTRAINT ck_agent_daily_task_admissions_count
+        CHECK (created_task_count BETWEEN 0 AND 20)
+);
+
 CREATE TABLE processed_client_health_findings (
     finding_id TEXT PRIMARY KEY,
-    task_id TEXT NOT NULL REFERENCES relationship_tasks (task_id),
+    task_id TEXT REFERENCES relationship_tasks (task_id),
     finding_payload JSONB NOT NULL,
     outcome TEXT NOT NULL,
     result_version BIGINT NOT NULL,
     processed_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT ck_processed_client_health_findings_outcome
-        CHECK (outcome IN ('CREATED', 'EVIDENCE_ATTACHED', 'DUPLICATE')),
-    CONSTRAINT ck_processed_client_health_findings_version CHECK (result_version > 0),
+        CHECK (outcome IN ('CREATED', 'EVIDENCE_ATTACHED', 'DUPLICATE',
+                           'SUPPRESSED_COOLDOWN', 'SUPPRESSED_DAILY_CAP')),
+    CONSTRAINT ck_processed_client_health_findings_result CHECK (
+        (outcome IN ('SUPPRESSED_COOLDOWN', 'SUPPRESSED_DAILY_CAP')
+            AND task_id IS NULL AND result_version = 0) OR
+        (outcome IN ('CREATED', 'EVIDENCE_ATTACHED', 'DUPLICATE')
+            AND task_id IS NOT NULL AND result_version > 0)
+    ),
     CONSTRAINT ck_processed_client_health_findings_payload
         CHECK (jsonb_typeof(finding_payload) = 'object')
 );
