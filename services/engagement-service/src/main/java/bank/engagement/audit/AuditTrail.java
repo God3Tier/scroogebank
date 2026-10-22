@@ -2,6 +2,7 @@ package bank.engagement.audit;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import java.util.UUID;
  * title, description, email body or address (agent-engagement plan §11).
  */
 @Component
+@RequiredArgsConstructor
 public class AuditTrail {
 
     /** The actor for what the dispatcher does on its own. */
@@ -29,12 +31,6 @@ public class AuditTrail {
     private final AuditOutboxRepository repository;
     private final ObjectMapper mapper;
     private final Clock clock;
-
-    public AuditTrail(AuditOutboxRepository repository, ObjectMapper mapper, Clock clock) {
-        this.repository = repository;
-        this.mapper = mapper;
-        this.clock = clock;
-    }
 
     @Transactional
     public void record(AuditAction action, String actorId, Map<String, ?> data) {

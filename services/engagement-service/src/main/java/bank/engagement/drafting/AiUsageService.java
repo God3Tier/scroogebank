@@ -1,5 +1,7 @@
 package bank.engagement.drafting;
 
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,15 +13,11 @@ import java.util.Optional;
  * decision 7). Reaching either gives a template, never an error.
  */
 @Service
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class AiUsageService {
 
     private final AiUsageRepository repository;
     private final AiProperties properties;
-
-    AiUsageService(AiUsageRepository repository, AiProperties properties) {
-        this.repository = repository;
-        this.properties = properties;
-    }
 
     /** @return the {@code sourceReason} when a cap is reached */
     @Transactional(readOnly = true)

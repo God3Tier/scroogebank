@@ -2,6 +2,7 @@ package bank.engagement.notifications;
 
 import bank.engagement.audit.AuditAction;
 import bank.engagement.audit.AuditTrail;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,19 +14,13 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 public class PreferencesService {
 
     private final PreferencesRepository repository;
     private final MailQueue mailQueue;
     private final AuditTrail audit;
     private final Clock clock;
-
-    public PreferencesService(PreferencesRepository repository, MailQueue mailQueue, AuditTrail audit, Clock clock) {
-        this.repository = repository;
-        this.mailQueue = mailQueue;
-        this.audit = audit;
-        this.clock = clock;
-    }
 
     @Transactional(readOnly = true)
     public Preferences get(String agentSub) {

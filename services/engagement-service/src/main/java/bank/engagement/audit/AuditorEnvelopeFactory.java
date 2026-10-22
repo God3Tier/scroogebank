@@ -3,6 +3,7 @@ package bank.engagement.audit;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
@@ -12,16 +13,13 @@ import org.springframework.stereotype.Component;
  * the same shape event-alert-service sends.
  */
 @Component
+@RequiredArgsConstructor
 public class AuditorEnvelopeFactory {
 
     static final String SOURCE_SERVICE = "ENGAGEMENT";
     static final String EVENT_TYPE = "ENGAGEMENT";
 
     private final ObjectMapper mapper;
-
-    public AuditorEnvelopeFactory(ObjectMapper mapper) {
-        this.mapper = mapper;
-    }
 
     public AuditorEnvelope create(AuditOutbox event) {
         try {

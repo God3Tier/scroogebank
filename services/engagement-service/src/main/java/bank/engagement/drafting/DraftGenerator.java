@@ -3,8 +3,9 @@ package bank.engagement.drafting;
 import bank.engagement.holidays.HolidayView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -21,9 +22,9 @@ import java.util.UUID;
  * error.
  */
 @Component
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
+@Slf4j
 class DraftGenerator {
-
-    private static final Logger log = LoggerFactory.getLogger(DraftGenerator.class);
 
     private final AiProperties properties;
     private final AiUsageService usage;
@@ -31,16 +32,6 @@ class DraftGenerator {
     private final DraftSafetyScreen screen;
     private final ObjectMapper mapper;
     private final MeterRegistry meters;
-
-    DraftGenerator(AiProperties properties, AiUsageService usage, ObjectProvider<DraftModelGateway> models,
-            DraftSafetyScreen screen, ObjectMapper mapper, MeterRegistry meters) {
-        this.properties = properties;
-        this.usage = usage;
-        this.models = models;
-        this.screen = screen;
-        this.mapper = mapper;
-        this.meters = meters;
-    }
 
     /**
      * @param holidays up to three public holidays in the next 30 days, nearest

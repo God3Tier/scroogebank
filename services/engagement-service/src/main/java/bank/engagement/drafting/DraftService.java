@@ -21,8 +21,8 @@ import bank.engagement.notifications.MailSendException;
 import bank.engagement.notifications.MailUnavailableException;
 import bank.engagement.notifications.OutgoingMail;
 import bank.engagement.web.ApiException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,9 +48,9 @@ import java.util.UUID;
  * short transactions of their own.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class DraftService {
-
-    private static final Logger log = LoggerFactory.getLogger(DraftService.class);
 
     static final int HOLIDAY_WINDOW_DAYS = 30;
     static final int MAX_HOLIDAYS = 3;
@@ -70,22 +70,6 @@ public class DraftService {
     private final AuditTrail audit;
     private final TransactionTemplate transactions;
     private final Clock clock;
-
-    public DraftService(EmailDraftRepository repository, DraftGenerator generator, ClientDirectory clients,
-            AgentDirectory agents, EventService events, HolidayService holidays, ClientMailSender sender,
-            MailProperties mail, AuditTrail audit, TransactionTemplate transactions, Clock clock) {
-        this.repository = repository;
-        this.generator = generator;
-        this.clients = clients;
-        this.agents = agents;
-        this.events = events;
-        this.holidays = holidays;
-        this.sender = sender;
-        this.mail = mail;
-        this.audit = audit;
-        this.transactions = transactions;
-        this.clock = clock;
-    }
 
     public DraftView create(String owner, DraftInput input) {
         Instant now = clock.instant();

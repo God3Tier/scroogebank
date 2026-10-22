@@ -7,6 +7,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -21,6 +23,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "events")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 class CalendarEvent {
 
     @Id
@@ -72,9 +75,6 @@ class CalendarEvent {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected CalendarEvent() {
-    }
 
     CalendarEvent(UUID id, String ownerAgentSub, Details details, Instant now) {
         this.id = Objects.requireNonNull(id);

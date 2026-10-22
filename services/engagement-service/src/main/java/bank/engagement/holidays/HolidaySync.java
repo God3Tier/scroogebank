@@ -1,8 +1,8 @@
 package bank.engagement.holidays;
 
 import bank.engagement.config.TimeConfiguration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -24,9 +24,9 @@ import java.util.UUID;
  * of a row a no-op.
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class HolidaySync {
-
-    private static final Logger log = LoggerFactory.getLogger(HolidaySync.class);
 
     /** MOM publishes next year's list around July, so from October its absence is worth an alarm. */
     static final int COVERAGE_EXPECTED_FROM_MONTH = 10;
@@ -41,13 +41,6 @@ public class HolidaySync {
     private final HolidayService holidays;
     private final JdbcTemplate jdbc;
     private final Clock clock;
-
-    public HolidaySync(HolidaySource source, HolidayService holidays, JdbcTemplate jdbc, Clock clock) {
-        this.source = source;
-        this.holidays = holidays;
-        this.jdbc = jdbc;
-        this.clock = clock;
-    }
 
     /** What one run did. {@code coveredThrough} is null when the country has no holidays at all. */
     public record Result(boolean fetched, int added, LocalDate coveredThrough, boolean coverageShort) {

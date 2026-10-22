@@ -2,8 +2,9 @@ package bank.engagement.holidays;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -17,9 +18,9 @@ import java.util.List;
  * ({@code YYYY-MM-DD}) and {@code holiday}; observed days are separate rows
  * named "… (Observed)". Nothing is sent to data.gov.sg but the dataset ID.
  */
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
+@Slf4j
 class DataGovSgHolidaySource implements HolidaySource {
-
-    private static final Logger log = LoggerFactory.getLogger(DataGovSgHolidaySource.class);
 
     static final int PAGE_SIZE = 100;
     /** About 14 rows a year; far more means the dataset is not what it should be. */
@@ -28,12 +29,6 @@ class DataGovSgHolidaySource implements HolidaySource {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final HolidaySyncProperties properties;
-
-    DataGovSgHolidaySource(RestClient restClient, ObjectMapper objectMapper, HolidaySyncProperties properties) {
-        this.restClient = restClient;
-        this.objectMapper = objectMapper;
-        this.properties = properties;
-    }
 
     @Override
     public String countryCode() {

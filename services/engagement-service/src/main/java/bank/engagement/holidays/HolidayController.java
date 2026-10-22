@@ -1,6 +1,7 @@
 package bank.engagement.holidays;
 
 import jakarta.validation.constraints.Pattern;
+import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,13 +15,10 @@ import java.util.List;
 @RestController
 @Validated
 @RequestMapping("/api/engagement/holidays")
+@RequiredArgsConstructor
 public class HolidayController {
 
     private final HolidayService holidays;
-
-    public HolidayController(HolidayService holidays) {
-        this.holidays = holidays;
-    }
 
     @GetMapping
     public List<HolidayView> list(

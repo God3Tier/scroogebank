@@ -1,5 +1,6 @@
 package bank.engagement.notifications;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,13 +20,10 @@ import java.util.stream.Collectors;
  * Nothing here sends: the dispatcher does.
  */
 @Service
+@RequiredArgsConstructor
 public class MailQueue {
 
     private final MailQueueRepository repository;
-
-    public MailQueue(MailQueueRepository repository) {
-        this.repository = repository;
-    }
 
     /**
      * Queues an invite, update or cancellation, replacing any that has not

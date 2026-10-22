@@ -1,12 +1,11 @@
 package bank.engagement.notifications;
 
+import lombok.experimental.UtilityClass;
 import org.springframework.web.util.HtmlUtils;
 
 /** The HTML alternative of a plain-text message: escaped, one paragraph per blank line. */
+@UtilityClass
 public final class HtmlText {
-
-    private HtmlText() {
-    }
 
     public static String of(String text) {
         StringBuilder html = new StringBuilder("<html><body>");

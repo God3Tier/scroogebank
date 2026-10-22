@@ -1,6 +1,7 @@
 package bank.engagement.drafting;
 
 import bank.engagement.holidays.HolidayView;
+import lombok.experimental.UtilityClass;
 
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -10,14 +11,12 @@ import java.util.Locale;
  * decision 5). Used whenever the model is off, capped, slow, failing or its
  * output fails the screen. Every template passes the screen itself.
  */
+@UtilityClass
 final class DraftTemplates {
 
     static final String VERSION = "templates-v1";
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH);
-
-    private DraftTemplates() {
-    }
 
     record Text(String subject, String body) {
     }

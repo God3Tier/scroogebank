@@ -10,6 +10,7 @@ import bank.engagement.notifications.Preferences;
 import bank.engagement.notifications.PreferencesService;
 import bank.engagement.reminders.ReminderSchedule;
 import bank.engagement.web.ApiException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
  * failure saves nothing (fail closed).
  */
 @Service
+@RequiredArgsConstructor
 public class EventService {
 
     static final Duration MAX_LIST_WINDOW = Duration.ofDays(92);
@@ -46,17 +48,6 @@ public class EventService {
     private final PreferencesService preferences;
     private final AuditTrail audit;
     private final Clock clock;
-
-    public EventService(CalendarEventRepository repository, ClientDirectory clients, MailQueue mailQueue,
-            ReminderSchedule reminders, PreferencesService preferences, AuditTrail audit, Clock clock) {
-        this.repository = repository;
-        this.clients = clients;
-        this.mailQueue = mailQueue;
-        this.reminders = reminders;
-        this.preferences = preferences;
-        this.audit = audit;
-        this.clock = clock;
-    }
 
     @Transactional(readOnly = true)
     public List<EventView> list(String owner, Instant from, Instant to, boolean includeCancelled) {

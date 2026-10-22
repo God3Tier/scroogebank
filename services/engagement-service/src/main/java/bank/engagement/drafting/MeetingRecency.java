@@ -3,11 +3,13 @@ package bank.engagement.drafting;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 
 /**
  * How long since the agent last met the client, in bands, so the model never
  * sees a date tied to a client (ADR-0054 decision 2).
  */
+@RequiredArgsConstructor
 enum MeetingRecency {
     NONE("NONE"),
     UNDER_1_MONTH("UNDER_1_MONTH"),
@@ -15,10 +17,6 @@ enum MeetingRecency {
     OVER_3_MONTHS("OVER_3_MONTHS");
 
     private final String label;
-
-    MeetingRecency(String label) {
-        this.label = label;
-    }
 
     String label() {
         return label;

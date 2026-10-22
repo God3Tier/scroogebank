@@ -1,7 +1,6 @@
 package bank.engagement.integration.identity;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,9 +11,8 @@ import java.net.URI;
 import java.util.Optional;
 
 @Configuration
+@Slf4j
 public class IdentityConfiguration {
-
-    private static final Logger log = LoggerFactory.getLogger(IdentityConfiguration.class);
 
     /**
      * Cognito when a user pool is configured. Without one no agent can be found,

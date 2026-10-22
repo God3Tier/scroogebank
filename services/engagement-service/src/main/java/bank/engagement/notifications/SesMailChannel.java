@@ -1,7 +1,7 @@
 package bank.engagement.notifications;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.exception.SdkException;
@@ -24,9 +24,9 @@ import java.util.regex.Pattern;
  * Sends raw MIME through SES v2 {@code SendEmail} with the configuration set
  * (ADR-0053 decision 6). Only the returned message ID is kept.
  */
+@RequiredArgsConstructor
+@Slf4j
 public class SesMailChannel implements MailChannel {
-
-    private static final Logger log = LoggerFactory.getLogger(SesMailChannel.class);
 
     /** Anything shaped like an address in an SES error message, which can name the sender or a recipient. */
     private static final Pattern ADDRESS = Pattern.compile("[^\\s<>`'\"(),;:/\\[\\]]+@[^\\s<>`'\"(),;:/\\[\\]]+");
@@ -34,12 +34,6 @@ public class SesMailChannel implements MailChannel {
     private final SesV2Client ses;
     private final MailProperties properties;
     private final Clock clock;
-
-    public SesMailChannel(SesV2Client ses, MailProperties properties, Clock clock) {
-        this.ses = ses;
-        this.properties = properties;
-        this.clock = clock;
-    }
 
     @Override
     public String send(OutgoingMail mail) {

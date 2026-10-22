@@ -1,6 +1,7 @@
 package bank.engagement.holidays;
 
 import bank.engagement.web.ApiException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,15 +13,12 @@ import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class HolidayService {
 
     static final int MAX_RANGE_DAYS = 366;
 
     private final HolidayRepository repository;
-
-    public HolidayService(HolidayRepository repository) {
-        this.repository = repository;
-    }
 
     /** {@code GET /api/engagement/holidays}: an inclusive range of at most 366 days. */
     public List<HolidayView> list(String countryCode, LocalDate from, LocalDate to) {

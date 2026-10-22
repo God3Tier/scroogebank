@@ -1,7 +1,7 @@
 package bank.engagement.audit;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,31 +14,21 @@ import java.util.List;
 /** Relays outbox rows to the shared audit queue (ADR-0020), as event-alert-service does. */
 @Component
 @ConditionalOnProperty(prefix = "engagement.audit.publisher", name = "enabled", havingValue = "true")
+@RequiredArgsConstructor
+@Slf4j
 public class AuditOutboxPublisher {
-
-    private static final Logger log = LoggerFactory.getLogger(AuditOutboxPublisher.class);
 
     private final AuditOutboxLeaseService leases;
     private final AuditDeliveryGateway gateway;
     private final AuditorEnvelopeFactory envelopes;
     private final Clock clock;
+    // lombok.config copies these @Value annotations onto the constructor parameters.
+    @Value("${engagement.audit.publisher.batch-size:50}")
     private final int batchSize;
-    private final int maxAttempts;
+    @Value("${engagement.audit.publisher.lease-duration:30s}")
     private final Duration leaseDuration;
-
-    public AuditOutboxPublisher(AuditOutboxLeaseService leases, AuditDeliveryGateway gateway,
-            AuditorEnvelopeFactory envelopes, Clock clock,
-            @Value("${engagement.audit.publisher.batch-size:50}") int batchSize,
-            @Value("${engagement.audit.publisher.lease-duration:30s}") Duration leaseDuration,
-            @Value("${engagement.audit.publisher.max-attempts:10}") int maxAttempts) {
-        this.leases = leases;
-        this.gateway = gateway;
-        this.envelopes = envelopes;
-        this.clock = clock;
-        this.batchSize = batchSize;
-        this.leaseDuration = leaseDuration;
-        this.maxAttempts = maxAttempts;
-    }
+    @Value("${engagement.audit.publisher.max-attempts:10}")
+    private final int maxAttempts;
 
     @Scheduled(fixedDelayString = "${engagement.audit.publisher.interval:5s}")
     public void publishAvailable() {

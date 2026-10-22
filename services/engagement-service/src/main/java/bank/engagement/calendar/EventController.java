@@ -2,6 +2,7 @@ package bank.engagement.calendar;
 
 import bank.engagement.security.CurrentUser;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,15 +22,11 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/engagement/events")
+@RequiredArgsConstructor
 public class EventController {
 
     private final EventService events;
     private final CurrentUser currentUser;
-
-    public EventController(EventService events, CurrentUser currentUser) {
-        this.events = events;
-        this.currentUser = currentUser;
-    }
 
     @GetMapping
     public List<EventView> list(

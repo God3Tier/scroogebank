@@ -2,8 +2,7 @@ package bank.engagement.integration.identity;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.AttributeType;
@@ -24,9 +23,8 @@ import java.util.stream.Collectors;
  * user lacks a requested attribute, so only the three user-service always sets
  * are requested.
  */
+@Slf4j
 public class CognitoAgentDirectory implements AgentDirectory {
-
-    private static final Logger log = LoggerFactory.getLogger(CognitoAgentDirectory.class);
 
     /** A sub is a UUID; anything else would be unsafe inside the filter string. */
     private static final Pattern SUB = Pattern.compile("[A-Za-z0-9-]{1,64}");

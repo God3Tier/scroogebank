@@ -1,17 +1,15 @@
 package bank.engagement.notifications;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * For local runs without SES ({@code ENGAGEMENT_MAIL_PROVIDER=log}). Logs that
  * a message would have gone, never its addresses or text.
  */
+@Slf4j
 public class LoggingMailChannel implements MailChannel {
-
-    private static final Logger log = LoggerFactory.getLogger(LoggingMailChannel.class);
 
     @Override
     public String send(OutgoingMail mail) {

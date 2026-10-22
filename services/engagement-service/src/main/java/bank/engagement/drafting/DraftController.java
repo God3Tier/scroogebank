@@ -3,6 +3,7 @@ package bank.engagement.drafting;
 import bank.engagement.security.CurrentUser;
 import bank.engagement.web.ApiException;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,15 +21,11 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/engagement/drafts")
+@RequiredArgsConstructor
 public class DraftController {
 
     private final DraftService drafts;
     private final CurrentUser currentUser;
-
-    public DraftController(DraftService drafts, CurrentUser currentUser) {
-        this.drafts = drafts;
-        this.currentUser = currentUser;
-    }
 
     @GetMapping
     public List<DraftView> list(

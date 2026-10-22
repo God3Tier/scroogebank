@@ -3,6 +3,7 @@ package bank.engagement.drafting;
 import bank.engagement.holidays.HolidayView;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.experimental.UtilityClass;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
  * banded recency and the placeholders (ADR-0054 decision 2). Nothing about the
  * client or what the agent typed is a parameter here.
  */
+@UtilityClass
 final class DraftPrompt {
 
     static final String VERSION = "drafts-v1";
@@ -29,9 +31,6 @@ final class DraftPrompt {
             Keep the body under 150 words, in short paragraphs.
             Reply with only a JSON object and nothing else: {"subject": "...", "body": "..."}. \
             The subject is at most 120 characters. The body must contain {{client_first_name}}.""";
-
-    private DraftPrompt() {
-    }
 
     static String userInput(DraftPurpose purpose, DraftTone tone, List<HolidayView> holidays,
             MeetingRecency recency, ObjectMapper mapper) {

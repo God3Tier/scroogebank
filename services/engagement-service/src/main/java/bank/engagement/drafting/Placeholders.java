@@ -6,12 +6,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.experimental.UtilityClass;
 
 /**
  * The two placeholders drafts may hold (ADR-0054 decision 2). They are filled
  * in after generation, so the model never sees who the client is, and marked
  * again when an agent saves, so stored drafts hold no names (ADR-0056).
  */
+@UtilityClass
 final class Placeholders {
 
     static final String CLIENT_FIRST_NAME = "client_first_name";
@@ -22,9 +24,6 @@ final class Placeholders {
     static final String AGENT_NAME_TOKEN = "{{" + AGENT_NAME + "}}";
 
     private static final Pattern TOKEN = Pattern.compile("\\{\\{\\s*([^{}]*?)\\s*}}");
-
-    private Placeholders() {
-    }
 
     /** Replaces each allowed placeholder that has a non-blank value; leaves the rest. */
     static String fill(String template, Map<String, String> values) {

@@ -1,5 +1,6 @@
 package bank.engagement.calendar;
 
+import lombok.experimental.UtilityClass;
 import net.fortuna.ical4j.model.Calendar;
 import net.fortuna.ical4j.model.Parameter;
 import net.fortuna.ical4j.model.ParameterList;
@@ -30,12 +31,10 @@ import java.util.UUID;
  * cancellations to the original; times are UTC; there is no {@code VALARM},
  * because the CRM sends its own reminders.
  */
+@UtilityClass
 final class InviteCalendarFactory {
 
     static final String PRODUCT_ID = "-//Scrooge Global Bank//CRM Calendar//EN";
-
-    private InviteCalendarFactory() {
-    }
 
     /**
      * @param cancel        {@code METHOD:CANCEL} and {@code STATUS:CANCELLED}; otherwise

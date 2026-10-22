@@ -2,6 +2,7 @@ package bank.engagement.notifications;
 
 import bank.engagement.audit.AuditAction;
 import bank.engagement.audit.AuditTrail;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,15 +19,11 @@ import java.util.UUID;
  * transaction.
  */
 @Service
+@RequiredArgsConstructor
 public class MailDispatchService {
 
     private final MailQueueRepository repository;
     private final AuditTrail audit;
-
-    public MailDispatchService(MailQueueRepository repository, AuditTrail audit) {
-        this.repository = repository;
-        this.audit = audit;
-    }
 
     /** How long the oldest due row has waited; zero when nothing is waiting. */
     @Transactional(readOnly = true)

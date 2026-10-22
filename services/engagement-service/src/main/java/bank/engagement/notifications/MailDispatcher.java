@@ -1,7 +1,7 @@
 package bank.engagement.notifications;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -17,9 +17,9 @@ import java.util.List;
  * sent again. Delivery is at least once.
  */
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class MailDispatcher {
-
-    private static final Logger log = LoggerFactory.getLogger(MailDispatcher.class);
 
     /** Logged when due mail has waited longer than this; a CloudWatch metric filter alarms on it. */
     static final Duration LAG_ALARM = Duration.ofMinutes(5);
@@ -30,16 +30,6 @@ public class MailDispatcher {
     private final SendThrottle throttle;
     private final MailProperties properties;
     private final Clock clock;
-
-    public MailDispatcher(MailDispatchService rows, ObjectProvider<MailChannel> channels,
-            ObjectProvider<MailComposer> composers, SendThrottle throttle, MailProperties properties, Clock clock) {
-        this.rows = rows;
-        this.channels = channels;
-        this.composers = composers;
-        this.throttle = throttle;
-        this.properties = properties;
-        this.clock = clock;
-    }
 
     @Scheduled(fixedDelayString = "${engagement.mail.dispatcher.interval:60s}",
             initialDelayString = "${engagement.mail.dispatcher.interval:60s}")

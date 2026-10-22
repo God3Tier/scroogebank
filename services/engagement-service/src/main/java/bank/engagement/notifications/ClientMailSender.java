@@ -1,5 +1,6 @@
 package bank.engagement.notifications;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -8,15 +9,11 @@ import org.springframework.stereotype.Component;
  * (ADR-0054 decision 6). It shares the send rate with the dispatcher.
  */
 @Component
+@RequiredArgsConstructor
 public class ClientMailSender {
 
     private final ObjectProvider<MailChannel> channels;
     private final SendThrottle throttle;
-
-    public ClientMailSender(ObjectProvider<MailChannel> channels, SendThrottle throttle) {
-        this.channels = channels;
-        this.throttle = throttle;
-    }
 
     /**
      * @throws MailUnavailableException no mail provider is configured

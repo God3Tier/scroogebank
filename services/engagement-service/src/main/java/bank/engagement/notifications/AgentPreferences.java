@@ -4,11 +4,14 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 
 @Entity
 @Table(name = "preferences")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 class AgentPreferences {
 
     @Id
@@ -23,9 +26,6 @@ class AgentPreferences {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected AgentPreferences() {
-    }
 
     AgentPreferences(String agentSub) {
         this.agentSub = agentSub;

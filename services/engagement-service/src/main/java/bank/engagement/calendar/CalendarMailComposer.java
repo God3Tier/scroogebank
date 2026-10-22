@@ -11,6 +11,8 @@ import bank.engagement.notifications.MailProperties;
 import bank.engagement.notifications.MailStatus;
 import bank.engagement.notifications.OutgoingMail;
 import bank.engagement.notifications.QueuedMail;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -26,6 +28,7 @@ import java.util.Optional;
  * typed appears, and only in the agent's own mailbox (ADR-0052 decision 4).
  */
 @Component
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class CalendarMailComposer implements MailComposer {
 
     static final String FROM_NAME = "CRM Calendar";
@@ -40,12 +43,6 @@ class CalendarMailComposer implements MailComposer {
     private final CalendarEventRepository events;
     private final AgentDirectory agents;
     private final MailProperties properties;
-
-    CalendarMailComposer(CalendarEventRepository events, AgentDirectory agents, MailProperties properties) {
-        this.events = events;
-        this.agents = agents;
-        this.properties = properties;
-    }
 
     @Override
     @Transactional(readOnly = true)

@@ -5,15 +5,18 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.time.LocalDate;
-import java.util.Objects;
 
 /** Model use per agent per Singapore day, for the caps (ADR-0054 decision 7). */
 @Entity
 @Table(name = "ai_usage")
 @IdClass(AiUsage.Key.class)
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 class AiUsage {
 
     @Id
@@ -33,25 +36,10 @@ class AiUsage {
     @Column(name = "output_tokens", nullable = false)
     private long outputTokens;
 
-    protected AiUsage() {
-    }
-
+    @NoArgsConstructor(access = AccessLevel.PROTECTED)
+    @EqualsAndHashCode
     static class Key implements Serializable {
         private LocalDate usageDate;
         private String agentSub;
-
-        protected Key() {
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Key key && Objects.equals(usageDate, key.usageDate)
-                    && Objects.equals(agentSub, key.agentSub);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(usageDate, agentSub);
-        }
     }
 }

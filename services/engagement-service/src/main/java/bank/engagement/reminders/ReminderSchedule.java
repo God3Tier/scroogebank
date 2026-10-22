@@ -3,6 +3,7 @@ package bank.engagement.reminders;
 import bank.engagement.notifications.MailQueue;
 import bank.engagement.notifications.ReminderSlot;
 import bank.engagement.web.ApiException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import java.util.UUID;
  * changes (agent-engagement plan §6).
  */
 @Component
+@RequiredArgsConstructor
 public class ReminderSchedule {
 
     /** The offsets the contract allows: 15 minutes, 30 minutes, 1 hour and 1 day. */
@@ -27,10 +29,6 @@ public class ReminderSchedule {
     static final int MAX_REMINDERS = 2;
 
     private final MailQueue mailQueue;
-
-    public ReminderSchedule(MailQueue mailQueue) {
-        this.mailQueue = mailQueue;
-    }
 
     /** @throws ApiException 400 for an offset the contract does not allow, a repeat, or more than two */
     public static List<Integer> validate(List<Integer> offsets) {

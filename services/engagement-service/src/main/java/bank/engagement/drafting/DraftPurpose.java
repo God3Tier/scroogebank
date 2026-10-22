@@ -1,5 +1,8 @@
 package bank.engagement.drafting;
 
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
 public enum DraftPurpose {
     CHECK_IN("A friendly check-in with a client the agent has not spoken to for a while."),
     MEETING_FOLLOW_UP("A thank-you after a meeting that has just taken place."),
@@ -7,10 +10,6 @@ public enum DraftPurpose {
     PRE_HOLIDAY_REVIEW("An invitation to meet and plan ahead before the upcoming public holiday.");
 
     private final String description;
-
-    DraftPurpose(String description) {
-        this.description = description;
-    }
 
     /** Sent to the model with the purpose; public text, no client data. */
     public String description() {

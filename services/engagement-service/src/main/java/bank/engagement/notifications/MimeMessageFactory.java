@@ -10,6 +10,7 @@ import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 import jakarta.mail.util.ByteArrayDataSource;
+import lombok.experimental.UtilityClass;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -23,12 +24,10 @@ import java.util.Properties;
  * and {@code text/calendar}, plus the same calendar as {@code invite.ics}
  * (ADR-0052 decision 3). Any other message is the alternative alone.
  */
+@UtilityClass
 public final class MimeMessageFactory {
 
     private static final Session SESSION = Session.getInstance(new Properties());
-
-    private MimeMessageFactory() {
-    }
 
     public static byte[] build(OutgoingMail mail, Date sentDate) {
         try {

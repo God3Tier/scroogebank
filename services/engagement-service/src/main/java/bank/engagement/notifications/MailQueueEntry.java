@@ -6,6 +6,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -16,6 +18,7 @@ import java.util.UUID;
 /** One queued message to an agent (ADR-0051 decision 4). */
 @Entity
 @Table(name = "mail_queue")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 class MailQueueEntry {
 
     @Id
@@ -70,9 +73,6 @@ class MailQueueEntry {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected MailQueueEntry() {
-    }
 
     MailQueueEntry(MailKind kind, UUID eventId, String ownerAgentSub, int eventVersion, int offsetMinutes,
             int icsSequence, Instant dueAt, MailStatus status, Instant now) {
