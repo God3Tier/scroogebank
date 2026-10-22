@@ -6,7 +6,7 @@
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: TBD (drafted on `dev`)
 - Related issue/PR: TBD
-- Supersedes: [ADR-0053](ADR-0053-email-delivery-through-ses.md) decision 2 (mail-identity is long-lived); [ADR-0042](ADR-0042-terraform-deployment.md) decision 1 in part (bootstrap applied once per account, and holding AWS Budgets); [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) in part (prod stopped, not destroyed, between sessions)
+- Supersedes: [ADR-0053](ADR-0053-email-delivery-through-ses.md) decision 2 (mail-identity is long-lived); [ADR-0042](ADR-0042-terraform-deployment.md) decision 1 in part (bootstrap applied once per account, and holding AWS Budgets); [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) in part (prod stopped, not destroyed, between sessions); [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md) in part (the budget alert thresholds)
 - Superseded by: N/A
 
 ## Context
@@ -49,7 +49,7 @@ So a deployment's starting point depended on who deployed last and what they lef
 4. **`bootstrap` is applied at the start of every deployment** (supersedes ADR-0042 decision 1 in part). Its local state lives on the deployer's machine only for that deployment.
 5. **Stopping is a pause within one deployment** (amends ADR-0029). `running = false` and `scripts/aws-session.sh stop` may pause a deployment overnight or between test sessions, but the deployment still ends with decision 2.
 6. **One deployment at a time.** If the state bucket `crm-tfstate-<account>` exists when someone starts, another deployment is in progress: they ask in the team channel rather than apply.
-7. **The budget alerts are made by hand, outside Terraform** (supersedes ADR-0042 decision 1 in part). ADR-0029's alerts must watch spending across every deployment and teardown, so the account owner keeps them in the Billing console, and `bootstrap` no longer creates `crm-total` or `crm-bedrock`.
+7. **The budget alerts are made by hand, outside Terraform** (supersedes ADR-0042 decision 1 in part). ADR-0029's alerts must watch spending across every deployment and teardown, so the account owner keeps them in the Billing console, and `bootstrap` no longer creates `crm-total` or `crm-bedrock`. They alert when actual cost passes **10, 20, 40, 60, 80 and 100%** of the limit (supersedes ADR-0029's 50, 70, 85, 95 and 100%), so the first warning comes early enough to stop a deployment left running. The USD 300 limit and the separate Bedrock alert are unchanged from ADR-0029, and the budgets count cost before credits.
 
 ## Rationale
 
@@ -99,3 +99,4 @@ Removes the stopped-stack cost of about USD 65 a month (ADR-0042 "Cost Impact").
 
 - 2026-10-22 20:33 +08:00: proposed.
 - 2026-10-22: decision 7 added while Proposed, as decided by the decision owner: the budget alerts move out of `bootstrap` into the Billing console.
+- 2026-10-22: decision 7 amended while Proposed, as decided by the decision owner: the alert thresholds become 10, 20, 40, 60, 80 and 100%, superseding ADR-0029's thresholds.

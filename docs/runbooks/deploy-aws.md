@@ -138,7 +138,7 @@ This stack keeps its state in a local `terraform.tfstate` (git-ignored), on your
 
 Bootstrap creates no GuardDuty detector: the account already has one, and a second fails. The crm stack also leaves out the cross-Region backup copy and WAF request logging, which the account's service control policy refuses. The [Terraform README](../../infrastructure/terraform/README.md#left-out-of-the-account) lists what each omission means.
 
-**Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
+**Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). They e-mail when actual cost passes 10, 20, 40, 60, 80 and 100% of the limit. This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
 
 ## 2. Build the Lambda zip and the images
 
