@@ -38,8 +38,8 @@ var changesOnly, changesOnlyArgs = func() (string, []any) {
 // paging do not shift the pages it has not read yet.
 func (i impl) ListActivities(ctx context.Context, filter models.ActivityFilter) ([]models.AuditLog, error) {
 	mods := []qm.QueryMod{qm.Where(changesOnly, changesOnlyArgs...)}
-	if filter.ActorId != "" {
-		mods = append(mods, qm.Where("actor_id = ?", filter.ActorId))
+	if filter.ActorID != "" {
+		mods = append(mods, qm.Where("actor_id = ?", filter.ActorID))
 	}
 	if filter.ClientID != "" {
 		mods = append(mods, qm.Where("payload->>'client_id' = ?", filter.ClientID))

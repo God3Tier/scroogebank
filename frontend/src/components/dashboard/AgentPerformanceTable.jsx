@@ -18,6 +18,15 @@ function initials(name) {
   return name.split(' ').map((part) => part.charAt(0)).join('').slice(0, 2)
 }
 
+// name and enabled are null for a Cognito sub with figures but no roster
+// entry (dashboard-api.yaml).
+const UNKNOWN_AGENT = 'Unknown agent'
+
+function statusOf(enabled) {
+  if (enabled === null || enabled === undefined) return { label: 'Not on roster', className: '' }
+  return enabled ? { label: 'Active', className: 'badge-completed' } : { label: 'Disabled', className: '' }
+}
+
 function AgentPerformanceTable({ rows, sortedBy }) {
   const sortedClass = (key) => (sortedBy === key ? 'num sorted' : 'num')
 
@@ -29,35 +38,37 @@ function AgentPerformanceTable({ rows, sortedBy }) {
             <th>Agent</th>
             <th>Status</th>
             <th className={sortedClass('clientsOnboarded')}>Onboarded</th>
-            <th className="num">Verified / Unverified / Rejected</th>
+            <th className="num">Verified / Unverified</th>
             <th className={sortedClass('verificationRate')}>Verification rate</th>
             <th className={sortedClass('accountsOpened')}>Accounts opened</th>
             <th className={sortedClass('bookedInitialDeposits')}>Booked deposits</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const name = row.name ?? UNKNOWN_AGENT
+            const status = statusOf(row.enabled)
+            return (
             <tr key={row.agentId}>
               <td>
                 <span className="agent-cell">
-                  <span className="mini-avatar" aria-hidden="true">{initials(row.name)}</span>
-                  {row.name}
+                  <span className="mini-avatar" aria-hidden="true">{initials(name)}</span>
+                  {name}
                 </span>
               </td>
               <td>
-                <span className={`badge ${row.enabled ? 'badge-completed' : ''}`}>
-                  {row.enabled ? 'Active' : 'Disabled'}
-                </span>
+                <span className={`badge ${status.className}`}>{status.label}</span>
               </td>
               <td className="num">{formatNumber(row.clientsOnboarded)}</td>
               <td className="num split-cell">
-                {formatNumber(row.verified)} / {formatNumber(row.unverified)} / {formatNumber(row.rejected)}
+                {formatNumber(row.verified)} / {formatNumber(row.unverified)}
               </td>
               <td className="num">{formatPercent(row.verificationRate)}</td>
               <td className="num">{formatNumber(row.accountsOpened)}</td>
               <td className="num" title={formatSGD(row.bookedInitialDeposits)}>{formatSGD(row.bookedInitialDeposits, { compact: true })}</td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>

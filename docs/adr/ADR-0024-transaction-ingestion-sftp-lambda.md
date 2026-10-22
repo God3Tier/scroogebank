@@ -177,3 +177,4 @@ EC2 is about USD 6–8/month (stopped when idle). Lambda costs pennies a month. 
   - **Decision 3:** retries happen within a run and skip host-key and authentication failures; the circuit breaker spans runs and keeps its state in memory, as failure episodes do.
   - **Decision 4:** a file with an extension other than `.json` is rejected and audited as unsupported, as [data-flow.md](../architecture/data-flow.md#how-the-specs-audit-requirements-are-met) already said, and `.tmp` uploads are skipped. A rejected file moves only after its event is written.
   - **Validation:** adds the retry and circuit breaker tests.
+- 2026-10-16, as decided by the decision owner: the sftp-server stack can use a host key the team was given (`host_key_file`) instead of generating one. The key is still kept in SSM Parameter Store and pinned by the CRM, and a new key replaces the instance. The decisions are otherwise unchanged.

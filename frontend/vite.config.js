@@ -5,12 +5,38 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // The first matching rule wins. Locally, user-service listens on 8081
-    // (sign-out calls /api/users/me/logout) and client-profile-management-
-    // service on 8080.
+    // The first matching rule wins, in the same order as the deployed ALB's
+    // rules. Locally, user-service listens on 8081 (users, activities and
+    // transactions), account-service on 8083, dashboard-service on 8085,
+    // engagement-service on 8086 and client-profile-management-service on
+    // 8080.
     proxy: {
+      '^/api/accounts/[^/]+/transactions': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
       '/api/users': {
         target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/api/activities': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/api/transactions': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/api/accounts': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+      },
+      '/api/dashboard': {
+        target: 'http://localhost:8085',
+        changeOrigin: true,
+      },
+      '/api/engagement': {
+        target: 'http://localhost:8086',
         changeOrigin: true,
       },
       '/api': {

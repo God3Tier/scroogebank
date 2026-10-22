@@ -99,7 +99,7 @@ func TestChainVerifyFindsTampering(t *testing.T) {
 					entry.Action, entry.ParentHash = "DELETE", parent
 					entry.Hash = chain.Hash(entry)
 					_, err := admin.Exec(`UPDATE audit_log SET action = $1, parent_hash = $2, hash = $3 WHERE id = $4`,
-						entry.Action, entry.ParentHash, entry.Hash, entry.Id)
+						entry.Action, entry.ParentHash, entry.Hash, entry.ID)
 					require.NoError(t, err)
 					parent = entry.Hash
 				}
@@ -124,7 +124,7 @@ func TestChainVerifyFindsTampering(t *testing.T) {
 			for sequence := 1; sequence <= 4; sequence++ {
 				require.NoError(t, writer.StoreAuditChain(ctx, models.AuditLogInput{
 					EventID: fmt.Sprintf("evt-%d", sequence), EventType: "CRUD", Action: "UPDATE",
-					SourceService: models.CRMServiceType, ActorId: "agent-1", Payload: `{"client_id":"c-1"}`,
+					SourceService: models.CRMServiceType, ActorID: "agent-1", Payload: `{"client_id":"c-1"}`,
 				}))
 			}
 			anchors := &memoryAnchors{}

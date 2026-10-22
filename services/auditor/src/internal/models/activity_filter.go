@@ -5,7 +5,7 @@ import "time"
 // ActivityFilter selects entries for the activity feed (ListActivities). A
 // zero value in any field means "no restriction" on that field.
 type ActivityFilter struct {
-	ActorId          string
+	ActorID          string
 	ClientID         string
 	From             time.Time // inclusive
 	To               time.Time // exclusive
@@ -19,7 +19,9 @@ type ActivityFilter struct {
 // views and events from transaction ingestion or chain-verify, stays in the
 // audit log but is not in the feed. A client's verification is recorded as
 // UPDATE. A user's own forgotten-password reset comes from the Cognito
-// triggers (ADR-0040).
+// triggers (ADR-0040). From engagement-service the feed shows an agent's
+// calendar changes and the client emails they send (ADR-0051), not reminders,
+// invites or drafts.
 var ActivityActions = []struct {
 	Source  ServiceType
 	Actions []string
@@ -27,4 +29,5 @@ var ActivityActions = []struct {
 	{UserManagementServiceType, []string{"CREATE", "UPDATE", "DISABLE", "ROLE_CHANGE", "PASSWORD_RESET", "DELETE"}},
 	{CRMServiceType, []string{"CREATE", "UPDATE", "DELETE"}},
 	{CognitoTriggersServiceType, []string{"PASSWORD_RESET"}},
+	{EngagementServiceType, []string{"EVENT_CREATE", "EVENT_UPDATE", "EVENT_CANCEL", "EMAIL_SEND"}},
 }

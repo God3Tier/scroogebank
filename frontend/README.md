@@ -18,7 +18,9 @@ npm run dev
 ```
 
 The browser uses same-origin `/api` requests. During local development Vite
-proxies them to `http://localhost:8080`, avoiding a separate CORS exception.
+proxies `/api/users` and `/api/activities` to user-service on
+`http://localhost:8081` and the rest to `http://localhost:8080`, avoiding a
+separate CORS exception.
 Set `VITE_API_URL` in `.env` only when the deployed API has a different origin.
 
 ## Sign-in
@@ -79,18 +81,34 @@ Open the browser's network tab and click **Sign in**. The `/oauth2/authorize` re
 
 `/clients/:clientId` is one client's page: the profile, the client's identity documents and the verification ([ADR-0041](../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md)). It is open to admins and agents; client-service decides which clients each may see, and answers 404 for another agent's client. An agent:
 
-1. creates the client with **Create Client Profile** on the Agent Dashboard, which opens the new client's page;
+1. creates the client with **Create Client Profile** on Agent Home, which opens the new client's page;
 2. uploads the identity document the client gave them, if any: JPEG, PNG or PDF, up to 5 MB. Use synthetic documents only, never a real NRIC;
 3. opens it with **View**, compares it with the profile and ticks **Checked**. A document can be ticked only once it has been opened;
 4. confirms that they checked the documents and clicks **Verify client**.
 
 Uploading never verifies anyone. Verify sends the checked documents' IDs, and client-service records who verified, when and which documents; the page then shows that, and marks the documents used.
 
+Until the client is verified, **Open account** offers only Pending, and account-service refuses any other status with 403 ([ADR-0050](../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)). After a verification, the page asks an agent whether to make the client's Pending accounts Active. On **Manage accounts and transactions** (`/agent/client/:clientId/transactions`), an agent can change a verified client's account to Active, Inactive, Pending or Closed with `PATCH /api/accounts/{id}`; admins see the status only. The calls are in `src/api/accounts.js`.
+
 Documents are optional, because the requirements Q&A does not expect an upload (CPM06). With no document checked, the agent confirms "I have checked this client's identity without an uploaded document" and clicks **Verify without a document**. That verification is never hidden: the page shows a **Without a document** badge and says the client was verified without an uploaded document, client-service returns `verified_with_documents: false`, and the audit event says so. The calls are in `src/api/clients.js`. Locally, Vite's `/api` rule sends them to client-profile-management-service on port 8080, which `make run` starts with its LocalStack bucket (see its README).
 
-The Agent Dashboard's **Manage Client Profiles** list is still synthetic: client-service has no endpoint that lists clients, so those rows do not open this page.
+Agent Home's **Manage Client Profiles and Accounts** list comes from `GET /api/clients`; **Edit** on a row opens this page, where **Open account** opens a bank account for the client through account-service.
 
 The page uses the existing tokens and components from the Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision), in `src/styles/index.css`.
+
+## Activity panels
+
+Admin Home's **Recent Activities** and Agent Home's **My Recent Activities** read user-service's activity feed, `GET /api/activities` ([ADR-0021](../docs/adr/ADR-0021-audit-read-path-grpc-service-connect.md)). Both are `src/components/ActivityFeed.jsx`; the call is in `src/api/activities.js`.
+
+- **Who sees what.** The spec says "Agents can only see their own client activities. Admins can see the activities of all agents." The panel never sends who the caller is: user-service and the auditor take it from the access token, so an agent gets only their own changes whatever the page asks for. The agent panel therefore shows no names.
+- **Changes only.** Creating, updating, deleting or verifying a client, uploading an identity document, opening or closing an account, and user changes. Views and sign-ins stay in the audit log and are not listed.
+- **IDs, not names.** Audit events hold no client personal data ([ADR-0030](../docs/adr/ADR-0030-client-data-envelope-encryption.md)), so an entry shows the first 8 characters of the client, account or user ID (the full ID on hover) and **Open client** where the client still exists. The acting user's name comes from user-service; a user it does not know shows as "Unknown user", and system work as "System". `src/components/activityText.js` turns each event's payload into words.
+- **Verification.** A verification shows how many documents it used, or a **Without a document** badge.
+- **Filters.** **Period** limits the feed to the last 24 hours, 7 or 30 days; the window is fixed when chosen, so every page covers the same one. An admin can select a name to see only that user's changes, and remove the chip to see everyone's again.
+- **Pages.** 10 entries at a time, newest first; **Load more** asks for the next page with the previous page's cursor.
+- **Failures.** If the auditor is down, user-service answers `503` and the panel says "Activity is temporarily unavailable." with **Try again**. A failed later page keeps the entries already shown.
+
+Locally, Vite sends `/api/activities` to user-service on port 8081, like `/api/users`. The feed also needs the auditor's gRPC server (`AUDITOR_GRPC_TARGET`, see the user-service README). The design is the "Admin Dashboard" screen with the Recent Activities card in the Stitch project "Scrooge Global Bank CRM".
 
 ## Synthetic alerts
 
@@ -105,22 +123,33 @@ Then open `/agent/alerts` for the decision workflow or `/admin/alerts` for the
 read-only oversight view. Synthetic mode uses only local example data and must
 remain disabled in deployed environments.
 
-## Business dashboard mockup (demo only)
+## Where each page's data comes from
 
-Mocks the business dashboard proposed on `feat/business-dashboard`.
+Every page reads the deployed services except Client Health Monitor, whose service is not built yet, and alerts in synthetic mode (above).
 
-- `/insights/admin`: bank-wide dashboard with KPI tiles, daily activity,
-  transaction health, ingestion freshness, portfolio composition, agent
-  performance and action items.
-- `/insights/agent`: one agent's own book with KPI tiles, action queue, team
-  comparison, portfolio and client transactions.
-- Data: synthetic, from `src/data/dashboard.js`. The window selector (7, 30,
-  90 days) changes the figures.
-- Styling: Stitch project "Scrooge Global Bank CRM" (design system:
-  Institutional Precision) — the same tokens the rest of the app uses.
-  Dashboard-specific styles are in `src/styles/dashboard.css`, chart colours
-  in `src/styles/chartTheme.js`.
-- Charts: Recharts.
+| Page | Data |
+|---|---|
+| `/agent` | My Clients and the client list from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit (on the client page) and Delete through client-service; Upcoming meetings (the next 7 days) from `GET /api/engagement/events`, with client names from `GET /api/clients`, hidden when engagement-service is unavailable |
+| `/admin` | Admin and agent totals and lists from `GET /api/users`; Create Admin / Agent with `POST /api/users` (Cognito e-mails the temporary password); Disable with `PATCH /api/users/{id}/disable` (users are never deleted, and the root admin cannot be disabled); All Transactions from `GET /api/transactions`, 20 at a time |
+| `/clients/:id` | client-service: profile, edit, documents, verification. Open account with `POST /api/accounts` on account-service |
+| `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions` |
+| `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)) |
+| `/agent/client-health` | Synthetic, from `src/data/clientHealthTasks.js` |
+| `/agent/calendar` | engagement-service ([`docs/api/engagement-api.yaml`](../docs/api/engagement-api.yaml)): the month's meetings and Singapore public holidays, up to the last month the holiday list covers ([ADR-0057](../docs/adr/ADR-0057-holiday-sync-from-data-gov-sg.md)); create, edit and cancel meetings, each emailed to the agent as a calendar invite ([ADR-0052](../docs/adr/ADR-0052-calendar-invites-by-email.md)); notification preferences. Times are shown and entered in Singapore time |
+| `/agent/drafts` | engagement-service: AI or template follow-up drafts ([ADR-0054](../docs/adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)), edited as plain text with the names filled in ([ADR-0056](../docs/adr/ADR-0056-drafts-edited-as-plain-text.md)), sent after a confirmation, or discarded. Client names come from `GET /api/clients` |
+
+Locally, `vite.config.js` sends each `/api` path to the service that owns it, in the same order as the deployed load balancer's rules.
+
+The calendar, follow-up emails and upcoming-meetings layouts follow the Stitch screens "Agent Calendar", "Follow-up Emails" and "Agent Dashboard - Upcoming Meetings" in the project "Scrooge Global Bank CRM" (design system: Institutional Precision). Their styles are in `src/styles/engagement.css`. Stitch's sample data, search bar and status badges are not part of the pages.
+
+## Business dashboards
+
+`/insights/admin` is the bank-wide dashboard: KPI tiles, daily activity, transaction health, portfolio composition, agent performance and stale unverified clients. `/insights/agent` is one agent's own book: KPI tiles, stale unverified clients, team comparison, client verification, transactions and accounts. The window selector (7, 30 or 90 days, ending today in Singapore) reloads every panel.
+
+- Each panel shows its own state. An unavailable panel says why (`reason` in the response), and a request that fails marks only its panels as unavailable.
+- A figure the API leaves out, such as a rate with nothing to divide or a value in more than one currency, shows as "—".
+- The mockup also showed most active clients, ingestion freshness, clients without an account, rejected verifications and flagged transactions. dashboard-service does not serve these yet, so they are not shown ([open item 25](../docs/architecture/open-items.md#25-business-dashboard-panels-not-served-yet)).
+- Styling: Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision) — the same tokens the rest of the app uses. Dashboard-specific styles are in `src/styles/dashboard.css`, chart colours in `src/styles/chartTheme.js`. Charts: Recharts.
 
 ## Verification
 
@@ -140,7 +169,10 @@ client tests cover the client API calls, creating a client, that uploading never
 verifies, the 5 MB check and the service's refusals, that a document can be
 checked only once opened, that Verify needs a confirmation that matches what was
 checked, verifying without a document and how that is shown, and the verified
-state.
+state. The activity tests cover the feed's query (no caller identity, filters,
+cursor), how each kind of event is described, that agents see no names and
+admins can narrow the feed to one user, paging, the unavailable and empty
+states, and that a slow reply for a replaced filter is dropped.
 
 ## Conventions
 

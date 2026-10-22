@@ -41,10 +41,11 @@ func (i impl) Latest(ctx context.Context) (*models.ChainAnchor, error) {
 	}
 	defer object.Body.Close()
 
-	var anchor models.ChainAnchor
-	if err := json.NewDecoder(object.Body).Decode(&anchor); err != nil {
+	var document anchorDocument
+	if err := json.NewDecoder(object.Body).Decode(&document); err != nil {
 		return nil, pkgerrors.Wrapf(err, "read anchor %s", newest)
 	}
+	anchor := document.model()
 	if anchor.SequenceNo < 1 || anchor.ID == "" || anchor.Hash == "" {
 		return nil, pkgerrors.Errorf("anchor %s is incomplete", newest)
 	}

@@ -30,6 +30,7 @@ func TestUpdateClientInformation(t *testing.T) {
 		"rejects malformed ID":           {id: "bad-id", body: body, wantStatus: http.StatusBadRequest},
 		"maps invalid client":            {id: id, body: body, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
 		"maps missing or deleted client": {id: id, body: body, serviceErr: clienterrors.ErrClientNotFound, wantStatus: http.StatusNotFound, callSvc: true},
+		"maps another client's contact":  {id: id, body: body, serviceErr: clienterrors.ErrDuplicateClient, wantStatus: http.StatusConflict, callSvc: true},
 		"maps unexpected service error":  {id: id, body: body, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
 	}
 	for name, test := range tests {

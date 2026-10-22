@@ -1,15 +1,16 @@
 package audit
 
 import (
-	auditv1 "auditor/src/gen/audit/v1"
-	"auditor/src/internal/models"
-	"auditor/src/internal/security"
-	auditSvc "auditor/src/internal/service/audit"
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	auditv1 "auditor/src/gen/audit/v1"
+	"auditor/src/internal/models"
+	"auditor/src/internal/security"
+	auditSvc "auditor/src/internal/service/audit"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
@@ -29,11 +30,11 @@ func TestListActivities(t *testing.T) {
 
 	entry := func(seq int64) models.AuditLog {
 		return models.AuditLog{
-			Id:            fmt.Sprintf("id-%d", seq),
+			ID:            fmt.Sprintf("id-%d", seq),
 			SequenceNo:    seq,
 			EventType:     "CRUD",
 			Action:        "UPDATE",
-			ActorId:       "agent-sub-1",
+			ActorID:       "agent-sub-1",
 			SourceService: models.CRMServiceType,
 			Timestamp:     at,
 			Payload:       `{"client_id":"c-1"}`,
@@ -84,7 +85,7 @@ func TestListActivities(t *testing.T) {
 				From: timestamppb.New(from), To: timestamppb.New(to), PageToken: "9",
 			},
 			wantFilter: &models.ActivityFilter{
-				ActorId: "agent-sub-1", ClientID: "client-1", From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
+				ActorID: "agent-sub-1", ClientID: "client-1", From: from, To: to, BeforeSequenceNo: 9, Limit: 3,
 			},
 			serviceLogs: []models.AuditLog{entry(8), entry(7)},
 			wantResponse: &auditv1.ListActivitiesResponse{
@@ -109,7 +110,7 @@ func TestListActivities(t *testing.T) {
 		"limits an agent to their own entries": {
 			caller:      &agent,
 			request:     &auditv1.ListActivitiesRequest{PageSize: 2},
-			wantFilter:  &models.ActivityFilter{ActorId: "agent-sub-1", Limit: 3},
+			wantFilter:  &models.ActivityFilter{ActorID: "agent-sub-1", Limit: 3},
 			serviceLogs: []models.AuditLog{entry(5)},
 			wantResponse: &auditv1.ListActivitiesResponse{
 				Activities: []*auditv1.Activity{activity(5)},
@@ -118,7 +119,7 @@ func TestListActivities(t *testing.T) {
 		"lets an agent name themselves": {
 			caller:       &agent,
 			request:      &auditv1.ListActivitiesRequest{PageSize: 2, ActorId: "agent-sub-1"},
-			wantFilter:   &models.ActivityFilter{ActorId: "agent-sub-1", Limit: 3},
+			wantFilter:   &models.ActivityFilter{ActorID: "agent-sub-1", Limit: 3},
 			wantResponse: &auditv1.ListActivitiesResponse{Activities: []*auditv1.Activity{}},
 		},
 		"refuses an agent asking for another agent": {

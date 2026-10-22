@@ -34,13 +34,13 @@ func Hash(entry models.AuditLog) string {
 	digest := sha256.New()
 	for _, item := range []string{
 		version,
-		entry.Id,
+		entry.ID,
 		strconv.FormatInt(entry.SequenceNo, 10),
 		entry.EventID,
 		entry.EventType,
 		entry.Action,
 		string(entry.SourceService),
-		entry.ActorId,
+		entry.ActorID,
 		entry.Timestamp.UTC().Format(timestampLayout),
 		entry.Payload,
 		entry.ParentHash,

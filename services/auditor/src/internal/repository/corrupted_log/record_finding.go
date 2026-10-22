@@ -20,11 +20,14 @@ func (i impl) RecordFinding(ctx context.Context, finding models.ChainFinding) (b
 		return false, pkgerrors.WithStack(err)
 	}
 
+	// SQLBoiler's Insert API does not expose this composite ON CONFLICT target.
+	// Keep this statement local to the repository to preserve once-only finding
+	// recording and report whether a new row was inserted.
 	result, err := i.db.ExecContext(ctx, `
 		INSERT INTO corrupted_audit_log (id, audit_log_id, reason, log_type, date_of_detect)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (audit_log_id, reason) DO NOTHING`,
-		uuid.New().String(), finding.Entry.Id, string(finding.Reason), string(entry), time.Now().UTC(),
+		uuid.New().String(), finding.Entry.ID, string(finding.Reason), string(entry), time.Now().UTC(),
 	)
 	if err != nil {
 		return false, pkgerrors.WithStack(err)

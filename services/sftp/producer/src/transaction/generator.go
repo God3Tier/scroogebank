@@ -9,12 +9,16 @@ import (
 	"uuid"
 )
 
+// currency is the only one a deployment holds: it serves one legal entity,
+// whose accounts are in SGD (Appendix 2, ADR-0038). GenerateRandomSet still
+// gives a few rows an unsupported currency on purpose.
+const currency = "SGD"
+
 var (
-	currencies = []string{"SGD", "USD", "EUR", "JPY", "MYR"}
-	channels   = []string{"CARD", "ONLINE", "ATM", "TRANSFER"}
-	merchants  = []string{"NTUC FAIRPRICE", "STARBUCKS", "SHELL", "GRAB", "AMAZON SG"}
-	txnTypes   = []string{"DEBIT", "CREDIT"}
-	status     = []string{"COMPLETED", "PENDING", "FAILED"}
+	channels  = []string{"CARD", "ONLINE", "ATM", "TRANSFER"}
+	merchants = []string{"NTUC FAIRPRICE", "STARBUCKS", "SHELL", "GRAB", "AMAZON SG"}
+	txnTypes  = []string{"DEBIT", "CREDIT"}
+	status    = []string{"COMPLETED", "PENDING", "FAILED"}
 )
 
 // Generate returns one valid transaction, on one of accountIDs if any are
@@ -34,7 +38,7 @@ func generateTransaction(accountIDs []string) Transaction {
 		TransferDate:    generateRandomRecent(),
 		TransactionType: txnTypes[rand.Intn(100)%2],
 		Amount:          generateRandomAmount(),
-		Currency:        currencies[rand.Intn(100)%5],
+		Currency:        currency,
 		Status:          generateStatusRandom(),
 		Description:     fmt.Sprintf("%s - %s", channels[rand.Intn(100)%4], merchants[rand.Intn(100)%5]),
 	}

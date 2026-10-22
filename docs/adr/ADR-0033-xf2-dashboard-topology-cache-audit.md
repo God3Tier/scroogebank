@@ -65,7 +65,7 @@ Those files use ADR numbers already taken on `dev`.
 
 1. **dashboard-service** is a stateless Java 25 ECS service with **no database**.
 2. It fans out over ECS Service Connect to aggregate endpoints on user-, client-, account- and transaction-service, **forwarding the caller's JWT**. Each service scopes its own answer.
-3. It caches each caller's result in process (Caffeine) for **3 minutes**.
+3. It caches each caller's result in process (Caffeine) for **3 minutes**. A result with a panel that timed out or failed (`upstream_timeout`, `upstream_error`) is not kept, so the next request asks again (amended 2026-10-19).
 4. It sends `DASHBOARD_VIEW` audit events straight to the shared audit queue, **best-effort** ([ADR-0020](ADR-0020-audit-write-path-outbox-shared-sqs.md)).
 
 ## Rationale
@@ -85,6 +85,7 @@ Those files use ADR numbers already taken on `dev`.
 ### Negative / Trade-offs
 
 - Figures can be up to 3 minutes stale.
+- While an upstream is failing, every refresh asks every upstream again, the failing one included: the cache no longer shields it.
 - Each task has its own cache, so different tasks may briefly show different figures.
 - Each source service must build and maintain aggregate endpoints. Only the user roster adapter exists today.
 - A failed audit send means a view goes unrecorded.
@@ -102,12 +103,13 @@ One small ECS service. No database or cache cluster.
 ## Operational Impact
 
 - Fan-out latency and error metrics.
-- Per-call (2 s) and overall (3 s) timeouts, with each panel resolved on its own and no retries, so a down service shows a partial dashboard rather than an error.
+- Per-call (10 s) and overall (15 s) timeouts, with each panel resolved on its own and no retries, so a down service shows a partial dashboard rather than an error. Raised from 2 s and 3 s on 2026-10-19, then from 5 s and 8 s on 2026-10-20. The overall timeout stays under API Gateway's 29 s integration timeout.
+- An upstream that answers with an error or cannot be reached is logged as a warning with its cause; expected unavailability (not deployed, refused, mixed currencies, unsupported window) stays at debug.
 - The cache TTL is in configuration.
 
 ## Validation
 
-- A repeat refresh within the TTL causes no extra calls to the source services.
+- A repeat refresh within the TTL causes no extra calls to the source services, unless a panel timed out or failed.
 - An agent's dashboard never includes another agent's clients.
 - With one source service down, the dashboard degrades gracefully.
 
@@ -116,3 +118,12 @@ One small ECS service. No database or cache cluster.
 - [X-factor 2: business dashboard](../architecture/x-factors.md#x-factor-2-business-dashboard)
 - [Numbered flow 12](../architecture/data-flow.md#numbered-flows)
 - `feat/business-dashboard`: ADR-0001, ADR-0003, ADR-0004 (Proposed, owner to be named) and `business-dashboard_plan.md`
+
+## Revision history
+
+- 2026-10-01 21:50 +08:00: proposed.
+- 2026-10-09: accepted by the decision owner.
+- 2026-10-19: amended by the decision owner after the first AWS test deployment, where panels exceeded the 2 s budget while their upstreams answered in milliseconds, mostly just after a restart. Each failure was then cached for the full 3 minutes, and upstream errors left nothing in the log at the default level.
+  - **Decision 3:** a result with a timed-out or failed panel is not cached. Results whose panels are unavailable for reasons a retry does not change are still cached.
+  - **Operational Impact:** timeouts raised to 5 s per call and 8 s overall; upstream errors logged as warnings with their cause.
+- 2026-10-20: amended by the decision owner. **Operational Impact:** timeouts raised again, to 10 s per call and 15 s overall, to give upstreams more room just after a restart. The overall timeout stays under API Gateway's 29 s integration timeout, so a slow dashboard still answers with a partial result rather than the gateway's timeout error. The cost is that a failing panel now takes up to 15 s, not 8 s, to show as unavailable.

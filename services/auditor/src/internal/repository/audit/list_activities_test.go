@@ -17,17 +17,21 @@ func TestListActivities(t *testing.T) {
 	}{
 		"returns only changes, newest first": {
 			// Leaves out the reads, the sign-out, the failed delete, the
-			// dashboard view, the ingestion event (5 to 10) and the sign-in
-			// (12).
+			// dashboard view, the ingestion event (5 to 10), the sign-in (12)
+			// and the reminder email (15).
 			filter:  models.ActivityFilter{Limit: 20},
-			wantSeq: []int64{13, 11, 4, 3, 2, 1},
+			wantSeq: []int64{14, 13, 11, 4, 3, 2, 1},
+		},
+		"shows an agent's calendar change but not the dispatcher's reminder": {
+			filter:  models.ActivityFilter{From: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), Limit: 20},
+			wantSeq: []int64{14},
 		},
 		"shows a user's own password reset but not their sign-in": {
-			filter:  models.ActivityFilter{ActorId: "agent-c", Limit: 20},
+			filter:  models.ActivityFilter{ActorID: "agent-c", Limit: 20},
 			wantSeq: []int64{13},
 		},
 		"filters by actor": {
-			filter:  models.ActivityFilter{ActorId: "agent-a", Limit: 20},
+			filter:  models.ActivityFilter{ActorID: "agent-a", Limit: 20},
 			wantSeq: []int64{4, 1},
 		},
 		"filters by client in the audited payload": {
@@ -35,7 +39,7 @@ func TestListActivities(t *testing.T) {
 			wantSeq: []int64{4, 1},
 		},
 		"combines client and agent filters": {
-			filter:  models.ActivityFilter{ActorId: "agent-b", ClientID: "c-2", Limit: 20},
+			filter:  models.ActivityFilter{ActorID: "agent-b", ClientID: "c-2", Limit: 20},
 			wantSeq: []int64{11, 2},
 		},
 		"filters by time range with inclusive from and exclusive to": {

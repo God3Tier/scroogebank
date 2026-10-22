@@ -7,6 +7,6 @@ type AuditLogInput struct {
 	EventType     string
 	Action        string
 	SourceService ServiceType
-	ActorId       string
+	ActorID       string
 	Payload       string
 }

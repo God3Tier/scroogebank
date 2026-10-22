@@ -27,6 +27,8 @@ func TestServiceTypeIsValidAction(t *testing.T) {
 		{name: "dashboard rejects CRUD", service: DashboardServiceType, action: "CRUD", want: false},
 		{name: "cognito triggers authentication event type", service: CognitoTriggersServiceType, action: "AUTHENTICATION", want: true},
 		{name: "cognito triggers reject CRUD", service: CognitoTriggersServiceType, action: "CRUD", want: false},
+		{name: "engagement event type", service: EngagementServiceType, action: "ENGAGEMENT", want: true},
+		{name: "engagement rejects CRUD", service: EngagementServiceType, action: "CRUD", want: false},
 		{name: "unknown service", service: ServiceType("UNKNOWN"), action: "CREATE", want: false},
 	}
 

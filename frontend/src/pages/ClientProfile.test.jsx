@@ -3,10 +3,12 @@ import { useAuth } from 'react-oidc-context'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createAccount, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { fetchDocument, getClient, listDocuments, uploadDocument, verifyClient } from '../api/clients.js'
 import ClientProfile from './ClientProfile.jsx'
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
+vi.mock('../api/accounts.js', () => ({ createAccount: vi.fn(), listAccounts: vi.fn(), updateAccountStatus: vi.fn() }))
 vi.mock('../api/clients.js', () => ({
   getClient: vi.fn(),
   listDocuments: vi.fn(),
@@ -35,6 +37,15 @@ const unverified = {
   verification_status: 'UNVERIFIED',
 }
 
+// Agents may open accounts only for verified clients (ADR-0050).
+const verified = {
+  ...unverified,
+  verification_status: 'VERIFIED',
+  verified_by_agent_id: AGENT_SUB,
+  verified_at: '2026-10-13T05:00:00Z',
+  verified_with_documents: true,
+}
+
 const document = {
   document_id: 'doc-0001',
   client_id: CLIENT_ID,
@@ -55,6 +66,25 @@ function renderPage() {
   )
 }
 
+async function fillAccountForm() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Open account' }))
+  fireEvent.change(screen.getByLabelText(/^Account Type/), { target: { value: 'SAVINGS' } })
+  fireEvent.change(screen.getByLabelText(/^Initial Deposit/), { target: { value: '250.50' } })
+  fireEvent.change(screen.getByLabelText(/^Currency/), { target: { value: 'sgd' } })
+  fireEvent.change(screen.getByLabelText(/^Branch ID/), { target: { value: 'SG-001' } })
+}
+
+// Verifies the page's unverified client without a document, then waits for
+// the page to show it verified.
+async function verifyWithoutDocument() {
+  verifyClient.mockResolvedValue({})
+  renderPage()
+  fireEvent.click(await screen.findByRole('checkbox', { name: /I have checked this client's identity without an uploaded document/ }))
+  getClient.mockResolvedValue({ ...verified, verified_with_documents: false })
+  fireEvent.click(screen.getByRole('button', { name: 'Verify without a document' }))
+  await screen.findByText(/, without an uploaded document\./)
+}
+
 async function openDocument() {
   fireEvent.click(await screen.findByRole('button', { name: /^View PNG image uploaded/ }))
   await screen.findByRole('img', { name: 'Identity document being checked' })
@@ -65,6 +95,7 @@ describe('client page', () => {
     useAuth.mockReturnValue({ isAuthenticated: true, user: { profile: { sub: AGENT_SUB, 'cognito:groups': ['Agent'] } } })
     getClient.mockResolvedValue(unverified)
     listDocuments.mockResolvedValue([document])
+    listAccounts.mockResolvedValue([])
     fetchDocument.mockResolvedValue(new Blob(['synthetic'], { type: 'image/png' }))
     URL.createObjectURL = vi.fn(() => 'blob:synthetic-preview')
     URL.revokeObjectURL = vi.fn()
@@ -187,6 +218,133 @@ describe('client page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Upload' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Only JPEG, PNG or PDF files')
+  })
+
+  it('opens an account for the client and says so', async () => {
+    getClient.mockResolvedValue(verified)
+    createAccount.mockResolvedValue({ account_id: 'acct-0001', status: 'Account created successfully' })
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    // A verified client's page already has a status: the verification.
+    expect(await screen.findByText(/Savings account opened\. Account ID: acct-0001/)).toHaveAttribute('role', 'status')
+    expect(createAccount).toHaveBeenCalledWith({
+      client_id: CLIENT_ID,
+      account_type: 'SAVINGS',
+      status: 'ACTIVE',
+      initial_deposit: 250.5,
+      currency: 'SGD',
+      branch_id: 'SG-001',
+    })
+    expect(screen.queryByLabelText(/^Account Type/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the form open and explains when the client already has that type of account', async () => {
+    getClient.mockResolvedValue(verified)
+    createAccount.mockRejectedValue(Object.assign(new Error('Request failed (409)'), { status: 409 }))
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('already has an account of this type')
+    expect(screen.getByLabelText(/^Branch ID/)).toHaveValue('SG-001')
+  })
+
+  it('offers only Pending when opening an account for an unverified client', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Open account' }))
+
+    const status = screen.getByLabelText(/^Status/)
+    expect([...status.options].map((option) => option.value)).toEqual(['PENDING'])
+    expect(status).toHaveValue('PENDING')
+    expect(screen.getByText(/new accounts open as Pending\. Verify the client to make them Active/)).toBeInTheDocument()
+  })
+
+  it('offers Active and Pending for a verified client', async () => {
+    getClient.mockResolvedValue(verified)
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Open account' }))
+
+    const status = screen.getByLabelText(/^Status/)
+    expect([...status.options].map((option) => option.value)).toEqual(['ACTIVE', 'PENDING'])
+    expect(status).toHaveValue('ACTIVE')
+  })
+
+  it('opens a Pending account for an unverified client', async () => {
+    createAccount.mockResolvedValue({ account_id: 'acct-0002', status: 'Account created successfully' })
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    expect(await screen.findByText(/Savings account opened\. Account ID: acct-0002/)).toBeInTheDocument()
+    expect(createAccount).toHaveBeenCalledWith(expect.objectContaining({ status: 'PENDING' }))
+  })
+
+  it('explains a refusal for a client who is not verified', async () => {
+    createAccount.mockRejectedValue(Object.assign(new Error('Request failed (403)'), { status: 403 }))
+    renderPage()
+    await fillAccountForm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('can only be opened as Pending')
+  })
+
+  it("offers to make the client's Pending accounts Active once they are verified", async () => {
+    listAccounts.mockResolvedValue([
+      { id: 'acct-0001', status: 'pending' },
+      { id: 'acct-0002', status: 'PENDING' },
+      { id: 'acct-0003', status: 'active' },
+    ])
+    updateAccountStatus.mockResolvedValue({})
+    await verifyWithoutDocument()
+
+    expect(await screen.findByText(/This client has 2 Pending accounts\.\s+Make them Active\?/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Make Active' }))
+
+    expect(await screen.findByText('2 accounts are now Active.')).toBeInTheDocument()
+    expect(updateAccountStatus).toHaveBeenCalledTimes(2)
+    expect(updateAccountStatus).toHaveBeenCalledWith('acct-0001', 'ACTIVE')
+    expect(updateAccountStatus).toHaveBeenCalledWith('acct-0002', 'ACTIVE')
+    expect(screen.queryByRole('button', { name: 'Make Active' })).not.toBeInTheDocument()
+  })
+
+  it('leaves the Pending accounts as they are when the agent says so', async () => {
+    listAccounts.mockResolvedValue([{ id: 'acct-0001', status: 'pending' }])
+    await verifyWithoutDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep Pending' }))
+
+    expect(screen.queryByText(/Pending account\./)).not.toBeInTheDocument()
+    expect(updateAccountStatus).not.toHaveBeenCalled()
+  })
+
+  it('offers again only the accounts that could not be made Active', async () => {
+    listAccounts.mockResolvedValue([{ id: 'acct-0001', status: 'pending' }, { id: 'acct-0002', status: 'pending' }])
+    updateAccountStatus.mockImplementation((id) => (id === 'acct-0002'
+      ? Promise.reject(Object.assign(new Error('Request failed (503)'), { status: 503 }))
+      : Promise.resolve({})))
+    await verifyWithoutDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Make Active' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('1 account could not be made Active. Try again.')
+    expect(within(alert).getByRole('link', { name: 'Manage accounts and transactions' })).toBeInTheDocument()
+    expect(screen.getByText(/This client has 1 Pending account\.\s+Make it Active\?/)).toBeInTheDocument()
+  })
+
+  it('asks an admin nothing about accounts after a verification', async () => {
+    useAuth.mockReturnValue({ isAuthenticated: true, user: { profile: { sub: 'admin-sub-0009', 'cognito:groups': ['Admin'] } } })
+    listAccounts.mockResolvedValue([{ id: 'acct-0001', status: 'pending' }])
+    await verifyWithoutDocument()
+
+    expect(listAccounts).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Make Active' })).not.toBeInTheDocument()
   })
 
   it('says so when the client is already verified', async () => {

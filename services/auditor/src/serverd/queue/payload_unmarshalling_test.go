@@ -21,7 +21,7 @@ func buildEvent(t *testing.T, eventType, action, sourceService string, payload a
 		EventType:     eventType,
 		Action:        action,
 		SourceService: sourceService,
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       payloadBytes,
 	}
 }
@@ -134,6 +134,8 @@ func TestValidatePayload_UserManagementOtherResources(t *testing.T) {
 			userOperation("CORRUPTED_AUDIT_LOG", id, "/api/corrupted-logs/{id}", "DELETE", 200)},
 		{"account transactions read", "READ",
 			userOperation("ACCOUNT", id, "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"transaction list read has no resource id", "READ",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
 	}
 
 	for _, tt := range tests {
@@ -164,6 +166,8 @@ func TestValidatePayload_UserManagementRejectsInvalidOperations(t *testing.T) {
 			userOperation("CORRUPTED_AUDIT_LOG", "", "/api/corrupted-logs", "POST", 201)},
 		{"successful user read needs a resource id", "READ",
 			userOperation("USER", "", "/api/users/{id}", "GET", 200)},
+		{"transactions are only read", "DELETE",
+			userOperation("TRANSACTION", id, "/api/transactions", "DELETE", 200)},
 	}
 
 	for _, tt := range tests {
@@ -295,7 +299,7 @@ func TestValidatePayload_DashboardRejectsInvalidEvents(t *testing.T) {
 				tt.change(&payload)
 			}
 			event := buildEvent(t, tt.eventType, tt.action, string(models.DashboardServiceType), payload)
-			event.ActorId = tt.actor
+			event.ActorID = tt.actor
 
 			if err := validatePayload(event); err == nil {
 				t.Errorf("expected %s to be rejected, got nil", tt.name)
@@ -389,7 +393,7 @@ func TestValidatePayload_AuthenticationRejectsInvalidEvents(t *testing.T) {
 				tt.change(&payload)
 			}
 			event := buildEvent(t, tt.eventType, tt.action, string(models.CognitoTriggersServiceType), payload)
-			event.ActorId = tt.actor
+			event.ActorID = tt.actor
 
 			if err := validatePayload(event); err == nil {
 				t.Errorf("expected %s to be rejected, got nil", tt.name)
@@ -432,7 +436,7 @@ func TestValidatePayload_MalformedCRUDPayload(t *testing.T) {
 		EventType:     "CRUD",
 		Action:        "UPDATE",
 		SourceService: string(models.CRMServiceType),
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       json.RawMessage(`{"agent_id": 12345}`), // agent_id should be a string, not a number
 	}
 
@@ -446,7 +450,7 @@ func TestValidatePayload_MalformedFileCompletedPayload(t *testing.T) {
 		EventType:     "TRANSACTION_INGESTION",
 		Action:        "FILE_PROCESSING_COMPLETED",
 		SourceService: string(models.TransactionServiceType),
-		ActorId:       "test-actor",
+		ActorID:       "test-actor",
 		Payload:       json.RawMessage(`{"records_processed": "not-a-number"}`),
 	}
 
@@ -489,6 +493,98 @@ func TestValidatePayload_RejectsIncompleteEventAlertMetadata(t *testing.T) {
 
 	if err := validatePayload(event); err == nil {
 		t.Error("expected missing event ID and occurrence time to be rejected")
+	}
+}
+
+// engagementEventCreate is a message as engagement-service's outbox relay
+// sends it: the event-alert envelope with IDs only in data.
+const engagementEventCreate = `{"event_id":"80000000-0000-4000-8000-000000000001","event_type":"ENGAGEMENT",` +
+	`"action":"EVENT_CREATE","source_service":"ENGAGEMENT","actor_id":"4a1b2c3d-0000-4000-8000-000000000001",` +
+	`"payload":{"event_id":"80000000-0000-4000-8000-000000000001","event_version":1,` +
+	`"occurred_at":"2026-10-21T02:00:00Z","data":{"calendarEventId":"80000000-0000-4000-8000-000000000002"}}}`
+
+func engagementPayload() map[string]any {
+	return map[string]any{
+		"event_id":      "80000000-0000-4000-8000-000000000001",
+		"event_version": 1,
+		"occurred_at":   "2026-10-21T02:00:00Z",
+		"data":          map[string]string{"calendarEventId": "80000000-0000-4000-8000-000000000002"},
+	}
+}
+
+func TestValidatePayload_EngagementMessage(t *testing.T) {
+	var event ValidEvent
+	if err := json.Unmarshal([]byte(engagementEventCreate), &event); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected engagement-service's message to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_ValidEngagementActions(t *testing.T) {
+	actions := []string{
+		"EVENT_CREATE", "EVENT_UPDATE", "EVENT_CANCEL",
+		"INVITE_SENT", "INVITE_FAILED",
+		"REMINDER_SENT", "REMINDER_FAILED", "REMINDER_MISSED",
+		"DRAFT_GENERATE", "DRAFT_DISCARD", "EMAIL_SEND", "EMAIL_SEND_FAILED",
+		"PREFERENCES_UPDATE",
+	}
+	for _, action := range actions {
+		t.Run(action, func(t *testing.T) {
+			event := buildEvent(t, "ENGAGEMENT", action, string(models.EngagementServiceType), engagementPayload())
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected engagement %s to pass, got error: %v", action, err)
+			}
+		})
+	}
+
+	// The dispatcher's own events name "system" as the actor.
+	event := buildEvent(t, "ENGAGEMENT", "REMINDER_SENT", string(models.EngagementServiceType), engagementPayload())
+	event.ActorID = "system"
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected a dispatcher event to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_EngagementRejectsInvalidEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		action    string
+		actor     string
+		change    func(map[string]any)
+	}{
+		{name: "wrong event type", eventType: "CRUD", action: "EVENT_CREATE", actor: "a1"},
+		{name: "unknown action", eventType: "ENGAGEMENT", action: "EMAIL_EXPORT", actor: "a1"},
+		{name: "missing actor", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: " "},
+		{name: "missing event ID", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { delete(p, "event_id") }},
+		{name: "version below 1", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { p["event_version"] = 0 }},
+		{name: "missing occurrence time", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { delete(p, "occurred_at") }},
+		{name: "missing data", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { delete(p, "data") }},
+		{name: "data not an object", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { p["data"] = "calendar event" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := engagementPayload()
+			if tt.change != nil {
+				tt.change(payload)
+			}
+			event := buildEvent(t, tt.eventType, tt.action, string(models.EngagementServiceType), payload)
+			event.ActorID = tt.actor
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s to be rejected, got nil", tt.name)
+			}
+		})
 	}
 }
 

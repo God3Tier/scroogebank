@@ -119,7 +119,7 @@ func TestDeleteCorruptedAuditLog(t *testing.T) {
 }
 
 func TestRecordFinding(t *testing.T) {
-	finding := models.ChainFinding{Entry: models.AuditLog{Id: "audit-4"}, Reason: models.HashMismatch}
+	finding := models.ChainFinding{Entry: models.AuditLog{ID: "audit-4"}, Reason: models.HashMismatch}
 	databaseErr := errors.New("database unavailable")
 	tests := map[string]struct {
 		isNew   bool

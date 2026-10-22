@@ -42,7 +42,7 @@ func verify(ctx context.Context, chain auditSvc.Service, findings corruptedLogSv
 		if isNew {
 			newFindings++
 			log.Printf("%s reason=%s sequence_no=%d audit_log_id=%s",
-				tamperDetected, problem.Reason, problem.Entry.SequenceNo, problem.Entry.Id)
+				tamperDetected, problem.Reason, problem.Entry.SequenceNo, problem.Entry.ID)
 		}
 	}
 
@@ -52,7 +52,7 @@ func verify(ctx context.Context, chain auditSvc.Service, findings corruptedLogSv
 	if report.Head != nil {
 		head := models.ChainAnchor{
 			SequenceNo: report.Head.SequenceNo,
-			ID:         report.Head.Id,
+			ID:         report.Head.ID,
 			Hash:       report.Head.Hash,
 			AnchoredAt: time.Now().UTC().Truncate(time.Microsecond),
 		}

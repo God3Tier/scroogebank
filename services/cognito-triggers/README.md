@@ -107,13 +107,15 @@ The auditor stores both events in its chain (`make psql` in `services/auditor`, 
 When the `AUDIT_SEND_FAILED` alarm fires, fix the cause first (for example the queue policy, or an SQS outage). Then, with the replay role's credentials in the environment (ADR-0027):
 
 ```sh
-aws logs filter-log-events --log-group-name /aws/lambda/cognito-triggers \
+MSYS_NO_PATHCONV=1 aws logs filter-log-events --log-group-name /aws/lambda/<stack>-cognito-triggers \
   --start-time <milliseconds since 1970, before the first failure> \
   --filter-pattern '{ $.msg = "AUDIT_SEND_FAILED" }' > failed.json
 
 make package
 make replay QUEUE_URL=<audit-insert URL> LOG_FILE=failed.json
 ```
+
+`<stack>` is the CRM stack's name, `crm-sg-prod` by default (the crm stack's `ecs_cluster` output), and the queue URL is its `audit_queue_url` output. `MSYS_NO_PATHCONV=1` stops Git Bash from rewriting the log group's leading `/`.
 
 Each event is sent exactly as logged, with its `event_id`, so replaying an event twice, or one that reached the auditor after all, stores nothing new. The tool (`Replay`) prints each `event_id` it sent. It exits 1 if any could not be sent, or if a failure line holds no audit event. Such a line means the trigger could not read the Cognito event. Its `trigger_source`, `user_pool_id` and time show which sign-in it was, and it must be looked into by hand.
 

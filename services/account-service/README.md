@@ -6,10 +6,11 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access |
+| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. For an unverified client an agent may open only a `PENDING` account; any other status is 403 (ADR-0050) |
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
+| PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Audited with the status before and after (ADR-0050) |
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
 | GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |
@@ -41,6 +42,7 @@ The `accounts` table has no foreign key to `clients`, because clients live in an
   | client service answers | Response |
   |---|---|
   | 200 | The account is created. The client's `created_by_agent_id` is stored as `owner_agent_id` |
+  | 200, but the caller is an agent, the client's `verification_status` is not `VERIFIED` (in any case) and the status is not `PENDING` | 403 `an unverified client's account can only be opened as pending`, and nothing is created. Admins are not restricted ([ADR-0050](../../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)) |
   | 404 | 404, and nothing is created |
   | Anything else, or no answer within 2 seconds | 503, and nothing is created |
 
@@ -57,7 +59,7 @@ client-profile-management-service calls the list endpoint before deleting a clie
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column, and one created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged); run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
+This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), applies `data/` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), and runs the API at `http://localhost:8083`. A database volume loaded before Flyway has no schema history, so `make run` stops and asks you to run `make db-reset`. A database volume created before soft delete has no `accounts.deleted_at` column, and one created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged); run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
 
 For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transaction-ingest app client ID>` to the command above, run client-profile-management-service with its own `make run`, then start the receiver with `make -C ../sftp up`. Each service keeps its own database; the import links transactions to accounts through `/internal/accounts/lookup`.
 
@@ -76,7 +78,7 @@ For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transacti
 | `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID`, `COGNITO_API_AUDIENCE` | Token validation, as in client-profile-management-service |
 | `COGNITO_SERVICE_CLIENT_IDS` | Comma-separated Cognito app clients allowed to call `/internal` with a client-credentials token (the transaction import's). Empty: every `/internal` call is refused |
 | `AWS_REGION`, `AUDIT_QUEUE_URL`, `AWS_ENDPOINT_URL` | Auditor SQS queue |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`) |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`). In AWS, `DB_USER` is the service's own login, `account_service`, which cannot change the schema ([Database logins](../../docs/database/migrations.md#database-logins)) |
 | `APP_ENV`, `APP_ADDR`, `APP_TLS_CERT_FILE`, `APP_TLS_KEY_FILE` | `local` or `production`; listen address (default `:8083`); TLS in production |
 
 ## Auditor SQS events

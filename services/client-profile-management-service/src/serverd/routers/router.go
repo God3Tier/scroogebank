@@ -48,6 +48,8 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 	client.Use(auditLogger)
 	{
 		client.POST("", adaptHandler(clients.CreateClientProfile, ""))
+		// Scoped by the caller, so no ownership check (ADR-0043).
+		client.GET("", withCaller(clients.ListClients))
 		client.POST("/:clientId/verify", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.VerifyClientIdentity, "clientId"))
 		client.PUT("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
 		client.GET("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientProfile, "clientId"))

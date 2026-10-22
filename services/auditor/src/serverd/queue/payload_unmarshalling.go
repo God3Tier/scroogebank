@@ -16,7 +16,7 @@ type ValidEvent struct {
 	EventType     string          `json:"event_type"`
 	Action        string          `json:"action"`
 	SourceService string          `json:"source_service"`
-	ActorId       string          `json:"actor_id"`
+	ActorID       string          `json:"actor_id"`
 	Payload       json.RawMessage `json:"payload"`
 }
 
@@ -104,14 +104,17 @@ var userAuditActions = map[string]map[string]bool{
 	},
 	// An account's transactions, read through user-service.
 	"ACCOUNT": {"READ": true},
+	// Every account's transactions, read by an admin (ADR-0043).
+	"TRANSACTION": {"READ": true},
 	// The auditor's corrupted-log table, managed through user-service.
 	"CORRUPTED_AUDIT_LOG": {"CREATE": true, "READ": true, "DELETE": true},
 }
 
 // userAuditNeedsResourceID reports whether a successful event must name the
-// resource it acted on. Reading the corrupted-log list names none.
+// resource it acted on. Reading the corrupted-log list or the transaction list
+// names none.
 func userAuditNeedsResourceID(resourceType, action string) bool {
-	return !(resourceType == "CORRUPTED_AUDIT_LOG" && action == "READ")
+	return action != "READ" || (resourceType != "CORRUPTED_AUDIT_LOG" && resourceType != "TRANSACTION")
 }
 
 // dashboardViewActions are the dashboard's endpoints, one action each.
@@ -121,6 +124,35 @@ var dashboardViewActions = map[string]bool{
 	"VIEW_TRANSACTIONS":      true,
 	"VIEW_ACTION_ITEMS":      true,
 	"VIEW_AGENT_PERFORMANCE": true,
+}
+
+// engagementActions are what engagement-service records (agent-engagement
+// plan §11): calendar changes, the invite and reminder emails its dispatcher
+// sends, and client follow-up drafts.
+var engagementActions = map[string]bool{
+	"EVENT_CREATE":       true,
+	"EVENT_UPDATE":       true,
+	"EVENT_CANCEL":       true,
+	"INVITE_SENT":        true,
+	"INVITE_FAILED":      true,
+	"REMINDER_SENT":      true,
+	"REMINDER_FAILED":    true,
+	"REMINDER_MISSED":    true,
+	"DRAFT_GENERATE":     true,
+	"DRAFT_DISCARD":      true,
+	"EMAIL_SEND":         true,
+	"EMAIL_SEND_FAILED":  true,
+	"PREFERENCES_UPDATE": true,
+}
+
+// ValidEngagementPayload is engagement-service's outbox envelope, the same
+// shape as event-alert-service's (ADR-0051 decision 7). data holds IDs,
+// statuses and changed field names, never titles, email bodies or addresses.
+type ValidEngagementPayload struct {
+	EventID      string                     `json:"event_id"`
+	EventVersion int                        `json:"event_version"`
+	OccurredAt   time.Time                  `json:"occurred_at"`
+	Data         map[string]json.RawMessage `json:"data"`
 }
 
 type ValidEventAlertPayload struct {
@@ -172,6 +204,9 @@ func validatePayload(envelope ValidEvent) error {
 	case models.CognitoTriggersServiceType:
 		return validateAuthenticationPayload(envelope)
 
+	case models.EngagementServiceType:
+		return validateEngagementPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
@@ -200,11 +235,30 @@ func validateEventAlertPayload(envelope ValidEvent) error {
 	return nil
 }
 
+// validateEngagementPayload accepts engagement-service's actions. The actor is
+// the agent's sub, or "system" for what its dispatcher sends.
+func validateEngagementPayload(envelope ValidEvent) error {
+	if !engagementActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for ENGAGEMENT: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorID) == "" {
+		return fmt.Errorf("ENGAGEMENT event requires actor_id")
+	}
+	var payload ValidEngagementPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid EngagementPayload: %w", err)
+	}
+	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || payload.Data == nil {
+		return fmt.Errorf("invalid EngagementPayload: required audit metadata is missing")
+	}
+	return nil
+}
+
 func validateUserManagementPayload(envelope ValidEvent) error {
 	if !models.UserManagementServiceType.IsValidAction(envelope.Action) || strings.EqualFold(envelope.Action, "CRUD") {
 		return fmt.Errorf("unrecognized action for USER_MANAGEMENT: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("USER_MANAGEMENT event requires actor_id")
 	}
 	var payload ValidUserAuditPayload
@@ -244,7 +298,7 @@ func validateAuthenticationPayload(envelope ValidEvent) error {
 	if !known {
 		return fmt.Errorf("unrecognized action for COGNITO_TRIGGERS: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("COGNITO_TRIGGERS event requires actor_id")
 	}
 	var payload ValidAuthenticationPayload
@@ -267,7 +321,7 @@ func validateDashboardPayload(envelope ValidEvent) error {
 	if !dashboardViewActions[envelope.Action] {
 		return fmt.Errorf("unrecognized action for DASHBOARD: %s", envelope.Action)
 	}
-	if strings.TrimSpace(envelope.ActorId) == "" {
+	if strings.TrimSpace(envelope.ActorID) == "" {
 		return fmt.Errorf("DASHBOARD event requires actor_id")
 	}
 	var payload ValidDashboardViewPayload

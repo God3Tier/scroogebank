@@ -39,7 +39,7 @@ The CRM runs eight containerised services ([ADR-0017](ADR-0017-microservices-per
 
 ## Decision
 
-Run every service on **Amazon ECS with the Fargate launch type**, at least two tasks per service across two Availability Zones, with target-tracking auto scaling on CPU and ALB requests per target (minimum 2, maximum 6 tasks). The auditor scales on SQS backlog. Scheduled work (chain-verify, alert worker, health analysis) runs as standalone ECS tasks started by EventBridge Scheduler, and each service's migrations run as a one-off ECS task. Staging may use Fargate Spot.
+Run every service on **Amazon ECS with the Fargate launch type**, in subnets across two Availability Zones, with target-tracking auto scaling on CPU and ALB requests per target (minimum 1, maximum 6 tasks). The auditor scales on SQS backlog. Scheduled work (chain-verify, alert worker, health analysis) runs as standalone ECS tasks started by EventBridge Scheduler, and each service's migrations run as a one-off ECS task. Staging may use Fargate Spot.
 
 ## Rationale
 
@@ -60,6 +60,7 @@ Run every service on **Amazon ECS with the Fargate launch type**, at least two t
 - Less portable than Kubernetes.
 - Standalone scheduled tasks cannot use Service Connect, so they call services through the internal ALB with a service token.
 - Fargate costs more per vCPU than EC2 when running continuously.
+- With one task, a service has no copy in the second AZ until it scales out. If its task or AZ fails, that service is unavailable until ECS starts a replacement task, usually within a few minutes; the rest of the CRM keeps serving.
 
 ## Security & Privacy Impact
 
@@ -67,7 +68,7 @@ Each task has its own IAM task role (least privilege) and security group. Tasks 
 
 ## Cost Impact
 
-Roughly USD 325–365/month for 8 services × 2–2.25 tasks (0.25–0.5 vCPU, 1 GB each) plus scheduled jobs if left on 24/7. The planned lifecycle uses about 60 running hours in total (about USD 37 of compute) under [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md). Saves about USD 73/month against EKS.
+Roughly USD 165–205/month for 8 services × 1–1.25 tasks (0.25–0.5 vCPU, 1 GB each) plus scheduled jobs if left on 24/7, about half the cost of a minimum of two tasks. The planned lifecycle uses about 60 running hours in total (about USD 37 of compute) under [ADR-0029](ADR-0029-environment-lifecycle-and-cost-controls.md). Saves about USD 73/month against EKS.
 
 ## Operational Impact
 
@@ -75,10 +76,15 @@ ECS deployment circuit breaker with automatic rollback on failed deployments. Ta
 
 ## Validation
 
-k6 load tests in staging show services scaling out and back in; a failover drill stops one AZ's tasks and the CRM keeps serving requests ([test strategy](../testing/test-strategy.md)).
+k6 load tests in staging show services scaling out and back in; a failover drill stops one AZ's tasks, and each affected service recovers on its own in the other AZ ([test strategy](../testing/test-strategy.md)).
 
 ## References
 
 - [Why ECS Fargate (and not EKS)](../architecture/system-overview.md#why-ecs-fargate-and-not-eks)
 - [Compute services](../architecture/system-overview.md#compute)
 - AWS documentation: Amazon ECS on AWS Fargate; Amazon EKS pricing
+
+## Revision history
+
+- 2026-10-01 21:50 +08:00: proposed.
+- 2026-10-16: amended while Proposed, as decided by the decision owner, to cut Fargate cost: the minimum is 1 task per service instead of 2, so a service no longer always has a task in each AZ. Consequences, Cost Impact and Validation changed to match; [ADR-0042](ADR-0042-terraform-deployment.md) decision 3 applies it in Terraform.

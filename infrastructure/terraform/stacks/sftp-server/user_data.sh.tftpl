@@ -1,0 +1,57 @@
+#!/bin/bash
+# First-boot setup of the simulated core banking SFTP server (rendered by
+# Terraform; see main.tf). Runs once, as root.
+set -euo pipefail
+
+# --- host key, pinned by the CRM ------------------------------------------
+aws ssm get-parameter --region "${region}" --name "${host_key_param}" \
+  --with-decryption --query Parameter.Value --output text > ${host_key_path}
+chmod 600 ${host_key_path}
+ssh-keygen -y -f ${host_key_path} > ${host_key_path}.pub
+
+# --- a chrooted, SFTP-only account with key authentication only -----------
+id -u "${sftp_user}" >/dev/null 2>&1 || useradd --system --shell /sbin/nologin --home-dir "/srv/sftp/${sftp_user}" "${sftp_user}"
+install -d -o root -g root -m 755 /srv/sftp "/srv/sftp/${sftp_user}"
+install -d -o "${sftp_user}" -g "${sftp_user}" -m 750 "${remote_dir}" "${remote_dir}/processed" "${remote_dir}/rejected"
+
+install -d -m 755 /etc/ssh/authorized_keys
+printf '%s\n' "${authorized_key}" > "/etc/ssh/authorized_keys/${sftp_user}"
+chmod 644 "/etc/ssh/authorized_keys/${sftp_user}"
+
+cat > /etc/ssh/sshd_config.d/10-crm-sftp.conf <<'EOF'
+HostKey ${host_key_path}
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+
+Match User ${sftp_user}
+    AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+    ChrootDirectory /srv/sftp/%u
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no
+    PermitTTY no
+EOF
+sshd -t
+systemctl restart sshd
+
+# --- the bank's file generator (services/sftp/producer) --------------------
+if [ -n "${producer_image}" ]; then
+  dnf install -y docker
+  systemctl enable --now docker
+  aws ecr get-login-password --region "${region}" | docker login --username AWS --password-stdin "${registry}"
+  # The CRM accounts the transactions may use, one ID per line, written by
+  # scripts/sync-producer-accounts.sh (ADR-0045). It starts empty, so nothing
+  # is published until the first sync. The directory is mounted, not the
+  # file: the sync replaces the file by renaming, which a file mount misses.
+  install -d -m 0755 "$(dirname "${account_ids_file}")"
+  [ -f "${account_ids_file}" ] || install -m 0644 /dev/null "${account_ids_file}"
+  docker run -d --restart unless-stopped --name producer \
+    --user "$(id -u ${sftp_user}):$(id -g ${sftp_user})" \
+    -v "${remote_dir}:/reports" \
+    -v "$(dirname "${account_ids_file}"):$(dirname "${account_ids_file}"):ro" \
+    -e OUTPUT_DIR=/reports \
+    -e INTERVAL_SECONDS="${interval}" \
+    -e CRM_ACCOUNT_IDS_FILE="${account_ids_file}" \
+    "${producer_image}"
+fi

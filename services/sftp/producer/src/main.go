@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"producer/src/accounts"
 	"producer/src/fault"
 	"producer/src/transaction"
 	"strconv"
@@ -23,8 +24,9 @@ func main() {
 	faultKind := flag.String("fault", "", "publish one fault file of this kind and exit: "+strings.Join(fault.Kinds, ", "))
 	flag.Parse()
 	destDir := getenv("OUTPUT_DIR", "/output")
+	source := accounts.FromEnv()
 	if *faultKind != "" {
-		if err := publishFault(*faultKind, destDir); err != nil {
+		if err := publishFault(*faultKind, destDir, source); err != nil {
 			log.Fatalf("publish %s fault: %v", *faultKind, err)
 		}
 		return
@@ -37,7 +39,7 @@ func main() {
 	defer stop()
 
 	// Publish once immediately on startup, then on every tick.
-	run(destDir)
+	run(destDir, source)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -48,14 +50,26 @@ func main() {
 			log.Println("shutting down")
 			return
 		case <-ticker.C:
-			run(destDir)
+			run(destDir, source)
 		}
 	}
 }
 
-func run(destDir string) {
-	transacitons := transaction.GenerateRandomSet(crmAccountIDs()...)
-	if err := stageContent(transacitons, destDir); err != nil {
+// run publishes one file. With a synced account list, its transactions use
+// only the accounts the CRM has, and with none it publishes nothing
+// (ADR-0045).
+func run(destDir string, source accounts.Source) {
+	accountIDs, err := source.IDs()
+	if err != nil {
+		log.Printf("nothing published: %v\n", err)
+		return
+	}
+	if source.Synced() && len(accountIDs) == 0 {
+		log.Printf("nothing published: %s lists no CRM accounts\n", source.File)
+		return
+	}
+	transactions := transaction.GenerateRandomSet(accountIDs...)
+	if err := stageContent(transactions, destDir); err != nil {
 		log.Printf("stage failed: %v\n", err)
 		return
 	}
@@ -85,9 +99,14 @@ func stageContent(transactions []transaction.Transaction, destDir string) error 
 
 // publishFault publishes the files of one fault for the demo (ADR-0024
 // decision 1). Files a second apart get names in the order they must be
-// read.
-func publishFault(kind, destDir string) error {
-	files, err := fault.Build(kind, crmAccountIDs())
+// read. A fault is asked for on purpose, so it is published even when the
+// synced list is empty, with random external account references.
+func publishFault(kind, destDir string, source accounts.Source) error {
+	accountIDs, err := source.IDs()
+	if err != nil {
+		return err
+	}
+	files, err := fault.Build(kind, accountIDs)
 	if err != nil {
 		return err
 	}
@@ -100,16 +119,6 @@ func publishFault(kind, destDir string) error {
 		log.Printf("published %s fault file %s\n", kind, name)
 	}
 	return nil
-}
-
-func crmAccountIDs() []string {
-	accountIDs := make([]string, 0)
-	for _, accountID := range strings.Split(os.Getenv("CRM_ACCOUNT_IDS"), ",") {
-		if accountID = strings.TrimSpace(accountID); accountID != "" {
-			accountIDs = append(accountIDs, accountID)
-		}
-	}
-	return accountIDs
 }
 
 // stageFile writes content as report-<time>-<id><extension>: first under a

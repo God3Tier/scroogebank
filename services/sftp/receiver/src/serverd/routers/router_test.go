@@ -28,6 +28,10 @@ func (s *transactionRepositoryStub) GetTransactionsByAccountID(_ context.Context
 	return s.transactions, s.err
 }
 
+func (s *transactionRepositoryStub) ListTransactions(context.Context, models.TransactionListQuery) (orm.TransactionSlice, error) {
+	return s.transactions, s.err
+}
+
 func TestGetTransactions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

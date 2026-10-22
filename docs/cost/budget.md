@@ -1,6 +1,6 @@
 # Environments and cost (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-12.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -18,7 +18,7 @@ The diagram shows the full design; the demo-week-only parts are not marked on it
 
 | Item | Normal running | High-availability demo week (pro rata) |
 |---|---|---|
-| Fargate, 8 services × 2–2.25 tasks (0.25–0.5 vCPU, 1 GB each) + scheduled jobs | 325–365 | same |
+| Fargate, 8 services × 1–1.25 tasks (0.25–0.5 vCPU, 1 GB each) + scheduled jobs | 165–205 | same |
 | RDS, 7 × `db.t4g.micro` | 140–155 (single-AZ) | 280–310 (Multi-AZ) |
 | ALB | ~20–25 | same |
 | NAT gateway(s) + public IPv4 | ~45–50 (one) | ~90–100 (two) |
@@ -29,7 +29,7 @@ The diagram shows the full design; the demo-week-only parts are not marked on it
 
 **Budget reality:** running this design 24/7 would cost about twice the USD 300 limit in a single month. Staying inside the limit depends on the lifecycle above.
 
-**Planned lifecycle cost.** The team's line-item estimate (`AWS Cost Estimate.xlsx`, with Singapore prices checked in the AWS Pricing Calculator on 30 Sep 2026) puts the whole project at about **USD 205** (about USD 224 with 9% GST). That is about USD 95 under the **USD 300 hard limit**, with the USD 100 contingency untouched. It assumes:
+**Planned lifecycle cost.** The team's line-item estimate (`AWS Cost Estimate.xlsx`, with Singapore prices checked in the AWS Pricing Calculator on 30 Sep 2026) puts the whole project at about **USD 206** (about USD 225 with 9% GST), including the customer-managed Sydney key required for encrypted RDS backup copies. That is about USD 94 under the **USD 300 hard limit**, with the USD 100 contingency untouched. It assumes:
 
 - prod runs for 3 weeks: 2 normal weeks and the high-availability demo week;
 - between sessions ECS scales to 0 and the RDS instances are stopped, with at most 2 sessions of 10 hours a week;

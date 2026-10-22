@@ -13,6 +13,23 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+// anchorDocument is the S3 wire format. Keep JSON encoding at this adapter
+// boundary so the domain model does not depend on object storage.
+type anchorDocument struct {
+	SequenceNo int64     `json:"sequence_no"`
+	ID         string    `json:"id"`
+	Hash       string    `json:"hash"`
+	AnchoredAt time.Time `json:"anchored_at"`
+}
+
+func (d anchorDocument) model() models.ChainAnchor {
+	return models.ChainAnchor{SequenceNo: d.SequenceNo, ID: d.ID, Hash: d.Hash, AnchoredAt: d.AnchoredAt}
+}
+
+func newAnchorDocument(anchor models.ChainAnchor) anchorDocument {
+	return anchorDocument{SequenceNo: anchor.SequenceNo, ID: anchor.ID, Hash: anchor.Hash, AnchoredAt: anchor.AnchoredAt}
+}
+
 // Retention is how long each anchor stays locked. A week outlasts several
 // missed daily runs, and is short enough to tear the project down.
 const Retention = 7 * 24 * time.Hour

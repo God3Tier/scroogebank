@@ -1,16 +1,41 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createClient } from '../api/clients.js'
+import { createClient, deleteClient, listClients } from '../api/clients.js'
+import { getDashboard } from '../api/dashboard.js'
 import AgentDashboard from './AgentDashboard.jsx'
 
-vi.mock('../api/clients.js', () => ({ createClient: vi.fn() }))
+vi.mock('../api/clients.js', () => ({ createClient: vi.fn(), listClients: vi.fn(), deleteClient: vi.fn() }))
+vi.mock('../api/dashboard.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getDashboard: vi.fn(),
+}))
+vi.mock('../api/engagement.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listEvents: vi.fn().mockResolvedValue([]),
+}))
+vi.mock('../api/activities.js', () => ({
+  listActivities: vi.fn().mockResolvedValue({ content: [], nextCursor: null }),
+}))
 
 function OpenedClient() {
   const { clientId } = useParams()
   return <p>Client page {clientId}</p>
 }
+
+const SYNTHETIC_CLIENT = { client_id: 'client-1', first_name: 'Synthetic', last_name: 'Client' }
+
+function clientPage(content, totalElements = content.length) {
+  return { content, page: 0, size: 20, totalElements, totalPages: Math.ceil(totalElements / 20) }
+}
+
+beforeEach(() => {
+  listClients.mockResolvedValue(clientPage([SYNTHETIC_CLIENT]))
+  getDashboard.mockResolvedValue({
+    panels: { transactions: { status: 'OK', data: { total: 12, byStatus: { Completed: 9, Pending: 3 } } } },
+  })
+})
 
 function renderDashboard() {
   render(
@@ -65,6 +90,25 @@ describe('creating a client', () => {
     }))
   })
 
+  it('starts with Singapore as the city, state and country', () => {
+    renderDashboard()
+
+    expect(screen.getByLabelText('City:')).toHaveValue('Singapore')
+    expect(screen.getByLabelText('State:')).toHaveValue('Singapore')
+    expect(screen.getByLabelText('Country:')).toHaveValue('Singapore')
+  })
+
+  it('checks the details before sending them', async () => {
+    renderDashboard()
+
+    fillInTheForm()
+    fireEvent.change(screen.getByLabelText('Phone Number:'), { target: { value: '91234567' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Profile' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('such as +6591234567')
+    expect(createClient).not.toHaveBeenCalled()
+  })
+
   it('explains a duplicate email or phone number', async () => {
     createClient.mockRejectedValue(Object.assign(new Error('duplicate client'), { status: 409 }))
     renderDashboard()
@@ -73,5 +117,64 @@ describe('creating a client', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Profile' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already exists')
+  })
+})
+
+describe('the dashboard figures and client list', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.restoreAllMocks()
+  })
+
+  function renderOnly() {
+    render(
+      <MemoryRouter initialEntries={['/agent']}>
+        <Routes>
+          <Route path="/agent" element={<AgentDashboard />} />
+          <Route path="/clients/:clientId" element={<OpenedClient />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('shows the totals from the client list and the business dashboard', async () => {
+    listClients.mockResolvedValue(clientPage([SYNTHETIC_CLIENT], 7))
+    renderOnly()
+
+    expect(await screen.findByText('7')).toBeInTheDocument()
+    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(getDashboard).toHaveBeenCalledWith('transactions', expect.objectContaining({ from: expect.any(String), to: expect.any(String) }))
+  })
+
+  it("lists the agent's clients from client-service", async () => {
+    renderOnly()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
+
+    expect(await screen.findByText('Synthetic Client')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByText('Client page client-1')).toBeInTheDocument()
+  })
+
+  it('explains that a client with accounts cannot be deleted', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    deleteClient.mockRejectedValue(Object.assign(new Error('client still has accounts'), { status: 409 }))
+    renderOnly()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('still has accounts')
+    expect(deleteClient).toHaveBeenCalledWith('client-1')
+  })
+
+  it('does not delete when the agent cancels', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderOnly()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    expect(deleteClient).not.toHaveBeenCalled()
   })
 })

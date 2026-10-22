@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-14.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -16,6 +16,8 @@ The spec says audit logs are accessible only to administrators, while the UI moc
 
 Needed for the ACM certificate on the internal ALB, at about USD 13/year plus USD 0.50/month for the hosted zone.
 
+**Resolved (2026-10-20)** by [ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8 (Proposed). The domain is registered by hand in Route 53, outside Terraform ([runbook](../runbooks/deploy-aws.md#register-a-domain-once-per-account)). With `domain_name` set, the CRM stack serves the app at `sg.<domain>` and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's hosted zone. The project account's domain is `itsag3t6.com`, already registered there until July 2027; its hosted zone costs USD 0.50/month. A new `.com` would cost about USD 15/year, which AWS credits do not cover.
+
 ## 3. Admin-wide activity view in user-service
 
 Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: business dashboard](x-factors.md#x-factor-2-business-dashboard)) could host this view later.
@@ -25,6 +27,8 @@ Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: 
 ## 4. Reconcile the x-factor branch ADRs with the target architecture
 
 Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) changed to match, so ADR-0006 and the `initial-lookback: 4h` setting stay as they are), ADR-0008 (shared database cluster, not its own RDS instance; revised drafts of ADR-0006 and ADR-0008 await the owner) and ADR-0010 (global-inference model, not Bedrock in Singapore; the model receives only public data, so this is a choice about residency and cost, not privacy); dashboard ADR-0003 (audit events through logs, not SQS); the health-monitor plan's open deployment decisions (now: daily scheduled task at 08:00 SGT, Bedrock in Singapore).
+
+**Dashboard part settled (2026-10-14).** The first dashboard branch's ADR-0003 was not carried over: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) replaces it, and dashboard-service on `dev` sends `DASHBOARD_VIEW` events straight to the audit queue. Still open: the alerts ADR-0008 and ADR-0010 points (on `dev`, the alert service defaults to the global-inference model through Bedrock in us-east-1, with AI off by default) and the health-monitor deployment decisions.
 
 ## 5. SFTP file format and schedule
 
@@ -42,6 +46,8 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 ## 8. Migrations on startup or as a task
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
+
+**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed), which chose neither. In AWS, the task of each service with a database runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. The container also gives the service its own login without schema rights. user-service and event-alert-service still migrate on startup locally and in their tests.
 
 ## 9. Client ID validation at import
 
@@ -75,7 +81,7 @@ The auditor code on `dev` differs from [Audit integrity and GDPR](../security/se
 - The auditor's database role has only `INSERT` and `SELECT` on `audit_log`.
 - Each run checks the latest S3 Object Lock anchor and writes a new one.
 
-This settles (a) to (d) and the findings table's columns. The implementation is on `task/base-features/audit-hash-chain`, and the anchor on `task/base-features/audit-chain-anchor`.
+This settles (a) to (d) and the findings table's columns. Both are now on `dev`: the hash chain and run-once chain-verify (PR #87) and the S3 Object Lock anchor (PR #88).
 
 Still open, from (e): which operations admins have on findings (read only, or also create and delete). Until that is decided, `dev`'s `GET`, `POST` and `DELETE` stay. Owner: the auditor's owner.
 
@@ -118,3 +124,19 @@ Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-d
 ## 22. Identity documents: wrong uploads and re-verification
 
 [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) keeps every uploaded document, because a document can become a verification's evidence, and leaves a verified client verified after any later edit. The Feature 2 owner must decide: (a) whether an agent or admin may remove a document uploaded by mistake (for example another client's) while it is not yet a verification's evidence, and how that is audited; (b) whether changing a verified client's identity details (name, date of birth) sets the client back to unverified, so the new details are checked against a document.
+
+## 23. Admin writes to client data
+
+The code lets admins update, delete and verify any client, and upload its documents: `RequireClientOwner` lets every admin through, as [ADR-0005](../adr/ADR-0005-cognito-security-across-features-1-and-2.md) decision 4, [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) and the [Feature 2 plan](../feature-plans/feature-2_plan.md) describe. The requirements Q&A says admins only read client data: "Admin have read only access to client info" (UM04); "Admin dont have write access on client related activities. Admin can't create new client account, update profile etc." (UM18); "Only Agent hand all client related activities. Admin has read access of it." (CPM31). The Feature 2 owner must decide whether to make admins read-only in client-service and account-service, and record it in an ADR that amends ADR-0005 and ADR-0041. The account status change added by [ADR-0050](../adr/ADR-0050-accounts-pending-until-client-verified.md) already follows UM18: only agents may make it.
+
+## 24. Client reassignment
+
+When an agent is disabled, deleted or leaves, an admin assigns their clients to another agent (Q&A UM07, UM15, UM17). Nothing implements this: a client's `created_by_agent_id` never changes, and account-service copies it as each account's `owner_agent_id` ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). The Feature 1 and Feature 2 owners must decide the endpoint, who may call it (the Q&A gives it to admins, which item 23 must allow), how the account copies are updated with it, and how it is audited.
+
+## 25. Business dashboard panels not served yet
+
+The business dashboard mockup showed panels that dashboard-service does not serve: most active clients by transaction value, ingestion freshness (when transactions were last imported), clients without an account, rejected verifications, and failed or long-pending transactions with their clients. The frontend hides them until they exist. Each needs a contract change to [`docs/api/dashboard-api.yaml`](../api/dashboard-api.yaml) and, where it names clients, a decision on how the transaction rows are joined to client names without moving personal data out of client-service ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md)). The business dashboard owner must decide which are worth building.
+
+## 26. Root user without MFA
+
+The account's root user has no MFA, and the team cannot sign in as root to add one: the account is a member of an AWS Organization the team does not control ([ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md)). Root is the one route to full control that the team's MFA-protected role does not cover. The Organization's administrators must decide between adding MFA to the root user and centrally removing member accounts' root credentials, so that no one can sign in as root.

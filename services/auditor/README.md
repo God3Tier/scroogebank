@@ -30,7 +30,7 @@ cd services/auditor
 docker compose up -d postgres localstack
 ```
 
-`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, loads the schema if it is missing, generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
+`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, applies `data/schema.sql` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
 
 To run it by hand instead, start the server from the `services/auditor` directory. Since
 LocalStack doesn't check AWS credentials, any non-empty values work:
@@ -100,8 +100,13 @@ Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over 
 | Method | Path | Behavior |
 |---|---|---|
 | `GET` | `/api/corrupted-logs` | Return all decodable findings as JSON. A finding chain-verify recorded also carries `audit_log_id` (the affected entry) and `reason`. |
-| `POST` | `/api/corrupted-logs` | Store a finding. The request body contains `id` (UUID) and `payload` (the original audit log); it cannot set `audit_log_id` or `reason`. The server sets `date_of_detect`. |
+| `POST` | `/api/corrupted-logs` | Store a finding. The request body contains `id` (UUID) and `payload` (the original audit log, using the snake_case fields below); it cannot set `audit_log_id` or `reason`. The server sets `date_of_detect`. |
 | `DELETE` | `/api/corrupted-logs/{id}` | Delete the finding with the given UUID. If the problem is still in the chain, chain-verify records it again on its next run. |
+
+The `payload` object uses `id`, `sequence_no`, `event_id`, `event_type`,
+`action`, `actor_id`, `source_service`, `timestamp`, `payload`, `parent_hash`
+and `hash`. The response uses the same field names, wrapped in a finding with
+`id`, optional `audit_log_id` and `reason`, and `date_of_detect`.
 
 Malformed JSON or UUIDs return `400`, a missing entry returns `404`, and
 unexpected storage failures return `500`.
@@ -111,7 +116,7 @@ TOKEN=<an admin's Cognito access token>
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs
 curl -X POST http://localhost:8080/api/corrupted-logs \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"Id":"audit-1","EventType":"CRUD","Action":"UPDATE"}}'
+  -d '{"id":"123e4567-e89b-12d3-a456-426614174000","payload":{"id":"audit-1","event_type":"CRUD","action":"UPDATE"}}'
 curl -X DELETE -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000
 ```
 
@@ -134,10 +139,11 @@ resource type allows these actions:
 |---|---|
 | `USER` | `CREATE`, `READ`, `UPDATE`, `DISABLE`, `PASSWORD_RESET`, `ROLE_CHANGE`, `LOGOUT` |
 | `ACCOUNT` (an account's transactions) | `READ` |
+| `TRANSACTION` (every account's transactions, admins only, [ADR-0043](../../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)) | `READ` |
 | `CORRUPTED_AUDIT_LOG` | `CREATE`, `READ`, `DELETE` |
 
 A successful event must carry `resource_id`, except a `READ` of
-`CORRUPTED_AUDIT_LOG`, which reads the whole list.
+`CORRUPTED_AUDIT_LOG` or `TRANSACTION`, which reads a whole list.
 
 The Cognito triggers (`services/cognito-triggers`, [ADR-0040](../../docs/adr/ADR-0040-cognito-triggers-java-lambda.md))
 send `source_service=COGNITO_TRIGGERS` with `event_type=AUTHENTICATION`. The
@@ -149,6 +155,21 @@ user's attributes. Each action must come from its own trigger source:
 |---|---|
 | `LOGIN` | `PostAuthentication_Authentication` |
 | `PASSWORD_RESET` (a user's own forgotten-password reset) | `PostConfirmation_ConfirmForgotPassword` |
+
+engagement-service (`services/engagement-service`, [ADR-0051](../../docs/adr/ADR-0051-engagement-service-and-mail-dispatcher.md))
+sends `source_service=ENGAGEMENT` with `event_type=ENGAGEMENT`. The actor is
+the agent's Cognito `sub`, or `system` for the emails its dispatcher sends.
+The payload is the same envelope event-alert-service uses: `event_id`,
+`event_version` (1 or more), `occurred_at` and a `data` object, which holds
+IDs, statuses and changed field names, never event titles, email bodies or
+addresses. The actions are:
+
+| Area | `action` |
+|---|---|
+| Calendar events | `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL` |
+| Emails the dispatcher sends | `INVITE_SENT`, `INVITE_FAILED`, `REMINDER_SENT`, `REMINDER_FAILED`, `REMINDER_MISSED` |
+| Client follow-up drafts | `DRAFT_GENERATE`, `DRAFT_DISCARD`, `EMAIL_SEND`, `EMAIL_SEND_FAILED` |
+| Notification preferences | `PREFERENCES_UPDATE` |
 
 The auditor long-polls the queue (up to 20s), so it should pick the message
 up, store it, and delete it shortly after.
@@ -237,10 +258,10 @@ Locally, `make run` and `make chain-verify` connect as `postgres`. The tests log
 - the role is enough for its job;
 - `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log` are refused.
 
-**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. `make run` loads the schema only into an empty database, so recreate yours: run `make db-reset`, then `make run`.
+**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. Recreate yours: run `make db-reset`, then `make run`. Flyway also refuses a database loaded before it, with the same fix.
 
 **Infrastructure requirements**, for when the infrastructure is built (ADR-0022, [ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)):
-- **Database logins:** the schema-migration task owns the tables. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify`. Neither service connects as the owner or the master user.
+- **Database logins:** the auditor's db-migrate container owns the tables, as the master user. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify` ([`afterMigrate.sql`](../../infrastructure/db-migrate/audit/afterMigrate.sql)). Neither service connects as the owner or the master user. `make migrate` creates the same logins locally, with local-only passwords.
 - **chain-verify's task:**
   - the ECS task definition runs the auditor image with the entry point `/chain-verify`;
   - it has its own task role and database secret;
@@ -317,7 +338,7 @@ make proto
 
 | RPC | Purpose |
 |---|---|
-| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
+| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` and an agent's calendar changes and sent client emails from `ENGAGEMENT` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views, engagement reminders, invites and drafts, and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
 
 user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
 

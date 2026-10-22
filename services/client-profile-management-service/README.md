@@ -10,13 +10,13 @@ The local service still verifies Cognito access tokens and records a CRM audit e
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)) and the identity documents bucket (see [Identity documents and verification](#identity-documents-and-verification)), initializes or migrates the schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
+The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)) and the identity documents bucket (see [Identity documents and verification](#identity-documents-and-verification)), applies `data/` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
 
 Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (default `http://localhost:8083`). Run account-service alongside this service, or client deletion returns 503.
 
 Each service has its own database, including locally: this one on port 5432, account-service's on 5436 and the SFTP stack's transactions database on 5437 ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). For the SFTP transaction integration, run `make run` here and in `../account-service`, then start the receiver with `make -C ../sftp up`.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`. A volume created before client data encryption holds plaintext clients and has no blind-index columns, so client endpoints fail until you run `make db-reset`. A volume created before identity documents has no `client_documents` table or `verified_*` columns, so every client endpoint fails until you run `make db-reset`. The same applies after the LocalStack container is recreated (`make run` recreates it when its settings change, as they did when S3 was added): its keys and documents are gone, so clients created before cannot be read.
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume loaded before Flyway has no schema history, so `make run` stops until you run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`. A volume created before client data encryption holds plaintext clients and has no blind-index columns, so client endpoints fail until you run `make db-reset`. A volume created before identity documents has no `client_documents` table or `verified_*` columns, so every client endpoint fails until you run `make db-reset`. The same applies after the LocalStack container is recreated (`make run` recreates it when its settings change, as they did when S3 was added): its keys and documents are gone, so clients created before cannot be read.
 
 ## Cognito authorization
 
@@ -26,11 +26,31 @@ The verified Cognito `sub` is the creator identity. Agents may read, update, ver
 
 account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `created_by_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
 
+## Listing clients
+
+`GET /api/clients?page&size` lists clients that are not deleted, newest first ([ADR-0043](../../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)). An agent gets only the clients they created; an admin gets every client. The scope comes from the verified token only, so there is no parameter that widens it. `page` starts at 0 and `size` is 1 to 100 (default 20); other values return 400. The response is `{content, page, size, totalElements, totalPages}`, the same shape as user-service's pages, and each entry has the fields of `GET /api/clients/{id}`. A client whose data key is gone (erased, [ADR-0030](../../docs/adr/ADR-0030-client-data-envelope-encryption.md)) is left out of the page but still counted in `totalElements`. The request is audited like the other client endpoints, with no client ID.
+
 ## Business dashboard figures
 
 `GET /aggregates/clients/stats?from&to[&groupBy=agent]` and `GET /aggregates/clients/action-items[?staleDays]` serve the business dashboard's client figures and work queue. They take the caller's access token, forwarded by the dashboard, and scope by it: agents see their own clients, and per-agent rows are for admins only (403 otherwise). They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted clients are never counted; statuses are grouped upper-cased because clients verified before [ADR-0041](../../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md) hold `verified` and newer ones `VERIFIED` ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
 
 `GET /aggregates/clients/team-comparison?days=7|30|90` compares the caller's clients onboarded over the last 7, 30 or 90 days (ending today in Singapore) with the team median. The median is computed here so no other agent's figure leaves the service. The group is every agent with a client, not deleted, created in the last 12 months, and the median is withheld when fewer than 5 agents are in it. Other windows are refused, so medians over chosen windows cannot be compared to narrow down one agent's figure (ADR-0038).
+
+## Field validation
+
+Creating or updating a client checks every field against the project brief's Appendix 2 validations and returns 400 with the first problem:
+
+| Field | Rule |
+|---|---|
+| First and last name | 2 to 50 characters, letters and spaces only |
+| Date of birth | An age between 18 and 100 on today's Singapore date |
+| Email | One `@` and a dot in the domain, no spaces, up to 255 characters |
+| Phone number | An optional `+` and 10 to 15 digits, after removing spaces, hyphens, dots and brackets (`+65 9123-4567` is fine; a bare 8-digit Singapore number is not) |
+| Address | 5 to 100 characters |
+| City, state, country | 2 to 50 characters |
+| Postal code | 6 digits when the country is Singapore (`SG`, `SGP`, `Singapore` or `Republic of Singapore`, punctuation ignored); otherwise 4 to 10 letters, digits, spaces or hyphens |
+
+Gender is only required: the brief lists Male, Female, Non-binary and Prefer not to say, while the frontend offers male, female and other, so restricting it needs the Feature 2 owner's decision first. The frontend runs the same checks before sending (`frontend/src/components/clientValidation.js`) and fills in Singapore as the new client's city, state and country.
 
 ## Deleting a client
 
@@ -82,7 +102,7 @@ Client personal data is encrypted in the application before it reaches the datab
 
 - **Encrypted:** the 11 personal fields: first and last name, date of birth, gender, email, phone number, address, city, state, country and postal code. Each is AES-256-GCM ciphertext, bound to its client and column, so it cannot be copied to another client or field. The client ID, owning agent, verification status and timestamps stay plaintext for lookups, ownership checks and the dashboard figures.
 - **One data key per client.** Creating a client calls KMS `GenerateDataKey` on the data key (`CLIENT_DATA_KEY_ID`) with the client ID as encryption context, and stores only the wrapped key in the DynamoDB table `CLIENT_KEYS_TABLE`, before the row is inserted. A stored key is never overwritten; if the insert fails, the new key is deleted. Reads unwrap the key with KMS `Decrypt` and keep it in memory for 5 minutes. Deleting a client is a soft delete and keeps its key.
-- **Uniqueness without plaintext.** `email_hash` and `phone_number_hash` are blind indexes: HMAC-SHA-256 from KMS `GenerateMac` with the shared HMAC key (`CLIENT_INDEX_KEY_ID`), which never leaves KMS. They are computed over the email trimmed and lowercased, and the phone number with spaces, hyphens, dots and brackets removed, so `Alice@Example.test` and `alice@example.test`, or `+65 6000-0101` and `+6560000101`, count as the same. No country code is assumed. Uniqueness counts only clients that are not deleted, so a deleted client's email and phone can be reused. The stored values are the ones entered.
+- **Uniqueness without plaintext.** `email_hash` and `phone_number_hash` are blind indexes: HMAC-SHA-256 from KMS `GenerateMac` with the shared HMAC key (`CLIENT_INDEX_KEY_ID`), which never leaves KMS. They are computed over the email trimmed and lowercased, and the phone number with spaces, hyphens, dots and brackets removed, so `Alice@Example.test` and `alice@example.test`, or `+65 6000-0101` and `+6560000101`, count as the same. No country code is assumed. Uniqueness counts only clients that are not deleted, so a deleted client's email and phone can be reused. Creating or updating a client with an email or phone another client already has returns 409; the unique indexes on the blind indexes make the final check, so two requests racing for the same contact get one success and one 409. The stored values are the ones entered.
 - **The database no longer checks field lengths**, because it stores ciphertext; the service's validation does.
 - The dashboard's action items include client names, so the service decrypts them for each row it returns.
 
