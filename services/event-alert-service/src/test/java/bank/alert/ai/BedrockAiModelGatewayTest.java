@@ -3,6 +3,7 @@ package bank.alert.ai;
 import bank.alert.config.AiProperties;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import software.amazon.awssdk.core.document.Document;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.model.ContentBlock;
 import software.amazon.awssdk.services.bedrockruntime.model.ConverseOutput;
@@ -25,12 +26,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class BedrockAiModelGatewayTest {
-    private static final String MODEL = "global.openai.gpt-5.6-luna";
+    private static final String MODEL = "global.amazon.nova-2-lite-v1:0";
 
     @Test
     void sendsOnlyTheBoundedPublicRequestAndReturnsText() {
         BedrockRuntimeClient client = mock(BedrockRuntimeClient.class);
-        Message message = Message.builder().content(ContentBlock.fromText("{\"abstain\":true}"))
+        Message message = Message.builder().content(ContentBlock.fromToolUse(tool -> tool
+                        .toolUseId("tool-1")
+                        .name("classify-public-event")
+                        .input(Document.mapBuilder().putBoolean("abstain", true).build())))
                 .build();
         when(client.converse(any(ConverseRequest.class))).thenReturn(ConverseResponse.builder()
                 .output(ConverseOutput.builder().message(message).build())
@@ -59,11 +63,12 @@ class BedrockAiModelGatewayTest {
                         "alert-public-v1", "structured JSON"));
         assertThat(sent.inferenceConfig().maxTokens()).isEqualTo(300);
         assertThat(sent.inferenceConfig().temperature()).isZero();
-        assertThat(sent.outputConfig().textFormat().typeAsString()).isEqualTo("json_schema");
-        assertThat(sent.outputConfig().textFormat().structure().jsonSchema().name())
-                .isEqualTo("classify-public-event");
-        assertThat(sent.outputConfig().textFormat().structure().jsonSchema().schema())
-                .isEqualTo("classification-v1");
+        assertThat(sent.toolConfig().tools()).singleElement().satisfies(tool -> {
+            assertThat(tool.toolSpec().name()).isEqualTo("classify-public-event");
+            assertThat(tool.toolSpec().inputSchema().json().asMap().get("type").asString())
+                    .isEqualTo("object");
+        });
+        assertThat(sent.toolConfig().toolChoice().tool().name()).isEqualTo("classify-public-event");
         assertThat(sent.overrideConfiguration().flatMap(configuration -> configuration.apiCallTimeout()))
                 .contains(Duration.ofSeconds(12));
     }
@@ -112,7 +117,7 @@ class BedrockAiModelGatewayTest {
     private static AiModelRequest request(String model) {
         return new AiModelRequest("CLASSIFY_PUBLIC_EVENT", model, "alert-public-v1",
                 "Use public only.", "{\"referenceId\":\"public-1\"}",
-                "classification-v1", 300);
+                SafeEventClassifier.OUTPUT_SCHEMA, 300);
     }
 
     private static AiProperties properties(boolean enabled) {

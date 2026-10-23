@@ -43,7 +43,7 @@ class SyntheticHoldingsSearchUniverseProviderTest {
     }
 
     private static IngestionProperties properties() {
-        return new IngestionProperties(false, "agentcore-web-search-1.2.0",
+        return new IngestionProperties(false, "tavily",
                 Duration.ofMinutes(5), Duration.ofHours(4), 4, 10, 3,
                 Duration.ofDays(90), new BigDecimal("0.40"), 2,
                 List.of("sgx.com"), List.of("earnings"));

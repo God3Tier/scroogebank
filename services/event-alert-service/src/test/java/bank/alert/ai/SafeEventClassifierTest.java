@@ -123,7 +123,7 @@ class SafeEventClassifierTest {
     }
 
     static AiProperties properties(boolean enabled) {
-        return new AiProperties(enabled, "gpt-5.6-luna", "alert-public-v1", 12_000,
+        return new AiProperties(enabled, "global.amazon.nova-2-lite-v1:0", "alert-public-v1", 12_000,
                 8_000, 1_200, 2, Duration.ofSeconds(20), new BigDecimal("0.60"));
     }
 

@@ -27,14 +27,14 @@ class AiBenchmarkReportCliTest {
                 new BenchmarkFixtureFile.FixtureExample("two", "Community event", "Public excerpt",
                         List.of("SYN-2"), null, false, null))));
         mapper.writeValue(runPath.toFile(), new BenchmarkRunFile(
-                "global.openai.gpt-5.6-luna", "alert-public-v1", new BigDecimal("0.0012"), List.of(
+                "global.amazon.nova-2-lite-v1:0", "alert-public-v1", new BigDecimal("0.0012"), List.of(
                 observation("one", EventType.EARNINGS, true, 125),
                 observation("two", null, false, 250))));
 
         VersionedBenchmarkReport result = new AiBenchmarkReportCli(mapper).generate(fixturePath, runPath);
 
         assertThat(result.fixtureVersion()).isEqualTo("fixture-v1");
-        assertThat(result.model()).isEqualTo("global.openai.gpt-5.6-luna");
+        assertThat(result.model()).isEqualTo("global.amazon.nova-2-lite-v1:0");
         assertThat(result.promptVersion()).isEqualTo("alert-public-v1");
         assertThat(result.fixtureLabelStatus()).isEqualTo("HUMAN_REVIEWED");
         assertThat(result.estimatedCostUsd()).isEqualByComparingTo("0.0012");
@@ -53,7 +53,7 @@ class AiBenchmarkReportCliTest {
                 new BenchmarkFixtureFile.FixtureExample("one", "Synthetic earnings", "Public excerpt",
                         List.of("SYN-1"), EventType.EARNINGS, true, null))));
         mapper.writeValue(runPath.toFile(), new BenchmarkRunFile(
-                "global.openai.gpt-5.6-luna", "alert-public-v1", new BigDecimal("0.0006"),
+                "global.amazon.nova-2-lite-v1:0", "alert-public-v1", new BigDecimal("0.0006"),
                 List.of(observation("one", EventType.EARNINGS, true, 125))));
 
         VersionedBenchmarkReport result = new AiBenchmarkReportCli(mapper).generate(fixturePath, runPath);

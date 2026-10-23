@@ -116,6 +116,7 @@ class AlertMutationServiceTest {
                     (client_ref, account_ref, assigned_agent_subject, source_version)
                 VALUES ('syn-client-001', 'syn-account-001', 'syn-agent-001',
                         'synthetic-holdings-v1')
+                ON CONFLICT (client_ref) DO NOTHING
                 """);
         HoldingSnapshot holding = holdingRepository.save(new HoldingSnapshot(
                 UUID.fromString("30000000-0000-4000-8000-000000000001"),

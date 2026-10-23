@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 
 @ConfigurationProperties(prefix = "alert.ingestion")
 public record IngestionProperties(
@@ -22,7 +23,8 @@ public record IngestionProperties(
         List<String> eventTerms) {
 
     public IngestionProperties {
-        provider = provider == null || provider.isBlank() ? "agentcore-web-search-1.2.0" : provider;
+        provider = provider == null || provider.isBlank()
+                ? "tavily" : provider.strip().toLowerCase(Locale.ROOT);
         overlap = overlap == null ? Duration.ofMinutes(5) : overlap;
         initialLookback = initialLookback == null ? Duration.ofHours(4) : initialLookback;
         maxQueriesPerRun = maxQueriesPerRun <= 0 ? 4 : Math.min(maxQueriesPerRun, 4);

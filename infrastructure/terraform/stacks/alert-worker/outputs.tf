@@ -13,6 +13,11 @@ output "log_group" {
   value       = module.event_alert_worker.log_group_name
 }
 
+output "tavily_secret_arn" {
+  description = "Populate this secret with the Tavily API key before enabling ingestion. The value is never managed by Terraform."
+  value       = aws_secretsmanager_secret.tavily.arn
+}
+
 output "schedule" {
   description = "The schedule's name and whether it is running (ENABLED needs the CRM stack running and ingestion_enabled)."
   value = {

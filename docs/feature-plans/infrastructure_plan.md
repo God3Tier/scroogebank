@@ -60,4 +60,4 @@ Recorded in ADR-0042:
 - Most services log in as their database's master user until INF-03.
 - Without `domain_name`, the internal ALB listens on HTTP inside the VPC and the app uses the default `*.cloudfront.net` address (INF-13).
 - The auditor's `GET`, `POST` and `DELETE /api/corrupted-logs` stay until open item 13(e) is settled.
-- The alert service defaults to a global-inference model in us-east-1 with AI off (open item 4); the stack leaves AI and ingestion switched off.
+- The alert service defaults to global Nova 2 Lite inference from ap-southeast-1 with AI off (open item 4); the stack leaves AI and ingestion switched off.

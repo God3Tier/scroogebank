@@ -6,19 +6,23 @@
 - Owners: Azeez (search, AI, scheduled worker, operations) and Hayyun (domain, migrations), as in section 19.1 of the feature plan
 - Related decisions: [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) and [ADR-0007](../adr/ADR-0007-alert-service-runtime-boundary.md), both Proposed
 
-**Update 2026-10-20:** gaps 3 and 4 are fixed (migration V3, `JdbcOutboundControlStore`, `PostgresIngestionRunLock`; ADR-0014 amendment). Gaps 1, 2 and 5 are built and tested against fakes and a local database ([ADR-0049](../adr/ADR-0049-alert-source-to-alert-pipeline.md)); what is still unproven is the real AWS service, below. The operator replay adapter, listed with these, is built too.
+**Update 2026-10-23:** gaps 1, 3, 4 and 5 are implemented. ADR-0050
+replaced the blocked AgentCore path with Tavily; its bounded adapter and secret
+wiring are implemented. The remaining proof is a real-key Tavily benchmark, a
+real-result end-to-end run, and CloudWatch/Terraform validation.
 
 None of these gaps is a risk today. Ingestion and the model are off by default, and nothing is deployed. Each one blocks switching part of the feature on. EDA-D1-06 fixes none of them; each needs a choice its owner should make.
 
 | # | Gap | Blocks | Owner |
 |---|---|---|---|
 | 1 | ~~A worker run never creates alerts~~ **Built 2026-10-20**, needs a live run with the real model | Nothing | Hayyun and Azeez (EDA-D2-06) |
-| 2 | ~~No AgentCore search client~~ **Built 2026-10-20** against a fake gateway; the real gateway is unproven | The live smoke test | Azeez (EDA-D1-02, needs AWS) |
+| 2 | ~~No usable live search path~~ **Tavily built 2026-10-23**; needs a real-key benchmark | Live enablement | Azeez (EDA-D1-02) |
 | 3 | ~~Monthly controls reset in every worker run~~ **Fixed 2026-10-20** | Nothing | Azeez, with a migration from Hayyun |
 | 4 | ~~Two runs at once both search~~ **Fixed 2026-10-20** | Nothing | Azeez |
 | 5 | ~~Worker metrics are not exported~~ **Built 2026-10-20**, off by default; needs a CloudWatch check | Nothing | Azeez (EDA-D1-05, needs AWS) |
 
-All five are built. What remains is proving them on AWS: the AgentCore call (gap 2), the Bedrock model end to end (gap 1), and the CloudWatch export (gap 5).
+All five have an implementation. What remains is proving Tavily with a real key
+and result (gap 2), the model end to end (gap 1), and CloudWatch export (gap 5).
 
 ## 1. A worker run never creates alerts
 
@@ -47,17 +51,20 @@ All five are built. What remains is proving them on AWS: the AgentCore call (gap
 
 Record the fan-out choice in the feature plan, or in an ADR if it changes the data boundary.
 
-## 2. No AgentCore search client
+## 2. Live search provider proof
 
-**Built 2026-10-20.** `HttpAgentCoreGatewayClient` makes the IAM-signed MCP call the spike makes, and `alert.ingestion.agentcore.gateway-url` switches it on. It has run only against a fake gateway, so the real response shape is unconfirmed. The text below records the gap as found.
+**Implemented 2026-10-23 ([ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md)).**
+`TavilySearchProvider` is the only runtime search adapter. It sends bounded public
+terms and date/domain filters, validates results again locally, and fails closed
+when the key is absent. The blocked AgentCore runtime adapter and environment
+variables were removed; the historical spike remains under `scripts/` as decision
+evidence.
 
-**What happens.** [`AgentCoreGatewayClient`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/AgentCoreGatewayClient.java) is an interface with no implementation, so `AgentCoreSearchProvider` is never created. In its place, [`SearchProviderConfiguration`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/SearchProviderConfiguration.java) supplies a provider that throws `PROVIDER_NOT_CONFIGURED`.
-
-**Effect.** With `ALERT_INGESTION_ENABLED=true`, every worker run fails and exits with code 1. It fails cleanly: the run is recorded as `FAILED`, no results are invented, and the watermark does not move. This matches ADR-0031's validation case of a run with Tokyo unavailable. `WorkerApplicationTest` checks this.
-
-**Why it was left.** The client needs the Tokyo AgentCore gateway and IAM-signed calls (EDA-D1-02, blocked on infrastructure). Open item 14 must also confirm that the service is available in Tokyo.
-
-**Suggested fix.** Implement `AgentCoreGatewayClient` with the AWS SDK and default credentials, and create it as a bean only when ingestion is enabled. Test it against a fake gateway, as the other adapters are tested.
+**Remaining gate.** Populate the worker-owned Secrets Manager secret out of band,
+run the operations-runbook benchmark with a real key, and prove one real result
+through classification, scoring, alert persistence, and audit delivery. Do not
+enable scheduled ingestion until result quality, latency, terms, and billed cost
+are reviewed.
 
 ## 3. Monthly controls reset in every worker run
 

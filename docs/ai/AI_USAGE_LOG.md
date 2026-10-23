@@ -495,3 +495,53 @@
   ADR-0006 through ADR-0016; checked Markdown structure, Mermaid participants,
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
+
+## 2026-10-23 — Tavily live-news path and dependency vulnerability repair
+
+- Human owner: Azeez; Hayyun review remains required for shared domain and deployment evidence.
+- Tool: OpenAI Codex.
+- Use: reproduce npm security advisories; update Vite/Vitest to patched releases;
+  verify Tavily's official request/response contract; implement the bounded
+  `PublicSearchProvider`; add secret-only ECS/Terraform wiring; remove obsolete
+  AgentCore IAM; trace and synchronize the provider-to-alert flow, ADR, feature
+  plan, budget and runbook.
+- Human verification required: review/approve the diff; run a saved Terraform
+  plan in the lower environment; populate the Tavily secret outside Terraform;
+  review provider terms and billed-credit benchmark; run a real-result worker
+  pass and inspect alert/audit evidence before enabling the schedule.
+- Data: repository content, synthetic search terms and a fake local Tavily HTTP
+  server only. No API key, real client data, live provider query or AWS mutation
+  was used.
+- Verification: `npm audit` reports zero vulnerabilities; frontend tests
+  (116/116), ESLint and the production build pass. Before cleanup, all 170 Java
+  tests that do not require Docker passed; after removing the inactive AgentCore
+  adapter and its 13 tests, all 157 remaining non-Docker tests pass. Once Docker
+  became available, the full suite exposed 16 duplicate-key errors in four test
+  seed routines that repeated migration V6 data; the setup was made idempotent
+  and the clean rerun passes 189/189, including all PostgreSQL Testcontainers
+  tests. Terraform validation could not run because the Terraform CLI is not
+  installed. No live AWS/Tavily result, quality, latency, usage-credit or cost
+  evidence is claimed.
+
+## 2026-10-23 — Singapore Bedrock source and Nova 2 Lite production pin
+
+- Human owner: Azeez; Hayyun review remains required for the ADR and deployment change.
+- Tool: OpenAI Codex.
+- Use: replace the remaining Luna/us-east-1 application fallbacks with
+  `global.amazon.nova-2-lite-v1:0` and `ap-southeast-1`; remove the temporary
+  wording from the worker stack; add regression assertions; and synchronize the
+  ADR, feature plan, service README and operations runbook with the Tavily-based
+  architecture that no longer requires Tokyo.
+- Human verification required: review/approve the model and cross-region data
+  processing decision; install Terraform and run its offline tests plus a saved
+  lower-environment plan before apply; keep AI and ingestion disabled until the
+  existing benchmark gates pass.
+- Data: repository configuration and synthetic tests only. No AWS call, Tavily
+  call, API key, credential or real client data was used.
+- Verification: the focused Nova defaults, Bedrock gateway and Tavily adapter
+  tests pass (10/10); compilation and all non-container tests reached by the full
+  run passed. The full rerun could not complete because Docker Desktop's Linux
+  engine pipe was absent. The same worktree had passed the complete PostgreSQL
+  Testcontainers suite (189/189) earlier in the session before this configuration
+  change. `git diff --check` passes, no runtime Luna/us-east-1 fallback remains,
+  and Terraform validation remains unavailable because the CLI is not installed.

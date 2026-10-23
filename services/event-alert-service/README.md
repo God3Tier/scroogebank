@@ -21,16 +21,15 @@ watermark only after the complete run succeeds. Retrying a partially persisted
 failed window derives its final result count from durable rows, preserving
 idempotent replay accounting. Historical replay is restricted to `WORKER` mode,
 cannot extend into the future or exceed the configured lookback span, and never
-moves the scheduler watermark. The replay is started by an operator as described below. `IngestionJob`
-can run only in `WORKER` mode. Supplying the IAM-authenticated AgentCore Gateway client remains
-blocked on the approved infrastructure task; the application does not create or
-contact AWS resources by itself.
+moves the scheduler watermark. The replay is started by an operator as described
+below. `IngestionJob` can run only in `WORKER` mode. Tavily is the sole live-news
+adapter; without its key the worker fails closed and makes no outbound search.
 
 The holdings-derived search universe is calculated only in Singapore. The
 synthetic holdings fixture supplies stable instrument IDs; the `instrument`
 catalogue maps them deterministically to public ticker, issuer, and sector terms.
 By default an instrument must be represented by at least two distinct clients and
-5% of clients in the snapshot. Tokyo receives none of those counts or private
+5% of clients in the snapshot. Tavily receives none of those counts or private
 holding facts. Unknown/inactive IDs and an empty eligible universe fail closed.
 
 The AI boundary is independently disabled by default with
@@ -43,8 +42,10 @@ source-cited, uncertainty-bearing, and rejected when they contain advice
 language.
 
 An opt-in Bedrock Runtime implementation uses the Converse API with the pinned
-global Luna inference profile, AWS default credential chain, configured region,
-zero temperature, output-token cap, and per-request timeout. Enabling it requires
+`global.amazon.nova-2-lite-v1:0` inference profile from the Singapore source
+Region, AWS default credential chain, zero temperature, output-token cap, and
+per-request timeout. Global inference may process the request in another supported
+AWS Region. Enabling it requires
 both `ALERT_AI_PROVIDER=bedrock` and `ALERT_AI_ENABLED=true`; keep both disabled
 until ADR-0010 is accepted and the benchmark gates pass. The committed tests mock
 the SDK and make no AWS call. Never put credentials in repository configuration.
@@ -122,9 +123,12 @@ Severity comes from a fixed table by event type. It does nothing while
 for the next run. The run exits 1 if a source errors. Its summary line is
 `worker pipeline examined=… processed=… no_match=… alerts_created=… deferred=… errors=…`.
 
-`ALERT_AGENTCORE_GATEWAY_URL` (and `ALERT_AGENTCORE_REGION`, default
-`ap-northeast-1`) switch on the IAM-signed Gateway client; the credentials come
-from the task role. With no URL the search fails cleanly as
+`ALERT_SEARCH_PROVIDER=tavily` and `ALERT_TAVILY_API_KEY` switch on the selected
+live-news adapter (ADR-0050). In AWS the key is injected from the worker-owned
+Secrets Manager secret; never commit or place it in Terraform. Requests use
+Tavily's restrictive domain mode and published-date filter, and results are
+checked again for approved HTTPS domains, the exact UTC window, count and body
+size before persistence. With no key the search fails cleanly as
 `PROVIDER_NOT_CONFIGURED`.
 
 An operator replays a past window by starting a one-off worker task with
@@ -140,10 +144,9 @@ It is off by default because every distinct metric and tag combination is billed
 Not done yet (details, owners and suggested fixes in
 [`docs/feature-plans/event-driven-alerts_gaps.md`](../../docs/feature-plans/event-driven-alerts_gaps.md)):
 
-- The AgentCore client has only run against a fake gateway, and the pipeline
-  only with a fixture model, so the real service's response shape and the real
-  model's behaviour are unproven. The smoke test in the operations runbook
-  settles both.
+- Tavily has contract tests but still needs a real-key lower-environment
+  benchmark. The complete pipeline also needs a real-result smoke test. The
+  operations runbook defines both gates.
 
 Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
 every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database
@@ -156,6 +159,48 @@ Docker must be running because repository tests use PostgreSQL Testcontainers.
 
 ```powershell
 mvn -B -pl services/event-alert-service -am verify
+```
+
+## Run a live Tavily pull locally
+
+Start a disposable PostgreSQL database (choose another host port if `5438` is
+already used):
+
+```powershell
+docker run --name event-alert-postgres --rm -d `
+  -e POSTGRES_DB=event_alert `
+  -e POSTGRES_USER=event_alert `
+  -e POSTGRES_PASSWORD=local-only `
+  -p 5438:5432 postgres:16-alpine
+```
+
+Set the worker environment in the same PowerShell session. Paste the key only
+into your local shell or an approved secret store; never write it to the repo.
+
+```powershell
+$env:ALERT_MODE = 'WORKER'
+$env:EVENT_ALERT_DB_URL = 'jdbc:postgresql://localhost:5438/event_alert'
+$env:EVENT_ALERT_DB_USERNAME = 'event_alert'
+$env:EVENT_ALERT_DB_PASSWORD = 'local-only'
+$env:ALERT_INGESTION_ENABLED = 'true'
+$env:ALERT_SEARCH_PROVIDER = 'tavily'
+$env:ALERT_TAVILY_API_KEY = '<your-tavily-key>'
+$env:ALERT_AI_ENABLED = 'false'
+$env:ALERT_AI_PROVIDER = 'none'
+mvn -B -f services/event-alert-service/pom.xml spring-boot:run
+```
+
+The worker runs one bounded window and exits. A successful pull logs
+`worker run status=SUCCEEDED`; it never logs the key, query text, titles, or
+URLs. With AI disabled, sources are stored but alert generation is deferred.
+Afterwards, clear the shell variables and stop the disposable database:
+
+```powershell
+'ALERT_MODE','EVENT_ALERT_DB_URL','EVENT_ALERT_DB_USERNAME',
+'EVENT_ALERT_DB_PASSWORD','ALERT_INGESTION_ENABLED','ALERT_SEARCH_PROVIDER',
+'ALERT_TAVILY_API_KEY','ALERT_AI_ENABLED','ALERT_AI_PROVIDER' |
+  ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+docker stop event-alert-postgres
 ```
 
 Runtime database settings are supplied through `EVENT_ALERT_DB_URL`,

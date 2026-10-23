@@ -7,7 +7,7 @@ environment  = "staging"
 # The bootstrap stack's state_bucket output.
 state_bucket = "crm-tfstate-123456789012"
 
-# Both stay false until the AgentCore client exists, the live spike has passed
-# and the AI benchmark gates are met.
+# Both stay false until the Tavily secret is populated, the live search
+# benchmark has passed and the AI benchmark gates are met.
 ingestion_enabled = false
 ai_enabled        = false

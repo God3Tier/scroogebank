@@ -19,12 +19,14 @@ human can investigate before the feature consumes its full allocation.
 
 | Cost source | Planning quantity | Planning estimate | Evidence still required |
 |---|---:|---:|---|
-| AgentCore search | 720 searches/month | USD 5.04/month | Provider bill and current regional price |
+| Tavily basic news search | 720 credits/month (one credit/search per current API contract) | Unknown until account-plan benchmark | Tavily usage dashboard, invoice/plan terms and measured credits |
 | Bedrock model inference | Bounded by 200,000 tokens/month | Unknown | Selected model, measured input/output tokens, current price |
 | Scheduled ECS worker and EventBridge | Bounded scheduled runs | Unknown | Deployed task size, duration, schedule, and bill |
 | PostgreSQL, logs, metrics, alarms, data transfer | Shared/incremental usage | Unknown | Tagged resource inventory and billing evidence |
 
-The search estimate follows the approved feature plan's prototype rate. It is a
+The search quantity follows the approved feature plan's prototype rate. ADR-0050
+replaced AgentCore with Tavily; no dollar amount is approved until the owner
+records the account plan and a billed lower-environment benchmark. It is a
 planning assumption, not a billing claim.
 
 ## Enforced application controls

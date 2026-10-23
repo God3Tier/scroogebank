@@ -4,8 +4,8 @@
 # reads them from that stack's alerts_worker_inputs output. It is the same
 # image as the event-alert-service API, started with ALERT_MODE=WORKER
 # (ADR-0007), so it needs no repository, database or security group of its own.
-# Apply the CRM stack first and destroy this one first. The Tokyo AgentCore
-# gateway is not created here: its resources are decided after the live spike.
+# Apply the CRM stack first and destroy this one first. The Tavily search API
+# is called directly from this worker (ADR-0050).
 
 data "terraform_remote_state" "crm" {
   backend = "s3"
@@ -36,19 +36,12 @@ locals {
   # route to any Region, so the model ARN is Region-wildcarded and tied to the
   # profile by the bedrock:InferenceProfileArn condition.
   #
-  # TEMPORARY (2026-10-22, Hayyun): the real pin "global.openai.gpt-5.6-luna"
-  # cannot be invoked in this account -- the AWS Marketplace subscription
-  # third-party Bedrock models require cannot be completed from this member
-  # account (needs the AWS Organization's management account). Swapped here
-  # to a native Amazon model, which needs no Marketplace subscription, so the
-  # mock-data pipeline test can exercise a real AI call end-to-end. Matched by
-  # the ALERT_AI_MODEL env var below, which overrides application.yml's
-  # pinned default for this task only. Revert both before merging.
+  # Nova 2 Lite is the accepted production model (ADR-0050). It is called from
+  # Singapore through its global inference profile; live-news retrieval is a
+  # separate, direct Tavily call and does not require a Tokyo Bedrock endpoint.
   bedrock_profile_id  = "global.amazon.nova-2-lite-v1:0"
   bedrock_model_id    = "amazon.nova-2-lite-v1:0"
   bedrock_profile_arn = "arn:${local.partition}:bedrock:${var.bedrock_region}:${local.account_id}:inference-profile/${local.bedrock_profile_id}"
-
-  use_agentcore = var.ingestion_enabled && var.agentcore_gateway_arn != null
 }
 
 # ----------------------------------------------------------------- the task
@@ -85,12 +78,12 @@ data "aws_iam_policy_document" "metrics" {
   }
 }
 
-data "aws_iam_policy_document" "agentcore" {
-  statement {
-    sid       = "InvokeTheSearchGateway"
-    actions   = ["bedrock-agentcore:InvokeGateway"]
-    resources = [coalesce(var.agentcore_gateway_arn, "arn:${local.partition}:bedrock-agentcore:ap-northeast-1:${local.account_id}:gateway/unset")]
-  }
+resource "aws_secretsmanager_secret" "tavily" {
+  # Prefix permits a clean redeploy while an old destroyed stack's secret is
+  # still inside its seven-day recovery window.
+  name_prefix             = "${local.name}-alert-worker-tavily-"
+  description             = "Tavily API key for the event-alert worker (populate out of band; never put the value in Terraform)"
+  recovery_window_in_days = 7
 }
 
 module "event_alert_worker" {
@@ -113,6 +106,7 @@ module "event_alert_worker" {
     EVENT_ALERT_DB_URL      = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
     AWS_REGION              = var.aws_region
     ALERT_INGESTION_ENABLED = tostring(var.ingestion_enabled)
+    ALERT_SEARCH_PROVIDER   = "tavily"
     ALERT_AI_ENABLED        = tostring(var.ai_enabled)
     ALERT_AI_PROVIDER       = var.ai_enabled ? "bedrock" : "none"
     ALERT_AI_BEDROCK_REGION = var.bedrock_region
@@ -122,22 +116,21 @@ module "event_alert_worker" {
     ALERT_CLOUDWATCH_METRICS_ENABLED = tostring(var.cloudwatch_metrics_enabled)
     ALERT_CLOUDWATCH_NAMESPACE       = var.cloudwatch_namespace
     },
-    var.agentcore_gateway_url == null ? {} : { ALERT_AGENTCORE_GATEWAY_URL = var.agentcore_gateway_url },
-    # TEMPORARY (2026-10-22, Hayyun): overrides application.yml's pinned
-    # model to match the local.bedrock_profile_id swap above. Revert together.
+    # Keep the task definition explicit even though application.yml has the
+    # same default, so a deployment cannot drift when application defaults move.
     !var.ai_enabled ? {} : { ALERT_AI_MODEL = local.bedrock_profile_id },
   )
   secrets = {
     EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"
     EVENT_ALERT_DB_PASSWORD = "${local.crm.alerts_db_secret_arn}:password::"
+    ALERT_TAVILY_API_KEY     = aws_secretsmanager_secret.tavily.arn
   }
-  secret_arns = [local.crm.alerts_db_secret_arn]
+  secret_arns = [local.crm.alerts_db_secret_arn, aws_secretsmanager_secret.tavily.arn]
 
   # Only what the switched-on capabilities need (least privilege). The keys
   # depend on variables only, so they are known at plan time.
   task_role_policies = merge(
     var.ai_enabled ? { bedrock = data.aws_iam_policy_document.bedrock.json } : {},
-    local.use_agentcore ? { agentcore = data.aws_iam_policy_document.agentcore.json } : {},
     var.cloudwatch_metrics_enabled ? { metrics = data.aws_iam_policy_document.metrics.json } : {},
   )
 

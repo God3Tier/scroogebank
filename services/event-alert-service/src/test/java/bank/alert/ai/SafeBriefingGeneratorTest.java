@@ -73,7 +73,7 @@ class SafeBriefingGeneratorTest {
         EventClassification classification = new EventClassification("Synthetic earnings event",
                 EventType.EARNINGS, EventDirection.POSITIVE, new BigDecimal("0.82"),
                 List.of(new AffectedInstrument("SYN-SGX-001", "source-1")), List.of("source-1"),
-                "gpt-5.6-luna", "alert-public-v1", NOW);
+                "global.amazon.nova-2-lite-v1:0", "alert-public-v1", NOW);
         return new BriefingInput(classification, List.of(evidence));
     }
 }

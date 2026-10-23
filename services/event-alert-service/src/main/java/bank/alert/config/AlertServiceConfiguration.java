@@ -14,7 +14,7 @@ import java.time.Clock;
         BedrockAiProperties.class,
         OperationalProperties.class,
         ReplayProperties.class,
-        AgentCoreProperties.class,
+        TavilyProperties.class,
         PipelineProperties.class
 })
 public class AlertServiceConfiguration {
