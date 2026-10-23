@@ -39,6 +39,19 @@ func RequireAgent() gin.HandlerFunc {
 	}
 }
 
+// RequireAdmin is for the one admin write on client data: reassigning clients
+// to another agent (ADR-0060).
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := PrincipalFromGin(c)
+		if !ok || principal.Role != "ADMIN" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "ADMIN role required"})
+			return
+		}
+		c.Next()
+	}
+}
+
 // RequireClientOwner limits agent access to their own client profiles. Admins
 // can read every profile; the routes that change one also need RequireAgent.
 // Missing, deleted and out-of-scope profiles all return 404 so callers cannot
@@ -72,8 +85,8 @@ func RequireClientOwner(db *sql.DB, parameter string) gin.HandlerFunc {
 
 // The generated finder skips deleted clients (ADR-0036).
 func ownsClient(c *gin.Context, db *sql.DB, clientID, subject string) bool {
-	client, err := orm.FindClient(c.Request.Context(), db, clientID, orm.ClientColumns.CreatedByAgentID)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && client.CreatedByAgentID != subject) {
+	client, err := orm.FindClient(c.Request.Context(), db, clientID, orm.ClientColumns.AssignedAgentID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && client.AssignedAgentID != subject) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 		return false
 	}

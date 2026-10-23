@@ -33,7 +33,7 @@ func (r clientRepository) CreateClient(ctx context.Context, client models.Client
 		EmailHash:          indexes.email,
 		PhoneNumberHash:    indexes.phone,
 		VerificationStatus: client.VerificationStatus,
-		CreatedByAgentID:   client.CreatedByAgentID,
+		AssignedAgentID:    client.AssignedAgentID,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}

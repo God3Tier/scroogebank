@@ -32,7 +32,7 @@ func New(db *sql.DB) Repository {
 
 // Every query takes the agent as $1: NULL for an admin, otherwise the agent's
 // sub. Deleted clients are left out (ADR-0036).
-const inScope = `deleted_at IS NULL AND ($1::text IS NULL OR created_by_agent_id = $1::text)`
+const inScope = `deleted_at IS NULL AND ($1::text IS NULL OR assigned_agent_id = $1::text)`
 
 // The window's days are Singapore days: $2 and $3 are its first and last date.
 const inWindow = `created_at >= ($2::date)::timestamp AT TIME ZONE 'Asia/Singapore'
@@ -78,7 +78,7 @@ func (r repository) ClientStats(ctx context.Context, caller models.Caller, windo
 
 	if byAgent {
 		stats.ByAgent = []models.AgentClientCounts{}
-		if err := queries.Raw(`SELECT created_by_agent_id AS agent_id, count(*) AS clients_onboarded,
+		if err := queries.Raw(`SELECT assigned_agent_id AS agent_id, count(*) AS clients_onboarded,
 				count(*) FILTER (WHERE upper(verification_status) = 'VERIFIED') AS verified,
 				count(*) FILTER (WHERE `+notVerified+`) AS unverified
 			FROM clients WHERE `+inScope+` AND `+inWindow+` GROUP BY 1 ORDER BY 1`, agent, from, to).Bind(ctx, r.db, &stats.ByAgent); err != nil {
@@ -119,11 +119,11 @@ func (r repository) TeamOnboarding(ctx context.Context, agentID string, window m
 	// Every member of the group counts, including those who onboarded no one
 	// in the window: the LEFT JOIN gives them a zero.
 	if err := r.db.QueryRowContext(ctx, `WITH cohort AS (
-			SELECT DISTINCT created_by_agent_id AS agent_id FROM clients
+			SELECT DISTINCT assigned_agent_id AS agent_id FROM clients
 			WHERE deleted_at IS NULL AND created_at >= $3
 		), onboarded AS (
 			SELECT cohort.agent_id, count(clients.client_id) AS clients
-			FROM cohort LEFT JOIN clients ON clients.created_by_agent_id = cohort.agent_id
+			FROM cohort LEFT JOIN clients ON clients.assigned_agent_id = cohort.agent_id
 				AND clients.deleted_at IS NULL
 				AND clients.created_at >= ($1::date)::timestamp AT TIME ZONE 'Asia/Singapore'
 				AND clients.created_at < ($2::date + 1)::timestamp AT TIME ZONE 'Asia/Singapore'
@@ -136,7 +136,7 @@ func (r repository) TeamOnboarding(ctx context.Context, agentID string, window m
 	if median.Valid {
 		team.Median = &median.Float64
 	}
-	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM clients WHERE deleted_at IS NULL AND created_by_agent_id = $1
+	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM clients WHERE deleted_at IS NULL AND assigned_agent_id = $1
 		AND created_at >= ($2::date)::timestamp AT TIME ZONE 'Asia/Singapore'
 		AND created_at < ($3::date + 1)::timestamp AT TIME ZONE 'Asia/Singapore'`,
 		agentID, from, to).Scan(&team.ClientsOnboarded)

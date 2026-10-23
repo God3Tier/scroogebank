@@ -24,3 +24,6 @@ packages:
   client-profile-management-service/src/internal/service/client:
     config:
       all: true
+  client-profile-management-service/src/internal/users:
+    config:
+      all: true

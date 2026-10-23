@@ -113,6 +113,6 @@ func validRepositoryClient() models.Client {
 		DateOfBirth: time.Date(1990, 5, 10, 0, 0, 0, 0, time.UTC), Gender: "female",
 		Email: "alice-new@example.test", PhoneNumber: "+6560000199", Address: "1 Example Street",
 		City: "Singapore", State: "Singapore", Country: "Singapore", PostalCode: "123456",
-		VerificationStatus: "UNVERIFIED", CreatedByAgentID: "00000000-0000-0000-0000-000000000901",
+		VerificationStatus: "UNVERIFIED", AssignedAgentID: "00000000-0000-0000-0000-000000000901",
 	}
 }

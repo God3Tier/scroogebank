@@ -63,6 +63,9 @@ func (r *recordingClients) ListClientDocuments(w http.ResponseWriter, req *http.
 func (r *recordingClients) GetClientDocument(w http.ResponseWriter, req *http.Request) {
 	r.record("GetClientDocument", w, req)
 }
+func (r *recordingClients) ReassignClients(w http.ResponseWriter, req *http.Request) {
+	r.record("ReassignClients", w, req)
+}
 
 // openRouterTestDB loads one client owned by documentsOwner. The ownership
 // check reads the clients table, so these tests need the test database.
@@ -83,7 +86,7 @@ func openRouterTestDB(t *testing.T) *sql.DB {
 		INSERT INTO clients (
 			client_id, first_name, last_name, date_of_birth, gender, email, email_hash, phone_number,
 			phone_number_hash, address, city, state, country, postal_code, verification_status,
-			created_by_agent_id, created_at, updated_at
+			assigned_agent_id, created_at, updated_at
 		) VALUES
 			('` + documentsClientID + `', 'Owned', 'Client', '1990-05-10', 'female', 'owned-161@example.test', 'email-hash-161', '+6560000161', 'phone-hash-161',
 			 '1 Example Street', 'Singapore', 'Singapore', 'Singapore', '123456', 'UNVERIFIED',
@@ -146,5 +149,36 @@ func TestClientRoutesAreForTheOwnerAndReadOnlyForAdmins(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Reassigning is the one admin write on client data (ADR-0060).
+func TestReassignmentIsForAdminsOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	principals := map[string]struct {
+		principal  security.Principal
+		wantStatus int
+	}{
+		"an admin": {security.Principal{Subject: "admin-161", Role: "ADMIN"}, http.StatusOK},
+		"an agent": {security.Principal{Subject: documentsOwner, Role: "AGENT"}, http.StatusForbidden},
+	}
+	for name, test := range principals {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			clients := &recordingClients{}
+			noAudit := func(c *gin.Context) { c.Next() }
+			principal := test.principal
+			RegisterRoutes(router, clients, &recordingAggregates{}, nil, signedInAs(&principal), noAudit)
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/api/clients/reassignments", strings.NewReader(`{}`)))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+			if test.wantStatus == http.StatusOK {
+				assert.Equal(t, []string{"ReassignClients?"}, clients.reached)
+			} else {
+				assert.Empty(t, clients.reached)
+			}
+		})
 	}
 }

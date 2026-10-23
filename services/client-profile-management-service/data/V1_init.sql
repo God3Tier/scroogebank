@@ -27,7 +27,9 @@ CREATE TABLE clients (
     verified_by_agent_id  VARCHAR(128),
     verified_at           TIMESTAMPTZ,
     verified_with_documents BOOLEAN,
-    created_by_agent_id   VARCHAR(128) NOT NULL,
+    -- Cognito sub of the client's agent: the creator, until an admin
+    -- reassigns the client (ADR-0060).
+    assigned_agent_id     VARCHAR(128) NOT NULL,
     created_at            TIMESTAMPTZ  NOT NULL,
     updated_at            TIMESTAMPTZ  NOT NULL,
     -- Set on delete; the row is kept but every API treats it as missing (ADR-0036).
@@ -37,7 +39,7 @@ CREATE TABLE clients (
 -- Unique among clients that are not deleted, so a deleted client's details can be reused.
 CREATE UNIQUE INDEX uk_clients_email ON clients (email_hash) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX uk_clients_phone ON clients (phone_number_hash) WHERE deleted_at IS NULL;
-CREATE INDEX idx_clients_created_by_agent_id ON clients (created_by_agent_id);
+CREATE INDEX idx_clients_assigned_agent_id ON clients (assigned_agent_id);
 CREATE INDEX idx_clients_updated_at ON clients (updated_at DESC);
 -- The business dashboard counts clients by creation date (ADR-0038).
 CREATE INDEX idx_clients_created_at ON clients (created_at DESC);
