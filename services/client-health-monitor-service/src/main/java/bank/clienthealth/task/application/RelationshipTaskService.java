@@ -1,5 +1,6 @@
 package bank.clienthealth.task.application;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEventFactory;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.RelationshipTaskPort;
 import bank.clienthealth.contract.TaskUpsertResult;
@@ -83,6 +84,8 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
                 RelationshipTask current = active.get();
                 RelationshipTask updated = current.attach(finding, unseen, now);
                 session.saveTask(updated, current.version());
+                session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(
+                        updated.taskId(), updated.clientId(), updated.history().getLast()));
                 result = new TaskUpsertResult(updated.taskId(), Outcome.EVIDENCE_ATTACHED, updated.version());
             } else {
                 var latestClosed = session.findLatestClosedTask(finding.clientId());
@@ -101,9 +104,15 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
                         RelationshipTask created = RelationshipTask.create(
                                 taskIds.get(), finding, unseen, assignment, now);
                         session.saveTask(created, 0);
+                        session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(
+                                created.taskId(), created.clientId(), created.history().getLast()));
                         result = new TaskUpsertResult(created.taskId(), Outcome.CREATED, created.version());
                     }
                 }
+            }
+            if (result.outcome().suppressed()) {
+                session.enqueueAudit(RelationshipHealthAuditEventFactory.suppression(
+                        finding, result.outcome()));
             }
             session.saveProcessedFinding(new ProcessedFinding(finding, result, now));
             return result;
@@ -148,6 +157,8 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             }
             RelationshipTask updated = change.apply(current);
             session.saveTask(updated, expectedVersion);
+            session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(
+                    updated.taskId(), updated.clientId(), updated.history().getLast()));
             return updated;
         });
     }

@@ -1,5 +1,6 @@
 package bank.clienthealth.task.persistence;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEvent;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
 import bank.clienthealth.contract.ClientHealthFinding.EvidenceDetails;
@@ -268,6 +269,19 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
                     """, processed.finding().findingId(), processed.result().taskId(), write(processed.finding()),
                     processed.result().outcome().name(), processed.result().taskVersion(),
                     Timestamp.from(processed.processedAt()));
+        }
+
+        @Override
+        public void enqueueAudit(RelationshipHealthAuditEvent event) {
+            jdbc.update("""
+                    INSERT INTO relationship_health_audit_outbox
+                        (event_id, event_type, action, source_service, actor_id, payload,
+                         created_at, next_attempt_at)
+                    VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?)
+                    """, event.eventId(), RelationshipHealthAuditEvent.EVENT_TYPE,
+                    event.action().name(), RelationshipHealthAuditEvent.SOURCE_SERVICE,
+                    event.actorId(), write(event.payload()), Timestamp.from(event.payload().occurredAt()),
+                    Timestamp.from(event.payload().occurredAt()));
         }
     }
 

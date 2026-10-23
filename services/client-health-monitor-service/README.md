@@ -55,9 +55,10 @@ accuracy claim.
 
 RH-SF08 currently provides a deterministic redacted Auditor envelope, task and
 suppression event mapping, transactional-enqueue/delivery ports, and a bounded
-leased relay that continues after individual delivery failures. It deliberately
-contains no Flyway/JDBC or SQS implementation yet: those wait for the corrected
-SF05 V1 migration and Auditor-owner contract approval.
+leased relay that continues after individual delivery failures. V3 creates the
+health-db outbox, and task creation/evidence/transition/suppression paths enqueue
+through the same repository transaction boundary. The production JDBC
+repository, SQS gateway and Auditor allowlist remain pending.
 
 ## Ownership boundary
 
@@ -140,6 +141,6 @@ projection/run repositories, and Java 25 CI. The client-profile Contract-B
 provider and its scoped Cognito registration remain external prerequisites for
 live current-assignment authorization.
 
-RH-SF08 production follow-up adds the outbox table/repository in the same
-transaction as SF05 task writes, then an IAM-scoped SQS gateway and the
-Auditor's reviewed `RELATIONSHIP_HEALTH_SERVICE` allowlist.
+RH-SF08 production follow-up implements the JDBC task/outbox repository against
+V1-V3, then an IAM-scoped SQS gateway and the Auditor's reviewed
+`RELATIONSHIP_HEALTH_SERVICE` allowlist.

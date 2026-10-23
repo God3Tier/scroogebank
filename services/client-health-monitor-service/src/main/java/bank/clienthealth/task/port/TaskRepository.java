@@ -1,5 +1,6 @@
 package bank.clienthealth.task.port;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEvent;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.TaskUpsertResult;
 import bank.clienthealth.task.domain.RelationshipTask;
@@ -24,6 +25,7 @@ public interface TaskRepository {
         boolean tryReserveTaskCreation(String agentSubject, LocalDate singaporeDate, int limit);
         void saveTask(RelationshipTask task, long expectedVersion);
         void saveProcessedFinding(ProcessedFinding processedFinding);
+        void enqueueAudit(RelationshipHealthAuditEvent event);
     }
 
     record ProcessedFinding(

@@ -781,6 +781,25 @@
   release behavior passed; all 54 Client Health tests passed locally with the
   Java 24 compiler override. Java 25 CI remains required.
 
+## 2026-10-22 — Client Health SF08 V3 and atomic task enqueue
+
+- Human owner: Garvit; Auditor-owner review remains required for SQS/Auditor
+  adapters.
+- Tool: Cursor.
+- Use: add the V3 relationship-health outbox schema and indexes; extend the
+  SF05 transaction session with deterministic audit enqueue; emit redacted
+  task-created/evidence/transition and suppression events atomically with task
+  and processed-finding changes.
+- Human verification required: production JDBC must use one transaction for
+  task/finding/outbox writes; SQS/IAM and Auditor allowlist changes remain
+  blocked on owner acceptance.
+- Data: repository-owned synthetic opaque identifiers and task states only. No
+  credentials, real client data, AWS calls, SQS calls or external services were
+  used.
+- Verification: task audit counts, deterministic mapping, suppression enqueue,
+  processed-finding rollback, outbox contract constraints and the full Client
+  Health suite are required before commit.
+
 ## 2026-10-22 — Client Health SF05 persistence review fixes
 
 - Human owner: Garvit; original V1 schema/admission implementation by Swayam.

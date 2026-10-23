@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF05 and offline rule evaluation are merged; RH-SF08 provider-independent audit/outbox slice is implemented on its task branch
+- Status: In progress; SF00-SF05, offline rule evaluation and RH-SF08 foundation are merged; SF08 V3 outbox and atomic task enqueue are implemented on its task branch
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
 - Current task branch: `task/client-health-monitor/audit-outbox`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-22 from `origin/feat/client-health-monitor` at `329115c`
+- Last repository sync: 2026-10-22 from `origin/feat/client-health-monitor` at `9f211c7`
 - AI-assisted planning: Yes; Cursor
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -499,7 +499,7 @@ Decisions:
 | RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy | `task/client-health-monitor/task-persistence` | Domain, V1/V2 schema, suppression/admission rules and JDBC repository adapter implemented; atomic SF08 audit-outbox integration remains pending | 2026-10-23 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API runtime wiring, JDBC task/query adapter, current-assignment revalidation, bounded notes and Contract-B consumer implemented; client-profile Contract-B provider/Cognito provisioning and atomic outbox integration remain pending | 2026-10-23 |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Planned | N/A |
-| RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, outbox/delivery ports and provider-independent relay; DB/SQS/Auditor adapters later | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-outbox` | Provider-independent envelope/factory/ports/leased relay implemented locally; Flyway/JDBC/SQS/Auditor allowlist deliberately blocked on SF05 V1 and owner review | 2026-10-22 |
+| RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, outbox/delivery ports, leased relay, V3 outbox and atomic task enqueue; JDBC/SQS/Auditor adapters later | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-outbox` | Foundation merged; V3 outbox and atomic task/evidence/transition/suppression enqueue implemented locally; JDBC repository, SQS gateway, IAM and Auditor allowlist pending owner review | 2026-10-22 |
 | RH-SF09 | Metrics and health | TBD | metrics/health/dashboard/alarms | Hooks across SF01-SF08 | TBD | Unassigned | N/A |
 | RH-SF10 | CRM UI integration | TBD | task list/detail/actions/Admin view | Frontend/Azeez/Hayyun coordination | TBD | Unassigned | N/A |
 | RH-SF11 | Cloud deployment | TBD | compute/database/IAM/routes/secrets/alarms | Accepted ADRs/platform owner | TBD | Unassigned | N/A |
