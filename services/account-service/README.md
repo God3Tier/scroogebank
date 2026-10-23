@@ -6,10 +6,10 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. For an unverified client an agent may open only a `PENDING` account; any other status is 403 (ADR-0050) |
+| POST | `/api/accounts` | AGENT | Open an account for one of the caller's clients. Admins get 403: they only read accounts (ADR-0059). The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. For an unverified client an agent may open only a `PENDING` account; any other status is 403 (ADR-0050) |
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
-| DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
+| DELETE | `/api/accounts/{accountId}` | AGENT | Soft-delete one of the caller's accounts (others 404). Admins get 403 (ADR-0059) |
 | PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Audited with the status before and after (ADR-0050) |
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
@@ -37,17 +37,17 @@ Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboile
 
 The `accounts` table has no foreign key to `clients`, because clients live in another service's database. Two things replace it:
 
-- **Creating an account** calls `GET {CLIENT_SERVICE_BASE_URL}/api/clients/{client_id}` with the caller's own token. client-profile-management-service applies its ownership rule: admins see every client, and an agent asking about another agent's client gets 404.
+- **Creating an account** calls `GET {CLIENT_SERVICE_BASE_URL}/api/clients/{client_id}` with the caller's own token. client-profile-management-service applies its ownership rule: an agent asking about another agent's client gets 404. Admins are refused before this call, since they do not open accounts ([ADR-0059](../../docs/adr/ADR-0059-admins-read-only-on-client-data.md)).
 
   | client service answers | Response |
   |---|---|
   | 200 | The account is created. The client's `created_by_agent_id` is stored as `owner_agent_id` |
-  | 200, but the caller is an agent, the client's `verification_status` is not `VERIFIED` (in any case) and the status is not `PENDING` | 403 `an unverified client's account can only be opened as pending`, and nothing is created. Admins are not restricted ([ADR-0050](../../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)) |
+  | 200, but the client's `verification_status` is not `VERIFIED` (in any case) and the status is not `PENDING` | 403 `an unverified client's account can only be opened as pending`, and nothing is created ([ADR-0050](../../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)) |
   | 404 | 404, and nothing is created |
   | Anything else, or no answer within 2 seconds | 503, and nothing is created |
 
-  Admins go through this check too: it is what proves the client exists. The owner is the client's owner, not the caller, so an admin opening an account does not become its owner.
-- **Reading or deleting an account** compares the caller's `sub` with the stored `owner_agent_id`. That is a local query, with no call to another service. Admins skip it; an agent who does not own the account gets 404, the same as for a missing one.
+  The owner stored is the client's owner as client-profile-management-service reports it, never a value from the request.
+- **Reading, deleting or changing an account** compares the caller's `sub` with the stored `owner_agent_id`. That is a local query, with no call to another service. Admins skip it when reading, and are refused with 403 before it on every write; an agent who does not own the account gets 404, the same as for a missing one.
 
 Copying the owner is correct because a client's owner never changes: nothing updates `created_by_agent_id`, and there is no reassignment feature. If one is added, the copies must be updated with it (ADR-0035).
 

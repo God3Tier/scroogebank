@@ -108,3 +108,29 @@ func TestWithCallerAndAccountPassesTheTokenCallerAndRouteAccount(t *testing.T) {
 	assert.Equal(t, models.Caller{Subject: "agent-a"}, gotCaller)
 	assert.Equal(t, "account-1", gotAccountID)
 }
+
+// Admins only read accounts (ADR-0059). The refusal comes before the
+// ownership check and the controller, so neither a database nor a service is
+// needed here.
+func TestAccountWritesRefuseAdmins(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	admin := &security.Principal{Subject: "admin-1", Role: "ADMIN"}
+	const accountPath = "/api/accounts/00000000-0000-0000-0000-000000000301"
+	requests := map[string]struct{ method, path string }{
+		"open":          {http.MethodPost, "/api/accounts"},
+		"delete":        {http.MethodDelete, accountPath},
+		"change status": {http.MethodPatch, accountPath},
+	}
+	for name, request := range requests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			pass := func(c *gin.Context) { c.Next() }
+			RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, signedInAs(admin), pass, pass)
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(request.method, request.path, nil))
+
+			assert.Equal(t, http.StatusForbidden, res.Code)
+		})
+	}
+}
