@@ -7,7 +7,7 @@
 - Feature/branch: `task/base-features/verified-clients-only-accounts`
 - Related issue/PR: TBD (pull request from `task/base-features/verified-clients-only-accounts` to `dev`)
 - Supersedes: on acceptance, [ADR-0035](ADR-0035-account-ownership-across-services.md) decision 2 in part (account creation also reads the client's verification, and an agent may open only a Pending account for an unverified client; the lookup, its fail-closed behaviour and the owner it copies are unchanged)
-- Superseded by: N/A
+- Superseded by: [ADR-0059](ADR-0059-admins-read-only-on-client-data.md) (decision 7: admins no longer open or delete accounts; the other decisions are unchanged)
 
 ## Context
 
