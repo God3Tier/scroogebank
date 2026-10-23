@@ -100,3 +100,37 @@ func TestRequireClientOwner(t *testing.T) {
 		})
 	}
 }
+
+// RequireAgent reads only the verified role, so it needs no database.
+func TestRequireAgent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := map[string]struct {
+		principal  *Principal
+		wantStatus int
+	}{
+		"an agent reaches the handler":       {principal: &Principal{Subject: "agent-sub", Role: "AGENT"}, wantStatus: http.StatusOK},
+		"an admin is refused":                {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, wantStatus: http.StatusForbidden},
+		"a caller without a role is refused": {principal: &Principal{Subject: "other-sub"}, wantStatus: http.StatusForbidden},
+		"an unauthenticated request too":     {wantStatus: http.StatusForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				if test.principal != nil {
+					c.Set("principal", *test.principal)
+				}
+				c.Next()
+			})
+			router.POST("/write", RequireAgent(), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/write", nil))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+		})
+	}
+}
