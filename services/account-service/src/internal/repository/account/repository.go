@@ -21,6 +21,9 @@ type Repository interface {
 	// FindAccountsByIDs returns the accounts among ids that exist. Service
 	// scope: the transaction import links rows with it (ADR-0037).
 	FindAccountsByIDs(ctx context.Context, ids []string) (orm.AccountSlice, error)
+	// SetOwner moves every account of the clients to a new owner, when an
+	// admin reassigns them (ADR-0060). It returns how many it updated.
+	SetOwner(ctx context.Context, clientIDs []string, ownerAgentID string) (int64, error)
 }
 
 type accountRepository struct {

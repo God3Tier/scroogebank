@@ -75,13 +75,13 @@ func (d httpDirectory) Lookup(ctx context.Context, clientID, authorization strin
 	switch res.StatusCode {
 	case http.StatusOK:
 		var profile struct {
-			CreatedByAgentID   string `json:"created_by_agent_id"`
+			AssignedAgentID    string `json:"assigned_agent_id"`
 			VerificationStatus string `json:"verification_status"`
 		}
 		if err := json.NewDecoder(io.LimitReader(res.Body, maxClientResponseBytes)).Decode(&profile); err != nil {
 			return Client{}, fmt.Errorf("%w: unreadable client profile: %v", accounterrors.ErrClientServiceUnavailable, err)
 		}
-		owner := strings.TrimSpace(profile.CreatedByAgentID)
+		owner := strings.TrimSpace(profile.AssignedAgentID)
 		if owner == "" {
 			return Client{}, fmt.Errorf("%w: client profile has no owning agent", accounterrors.ErrClientServiceUnavailable)
 		}
