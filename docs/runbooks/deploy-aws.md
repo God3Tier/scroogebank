@@ -1,11 +1,13 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
-> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-22.
+> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-23.
 > Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack), [ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) (every deployment ends with a full teardown; proposed).
 
 **Every deployment starts from an empty account and ends with [Tear down](#tear-down)**, which destroys every Terraform stack, `bootstrap` and `mail-identity` included ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). That way everyone starts from the same state. Only what is created by hand stays between deployments: the `crm-infra-admin` role and your IAM user ([AWS access](#aws-access)), the budget alerts, and the domain with its hosted zone ([Register a domain](#register-a-domain-once-per-account)). One deployment runs at a time; [Check the account is empty](#check-the-account-is-empty) tells you whether one is in progress.
 
 The code is in `infrastructure/terraform/` (see its [README](../../infrastructure/terraform/README.md)). Commands run from the repository root in Git Bash, unless a step says otherwise. In Windows PowerShell 5.1 (VS Code's default terminal on Windows), quote every option that contains a dot, such as `"-var-file=env/prod.tfvars"`: unquoted, PowerShell splits it at the first dot. Everything uses synthetic data only.
+
+**In parallel** notes in the steps below say what can run at the same time, in a second terminal. In that terminal, run [Start each session](#start-each-session) first, and set any shell variable the step uses again, such as `TAG`. Never run two Terraform commands on the same stack at once: the second fails with `Error acquiring the state lock`.
 
 ## Before you start
 
@@ -121,7 +123,11 @@ aws secretsmanager list-secrets --include-planned-deletion --filters Key=name,Va
 - **`crm-tfstate-<account>` is listed, or a cluster or database:** another deployment is in progress, or its teardown did not finish. Ask the team who it belongs to, and do not apply anything: your stacks would share its state bucket and names. Its owner finishes [Tear down](#tear-down).
 - **Only secrets are listed:** a teardown skipped the hard delete. Run the secrets loop in [Tear down](#tear-down) with `STACK=crm-sg-prod`, then check again.
 
+**In parallel:** step 2, which uses no AWS.
+
 ## 1. Bootstrap the account
+
+**In parallel:** step 2.
 
 ```sh
 cd infrastructure/terraform/bootstrap
@@ -141,6 +147,8 @@ Bootstrap creates no GuardDuty detector: the account already has one, and a seco
 **Budget alerts are not in Terraform.** The account owner made them by hand in the Billing console, so they survive every teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7). `Team-Created-Budget` e-mails when actual cost passes 10, 20, 40, 60, 80 and 100% of USD 200, and a Bedrock budget at 50, 80 and 100% of USD 25 a month. Both count cost after credits, since the project account has none; in an account with credits, such as a personal one, exclude the `Credit` and `Refund` charge types, or the budget never alerts. This stack creates none. A `terraform.tfvars` from an earlier deployment may still set `budget_emails` or `budget_start_date`; Terraform warns that they are undeclared, and you can delete them.
 
 ## 2. Build the Lambda zip and the images
+
+**In parallel:** [Check the account is empty](#check-the-account-is-empty) and step 1, since this step uses no AWS. Step 3 needs only the Cognito triggers zip below and `TAG`, not the images, so once `mvn` has finished, step 3 can start while the images build; step 5 is the first step that needs them. Two other builds need no AWS either, so they can run here too: step 9.3's `make -C services/sftp lambda`, and `npm ci` in `frontend/` (step 7).
 
 ```sh
 mvn -B -pl services/cognito-triggers -am clean package
@@ -213,6 +221,8 @@ cd -
 
 `running=false` creates everything but starts no task and no NAT gateway, so nothing pulls images yet.
 
+**In parallel:** step 2's image builds, if they are still running. Once the first block above has written `env/prod.tfvars`, the mail identity (step 3a) can apply while this apply runs: it reads only `domain_name` from that file, not this stack's state. Start it now, since DKIM can take up to an hour.
+
 **Always create a stack stopped, as here, never with `running=true`.** The services can call each other only because of it:
 - A task can call another service through Service Connect only if that service existed when its own service's latest deployment was made.
 - This apply creates the services together, so their first deployments can miss each other. client-service and account-service call each other, so no order of creation avoids that.
@@ -229,29 +239,13 @@ With `domain_name`, the apply also requests two certificates, `sg.<domain>` (in 
 - The backend file decides which stack's state this directory works on, and the scripts read that same state. To switch environments, run `terraform init -reconfigure -backend-config=env/<environment>.s3.tfbackend` first.
 - Never apply one environment's tfvars while the directory is initialised on the other's backend: Terraform would try to turn that stack into the other one.
 
-## 4. Create the business-dashboard stack, stopped
+## 3a. Create the mail identity
 
-This stack deploys dashboard-service into the CRM stack's cluster ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)). It reads the CRM stack's state, so apply it after step 3. It takes the image tag from the CRM stack's `env/prod.tfvars`, so both stacks deploy the same tag:
+Agent engagement (step 4a) sends calendar invites, reminders and client emails through SES. With the CRM stack's `domain_name`, mail comes from `no-reply@mail.<app host>`, signed with the domain's DKIM. In an account without the domain's hosted zone, mail comes from one verified address you choose, `sender_address`, with no DNS records ([ADR-0055](../adr/ADR-0055-sender-address-without-a-domain.md)). Receivers check that address's domain's DMARC policy, so mail from an address at a domain that publishes `p=quarantine` or `p=reject` (many webmail providers do) may go to spam or be refused. Check with `nslookup -type=TXT _dmarc.<domain>`, and prefer a domain with `p=none` or no DMARC record.
 
-```sh
-cd infrastructure/terraform/stacks/business-dashboard
-STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
-TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' ../crm/env/prod.tfvars); echo "$TAG"
-sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
-[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
-sed -i -e "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" -e "s/^image_tag *=.*/image_tag = \"${TAG:?no image_tag in crm/env/prod.tfvars: finish step 3}\"/" env/prod.tfvars
-terraform init -backend-config=env/prod.s3.tfbackend
-terraform apply -var-file=env/prod.tfvars
-cd -
-```
+Like every stack, the mail identity is created in each deployment and destroyed in its teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 3), so the verification below is repeated every time. It comes before the other stacks because it has the longest wait: DKIM can take up to an hour, and each inbox must click a new link. The commands set `domain_name` as step 3 does, when this account has the zone. Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand, and, without a domain, `sender_address` too: real addresses only there, never in the example.
 
-It takes the task count from the CRM stack, so, like step 3, this apply starts no task. If the plan stops with `The audit queue does not allow arn:aws:iam::…`, the CRM stack was applied without that ARN in `extra_audit_producer_role_arns`: run step 3's first block again, apply the CRM stack, then this step.
-
-## 4a. Create the mail identity and the agent-engagement stack, stopped
-
-Agent engagement ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)) sends calendar invites, reminders and client emails through SES. With the CRM stack's `domain_name`, mail comes from `no-reply@mail.<app host>`, signed with the domain's DKIM. In an account without the domain's hosted zone, mail comes from one verified address you choose, `sender_address`, with no DNS records ([ADR-0055](../adr/ADR-0055-sender-address-without-a-domain.md)). Receivers check that address's domain's DMARC policy, so mail from an address at a domain that publishes `p=quarantine` or `p=reject` (many webmail providers do) may go to spam or be refused. Check with `nslookup -type=TXT _dmarc.<domain>`, and prefer a domain with `p=none` or no DMARC record.
-
-**The mail identity.** Like every stack, it is created in each deployment and destroyed in its teardown ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) decision 3), so the verification below is repeated every time. Apply it early: DKIM can take up to an hour, and each inbox must click a new link. The commands set `domain_name` as step 3 does, when this account has the zone. Put the team inboxes that may receive mail in `verified_recipients` in `env/prod.tfvars` by hand, and, without a domain, `sender_address` too: real addresses only there, never in the example:
+**In parallel:** the CRM stack's apply in step 3, once step 3's first block has written `domain_name` to `crm/env/prod.tfvars`, and step 4. This stack does not read the CRM stack's state.
 
 ```sh
 cd infrastructure/terraform/stacks/mail-identity
@@ -274,7 +268,31 @@ Each address in `verified_recipients`, and `sender_address` without a domain, re
 aws sesv2 list-email-identities --query 'EmailIdentities[].[IdentityName,VerificationStatus]' --output table
 ```
 
-**The agent-engagement stack.** Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`. It copies `sender_address` from mail-identity's `env/prod.tfvars`, so both stacks use the same address; with a domain there is none, and the stack ignores it anyway:
+## 4. Create the business-dashboard stack, stopped
+
+This stack deploys dashboard-service into the CRM stack's cluster ([ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md)). It reads the CRM stack's state, so apply it after step 3. It takes the image tag from the CRM stack's `env/prod.tfvars`, so both stacks deploy the same tag.
+
+**In parallel:** the mail identity (step 3a), the agent-engagement stack (step 4a), the push of the CRM stack's images (step 5), step 7, and steps 9.1 and 9.2. None of them needs this stack.
+
+```sh
+cd infrastructure/terraform/stacks/business-dashboard
+STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' ../crm/env/prod.tfvars); echo "$TAG"
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
+sed -i -e "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" -e "s/^image_tag *=.*/image_tag = \"${TAG:?no image_tag in crm/env/prod.tfvars: finish step 3}\"/" env/prod.tfvars
+terraform init -backend-config=env/prod.s3.tfbackend
+terraform apply -var-file=env/prod.tfvars
+cd -
+```
+
+It takes the task count from the CRM stack, so, like step 3, this apply starts no task. If the plan stops with `The audit queue does not allow arn:aws:iam::…`, the CRM stack was applied without that ARN in `extra_audit_producer_role_arns`: run step 3's first block again, apply the CRM stack, then this step.
+
+## 4a. Create the agent-engagement stack, stopped
+
+This stack deploys engagement-service and engagement-db ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)). Like step 4, it reads the CRM stack's state and takes the image tag from the CRM stack's `env/prod.tfvars`. It sends mail through the mail identity from step 3a, so apply it after that step. It copies `sender_address` from mail-identity's `env/prod.tfvars`, so both stacks use the same address; with a domain there is none, and the stack ignores it anyway.
+
+**In parallel:** step 4, the push of the CRM stack's images (step 5), step 7, and steps 9.1 and 9.2. This stack needs step 3's apply and step 3a's.
 
 ```sh
 cd infrastructure/terraform/stacks/agent-engagement
@@ -292,11 +310,15 @@ terraform apply -var-file=env/prod.tfvars
 cd -
 ```
 
-It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first. If it stops with `The CRM stack has no domain_name`, set `sender_address` in mail-identity's `env/prod.tfvars`, apply that stack, and run this block again.
+It creates engagement-db (a `db.t4g.micro`, about USD 0.02 to 0.03 an hour while it runs) and starts no task while the CRM stack is stopped. `ai_enabled = false` in `env/prod.tfvars` keeps AI drafting off; turn it on only for a test or demo run, and re-check the Nova Micro profile's regions first (`aws bedrock get-inference-profile --inference-profile-identifier apac.amazon.nova-micro-v1:0`) against ADR-0054. If the plan stops with `The audit queue does not allow ...`, run step 3's first block again and apply the CRM stack first; if it cannot read the SES identity or configuration set, apply the mail identity first (step 3a). If it stops with `The CRM stack has no domain_name`, set `sender_address` in mail-identity's `env/prod.tfvars`, apply that stack, and run this block again.
 
 ## 5. Push the images
 
-Steps 3, 4 and 4a created the ECR repositories: the CRM stack's in step 3, dashboard-service's in step 4, engagement-service's in step 4a. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys:
+Steps 3, 4 and 4a created the ECR repositories: the CRM stack's in step 3, dashboard-service's in step 4, engagement-service's in step 4a. From the repository root, with Docker Desktop running, push step 2's images to them. `TAG` is read from `env/prod.tfvars`, so the pushed tag is the one Terraform deploys.
+
+**In parallel:** steps 4 and 4a. The CRM stack's images need only step 3's apply, so push them while those stacks apply. Every push must finish before step 6.
+
+The CRM stack's images:
 
 ```sh
 TAG=$(sed -n 's/^image_tag *= *"\([^"]*\)".*/\1/p' infrastructure/terraform/stacks/crm/env/prod.tfvars); echo "$TAG"
@@ -306,15 +328,25 @@ aws ecr get-login-password | docker login --username AWS --password-stdin "$(rep
 
 push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
 for s in user-service event-alert-service auditor client-service account-service transaction-service db-migrate; do push "$s"; done
+```
 
+In the same terminal, dashboard-service's image, once step 4 has applied:
+
+```sh
 DASHBOARD=$(terraform -chdir=infrastructure/terraform/stacks/business-dashboard output -raw ecr_repository)
 docker tag "crm/dashboard-service:$TAG" "$DASHBOARD:$TAG" && docker push "$DASHBOARD:$TAG"
+```
 
+And engagement-service's image, once step 4a has applied:
+
+```sh
 ENGAGEMENT=$(terraform -chdir=infrastructure/terraform/stacks/agent-engagement output -raw ecr_repository)
 docker tag "crm/engagement-service:$TAG" "$ENGAGEMENT:$TAG" && docker push "$ENGAGEMENT:$TAG"
 ```
 
 ## 6. Start the stacks
+
+**In parallel:** the CRM stack's apply goes first. After it, the business-dashboard and agent-engagement applies can run at the same time, in two terminals: each only reads the CRM stack's state. Step 7 and steps 9.1 and 9.2 can still be running. A step 9.3 apply cannot, since it applies the CRM stack too.
 
 ```sh
 cd infrastructure/terraform/stacks/crm
@@ -329,6 +361,8 @@ The databases need nothing by hand. Each service's task runs its `db-migrate` co
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
 ## 7. Upload the frontend
+
+**In parallel:** steps 4 to 6, and steps 9.1 and 9.2. This step needs only the CRM stack's outputs, which exist from step 3's apply, even while the stack is stopped.
 
 ```sh
 cd frontend
@@ -369,7 +403,9 @@ cd -
 
 ## 9. The external SFTP server and the ingest Lambda
 
-The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1). transaction-ingest, a Lambda function in the crm stack, imports its files. Each stack needs the other's outputs, so the order is: crm (steps 3–6), then sftp-server, then crm again. Run the commands below in Git Bash, from the repository root.
+The sftp-server stack is the bank's SFTP server ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1). transaction-ingest, a Lambda function in the crm stack, imports its files. Each stack needs the other's outputs, so the order is: crm (step 3), then sftp-server, then crm again (9.3, after step 6). Run the commands below in Git Bash, from the repository root.
+
+**In parallel:** 9.1 and 9.2 need only step 3's apply, so they can run beside steps 4 to 7. The crm outputs they read exist while the stack is stopped: `nat_public_ips` are the NAT gateway's Elastic IPs, which stay when the gateway is removed. 9.3 applies the crm stack, so it waits for step 6 and never runs beside another crm apply. 9.5 needs the running stack.
 
 ### 9.1 Create the SFTP server
 
@@ -459,7 +495,7 @@ The producer starts with an empty account list and publishes nothing until you g
 
 transaction-ingest imports the files ([ADR-0024](../adr/ADR-0024-transaction-ingestion-sftp-lambda.md), INF-04).
 
-1. Build its zip. Docker must be running:
+1. Build its zip, unless you built it during step 2. Docker must be running:
 
    ```sh
    make -C services/sftp lambda   # services/sftp/receiver/dist/transaction-ingest.zip
@@ -553,7 +589,7 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-fil
 ```
 
 - Stopping scales every service to 0, pauses the schedules, removes the NAT gateway (its Elastic IP stays) and stops the databases and the SFTP server.
-- The business-dashboard and agent-engagement stacks read `running` from the CRM stack's state, so apply them after the CRM stack every time. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
+- The business-dashboard and agent-engagement stacks read `running` from the CRM stack's state, so apply them after the CRM stack every time. **In parallel:** those two applies can run at the same time, in two terminals. Keep `scripts/aws-session.sh` where it is: `stop` after the applies, `start` before them. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
 - Starting and stopping each redeploy every service, for Service Connect (step 3), so each plan shows every `aws_ecs_service` updating in place. A stop briefly starts one new task per service, which the scale to 0 stops within seconds.
 - The script also stops and starts engagement-db when the agent-engagement stack exists. While stopped, no invite or reminder is sent; a reminder whose meeting starts in the meantime is recorded as missed (ADR-0051 decision 6).
 - Starting takes several minutes, mostly the databases.
@@ -567,7 +603,7 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-fil
 
 ## Tear down
 
-Every deployment ends here, and destroys every stack ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). Run the four parts in order, in one terminal, from the repository root. Take a manual snapshot first only if you need data from this deployment: nothing survives it.
+Every deployment ends here, and destroys every stack ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). Run the four parts in order, from the repository root, in one terminal, except for the commands the **In parallel** notes move to a second one. Take a manual snapshot first only if you need data from this deployment: nothing survives it.
 
 **1. The app stacks:**
 
@@ -582,6 +618,7 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement destroy -var-f
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
 
+- **In parallel:** the sftp-server destroy can run beside the first crm apply. After that apply, the business-dashboard pair (apply, destroy) and the agent-engagement pair can run at the same time, in two terminals. The crm destroy waits for both.
 - **Destroy business-dashboard before crm.** Its rules sit on the CRM stack's security groups and its service runs in the CRM's cluster, so the CRM stack cannot be destroyed while it exists. Its apply after the CRM's `deletion_protection=false` apply lets its destroy empty dashboard-service's image repository.
 - **Destroy agent-engagement before crm too,** for the same reasons: its rule sits on client-service's group, it runs in the CRM's cluster, and engagement-db uses the CRM's subnet group, parameter group and KMS key. Its apply after the CRM's `deletion_protection=false` apply turns off engagement-db's deletion protection and final snapshot.
 - **Prod first needs its protections lifted:** the first crm apply above, with `-var deletion_protection=false`, turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots. Staging has none to lift.
@@ -611,9 +648,10 @@ terraform destroy # If this fails, manually empty bucket in AWS Console S3
 cd -
 ```
 
+- **In parallel:** the mail-identity destroy can run beside part 1's crm destroy and part 2, once agent-engagement is destroyed: agent-engagement's destroy reads the SES identity and fails without it. `bootstrap` waits for everything else.
 - `delete-objects` takes at most 1,000 versions per call. Old versions expire after 90 days, so the bucket rarely holds that many.
 - Destroying `bootstrap` also removes the CloudTrail trail and its bucket; the budget alerts stay, as they are outside Terraform. CloudTrail's 90-day event history still shows who did what.
-- The verified inboxes and DKIM go with `mail-identity`. The next deployment verifies them again (step 4a).
+- The verified inboxes and DKIM go with `mail-identity`. The next deployment verifies them again (step 3a).
 
 **4. Check the account is empty:** run the commands in [Check the account is empty](#check-the-account-is-empty). Each must print nothing. Anything left is the next person's problem, so remove it now: a listed stack resource means a destroy above stopped part way; run it again and fix the error it reports.
 
@@ -643,7 +681,7 @@ The next deployment starts with a new user pool and empty databases, so `root_ad
 | Mail fails with `ses_error`, or a draft send says the email service did not accept the message | engagement-service logs `SES refused the message (<code>): <AWS error> <status> <message>`, with addresses shown as `<from>` and `<address>`. `AccessDenied 403` names the resource the task role may not use. The `SendEngagementMail` policy allows every identity in the account and region (`identity/*`) and the configuration set, from the sender address only: apply the agent-engagement stack if it is older, and check the configuration set's name. With no such line, the log says `SES could not be reached`: check the NAT gateway |
 | Every send fails with `ses_rejected` just after mail-identity was created, without a domain | `sender_address` has not clicked its verification email. Click it, or apply mail-identity again to resend it |
 | Every send fails with `ses_rejected` just after mail-identity was created | DKIM is not verified yet (`terraform -chdir=infrastructure/terraform/stacks/mail-identity output dkim_status` is not `SUCCESS`). Wait for SES to find the records, usually within an hour |
-| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, the CRM stack's `domain_name` differs from its `domain_name`, or, without a domain, the two stacks' `sender_address` differ (the agent-engagement block copies it; check for an edit made since). Apply mail-identity with the same values, and run the agent-engagement block again |
+| The agent-engagement plan cannot read the SES email identity or configuration set | The mail-identity stack was not applied for this environment, the CRM stack's `domain_name` differs from its `domain_name`, or, without a domain, the two stacks' `sender_address` differ (the agent-engagement block copies it; check for an edit made since). Apply mail-identity with the same values (step 3a), and run the agent-engagement block again (step 4a) |
 | Mail sent without a domain lands in spam or is refused | The sender address's domain publishes DMARC `p=quarantine` or `p=reject`, and SES signs with its own DKIM key, so DMARC fails (ADR-0055). Use an address at a domain with `p=none` or no DMARC record, or deploy in the account with the domain |
 | `tls-init` exits non-zero | No internet: the stack is stopped, or the NAT gateway is still being created |
 | A service that serves TLS refuses to start: client-service or account-service, or a Java service (user-, dashboard- or event-alert-service) naming `/tls/cert.pem` or `/tls/key.pem` | It needs the certificate files `tls-init` writes; check the `tls-init` log in the same task. client-service and account-service also need production mode's `verify-full` settings |

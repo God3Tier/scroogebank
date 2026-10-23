@@ -332,6 +332,7 @@ function AgentCalendar({ now: fixedNow }) {
               event={editing.event}
               clients={clients}
               defaultStart={defaultStartFor(editing.date, now)}
+              now={fixedNow}
               onSave={handleSave}
               onCancelEvent={handleCancelEvent}
               onClose={() => setEditing(null)}

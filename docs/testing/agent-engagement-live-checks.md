@@ -54,6 +54,17 @@ Checked on 2026-10-22 with an Outlook.com agent inbox ([ADR-0052](../adr/ADR-005
 | Accept and decline buttons | No error for the agent; the replies to the organizer address are not processed, by design |
 | Reminders | Received |
 
+### Domain mode: client emails filed as bulk mail
+
+Checked on 2026-10-22 with the CRM stack's `domain_name` set, so mail came from `mail.sg.itsag3t6.com`.
+
+| Inbox | Authentication | Where the client email landed |
+|---|---|---|
+| Gmail | SPF, DKIM and DMARC pass | Promotions tab |
+| Outlook.com | SPF, DKIM and DMARC pass | Junk |
+
+Authentication was sound, so the filters judged the sender, `"<agent> via Scrooge Bank" <no-reply@mail.sg.itsag3t6.com>` with a different `Reply-To`, as bulk mail. Fixed on `task/agent-engagement/agent-sender`: client emails now come from `"<agent>" <<given>.<family>@mail.sg.itsag3t6.com>` (ADR-0053 decisions 3 and 9 amended). **Not yet deployed**; see [Still to do](#still-to-do).
+
 ## Problems found and fixed
 
 Each was found in the deployed stack. Each fix has automated tests and was redeployed, unless the last column says otherwise.
@@ -84,7 +95,7 @@ Results: engagement-service 112 tests; frontend lint, 181 tests and build; mail-
 
 1. **Redeploy `895bc93`**, then repeat the holiday-greeting draft for a client whose country is `Singapore`.
 2. **Nova evaluation** ([ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md) Validation): 24 drafts, the 12 combinations of purpose, tone and holiday (8 for a Singapore client, 4 for a client without holiday data) twice each, split across two agents because of the 20-a-day cap. Pass: at least 22 AI-generated. Record each draft's purpose, tone, client, label and reason here.
-3. **Project account, domain mode:** mail-identity creates the `mail.sg.itsag3t6.com` identity and its records; check `dkim_status` is `SUCCESS` and that Gmail shows DKIM and **DMARC** passing for `mail.sg.itsag3t6.com`. Verify the agents' and clients' inboxes again there (identities are per account), run the Bedrock `converse` check, and repeat a short smoke test.
+3. **Project account, domain mode:** mail-identity creates the `mail.sg.itsag3t6.com` identity and its records; check `dkim_status` is `SUCCESS`. SPF, DKIM and DMARC passing in Gmail and Outlook: done (see [Domain mode](#domain-mode-client-emails-filed-as-bulk-mail)). Deploy the per-agent sender, then send a client email to Gmail and Outlook.com again: it should come from the agent's name and land in Primary and the inbox, with DMARC still passing. If it still goes to Promotions or Junk, sending history and content are what remain. Verify the agents' and clients' inboxes again there (identities are per account), run the Bedrock `converse` check, and repeat a short smoke test.
 4. **Cost:** the session's cost against plan §14.
 5. **Q8:** decide whether the sandbox is enough for the demo. It worked here with every recipient verified.
 6. Tear down the personal account's stacks when finished.

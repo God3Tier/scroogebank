@@ -211,8 +211,22 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   async function handleSend() {
     if (!window.confirm(`Send this email to ${clientName}?`)) return
     setState({ busy: true, error: '', message: '' })
+    // Unsaved edits are saved first, so the email sent is the one on screen.
+    let version = draft.version
+    if (changed) {
+      try {
+        const saved = await updateDraft(draft.id, { ...values, version })
+        setDraft(saved)
+        setValues({ subject: saved.subject ?? '', body: saved.body ?? '' })
+        version = saved.version
+        onChanged()
+      } catch (error) {
+        setState({ busy: false, error: saveProblem(error), message: '' })
+        return
+      }
+    }
     try {
-      const sent = await sendDraft(draft.id, draft.version)
+      const sent = await sendDraft(draft.id, version)
       setDraft(sent)
       setState({ busy: false, error: '', message: 'Sent.' })
       onChanged()
@@ -303,8 +317,8 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
           {editable && <button type="button" className="button--danger" onClick={handleDiscard} disabled={state.busy}>Discard</button>}
           {editable && named && <button type="button" onClick={handleSave} disabled={state.busy || !changed}>Save changes</button>}
           {editable && named && (
-            <button type="button" className="button--accent" onClick={handleSend} disabled={state.busy || changed}
-              title={changed ? 'Save your changes before sending' : undefined}>
+            <button type="button" className="button--accent" onClick={handleSend} disabled={state.busy}
+              title={changed ? 'Saves your changes, then sends' : undefined}>
               Send
               <span className="material-symbols-outlined" aria-hidden="true">send</span>
             </button>

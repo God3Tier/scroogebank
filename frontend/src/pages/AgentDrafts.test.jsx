@@ -184,13 +184,30 @@ describe('AgentDrafts', () => {
     expect(sendDraft).not.toHaveBeenCalled()
   })
 
-  it('asks for unsaved edits to be saved before sending', async () => {
+  it('saves unsaved edits, then sends the saved version', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    updateDraft.mockResolvedValue({ ...AI_DRAFT, subject: 'Changed subject', version: 1 })
+    sendDraft.mockResolvedValue({ ...AI_DRAFT, subject: 'Changed subject', status: 'SENT', sentAt: '2026-10-21T02:05:00Z', version: 2 })
     await openDraft()
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Changed subject' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled()
+    expect(await screen.findByText(/^Sent /)).toBeInTheDocument()
+    expect(updateDraft).toHaveBeenCalledWith('draft-1', { subject: 'Changed subject', body: AI_DRAFT.body, version: 0 })
+    expect(sendDraft).toHaveBeenCalledWith('draft-1', 1)
+  })
+
+  it('sends nothing when saving the edits fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    updateDraft.mockRejectedValue(Object.assign(new Error('Conflict'), { status: 409 }))
+    await openDraft()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Changed subject' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(sendDraft).not.toHaveBeenCalled()
   })
 
   it('explains a failed send', async () => {
