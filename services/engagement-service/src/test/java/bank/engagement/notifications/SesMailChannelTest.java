@@ -1,5 +1,6 @@
 package bank.engagement.notifications;
 
+import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -45,9 +46,24 @@ class SesMailChannelTest {
         ArgumentCaptor<SendEmailRequest> request = ArgumentCaptor.forClass(SendEmailRequest.class);
         verify(ses).sendEmail(request.capture());
         assertThat(request.getValue().configurationSetName()).isEqualTo("engagement-test");
-        assertThat(request.getValue().fromEmailAddress()).isEqualTo("no-reply@mail.example.test");
+        assertThat(request.getValue().fromEmailAddress()).isEqualTo("CRM Calendar <no-reply@mail.example.test>");
         MimeMessage message = MimeMessageFactoryTest.parse(request.getValue().content().raw().data().asByteArray());
         assertThat(message.getSubject()).isEqualTo("Reminder");
+    }
+
+    @Test
+    void theSenderKeepsItsDisplayNameEncodedWhenNotAscii() throws Exception {
+        OutgoingMail named = new OutgoingMail("Zoë Tan via Scrooge Bank", "no-reply@mail.example.test",
+                "synthetic.client@example.test", "synthetic.agent@example.test", "Hello", "Text", "<p>Text</p>",
+                null);
+
+        String from = SesMailChannel.from(named);
+
+        assertThat(from).startsWith("=?UTF-8?").endsWith(" <no-reply@mail.example.test>");
+        assertThat(new InternetAddress(from).getPersonal()).isEqualTo("Zoë Tan via Scrooge Bank");
+        assertThat(SesMailChannel.from(new OutgoingMail(null, "no-reply@mail.example.test",
+                "synthetic.agent@example.test", null, "Reminder", "Text", "<p>Text</p>", null)))
+                .isEqualTo("no-reply@mail.example.test");
     }
 
     @Test
