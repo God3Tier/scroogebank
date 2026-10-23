@@ -279,6 +279,7 @@ components:
     Cursor:
       name: cursor
       in: query
+      description: Opaque Base64URL keyset cursor returned by the preceding page; clients must not interpret it.
       schema: {type: string, maxLength: 512}
     Limit:
       name: limit

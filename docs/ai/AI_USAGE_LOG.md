@@ -833,3 +833,21 @@
 - Verification: focused domain/controller/adapter/configuration tests and the
   full Client Health Maven suite; PostgreSQL Testcontainers coverage depends on
   local Docker availability.
+
+## 2026-10-23 — Client Health SF06 reassignment, pagination and PostgreSQL completion
+
+- Human owner: Swayam.
+- Tool: OpenAI Codex.
+- Use: remove historical-assignment pre-filtering, enforce current assignment
+  for Agent reads and actions, replace numeric OFFSET cursors with opaque
+  Base64URL keyset cursors, integrate SF08 audit enqueue into the JDBC task
+  transaction, and add PostgreSQL and full Spring runtime integration tests.
+- Human verification required: run the Testcontainers suites in Docker-enabled
+  CI and review the keyset behavior when rows move ahead of an issued cursor;
+  the client-profile Contract-B provider and Cognito provisioning remain owned
+  outside this branch.
+- Data: synthetic opaque clients, Agents, tasks, findings and audit events only.
+  No real client data, secrets, AWS calls or live services were used.
+- Verification: application-level reassignment and paging tests pass; the full
+  Maven suite reports 108 tests with no failures and 14 Docker-dependent tests
+  skipped locally because Docker is unavailable.

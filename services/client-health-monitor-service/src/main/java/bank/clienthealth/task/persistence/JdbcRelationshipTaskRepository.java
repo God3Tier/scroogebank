@@ -25,10 +25,12 @@ import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -73,21 +75,13 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
     }
 
     private TaskPage findTasksInTransaction(Viewer viewer, TaskFilter filter) {
-        int offset = decodeCursor(filter.cursor());
+        CursorBoundary cursor = decodeCursor(filter.cursor());
         StringBuilder sql = new StringBuilder("""
-                SELECT t.task_id
+                SELECT t.task_id, t.updated_at
                 FROM relationship_tasks t
-                JOIN task_assignment_snapshots a ON a.task_id = t.task_id
                 WHERE 1 = 1
                 """);
         MapSqlParameterSource parameters = new MapSqlParameterSource();
-        if (viewer instanceof AgentViewer agent) {
-            sql.append(" AND a.agent_subject = :agent");
-            parameters.addValue("agent", agent.subject());
-        } else if (((AdminViewer) viewer).assignedAgentSubject() != null) {
-            sql.append(" AND a.agent_subject = :agent");
-            parameters.addValue("agent", ((AdminViewer) viewer).assignedAgentSubject());
-        }
         if (!filter.statuses().isEmpty()) {
             sql.append(" AND t.status IN (:statuses)");
             parameters.addValue("statuses", filter.statuses().stream().map(Enum::name).toList());
@@ -96,13 +90,20 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
             sql.append(" AND t.severity IN (:severities)");
             parameters.addValue("severities", filter.severities().stream().map(Enum::name).toList());
         }
-        sql.append(" ORDER BY t.updated_at DESC, t.task_id ASC LIMIT :limit OFFSET :offset");
-        parameters.addValue("limit", filter.limit() + 1).addValue("offset", offset);
-        List<String> ids = namedJdbc.query(sql.toString(), parameters, (rs, row) -> rs.getString(1));
-        boolean more = ids.size() > filter.limit();
-        if (more) ids = ids.subList(0, filter.limit());
-        List<RelationshipTask> tasks = ids.stream().map(this::loadTask).toList();
-        return new TaskPage(tasks, more ? Integer.toString(offset + filter.limit()) : null);
+        if (cursor != null) {
+            sql.append(" AND (t.updated_at < :cursorUpdatedAt "
+                    + "OR (t.updated_at = :cursorUpdatedAt AND t.task_id > :cursorTaskId))");
+            parameters.addValue("cursorUpdatedAt", Timestamp.from(cursor.updatedAt()))
+                    .addValue("cursorTaskId", cursor.taskId());
+        }
+        sql.append(" ORDER BY t.updated_at DESC, t.task_id ASC LIMIT :limit");
+        parameters.addValue("limit", filter.limit() + 1);
+        List<CursorBoundary> rows = namedJdbc.query(sql.toString(), parameters,
+                (rs, row) -> new CursorBoundary(instant(rs, "updated_at"), rs.getString("task_id")));
+        boolean more = rows.size() > filter.limit();
+        if (more) rows = rows.subList(0, filter.limit());
+        List<RelationshipTask> tasks = rows.stream().map(CursorBoundary::taskId).map(this::loadTask).toList();
+        return new TaskPage(tasks, more ? encodeCursor(rows.getLast()) : null);
     }
 
     @Override
@@ -111,24 +112,8 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
     }
 
     private Optional<RelationshipTask> findTaskInTransaction(String taskId, Viewer viewer) {
-        List<String> ids;
-        if (viewer instanceof AgentViewer agent) {
-            ids = jdbc.query("""
-                    SELECT t.task_id FROM relationship_tasks t
-                    JOIN task_assignment_snapshots a ON a.task_id = t.task_id
-                    WHERE t.task_id = ? AND a.agent_subject = ?
-                    """, (rs, row) -> rs.getString(1), taskId, agent.subject());
-        } else {
-            String filter = ((AdminViewer) viewer).assignedAgentSubject();
-            ids = filter == null
-                    ? jdbc.query("SELECT task_id FROM relationship_tasks WHERE task_id = ?",
-                            (rs, row) -> rs.getString(1), taskId)
-                    : jdbc.query("""
-                            SELECT t.task_id FROM relationship_tasks t
-                            JOIN task_assignment_snapshots a ON a.task_id = t.task_id
-                            WHERE t.task_id = ? AND a.agent_subject = ?
-                            """, (rs, row) -> rs.getString(1), taskId, filter);
-        }
+        List<String> ids = jdbc.query("SELECT task_id FROM relationship_tasks WHERE task_id = ?",
+                (rs, row) -> rs.getString(1), taskId);
         return ids.stream().findFirst().map(this::loadTask);
     }
 
@@ -385,14 +370,27 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
         catch (JsonProcessingException exception) { throw new IllegalStateException("Cannot serialize task data", exception); }
     }
 
-    private static int decodeCursor(String cursor) {
-        if (cursor == null) return 0;
+    private CursorBoundary decodeCursor(String cursor) {
+        if (cursor == null) return null;
         try {
-            int value = Integer.parseInt(cursor);
-            if (value < 0) throw new NumberFormatException();
-            return value;
-        } catch (NumberFormatException invalid) {
+            byte[] decoded = Base64.getUrlDecoder().decode(cursor);
+            JsonNode value = json.readTree(new String(decoded, StandardCharsets.UTF_8));
+            Instant updatedAt = Instant.parse(value.path("updatedAt").asText());
+            String taskId = value.path("taskId").asText();
+            if (taskId.isBlank() || taskId.length() > 128) throw new IllegalArgumentException();
+            return new CursorBoundary(updatedAt, taskId);
+        } catch (RuntimeException | JsonProcessingException invalid) {
             throw new InvalidCursorException();
+        }
+    }
+
+    private String encodeCursor(CursorBoundary cursor) {
+        try {
+            byte[] value = json.writeValueAsBytes(Map.of(
+                    "updatedAt", cursor.updatedAt().toString(), "taskId", cursor.taskId()));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+        } catch (JsonProcessingException impossible) {
+            throw new IllegalStateException("Cannot encode task cursor", impossible);
         }
     }
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -404,4 +402,5 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
 
     private record TaskRow(String taskId, String clientId, Status status, Severity severity,
                            long version, Instant createdAt, Instant updatedAt) { }
+    private record CursorBoundary(Instant updatedAt, String taskId) { }
 }

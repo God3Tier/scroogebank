@@ -9,7 +9,9 @@ import bank.clienthealth.task.port.RelationshipTaskQueryPort.TaskFilter;
 import bank.clienthealth.task.port.RelationshipTaskQueryPort.Viewer;
 import bank.clienthealth.task.port.ClientAssignmentPort;
 import bank.clienthealth.task.port.ClientAssignmentPort.AssignmentRejectedException;
+import bank.clienthealth.task.port.RelationshipTaskQueryPort.AdminViewer;
 import bank.clienthealth.task.port.RelationshipTaskQueryPort.AgentViewer;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -24,15 +26,32 @@ public final class RelationshipTaskQueryService {
     }
 
     public Page list(Viewer viewer, TaskFilter filter) {
-        var page = queries.findTasks(Objects.requireNonNull(viewer), Objects.requireNonNull(filter));
-        if (!(viewer instanceof AgentViewer agent)) {
+        Objects.requireNonNull(viewer);
+        Objects.requireNonNull(filter);
+        var page = queries.findTasks(viewer, filter);
+        if (viewer instanceof AdminViewer admin && admin.assignedAgentSubject() == null) {
             return RelationshipTaskView.page(page.tasks(), page.nextCursor());
         }
-        var visible = page.tasks().stream()
-                .map(task -> currentTaskFor(task, agent.subject()))
-                .flatMap(Optional::stream)
-                .toList();
-        return RelationshipTaskView.page(visible, page.nextCursor());
+        String expectedSubject = viewer instanceof AgentViewer agent
+                ? agent.subject() : ((AdminViewer) viewer).assignedAgentSubject();
+        var visible = new ArrayList<bank.clienthealth.task.domain.RelationshipTask>();
+        String requestCursor = filter.cursor();
+        String nextCursor;
+        while (true) {
+            page.tasks().stream()
+                    .map(task -> currentTaskFor(task, expectedSubject))
+                    .flatMap(Optional::stream)
+                    .forEach(visible::add);
+            nextCursor = page.nextCursor();
+            if (visible.size() >= filter.limit() || nextCursor == null) break;
+            if (nextCursor.equals(requestCursor)) {
+                throw new RelationshipTaskQueryPort.InvalidCursorException();
+            }
+            requestCursor = nextCursor;
+            page = queries.findTasks(viewer, new TaskFilter(
+                    filter.statuses(), filter.severities(), filter.limit() - visible.size(), nextCursor));
+        }
+        return RelationshipTaskView.page(visible, nextCursor);
     }
 
     public Task detail(String taskId, Viewer viewer) {

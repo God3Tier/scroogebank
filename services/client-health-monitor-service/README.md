@@ -19,7 +19,11 @@ RH-SF06 now supplies the Spring Boot task API runtime wiring, PostgreSQL task
 repository, Contract-B HTTP assignment adapter, current-assignment checks and
 bounded disposition policy. Agent reads and actions re-resolve ownership and
 hide tasks from a former Agent as `404`; assignment outages fail closed as
-`503`. Admin task reads remain cross-Agent and read-only under ADR-0034.
+`503`. A newly assigned Agent can read and act on an existing task without the
+historical assignment snapshot hiding it first. Task lists use opaque Base64URL
+keyset cursors over `updated_at` and `task_id`, so inserts and updates do not
+shift later pages. Admin task reads remain cross-Agent and read-only under
+ADR-0034.
 
 RH-SF02 atomically applies complete replays by transaction ID, permits only
 Pending-to-terminal status changes, and fails closed on immutable conflicts.
@@ -58,7 +62,9 @@ suppression event mapping, transactional-enqueue/delivery ports, and a bounded
 leased relay that continues after individual delivery failures. V3 creates the
 health-db outbox, and task creation/evidence/transition/suppression paths enqueue
 through the same repository transaction boundary. The production JDBC
-repository, SQS gateway and Auditor allowlist remain pending.
+task repository now persists those events atomically with task and finding
+writes. The leased outbox JDBC adapter, SQS gateway and Auditor allowlist remain
+pending.
 
 ## Ownership boundary
 
@@ -79,6 +85,11 @@ From the repository root:
 ```sh
 mvn -pl services/client-health-monitor-service -am test
 ```
+
+PostgreSQL repository and full runtime integration tests use Testcontainers and
+run when Docker is available. The runtime test starts the real Spring context,
+applies Flyway migrations, and uses only local HTTP stubs for Cognito machine
+tokens and Contract-B assignment responses.
 
 ## Local API configuration
 

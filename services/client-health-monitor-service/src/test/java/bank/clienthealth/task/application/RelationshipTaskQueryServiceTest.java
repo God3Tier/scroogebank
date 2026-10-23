@@ -27,7 +27,8 @@ import org.junit.jupiter.api.Test;
 class RelationshipTaskQueryServiceTest {
     private final InMemoryRelationshipTaskQueryPort queries = new InMemoryRelationshipTaskQueryPort();
     private final RelationshipTaskQueryService service = new RelationshipTaskQueryService(
-            queries, clientId -> assignment(clientId, "agent-a"));
+            queries, clientId -> assignment(clientId,
+                    "client-3".equals(clientId) ? "agent-b" : "agent-a"));
 
     @BeforeEach
     void setUp() {
@@ -69,12 +70,35 @@ class RelationshipTaskQueryServiceTest {
     @Test
     void hidesTasksFromFormerAgentAfterCurrentAssignmentChanges() {
         RelationshipTaskQueryService reassigned = new RelationshipTaskQueryService(
-                queries, clientId -> assignment(clientId, "agent-b"));
+                queries, clientId -> assignment(clientId,
+                        "client-2".equals(clientId) ? "agent-b" : "agent-a"));
 
-        assertThat(reassigned.list(new AgentViewer("agent-a"),
-                new TaskFilter(Set.of(), Set.of(), 100, null)).items()).isEmpty();
         assertThatThrownBy(() -> reassigned.detail("task-new", new AgentViewer("agent-a")))
                 .isInstanceOf(RelationshipTaskService.TaskNotFoundException.class);
+        assertThat(reassigned.list(new AgentViewer("agent-a"),
+                new TaskFilter(Set.of(), Set.of(), 100, null)).items())
+                .extracting(item -> item.taskId()).doesNotContain("task-new");
+
+        assertThat(reassigned.detail("task-new", new AgentViewer("agent-b")).assignedAgentSubject())
+                .isEqualTo("agent-b");
+        assertThat(reassigned.list(new AgentViewer("agent-b"),
+                new TaskFilter(Set.of(), Set.of(), 100, null)).items())
+                .extracting(item -> item.taskId()).containsExactly("task-new");
+    }
+
+    @Test
+    void keysetCursorDoesNotShiftWhenANewerTaskIsInserted() {
+        var first = service.list(new AdminViewer(null),
+                new TaskFilter(Set.of(), Set.of(), 2, null));
+        queries.add(task("task-inserted", "client-4", "agent-a", Severity.HIGH,
+                "2026-10-23T08:00:00Z"));
+
+        var second = service.list(new AdminViewer(null),
+                new TaskFilter(Set.of(), Set.of(), 2, first.nextCursor()));
+
+        assertThat(first.items()).extracting(item -> item.taskId())
+                .containsExactly("task-other", "task-new");
+        assertThat(second.items()).extracting(item -> item.taskId()).containsExactly("task-old");
     }
 
     @Test

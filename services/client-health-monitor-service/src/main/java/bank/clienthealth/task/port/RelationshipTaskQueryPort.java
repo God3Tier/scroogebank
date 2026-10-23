@@ -9,8 +9,9 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Read boundary for the relationship-task API. Implementations must apply the
- * supplied viewer scope in the query instead of loading unrestricted tasks.
+ * Read boundary for the relationship-task API. Assignment-dependent visibility
+ * is applied by the application service after current assignment is resolved;
+ * persistence adapters must not pre-filter using the historical snapshot.
  */
 public interface RelationshipTaskQueryPort {
     TaskPage findTasks(Viewer viewer, TaskFilter filter);
