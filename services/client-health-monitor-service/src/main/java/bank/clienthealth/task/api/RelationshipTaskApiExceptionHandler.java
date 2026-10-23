@@ -5,6 +5,7 @@ import bank.clienthealth.task.domain.RelationshipTask.InvalidTransitionException
 import bank.clienthealth.task.domain.RelationshipTask.OptimisticLockException;
 import bank.clienthealth.task.domain.RelationshipTask.TaskAccessException;
 import bank.clienthealth.task.port.RelationshipTaskQueryPort.InvalidCursorException;
+import bank.clienthealth.task.port.ClientAssignmentPort.AssignmentRejectedException;
 import bank.clienthealth.task.port.DispositionPolicy.InvalidDispositionException;
 import bank.clienthealth.task.port.TaskRepository.ConflictException;
 import jakarta.validation.ConstraintViolationException;
@@ -25,8 +26,8 @@ public class RelationshipTaskApiExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "Relationship task not found", exception.getMessage());
     }
 
-    @ExceptionHandler(TaskAccessException.class)
-    ProblemDetail hidden(TaskAccessException exception) {
+    @ExceptionHandler({TaskAccessException.class, AssignmentRejectedException.class})
+    ProblemDetail hidden(RuntimeException exception) {
         return problem(HttpStatus.NOT_FOUND, "Relationship task not found", "Relationship task not found");
     }
 

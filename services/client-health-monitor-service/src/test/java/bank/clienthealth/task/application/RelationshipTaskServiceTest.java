@@ -229,6 +229,23 @@ class RelationshipTaskServiceTest {
     }
 
     @Test
+    void revalidatesCurrentAssignmentBeforeMutation() {
+        String taskId = service.upsertFinding(
+                finding("finding-1", Severity.LOW, signal("a", Severity.LOW))).taskId();
+        RelationshipTaskService reassigned = service(
+                clientId -> new AssignmentSnapshot(clientId, "new-agent", true, 2, NOW),
+                (code, note) -> { });
+
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> reassigned.accept(taskId, 1, AGENT, "former-agent"));
+        RelationshipTask accepted = reassigned.accept(taskId, 1, "new-agent", "current-agent");
+
+        assertEquals(Status.IN_REVIEW, accepted.status());
+        assertEquals("new-agent", accepted.assignment().agentSubject());
+        assertEquals(2, accepted.assignment().assignmentVersion());
+    }
+
+    @Test
     void rejectsFindingIdReuseWithDifferentContent() {
         service.upsertFinding(finding("same-id", Severity.LOW, signal("a", Severity.LOW)));
         assertThrows(RelationshipTaskService.IdempotencyConflictException.class,

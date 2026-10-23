@@ -15,9 +15,11 @@ out-of-window rows, and exposes a result only after every page succeeds. Its
 contract-faithful mock supplies six deterministic months for the three positive
 signals plus healthy and non-completed controls.
 
-It is intentionally not a runnable application yet. No Spring Boot API,
-health-db repository adapter, Bedrock adapter, transaction HTTP adapter, or
-deployment configuration has been implemented.
+RH-SF06 now supplies the Spring Boot task API runtime wiring, PostgreSQL task
+repository, Contract-B HTTP assignment adapter, current-assignment checks and
+bounded disposition policy. Agent reads and actions re-resolve ownership and
+hide tasks from a former Agent as `404`; assignment outages fail closed as
+`503`. Admin task reads remain cross-Agent and read-only under ADR-0034.
 
 RH-SF02 atomically applies complete replays by transaction ID, permits only
 Pending-to-terminal status changes, and fails closed on immutable conflicts.
@@ -42,7 +44,8 @@ RH-SF05 task persistence migrations now create tasks, assignment snapshots,
 evidence, history, daily admissions and idempotent processed-finding outcomes.
 V2 enforces strict non-overlapping evidence windows, the three supported signal
 types, SHA-256 fingerprints and the closed-task cooldown query index. The JDBC
-repository adapter remains pending.
+adapter writes a complete aggregate in one `TransactionTemplate` unit and uses
+an explicit version predicate for compare-and-set updates.
 
 The offline V1 rule-evaluation harness runs six labelled synthetic scenario
 groups covering positives, healthy controls, exact boundaries, just-below
@@ -76,6 +79,38 @@ From the repository root:
 mvn -pl services/client-health-monitor-service -am test
 ```
 
+## Local API configuration
+
+The service has no embedded database and does not ship credentials. Set these
+properties through environment variables or an external Spring configuration:
+
+| Spring property | Environment form | Purpose |
+|---|---|---|
+| `spring.datasource.url` | `SPRING_DATASOURCE_URL` | JDBC URL for health-db |
+| `spring.datasource.username` | `SPRING_DATASOURCE_USERNAME` | health-db application login |
+| `spring.datasource.password` | `SPRING_DATASOURCE_PASSWORD` | health-db application password |
+| `spring.security.oauth2.resourceserver.jwt.issuer-uri` | `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` | Cognito user-pool issuer |
+| `idp.cognito.app-client-id` | `IDP_COGNITO_APP_CLIENT_ID` | CRM access-token client ID |
+| `client-health.assignment.base-url` | `CLIENT_HEALTH_ASSIGNMENT_BASE_URL` | client-profile internal ALB URL |
+| `client-health.assignment.oauth.token-uri` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_TOKEN_URI` | Cognito token endpoint |
+| `client-health.assignment.oauth.client-id` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID` | health-service machine client |
+| `client-health.assignment.oauth.client-secret` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET` | secret supplied outside Git |
+| `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | assignment-read scope |
+
+With configuration supplied, run from the repository root:
+
+```sh
+mvn -pl services/client-health-monitor-service spring-boot:run
+```
+
+The application starts with concrete task/query services and repositories.
+Assignment-dependent operations cannot succeed until the client-profile owner
+implements the currently proposed Contract-B endpoint and provisions the scoped
+Cognito client. Blank or unreachable assignment configuration produces `503`
+without exposing or mutating a task. AWS still runs Flyway in the separate
+`db-migrate` container required by ADR-0028; application-start Flyway is for
+local development and tests only.
+
 Contract documentation and fixtures:
 
 - `docs/api/client-health-monitor-contracts.md`
@@ -101,9 +136,9 @@ tests intentionally keep database technology out of the rule-facing domain.
 
 Garvit's provider-independent RH-SF01-SF04 stream is now implemented. Remaining
 integration work includes the real Feature 3 replay adapter, production
-projection/run repositories, and Java 25 CI. Swayam's RH-SF05 task stream must
-implement ADR-0053's atomic 30-day severity-worsening cooldown and 20-new-task
-Singapore-day cap before production orchestration is complete.
+projection/run repositories, and Java 25 CI. The client-profile Contract-B
+provider and its scoped Cognito registration remain external prerequisites for
+live current-assignment authorization.
 
 RH-SF08 production follow-up adds the outbox table/repository in the same
 transaction as SF05 task writes, then an IAM-scoped SQS gateway and the

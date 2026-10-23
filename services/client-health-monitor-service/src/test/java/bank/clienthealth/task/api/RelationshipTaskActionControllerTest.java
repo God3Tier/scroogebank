@@ -139,6 +139,22 @@ class RelationshipTaskActionControllerTest {
     }
 
     @Test
+    void rejectsOversizedCompletionAndDismissalNotes() throws Exception {
+        String oversized = "x".repeat(501);
+        mockMvc.perform(post("/api/relationship-health/tasks/task-1/complete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":2,\"outcomeCode\":\"DONE\",\"note\":\""
+                                + oversized + "\"}").with(agent()))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/relationship-health/tasks/task-1/dismiss")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":1,\"reasonCode\":\"EXPECTED\",\"note\":\""
+                                + oversized + "\"}").with(agent()))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(tasks);
+    }
+
+    @Test
     void mapsConcurrencyAndOwnershipFailuresWithoutLeakingTasks() throws Exception {
         when(tasks.accept("task-1", 1, "agent-a", "correlation-1"))
                 .thenThrow(new OptimisticLockException("stale version"));

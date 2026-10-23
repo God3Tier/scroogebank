@@ -565,7 +565,7 @@ components:
         afterSeverity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
         evidenceAddedCount: {type: integer, minimum: 0}
         dispositionCode: {type: [string, 'null'], maxLength: 128}
-        note: {type: [string, 'null']}
+        note: {type: [string, 'null'], maxLength: 500}
     AcceptRelationshipTaskRequest:
       type: object
       additionalProperties: false
@@ -579,7 +579,7 @@ components:
       properties:
         expectedVersion: {type: integer, minimum: 1}
         outcomeCode: {type: string, minLength: 1, maxLength: 128}
-        note: {type: [string, 'null']}
+        note: {type: [string, 'null'], maxLength: 500}
     DismissRelationshipTaskRequest:
       type: object
       additionalProperties: false
@@ -587,7 +587,7 @@ components:
       properties:
         expectedVersion: {type: integer, minimum: 1}
         reasonCode: {type: string, minLength: 1, maxLength: 128}
-        note: {type: [string, 'null']}
+        note: {type: [string, 'null'], maxLength: 500}
     Problem:
       type: object
       additionalProperties: false

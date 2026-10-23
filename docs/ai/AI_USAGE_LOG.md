@@ -798,3 +798,19 @@
   skipped because local Docker was unavailable. Java 25 CI with Docker must run
   V1-to-V2 migration, rerun idempotency, valid evidence and malformed
   window/type/fingerprint cases before merge.
+
+## 2026-10-23 — Client Health SF06 runtime and assignment hardening
+
+- Human owner: Swayam.
+- Tool: OpenAI Codex.
+- Use: implement Spring runtime wiring, the PostgreSQL task/query adapter,
+  Contract-B client-credentials consumer, current-assignment authorization,
+  bounded disposition notes, API schema updates, tests and startup guidance.
+- Human verification required: review the SQL mapping and authorization flow;
+  the client-profile owner must implement and approve Contract B and scoped
+  Cognito provisioning before live assignment lookups are enabled.
+- Data: repository code and synthetic identifiers only. No credentials, real
+  client data, AWS calls or external services were used.
+- Verification: focused domain/controller/adapter/configuration tests and the
+  full Client Health Maven suite; PostgreSQL Testcontainers coverage depends on
+  local Docker availability.

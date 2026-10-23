@@ -26,7 +26,8 @@ import org.junit.jupiter.api.Test;
 
 class RelationshipTaskQueryServiceTest {
     private final InMemoryRelationshipTaskQueryPort queries = new InMemoryRelationshipTaskQueryPort();
-    private final RelationshipTaskQueryService service = new RelationshipTaskQueryService(queries);
+    private final RelationshipTaskQueryService service = new RelationshipTaskQueryService(
+            queries, clientId -> assignment(clientId, "agent-a"));
 
     @BeforeEach
     void setUp() {
@@ -62,6 +63,17 @@ class RelationshipTaskQueryServiceTest {
         assertThatThrownBy(() -> service.detail("task-other", new AgentViewer("agent-a")))
                 .isInstanceOf(RelationshipTaskService.TaskNotFoundException.class);
         assertThatThrownBy(() -> service.detail("missing", new AgentViewer("agent-a")))
+                .isInstanceOf(RelationshipTaskService.TaskNotFoundException.class);
+    }
+
+    @Test
+    void hidesTasksFromFormerAgentAfterCurrentAssignmentChanges() {
+        RelationshipTaskQueryService reassigned = new RelationshipTaskQueryService(
+                queries, clientId -> assignment(clientId, "agent-b"));
+
+        assertThat(reassigned.list(new AgentViewer("agent-a"),
+                new TaskFilter(Set.of(), Set.of(), 100, null)).items()).isEmpty();
+        assertThatThrownBy(() -> reassigned.detail("task-new", new AgentViewer("agent-a")))
                 .isInstanceOf(RelationshipTaskService.TaskNotFoundException.class);
     }
 
@@ -107,5 +119,10 @@ class RelationshipTaskQueryServiceTest {
                 java.util.List.of(signal), new PriorityInputs(severity, 1), "correlation-1", now);
         return RelationshipTask.create(taskId, finding,
                 new AssignmentSnapshot(clientId, agent, true, 1, now), now);
+    }
+
+    private static AssignmentSnapshot assignment(String clientId, String agent) {
+        return new AssignmentSnapshot(clientId, agent, true, 2,
+                Instant.parse("2026-10-23T00:00:00Z"));
     }
 }

@@ -12,12 +12,12 @@ public final class RelationshipTaskActionRequest {
     public record Complete(
             @Positive long expectedVersion,
             @NotBlank @Size(max = 128) String outcomeCode,
-            String note
+            @Size(max = 500) String note
     ) { }
 
     public record Dismiss(
             @Positive long expectedVersion,
             @NotBlank @Size(max = 128) String reasonCode,
-            String note
+            @Size(max = 500) String note
     ) { }
 }
