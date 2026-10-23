@@ -329,7 +329,7 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
                 List.of(values), rs.getString("disposition_code"), rs.getString("note"));
     }
 
-    private ClientHealthFinding readFinding(String value) {
+    ClientHealthFinding readFinding(String value) {
         try {
             JsonNode root = json.readTree(value);
             List<SignalEvidence<? extends EvidenceDetails>> signals = new ArrayList<>();
@@ -344,7 +344,8 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
                     root.path("clientId").asText(), root.path("analysisRunId").asText(),
                     root.path("rulesetVersion").asText(), json.treeToValue(root.path("analysisWindow"), AnalysisWindow.class),
                     signals, json.treeToValue(root.path("priorityInputs"), PriorityInputs.class),
-                    root.path("correlationId").asText(), Instant.parse(root.path("detectedAt").asText()));
+                    root.path("correlationId").asText(),
+                    json.treeToValue(root.path("detectedAt"), Instant.class));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Stored finding JSON is invalid", exception);
         }
