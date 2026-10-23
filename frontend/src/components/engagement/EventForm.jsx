@@ -34,8 +34,9 @@ function problemFor(error) {
 }
 
 // Creates or edits one meeting. The agent's mailbox receives the invite,
-// update or cancellation; the CRM is the source of truth (ADR-0052).
-function EventForm({ event, clients, defaultStart, onSave, onCancelEvent, onClose }) {
+// update or cancellation; the CRM is the source of truth (ADR-0052). `now`
+// fixes the clock for tests; otherwise each save checks against the real time.
+function EventForm({ event, clients, defaultStart, now, onSave, onCancelEvent, onClose }) {
   const isNew = !event
   const [values, setValues] = useState(() => initialValues(event, defaultStart))
   const [state, setState] = useState({ saving: false, error: '' })
@@ -56,7 +57,7 @@ function EventForm({ event, clients, defaultStart, onSave, onCancelEvent, onClos
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const problem = validateEvent(values, { isNew })
+    const problem = validateEvent(values, { isNew, now: now ?? new Date() })
     if (problem) {
       setState({ saving: false, error: problem })
       return
