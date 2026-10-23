@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createAccount, listAccounts, updateAccountStatus } from '../api/accounts.js'
-import { fetchDocument, getClient, listDocuments, uploadDocument, verifyClient } from '../api/clients.js'
+import { fetchDocument, getClient, listDocuments, reassignClients, uploadDocument, verifyClient } from '../api/clients.js'
+import { listUsers } from '../api/users.js'
 import ClientProfile from './ClientProfile.jsx'
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
@@ -15,7 +16,9 @@ vi.mock('../api/clients.js', () => ({
   uploadDocument: vi.fn(),
   fetchDocument: vi.fn(),
   verifyClient: vi.fn(),
+  reassignClients: vi.fn(),
 }))
+vi.mock('../api/users.js', () => ({ listUsers: vi.fn() }))
 
 const CLIENT_ID = '00000000-0000-0000-0000-000000000101'
 const AGENT_SUB = 'agent-sub-0001'
@@ -35,6 +38,7 @@ const unverified = {
   country: 'Singapore',
   postal_code: '123456',
   verification_status: 'UNVERIFIED',
+  assigned_agent_id: AGENT_SUB,
 }
 
 // Agents may open accounts only for verified clients (ADR-0050).
@@ -341,6 +345,7 @@ describe('client page', () => {
   // Admins only read client data (ADR-0059).
   it('shows an admin the client and its documents, and no control that changes them', async () => {
     useAuth.mockReturnValue({ isAuthenticated: true, user: { profile: { sub: 'admin-sub-0009', 'cognito:groups': ['Admin'] } } })
+    listUsers.mockResolvedValue({ content: [] })
     renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Synthetic Client' })).toBeInTheDocument()
@@ -356,6 +361,42 @@ describe('client page', () => {
 
     await openDocument()
     expect(fetchDocument).toHaveBeenCalledWith(CLIENT_ID, 'doc-0001')
+  })
+
+  // Admins move one client, with its accounts, to another agent (UM07, ADR-0060).
+  it("shows an admin the client's agent and moves the client to another enabled agent", async () => {
+    useAuth.mockReturnValue({ isAuthenticated: true, user: { profile: { sub: 'admin-sub-0009', 'cognito:groups': ['Admin'] } } })
+    listUsers.mockResolvedValue({
+      content: [
+        { id: 'user-1', idpSub: AGENT_SUB, firstName: 'Synthetic', lastName: 'Agent', email: 'agent@example.test', enabled: false },
+        { id: 'user-2', idpSub: 'agent-sub-0002', firstName: 'Other', lastName: 'Agent', email: 'other@example.test', enabled: true },
+        { id: 'user-3', idpSub: 'agent-sub-0003', firstName: 'Away', lastName: 'Agent', email: 'away@example.test', enabled: false },
+      ],
+    })
+    reassignClients.mockResolvedValue({ reassigned: 1, client_ids: [CLIENT_ID] })
+    renderPage()
+
+    const panel = (await screen.findByRole('heading', { name: 'Agent' })).closest('section')
+    expect(await within(panel).findByText('Synthetic Agent (agent@example.test), disabled')).toBeInTheDocument()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reassign' }))
+    const select = within(panel).getByLabelText('New agent')
+    // Only enabled agents other than the client's own.
+    expect([...select.options].map((option) => option.value)).toEqual(['', 'user-2'])
+    fireEvent.change(select, { target: { value: 'user-2' } })
+    getClient.mockResolvedValue({ ...unverified, assigned_agent_id: 'agent-sub-0002' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reassign client' }))
+
+    expect(await within(panel).findByRole('status')).toHaveTextContent('1 client moved to Other Agent, with their accounts.')
+    expect(reassignClients).toHaveBeenCalledWith({ toUserId: 'user-2', clientIds: [CLIENT_ID] })
+    expect(within(panel).getByText('Other Agent (other@example.test)')).toBeInTheDocument()
+  })
+
+  it('shows agents no Agent panel', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Synthetic Client' })
+
+    expect(screen.queryByRole('heading', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(listUsers).not.toHaveBeenCalled()
   })
 
   it('says so when the client is already verified', async () => {

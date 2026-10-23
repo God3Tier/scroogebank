@@ -35,6 +35,18 @@ describe('describing client and account changes', () => {
     })
   })
 
+  it("describes each client a reassignment moved, without the agents' IDs", () => {
+    const entry = describeActivity(crm('UPDATE', 'POST', '/api/clients/reassignments', {
+      attribute_name: 'assigned_agent_id', client_id: CLIENT_ID, before_value: 'agent-sub-old', after_value: 'agent-sub-new',
+    }))
+    expect(entry).toMatchObject({
+      text: 'reassigned a client to another agent',
+      record: { label: 'Client', id: CLIENT_ID },
+      clientId: CLIENT_ID,
+      note: null,
+    })
+  })
+
   it('does not open a deleted client', () => {
     expect(describeActivity(crm('DELETE', 'DELETE', '/api/clients/:clientId', { client_id: CLIENT_ID }))).toMatchObject({
       text: 'deleted a client profile',
