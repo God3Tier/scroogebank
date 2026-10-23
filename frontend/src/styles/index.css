@@ -664,6 +664,11 @@ textarea:focus {
   margin: 0;
 }
 
+/* Between the client page's cards, so it lines up with them. */
+.client-profile > .read-only-notice {
+  margin: 0 0 var(--stack-lg);
+}
+
 .client-header p {
   color: var(--on-surface-variant);
 }

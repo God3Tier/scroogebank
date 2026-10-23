@@ -99,43 +99,50 @@ func envOrDefault(name, fallback string) string {
 	return fallback
 }
 
-func TestDocumentRoutesAndVerifyAreOnlyForTheOwnerAndAdmins(t *testing.T) {
+// Agents use their own clients; admins only read every client (ADR-0059).
+func TestClientRoutesAreForTheOwnerAndReadOnlyForAdmins(t *testing.T) {
 	db := openRouterTestDB(t)
 	gin.SetMode(gin.TestMode)
 	requests := []struct {
 		method, path, handler string
+		write                 bool
 	}{
-		{http.MethodPost, "/api/clients/" + documentsClientID + "/documents", "UploadClientDocument?id=" + documentsClientID},
-		{http.MethodGet, "/api/clients/" + documentsClientID + "/documents", "ListClientDocuments?id=" + documentsClientID},
-		{http.MethodGet, "/api/clients/" + documentsClientID + "/documents/" + documentID, "GetClientDocument?documentId=" + documentID + "&id=" + documentsClientID},
-		{http.MethodPost, "/api/clients/" + documentsClientID + "/verify", "VerifyClientIdentity?id=" + documentsClientID},
+		{http.MethodPost, "/api/clients", "CreateClientProfile?", true},
+		{http.MethodGet, "/api/clients/" + documentsClientID, "GetClientProfile?id=" + documentsClientID, false},
+		{http.MethodPut, "/api/clients/" + documentsClientID, "UpdateClientInformation?id=" + documentsClientID, true},
+		{http.MethodDelete, "/api/clients/" + documentsClientID, "DeleteClientProfile?id=" + documentsClientID, true},
+		{http.MethodPost, "/api/clients/" + documentsClientID + "/documents", "UploadClientDocument?id=" + documentsClientID, true},
+		{http.MethodGet, "/api/clients/" + documentsClientID + "/documents", "ListClientDocuments?id=" + documentsClientID, false},
+		{http.MethodGet, "/api/clients/" + documentsClientID + "/documents/" + documentID, "GetClientDocument?documentId=" + documentID + "&id=" + documentsClientID, false},
+		{http.MethodPost, "/api/clients/" + documentsClientID + "/verify", "VerifyClientIdentity?id=" + documentsClientID, true},
 	}
-	principals := map[string]struct {
-		principal security.Principal
-		reaches   bool
-	}{
-		"the owning agent": {security.Principal{Subject: documentsOwner, Role: "AGENT"}, true},
-		"an admin":         {security.Principal{Subject: "admin-161", Role: "ADMIN"}, true},
-		"another agent":    {security.Principal{Subject: "agent-other-161", Role: "AGENT"}, false},
+	principals := map[string]security.Principal{
+		"the owning agent": {Subject: documentsOwner, Role: "AGENT"},
+		"an admin":         {Subject: "admin-161", Role: "ADMIN"},
+		"another agent":    {Subject: "agent-other-161", Role: "AGENT"},
 	}
-	for name, caller := range principals {
+	for name, principal := range principals {
 		for _, request := range requests {
-			t.Run(name+" "+request.method+" "+strings.TrimPrefix(request.path, "/api/clients/"+documentsClientID), func(t *testing.T) {
+			t.Run(name+" "+request.method+" "+strings.TrimPrefix(request.path, "/api/clients"), func(t *testing.T) {
 				router := gin.New()
 				clients := &recordingClients{}
 				noAudit := func(c *gin.Context) { c.Next() }
-				principal := caller.principal
+				principal := principal
 				RegisterRoutes(router, clients, &recordingAggregates{}, db, signedInAs(&principal), noAudit)
 				res := httptest.NewRecorder()
 
 				router.ServeHTTP(res, httptest.NewRequest(request.method, request.path, nil))
 
-				if caller.reaches {
-					assert.Equal(t, http.StatusOK, res.Code)
-					assert.Equal(t, []string{request.handler}, clients.reached)
-				} else {
+				switch {
+				case principal.Role == "ADMIN" && request.write:
+					assert.Equal(t, http.StatusForbidden, res.Code, "admins only read client data")
+					assert.Empty(t, clients.reached)
+				case principal.Subject == "agent-other-161" && request.path != "/api/clients":
 					assert.Equal(t, http.StatusNotFound, res.Code, "another agent's client looks missing")
 					assert.Empty(t, clients.reached)
+				default:
+					assert.Equal(t, http.StatusOK, res.Code)
+					assert.Equal(t, []string{request.handler}, clients.reached)
 				}
 			})
 		}

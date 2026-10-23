@@ -361,8 +361,7 @@ function ClientProfileView({ clientId }) {
       setVerification({ saving: false, error: 'The client was verified, but the page could not be refreshed. Reload the page.' })
       return
     }
-    // Agents manage client accounts; admins do not (requirements Q&A UM18).
-    if (!admin) await offerActivation()
+    await offerActivation()
   }
 
   // Asks the agent whether the newly verified client's Pending accounts
@@ -419,6 +418,10 @@ function ClientProfileView({ clientId }) {
   const { client, documents } = state
   const verified = isVerified(client)
   const accountsPath = `/agent/client/${encodeURIComponent(clientId)}/transactions`
+  // Admins only read client data: no edit, account, upload or verify control
+  // (ADR-0059).
+  const accountsLabel = admin ? 'View accounts and transactions' : 'Manage accounts and transactions'
+  const checkable = !admin && !verified
   const withoutDocument = verified && client.verified_with_documents === false
   const verifyWithDocuments = checked.size > 0
   const evidenceCount = documents.filter((doc) => doc.verification_evidence).length
@@ -446,7 +449,7 @@ function ClientProfileView({ clientId }) {
         <div className="client-header__text">
           <h1>{client.first_name} {client.last_name}</h1>
           <p>{client.email}</p>
-          <p><Link to={accountsPath}>Manage accounts and transactions</Link></p>
+          <p><Link to={accountsPath}>{accountsLabel}</Link></p>
         </div>
         <div className="client-header__badges">
           <span className={`status-badge ${verified ? 'status-badge--verified' : 'status-badge--attention'}`}>
@@ -462,10 +465,17 @@ function ClientProfileView({ clientId }) {
         </div>
       </header>
 
+      {admin && (
+        <div className="read-only-notice" role="note">
+          <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
+          <span><strong>Read only.</strong> Admins can view this client, but only the client's agent can change them.</span>
+        </div>
+      )}
+
       <section className="card" aria-labelledby="profile-title">
         <div className="document-preview__header">
           <h2 id="profile-title">Profile</h2>
-          {!editing && (
+          {!admin && !editing && (
             <button type="button" onClick={() => { setEditMessage(''); setEditing(true) }}>Edit</button>
           )}
         </div>
@@ -487,12 +497,16 @@ function ClientProfileView({ clientId }) {
       <section className="card" aria-labelledby="accounts-title">
         <div className="document-preview__header">
           <h2 id="accounts-title">Accounts</h2>
-          {!openingAccount && (
+          {!admin && !openingAccount && (
             <button type="button" onClick={() => { setAccountMessage(''); setOpeningAccount(true) }}>Open account</button>
           )}
         </div>
         {accountMessage && <p className="success-message" role="status">{accountMessage}</p>}
-        {openingAccount ? (
+        {admin ? (
+          <p className="section-note">
+            To see the accounts this client holds, use <Link to={accountsPath}>{accountsLabel}</Link>.
+          </p>
+        ) : openingAccount ? (
           <AccountOpener clientId={clientId} pendingOnly={!verified} onOpened={handleAccountOpened} onCancel={() => setOpeningAccount(false)} />
         ) : (
           <p className="section-note">
@@ -504,22 +518,28 @@ function ClientProfileView({ clientId }) {
 
       <section className="card card-flush" aria-labelledby="documents-title">
         <h2 id="documents-title">Identity documents</h2>
-        <div className="card-body">
-          <p className="section-note">
-            Upload the identity document the client gave you, open it and compare it with the profile.
-            Uploading a document does not verify the client. Documents are optional, but a verification
-            without one is recorded and shown as such.
-          </p>
-          <form className="document-upload" onSubmit={handleUpload}>
-            <label>
-              Document file (JPEG, PNG or PDF, up to 5 MB)
-              <input type="file" accept={ACCEPTED_FILES} onChange={(event) => setFile(event.target.files?.[0] || null)} />
-            </label>
-            <button type="submit" disabled={!file || upload.saving}>{upload.saving ? 'Uploading…' : 'Upload'}</button>
-          </form>
-          {upload.error && <p className="form-error" role="alert">{upload.error}</p>}
-          {upload.message && <p className="success-message" role="status">{upload.message}</p>}
-        </div>
+        {admin ? (
+          <div className="card-body">
+            <p className="section-note">The identity documents the client's agent uploaded. Open one to see it.</p>
+          </div>
+        ) : (
+          <div className="card-body">
+            <p className="section-note">
+              Upload the identity document the client gave you, open it and compare it with the profile.
+              Uploading a document does not verify the client. Documents are optional, but a verification
+              without one is recorded and shown as such.
+            </p>
+            <form className="document-upload" onSubmit={handleUpload}>
+              <label>
+                Document file (JPEG, PNG or PDF, up to 5 MB)
+                <input type="file" accept={ACCEPTED_FILES} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              </label>
+              <button type="submit" disabled={!file || upload.saving}>{upload.saving ? 'Uploading…' : 'Upload'}</button>
+            </form>
+            {upload.error && <p className="form-error" role="alert">{upload.error}</p>}
+            {upload.message && <p className="success-message" role="status">{upload.message}</p>}
+          </div>
+        )}
 
         {documents.length === 0 ? (
           <p className="empty-state">No documents yet.</p>
@@ -528,7 +548,7 @@ function ClientProfileView({ clientId }) {
             <table className="data-table documents-table">
               <thead>
                 <tr>
-                  {!verified && <th scope="col">Checked</th>}
+                  {checkable && <th scope="col">Checked</th>}
                   <th scope="col">Document</th>
                   <th scope="col" className="num">Size</th>
                   <th scope="col">Uploaded</th>
@@ -543,7 +563,7 @@ function ClientProfileView({ clientId }) {
                   const uploader = who(doc.uploaded_by_agent_id)
                   return (
                     <tr key={doc.document_id}>
-                      {!verified && (
+                      {checkable && (
                         <td>
                           <input
                             type="checkbox"
@@ -574,7 +594,7 @@ function ClientProfileView({ clientId }) {
             </table>
           </div>
         )}
-        {!verified && documents.length > 0 && (
+        {checkable && documents.length > 0 && (
           <p className="section-note card-body">Open a document before you mark it as checked.</p>
         )}
       </section>
@@ -631,7 +651,10 @@ function ClientProfileView({ clientId }) {
           </p>
         )}
         {activation.message && <p className="success-message" role="status">{activation.message}</p>}
-        {!verified && (
+        {admin && !verified && (
+          <p className="section-note">Not verified yet. Only the client's agent can verify them.</p>
+        )}
+        {checkable && (
           <form className="verify-form" onSubmit={handleVerify}>
             <p>
               Verify the client once you have checked their identity against the profile. The verification

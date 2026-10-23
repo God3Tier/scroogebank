@@ -8,20 +8,23 @@ import (
 )
 
 // CreateAccount replaces the old accounts-to-clients foreign key with an API
-// check. Admins go through it too: it is what proves the client exists.
+// check.
 func (s *accountService) CreateAccount(ctx context.Context, account models.CreateAccountInput, caller models.Caller, authorization string) error {
+	// Admins do not manage client accounts (requirements Q&A UM18, ADR-0059).
+	if caller.Admin {
+		return accounterrors.ErrForbidden
+	}
 	client, err := s.clients.Lookup(ctx, account.ClientID.String(), authorization)
 	if err != nil {
 		return err
 	}
 	// An unverified client's new accounts are pending until the agent
-	// verifies the client and activates them (ADR-0050). Admins do not manage
-	// client accounts; what they may still do here is open item 23.
-	if !caller.Admin && !client.Verified && account.Status != models.AccountStatusPending {
+	// verifies the client and activates them (ADR-0050).
+	if !client.Verified && account.Status != models.AccountStatusPending {
 		return accounterrors.ErrClientNotVerified
 	}
-	// The client's owner, not the caller: an admin opening an account for an
-	// agent's client must not become its owner.
+	// The client's owner, not the caller, which the lookup has shown to be the
+	// same agent.
 	account.OwnerAgentID = client.OwnerAgentID
 	return s.repo.CreateAccount(ctx, account)
 }

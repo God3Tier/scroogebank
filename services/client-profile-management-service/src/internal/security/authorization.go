@@ -26,9 +26,23 @@ func RequireCRMRole() gin.HandlerFunc {
 	}
 }
 
+// RequireAgent keeps admins to reading client data: every route that changes a
+// client or its documents is for agents only (ADR-0059).
+func RequireAgent() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := PrincipalFromGin(c)
+		if !ok || principal.Role != "AGENT" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admins have read-only access to client data"})
+			return
+		}
+		c.Next()
+	}
+}
+
 // RequireClientOwner limits agent access to their own client profiles. Admins
-// can access every profile. Missing, deleted and out-of-scope profiles all
-// return 404 so callers cannot enumerate another agent's client IDs.
+// can read every profile; the routes that change one also need RequireAgent.
+// Missing, deleted and out-of-scope profiles all return 404 so callers cannot
+// enumerate another agent's client IDs.
 //
 // account-service relies on this rule: it forwards the caller's token to
 // GET /api/clients/{id} before creating an account, and treats 404 as "no
