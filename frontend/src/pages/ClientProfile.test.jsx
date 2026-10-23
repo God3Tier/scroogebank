@@ -338,13 +338,24 @@ describe('client page', () => {
     expect(screen.getByText(/This client has 1 Pending account\.\s+Make it Active\?/)).toBeInTheDocument()
   })
 
-  it('asks an admin nothing about accounts after a verification', async () => {
+  // Admins only read client data (ADR-0059).
+  it('shows an admin the client and its documents, and no control that changes them', async () => {
     useAuth.mockReturnValue({ isAuthenticated: true, user: { profile: { sub: 'admin-sub-0009', 'cognito:groups': ['Admin'] } } })
-    listAccounts.mockResolvedValue([{ id: 'acct-0001', status: 'pending' }])
-    await verifyWithoutDocument()
+    renderPage()
 
-    expect(listAccounts).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Make Active' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Synthetic Client' })).toBeInTheDocument()
+    expect(screen.getByRole('note')).toHaveTextContent("only the client's agent can change them")
+    expect(screen.getByText('synthetic.client@example.test', { selector: 'dd' })).toBeInTheDocument()
+    expect(screen.getByText(/Only the client's agent can verify them\./)).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'View accounts and transactions' })).toHaveLength(2)
+    for (const name of ['Edit', 'Open account', 'Upload', 'Verify client', 'Verify without a document']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+    expect(screen.queryByLabelText(/Document file/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+
+    await openDocument()
+    expect(fetchDocument).toHaveBeenCalledWith(CLIENT_ID, 'doc-0001')
   })
 
   it('says so when the client is already verified', async () => {
