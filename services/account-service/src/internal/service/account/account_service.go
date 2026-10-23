@@ -25,6 +25,10 @@ type AccountService interface {
 	// LookupAccounts returns the accounts among ids that exist and are not
 	// deleted, for the transaction import (ADR-0037).
 	LookupAccounts(ctx context.Context, ids []string) (orm.AccountSlice, error)
+	// SetOwner gives every account of the clients to a new owner, when an
+	// admin reassigns the clients in client-profile-management-service
+	// (ADR-0060). It returns how many accounts it updated.
+	SetOwner(ctx context.Context, clientIDs []string, ownerAgentID string) (int64, error)
 }
 
 type accountService struct {

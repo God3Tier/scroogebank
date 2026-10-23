@@ -8,8 +8,9 @@
 CREATE TABLE accounts (
     id              UUID PRIMARY KEY,
     client_id       UUID           NOT NULL,
-    -- Cognito sub of the agent who owns client_id, copied at creation.
-    -- VARCHAR(128) to match clients.created_by_agent_id: Cognito does not
+    -- Cognito sub of the agent who owns client_id, copied at creation and
+    -- updated when an admin reassigns the client (ADR-0060).
+    -- VARCHAR(128) to match clients.assigned_agent_id: Cognito does not
     -- guarantee that sub is a UUID.
     owner_agent_id  VARCHAR(128)   NOT NULL,
     account_type    VARCHAR(20)    NOT NULL,

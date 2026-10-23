@@ -14,6 +14,7 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
 | GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |
+| PUT | `/ownership/accounts` | ADMIN | Give every account of the clients, deleted ones included, to a new owner: body `{"client_ids": [...], "owner_agent_id": "<sub>"}` (1 to 1,000 UUIDs), answer `{"accounts": n}`. Only client-profile-management-service calls it, with the admin's token, while it reassigns those clients. Outside `/api`, so API Gateway never routes it; not audited here, as client-service audits each client moved (ADR-0060) |
 
 `GET /health` is public; all `/api` routes require a Cognito user **access token**.
 
@@ -41,7 +42,7 @@ The `accounts` table has no foreign key to `clients`, because clients live in an
 
   | client service answers | Response |
   |---|---|
-  | 200 | The account is created. The client's `created_by_agent_id` is stored as `owner_agent_id` |
+  | 200 | The account is created. The client's `assigned_agent_id` is stored as `owner_agent_id` |
   | 200, but the client's `verification_status` is not `VERIFIED` (in any case) and the status is not `PENDING` | 403 `an unverified client's account can only be opened as pending`, and nothing is created ([ADR-0050](../../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)) |
   | 404 | 404, and nothing is created |
   | Anything else, or no answer within 2 seconds | 503, and nothing is created |
@@ -49,7 +50,7 @@ The `accounts` table has no foreign key to `clients`, because clients live in an
   The owner stored is the client's owner as client-profile-management-service reports it, never a value from the request.
 - **Reading, deleting or changing an account** compares the caller's `sub` with the stored `owner_agent_id`. That is a local query, with no call to another service. Admins skip it when reading, and are refused with 403 before it on every write; an agent who does not own the account gets 404, the same as for a missing one.
 
-Copying the owner is correct because a client's owner never changes: nothing updates `created_by_agent_id`, and there is no reassignment feature. If one is added, the copies must be updated with it (ADR-0035).
+The copy stays correct when an admin reassigns a client: client-profile-management-service locks the clients, calls `PUT /ownership/accounts` here with the admin's token, and only then moves the clients ([ADR-0060](../../docs/adr/ADR-0060-client-reassignment.md)). If that call fails, nothing moves.
 
 client-profile-management-service calls the list endpoint before deleting a client, and refuses the delete while accounts remain. Deleted accounts are not listed, so they do not block it; closed accounts that are not deleted do.
 

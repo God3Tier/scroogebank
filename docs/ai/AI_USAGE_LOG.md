@@ -911,3 +911,26 @@
   (Docker, with PostgreSQL); frontend lint, 204 tests and build passed (one
   test failed once while Docker tests ran alongside and passed on rerun). Not
   run end to end.
+
+## 2026-10-23 — Client reassignment (open item 24)
+
+- Human owner: Neo Jia Wen (decision owner; accepted ADR-0060).
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0060 from the requirements Q&A (UM07, UM15, UM17, UM18,
+  CPM30); rename `clients.created_by_agent_id` to `assigned_agent_id`; add
+  `POST /api/clients/reassignments` to client-service (user lookup in
+  user-service, account move through account-service's new
+  `PUT /ownership/accounts`, one audit event per client); add Reassign controls
+  to Admin Home and the client page; wire `USER_SERVICE_BASE_URL` and a
+  security-group rule in `stacks/crm`; update tests and docs. Also renumbered
+  the duplicate F2-SEC-02 task added with ADR-0059 to F2-SEC-04.
+- Human verification required: decide what
+  client-health-monitor-service does with open tasks of a moved client; run
+  `terraform plan` for `stacks/crm` and the end-to-end check in ADR-0060.
+- Data: repository content and synthetic test data only. No credentials, real
+  client data or AWS resources were used.
+- Verification: `make test` passed for client-service and account-service
+  (Docker, with PostgreSQL), and the reassignment repository tests were run
+  again verbosely; frontend lint and the affected test files passed;
+  `terraform fmt -check` passed. Terraform was not planned or applied. Not run
+  end to end.

@@ -21,6 +21,8 @@ const CRM_ROUTES = {
   'DELETE /api/clients/:clientId': { text: 'deleted a client profile', icon: 'person_remove', tone: 'remove', record: 'Client' },
   'POST /api/clients/:clientId/verify': { text: 'verified a client', icon: 'verified_user', tone: 'verify', record: 'Client', opens: true, evidence: true },
   'POST /api/clients/:clientId/documents': { text: 'uploaded an identity document', icon: 'upload_file', tone: 'change', record: 'Client', opens: true },
+  // One entry per client moved; the agents are Cognito subs, so not shown (ADR-0060).
+  'POST /api/clients/reassignments': { text: 'reassigned a client to another agent', icon: 'swap_horiz', tone: 'change', record: 'Client', opens: true },
   'POST /api/accounts': { text: 'opened an account', icon: 'account_balance', tone: 'create', record: 'Client', opens: true },
   // account-service records the account's ID in client_id on its account
   // routes. Deleting is not closing: Closed is a status (ADR-0036, ADR-0050).

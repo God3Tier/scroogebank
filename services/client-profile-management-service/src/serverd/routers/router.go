@@ -51,6 +51,9 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 		client.POST("", security.RequireAgent(), adaptHandler(clients.CreateClientProfile, ""))
 		// Scoped by the caller, so no ownership check (ADR-0043).
 		client.GET("", withCaller(clients.ListClients))
+		// The one admin write: moving clients, with their accounts, to
+		// another agent (ADR-0060).
+		client.POST("/reassignments", security.RequireAdmin(), adaptHandler(clients.ReassignClients, ""))
 		client.POST("/:clientId/verify", security.RequireAgent(), security.RequireClientOwner(db, "clientId"), adaptHandler(clients.VerifyClientIdentity, "clientId"))
 		client.PUT("/:clientId", security.RequireAgent(), security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
 		client.GET("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientProfile, "clientId"))

@@ -3,9 +3,12 @@ import { useAuth } from 'react-oidc-context'
 import { Link, useParams } from 'react-router-dom'
 
 import { createAccount, listAccounts, updateAccountStatus } from '../api/accounts.js'
-import { fetchDocument, getClient, listDocuments, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
+import { fetchDocument, getClient, listDocuments, reassignClients, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
+import { listUsers } from '../api/users.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
+import ReassignForm from '../components/ReassignForm.jsx'
 import { validateClient } from '../components/clientValidation.js'
+import { agentName, movedText } from '../components/reassignText.js'
 
 // One client's profile, identity documents and verification (ADR-0041). The
 // agent may upload the document the client gave them, opens it, compares it
@@ -227,6 +230,68 @@ function ClientProfile() {
   const { clientId } = useParams()
   // A new client starts from a fresh page, with nothing checked.
   return <ClientProfileView key={clientId} clientId={clientId} />
+}
+
+// Admins see who the client's agent is, and may move the client, with its
+// accounts, to another enabled agent: their one write on client data
+// (requirements Q&A UM07, ADR-0060). Agents are matched to the client by
+// their Cognito sub.
+function AgentPanel({ client, onReassigned }) {
+  const [agents, setAgents] = useState({ status: 'loading', users: [] })
+  const [open, setOpen] = useState(false)
+  const [message, setMessage] = useState({ text: '', error: '' })
+
+  useEffect(() => {
+    let active = true
+    listUsers({ role: 'AGENT', size: 100 })
+      .then((page) => {
+        if (active) setAgents({ status: 'ready', users: page.content })
+      })
+      .catch(() => {
+        if (active) setAgents({ status: 'error', users: [] })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const current = agents.users.find((user) => user.idpSub === client.assigned_agent_id)
+  const receivers = agents.users.filter((user) => user.enabled && user.idpSub !== client.assigned_agent_id)
+
+  async function handleReassign(receiver) {
+    const result = await reassignClients({ toUserId: receiver.id, clientIds: [client.client_id] })
+    setOpen(false)
+    try {
+      await onReassigned()
+      setMessage({ text: movedText(result.reassigned, receiver), error: '' })
+    } catch {
+      setMessage({ text: '', error: 'The client was reassigned, but the page could not be refreshed. Reload the page.' })
+    }
+  }
+
+  let currentText = 'Loading…'
+  if (current) currentText = `${agentName(current)} (${current.email})${current.enabled ? '' : ', disabled'}`
+  else if (agents.status !== 'loading') currentText = `An agent the CRM does not list (${String(client.assigned_agent_id || '').slice(0, 8)}…)`
+
+  return (
+    <section className="card" aria-labelledby="agent-title">
+      <div className="document-preview__header">
+        <h2 id="agent-title">Agent</h2>
+        {!open && agents.status === 'ready' && (
+          <button type="button" onClick={() => { setMessage({ text: '', error: '' }); setOpen(true) }}>Reassign</button>
+        )}
+      </div>
+      <p>{currentText}</p>
+      {agents.status === 'error' && (
+        <p className="form-error" role="alert">The agents could not be loaded, so the client cannot be reassigned now.</p>
+      )}
+      {message.text && <p className="success-message" role="status">{message.text}</p>}
+      {message.error && <p className="form-error" role="alert">{message.error}</p>}
+      {open && (
+        <ReassignForm agents={receivers} submitLabel="Reassign client" onSubmit={handleReassign} onCancel={() => setOpen(false)} />
+      )}
+    </section>
+  )
 }
 
 function ClientProfileView({ clientId }) {
@@ -468,7 +533,7 @@ function ClientProfileView({ clientId }) {
       {admin && (
         <div className="read-only-notice" role="note">
           <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
-          <span><strong>Read only.</strong> Admins can view this client, but only the client's agent can change them.</span>
+          <span><strong>Read only.</strong> Admins can view this client, but only the client's agent can change them. An admin can only move the client to another agent.</span>
         </div>
       )}
 
@@ -493,6 +558,8 @@ function ClientProfileView({ clientId }) {
           </dl>
         )}
       </section>
+
+      {admin && <AgentPanel client={client} onReassigned={reload} />}
 
       <section className="card" aria-labelledby="accounts-title">
         <div className="document-preview__header">

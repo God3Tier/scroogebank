@@ -127,3 +127,36 @@ func TestRequireAgent(t *testing.T) {
 		})
 	}
 }
+
+func TestRequireAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := map[string]struct {
+		principal  *Principal
+		wantStatus int
+	}{
+		"an admin reaches the handler":       {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, wantStatus: http.StatusOK},
+		"an agent is refused":                {principal: &Principal{Subject: "agent-sub", Role: "AGENT"}, wantStatus: http.StatusForbidden},
+		"a caller without a role is refused": {principal: &Principal{Subject: "other-sub"}, wantStatus: http.StatusForbidden},
+		"an unauthenticated request too":     {wantStatus: http.StatusForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				if test.principal != nil {
+					c.Set("principal", *test.principal)
+				}
+				c.Next()
+			})
+			router.PUT("/ownership/accounts", RequireAdmin(), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/ownership/accounts", nil))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+		})
+	}
+}

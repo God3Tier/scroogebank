@@ -56,7 +56,7 @@ Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read
 
 Each step runs even if the one before fails, so an audit failure never blocks a sign-out. The endpoint records what the frontend reports; it does not check that a revocation happened. If the call fails or is skipped, the user is still signed out but no `LOGOUT` event is recorded.
 
-**`idpSub` in responses.** Every user response includes `idpSub`, the user's Cognito `sub`. Other services identify agents by it, not by `id`: the client profile service stores it as `created_by_agent_id`, and audit events carry it as `actor_id`. Without it, an admin view such as the business dashboard's per-agent table cannot match those records to a named user. It is safe to return because every endpoint here is admin-only, and the `sub` is already in every token the user presents. A future non-admin endpoint that returns a user should use a narrower response.
+**`idpSub` in responses.** Every user response includes `idpSub`, the user's Cognito `sub`. Other services identify agents by it, not by `id`: the client profile service stores it as `assigned_agent_id`, and reads it from `GET /api/users/{id}` before reassigning clients (ADR-0060), and audit events carry it as `actor_id`. Without it, an admin view such as the business dashboard's per-agent table cannot match those records to a named user. It is safe to return because every endpoint here is admin-only, and the `sub` is already in every token the user presents. A future non-admin endpoint that returns a user should use a narrower response.
 
 ## NFR notes
 

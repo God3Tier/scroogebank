@@ -67,11 +67,11 @@ func validateClientProfile(client models.Client, requireVerificationStatus bool)
 		{name: "state", value: strings.TrimSpace(client.State), max: maxStateLength},
 		{name: "country", value: strings.TrimSpace(client.Country), max: maxCountryLength},
 		{name: "postal_code", value: strings.TrimSpace(client.PostalCode), max: maxPostalCodeLength},
-		{name: "created_by_agent_id", value: strings.TrimSpace(client.CreatedByAgentID), max: 0},
+		{name: "assigned_agent_id", value: strings.TrimSpace(client.AssignedAgentID), max: 0},
 	}
 
 	for _, field := range trimmedValues {
-		if field.name == "created_by_agent_id" && !requireVerificationStatus {
+		if field.name == "assigned_agent_id" && !requireVerificationStatus {
 			continue
 		}
 		if field.value == "" {

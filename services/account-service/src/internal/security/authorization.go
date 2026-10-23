@@ -39,6 +39,19 @@ func RequireAgent() gin.HandlerFunc {
 	}
 }
 
+// RequireAdmin is for the one admin write on accounts: moving a reassigned
+// client's accounts to its new agent (ADR-0060).
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := PrincipalFromGin(c)
+		if !ok || principal.Role != "ADMIN" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "ADMIN role required"})
+			return
+		}
+		c.Next()
+	}
+}
+
 // RequireAccountOwner limits agents to accounts they own. Admins can read
 // every account; the routes that change one also need RequireAgent. The owner
 // is stored on the account itself (copied from

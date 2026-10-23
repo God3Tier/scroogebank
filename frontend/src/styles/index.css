@@ -456,6 +456,31 @@ textarea:focus {
   transition: background-color 0.15s ease;
 }
 
+/* Reassigning an agent's clients opens under their row (ADR-0060). */
+.row-list > li:has(.reassign-form) {
+  flex-wrap: wrap;
+}
+
+.reassign-form {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--stack-sm);
+}
+
+.reassign-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.reassign-form .form-actions {
+  margin: 0;
+}
+
 .row-list > li:last-child {
   border-bottom: none;
 }

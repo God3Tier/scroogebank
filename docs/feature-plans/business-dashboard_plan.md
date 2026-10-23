@@ -72,7 +72,7 @@ Stateless fan-out (ADR-0033): dashboard-service forwards the caller's token to t
 | Panel data | From | Scope |
 |---|---|---|
 | Agent roster | user-service `GET /api/users` (admin-only, paged) | Admins only |
-| Client figures, work queue | client-service `/aggregates/clients/*` | `created_by_agent_id` = caller |
+| Client figures, work queue | client-service `/aggregates/clients/*` | `assigned_agent_id` = caller (ADR-0060) |
 | Account figures | account-service `/aggregates/accounts/stats` | `owner_agent_id` = caller |
 | Transaction figures | user-service `/aggregates/transactions/stats`, which asks account-service for the caller's account IDs and then the receiver | Caller's accounts; `Matched` rows only |
 

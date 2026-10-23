@@ -38,19 +38,19 @@ func (c clientController) CreateClientProfile(w http.ResponseWriter, r *http.Req
 
 	ctx := r.Context()
 	profile := models.Client{
-		FirstName:        cli.FirstName,
-		LastName:         cli.LastName,
-		DateOfBirth:      cli.DateOfBirth,
-		Gender:           cli.Gender,
-		Email:            cli.Email,
-		PhoneNumber:      cli.PhoneNumber,
-		Address:          cli.Address,
-		City:             cli.City,
-		State:            cli.State,
-		Country:          cli.Country,
-		PostalCode:       cli.PostalCode,
-		ClientID:         uuid.New(),
-		CreatedByAgentID: r.Header.Get("X-Agent-ID"),
+		FirstName:       cli.FirstName,
+		LastName:        cli.LastName,
+		DateOfBirth:     cli.DateOfBirth,
+		Gender:          cli.Gender,
+		Email:           cli.Email,
+		PhoneNumber:     cli.PhoneNumber,
+		Address:         cli.Address,
+		City:            cli.City,
+		State:           cli.State,
+		Country:         cli.Country,
+		PostalCode:      cli.PostalCode,
+		ClientID:        uuid.New(),
+		AssignedAgentID: r.Header.Get("X-Agent-ID"),
 	}
 	err = c.svc.CreateClientProfile(ctx, profile)
 	if err != nil {

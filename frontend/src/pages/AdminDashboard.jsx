@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
-import { listClients } from '../api/clients.js'
+import { listClients, reassignClients } from '../api/clients.js'
 import { listTransactions } from '../api/transactions.js'
 import { createUser, disableUser, listUsers } from '../api/users.js'
 import ActivityFeed from '../components/ActivityFeed.jsx'
+import ReassignForm from '../components/ReassignForm.jsx'
 import StatCard from '../components/StatCard.jsx'
 import { NO_FIGURE, formatNumber } from '../components/dashboard/format.js'
+import { agentName, movedText } from '../components/reassignText.js'
 
 const EMPTY_USER = { firstName: '', lastName: '', email: '', role: '' }
 const TRANSACTION_PAGE = 20
@@ -85,10 +87,14 @@ function CreateUserForm({ onCreated }) {
 }
 
 // The admins or agents, with Disable. Users are never deleted, and the root
-// admin cannot be disabled (user-service answers 403).
+// admin cannot be disabled (user-service answers 403). Each agent, enabled or
+// not, also has Reassign clients, which moves all their clients to another
+// enabled agent (requirements Q&A UM17, ADR-0060).
 function UserList({ role, title, version }) {
   const [state, setState] = useState({ loading: true, error: '', users: [] })
   const [problem, setProblem] = useState('')
+  const [reassigning, setReassigning] = useState(null)
+  const [moved, setMoved] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -115,12 +121,20 @@ function UserList({ role, title, version }) {
     }
   }
 
+  async function handleReassign(from, receiver) {
+    const result = await reassignClients({ toUserId: receiver.id, fromUserId: from.id })
+    setReassigning(null)
+    setMoved(`${agentName(from)}: ${movedText(result.reassigned, receiver)}`)
+  }
+
+  const agentList = role === 'AGENT'
   return (
     <div className="card card-flush">
       <h2>{title}</h2>
       {state.loading && <p className="empty-note">Loading…</p>}
       {state.error && <p className="form-error" role="alert">{state.error}</p>}
       {problem && <p className="form-error" role="alert">{problem}</p>}
+      {moved && <p className="success-message" role="status">{moved}</p>}
       {!state.loading && !state.error && state.users.length === 0 && <p className="empty-note">None yet.</p>}
       <ul className="row-list">
         {state.users.map((user) => (
@@ -128,10 +142,21 @@ function UserList({ role, title, version }) {
             <span>
               {user.firstName} {user.lastName} ({user.email})
             </span>
+            {agentList && reassigning !== user.id && (
+              <button type="button" onClick={() => { setMoved(''); setReassigning(user.id) }}>Reassign clients</button>
+            )}
             {user.enabled ? (
               <button type="button" onClick={() => handleDisable(user)}>Disable</button>
             ) : (
               <span className="badge">Disabled</span>
+            )}
+            {agentList && reassigning === user.id && (
+              <ReassignForm
+                agents={state.users.filter((agent) => agent.enabled && agent.id !== user.id)}
+                submitLabel={`Move all of ${agentName(user)}'s clients`}
+                onSubmit={(receiver) => handleReassign(user, receiver)}
+                onCancel={() => setReassigning(null)}
+              />
             )}
           </li>
         ))}

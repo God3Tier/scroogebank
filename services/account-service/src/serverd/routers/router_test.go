@@ -3,6 +3,7 @@ package routers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	accountcontroller "account-service/src/internal/controller/account"
@@ -131,6 +132,32 @@ func TestAccountWritesRefuseAdmins(t *testing.T) {
 			router.ServeHTTP(res, httptest.NewRequest(request.method, request.path, nil))
 
 			assert.Equal(t, http.StatusForbidden, res.Code)
+		})
+	}
+}
+
+// Only admins move a reassigned client's accounts (ADR-0060). A malformed
+// body shows the request reached the controller without needing a service.
+func TestOwnershipIsForAdminsOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := map[string]struct {
+		principal  *security.Principal
+		wantStatus int
+	}{
+		"an admin reaches the controller": {principal: &security.Principal{Subject: "admin-1", Role: "ADMIN"}, wantStatus: http.StatusBadRequest},
+		"an agent is refused":             {principal: &security.Principal{Subject: "agent-a", Role: "AGENT"}, wantStatus: http.StatusForbidden},
+		"no token":                        {wantStatus: http.StatusUnauthorized},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			pass := func(c *gin.Context) { c.Next() }
+			RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, signedInAs(test.principal), pass, pass)
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/ownership/accounts", strings.NewReader(`{`)))
+
+			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}
 }

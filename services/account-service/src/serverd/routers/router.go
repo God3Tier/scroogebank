@@ -45,6 +45,16 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 	internal.Use(authenticateService)
 	internal.POST("/accounts/lookup", adaptHandler(accounts.LookupAccounts, ""))
 
+	// Moving a reassigned client's accounts to its new agent: called only by
+	// client-profile-management-service with the admin's own user token, while
+	// it holds the clients locked. Outside /api, so API Gateway never routes
+	// it, and not audited here: client-service audits each client moved
+	// (ADR-0060).
+	ownership := router.Group("/ownership")
+	ownership.Use(authenticate)
+	ownership.Use(security.RequireAdmin())
+	ownership.PUT("/accounts", adaptHandler(accounts.SetOwner, ""))
+
 	api := router.Group("/api")
 	api.Use(authenticate)
 	api.Use(security.RequireCRMRole())
