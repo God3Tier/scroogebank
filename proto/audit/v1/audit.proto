@@ -33,6 +33,8 @@ message ListActivitiesRequest {
   int32 page_size = 4;
   // A previous response's next_page_token. Empty starts at the newest entry.
   string page_token = 5;
+  // Only events whose audited payload names this client. Empty means any client.
+  string client_id = 6;
 }
 
 message ListActivitiesResponse {

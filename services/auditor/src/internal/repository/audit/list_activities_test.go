@@ -34,6 +34,14 @@ func TestListActivities(t *testing.T) {
 			filter:  models.ActivityFilter{ActorID: "agent-a", Limit: 20},
 			wantSeq: []int64{4, 1},
 		},
+		"filters by client in the audited payload": {
+			filter:  models.ActivityFilter{ClientID: "c-1", Limit: 20},
+			wantSeq: []int64{4, 1},
+		},
+		"combines client and agent filters": {
+			filter:  models.ActivityFilter{ActorID: "agent-b", ClientID: "c-2", Limit: 20},
+			wantSeq: []int64{11, 2},
+		},
 		"filters by time range with inclusive from and exclusive to": {
 			filter: models.ActivityFilter{
 				From:  time.Date(2026, 9, 11, 4, 0, 0, 0, time.UTC),

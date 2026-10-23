@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Planned |
+| Status | In progress |
 | Feature owner | Hayyun |
 | Approved by | Joseph (engineering lead), 2026-09-24 |
 | Feature branch | `feat/auditor-sqs` |
@@ -184,15 +184,20 @@ ADR that supersedes ADR-0004, per the append-only ADR policy.
 | Task ID | Task | Primary Dev | Collaborators | Files/Components | Branch | Dependencies/Conflict Zones | Status | Last Sync |
 |---|---|---|---|---|---|---|---|---|
 | AS-T01 | Migrate auditor Kafka reader/writer to SQS consumer/DLQ sender, add `event_id` idempotency, update deps/config/compose/docs/tests | Hayyun | Joseph (review) | `services/auditor/src/serverd/**`, `services/auditor/data/*.sql`, `services/auditor/README.md`, `services/auditor/go.mod`, `compose.yaml`, `docker-compose.yaml`, `docs/architecture/nfr-notes.md` | `task/auditor-sqs/kafka-migration` | None currently — no other service touches auditor's Kafka/SQS code or these files | Planned | 2026-09-24 |
+| AS-T02 | Standardise auditor layering and formatting; keep HTTP JSON DTOs in controllers, S3 wire types in the storage adapter, and use the service's Mockery/SQLBoiler conventions | Joseph Yau | Hayyun (auditor owner/review) | `services/auditor/src/internal/{controller,models,repository,service}`, `services/auditor/.mockery.yaml`, auditor docs | `task/auditor/standardize-service` | Coordinate with Hayyun before integrating auditor changes | Implementation complete; formatting, generation, and focused tests passed; full suite was terminated during runner startup | 2026-10-14 |
+| AS-T03 | Add an optional client filter to the protected, time-bounded activity feed; filter only successful change events by the `client_id` in their audited payload, while the auditor enforces the agent subject from the verified JWT | Joseph Yau | Hayyun (auditor owner/review) | `proto/audit/v1/audit.proto`, `services/auditor/src/internal/{controller,models,repository}`, `services/user-service/src/main/java/bank/user/activity`, related tests | `task/auditor/client-activity-query` | Proposed ADR-0042 extends ADR-0021; client-profile-management-service's audit middleware stores client ID in `payload.client_id`, and owner authorization occurs before a client request is audited | Implementation and focused tests complete; human ADR acceptance/review pending | 2026-10-22 |
 
-This is scoped as a single task rather than split across multiple
+AS-T01 is scoped as a single task rather than split across multiple
 developers/branches: the messaging code, schema change, and config/docs
 updates are tightly coupled and not sensibly separable without leaving the
-service in an inconsistent intermediate state.
+service in an inconsistent intermediate state. AS-T02 is a separate auditor
+layering/style task owned by Joseph Yau, with Hayyun reviewing because Hayyun
+owns the auditor implementation.
 
 ## Dependencies/Conflict Zones Between Developers
 
-None identified. No other active branch touches
+AS-T02 and AS-T01 both touch auditor code and must be coordinated before
+integration. No other active branch touches
 `services/auditor/src/serverd/kafka/` or the auditor's Compose/env
 configuration (checked against `origin/feat/event-driven-alerts` and
 `origin/task/event-driven-alerts/plan`, which reference the same files but
@@ -202,3 +207,7 @@ ADR-0004 Context).
 ## Last Synchronization/Update Timestamp Per Active Task
 
 - AS-T01: 2026-09-24, synchronized against `origin/dev` at `544ff66`.
+- AS-T02: 2026-10-14, based on cached `dev`/`origin/dev` at `85256ff`; remote
+  fetch was unavailable in this session.
+- AS-T03: 2026-10-22, working tree based on local `dev` at `85256ff`; remote
+  synchronization was not performed per the user's Git instruction.

@@ -79,6 +79,16 @@ Only other CRM services call the auditor, and each forwards the token of the use
 | HTTP `/api/corrupted-logs` | An `ADMIN`'s token in `Authorization: Bearer`; otherwise `401` (no or an invalid token) or `403` (not an admin). user-service forwards it. |
 | gRPC `AuditService` | An `ADMIN`'s or `AGENT`'s token in the `authorization` metadata; otherwise `UNAUTHENTICATED` or `PERMISSION_DENIED`. An agent can list only their own activities. |
 
+`ListActivities` accepts an optional `client_id` alongside the inclusive `from`
+and exclusive `to` timestamps. It filters the successful change events whose
+audited JSON payload has that exact `client_id`, newest first, with the same
+sequence-based page token. CRM clients forward the user's access token; the
+auditor derives an agent's actor filter from the verified token, regardless of
+the requested filters. The client-profile-management service's middleware
+records the client ID from the authorized route and marks `POST .../verify` as
+an `UPDATE`; a verification event can be recognized by its client ID, endpoint,
+and optional `document_ids` or `without_document` fields in the payload.
+
 Only user tokens are accepted so far. ADR-0021 also lets a background job with no user call with a Cognito client-credentials token carrying an `audit/read` scope; that is not built yet, because no such caller exists. Such a token has no CRM group, so it is refused with `PERMISSION_DENIED`.
 
 Set `AUDITOR_TLS_CERT_FILE` and `AUDITOR_TLS_KEY_FILE` to serve both ports over TLS, as the target design requires; leave both unset only for local development.

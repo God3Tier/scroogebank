@@ -15,7 +15,7 @@ VALUES
     ('00000000-0000-0000-0000-000000000203', 3, 'CRUD', 'ROLE_CHANGE', 'USER_MANAGEMENT', 'admin-a',
      '2026-09-12 04:00:00', '{"resource_type":"USER","resource_id":"u-1","status_code":200}', 'hash-2', 'hash-3'),
     ('00000000-0000-0000-0000-000000000204', 4, 'CRUD', 'UPDATE', 'CRM', 'agent-a',
-     '2026-09-20 04:00:00', '{"client_id":"c-1","status_code":200}', 'hash-3', 'hash-4'),
+     '2026-09-20 04:00:00', '{"client_id":"c-1","endpoint":"/api/clients/:clientId/verify","document_ids":["document-1"],"status_code":200}', 'hash-3', 'hash-4'),
     ('00000000-0000-0000-0000-000000000205', 5, 'CRUD', 'GET', 'CRM', 'agent-a',
      '2026-09-21 04:00:00', '{"client_id":"c-1","status_code":200}', 'hash-4', 'hash-5'),
     ('00000000-0000-0000-0000-000000000206', 6, 'CRUD', 'READ', 'USER_MANAGEMENT', 'admin-a',
