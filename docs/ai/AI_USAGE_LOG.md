@@ -891,3 +891,23 @@
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
 - 2026-10-22 — Joseph Yau — Codex — Added client filtering to the authenticated, paged auditor activity query and corresponding user-service query parameters. Files: `proto/audit/v1/audit.proto`, auditor activity controller/model/repository and tests, user-service activity controller/service/record and tests, API contract, proposed ADR, and auditor feature plan. Protobuf generation, all auditor tests, SQL-backed activity query tests, focused user-service tests, and formatting checks passed; proposed ADR-0042 still needs human acceptance/review.
+
+## 2026-10-23 — Admins read-only on client data (open item 23)
+
+- Human owner: Neo Jia Wen (decision owner; accepted ADR-0059).
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0059 from the requirements Q&A (UM01, UM04, UM18, CPM24,
+  CPM31); add a `RequireAgent` route check to client-service and account-service
+  so admins get 403 on every client and account write; make account-service's
+  `CreateAccount` refuse admins; make the client page read-only for admins;
+  update tests, READMEs, the Feature 2 plan, the security model and open items
+  23 and 24. Client reassignment (open item 24) is left for later.
+- Human verification required: confirm that admins
+  losing every client write is acceptable until reassignment exists; run the
+  end-to-end checks in ADR-0059's Validation section.
+- Data: repository content and synthetic test data only. No credentials, real
+  client data or AWS resources were used.
+- Verification: `make test` passed for account-service and client-service
+  (Docker, with PostgreSQL); frontend lint, 204 tests and build passed (one
+  test failed once while Docker tests ran alongside and passed on rerun). Not
+  run end to end.
