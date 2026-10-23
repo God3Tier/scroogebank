@@ -42,6 +42,7 @@ locals {
     { to = "alb", from = "ingest", port = local.alb_port },
 
     { to = "user", from = "alb", port = local.ports.user },
+    { to = "user", from = "client", port = local.ports.user }, # reassigning clients (ADR-0060)
     { to = "client", from = "alb", port = local.ports.client },
     { to = "client", from = "account", port = local.ports.client },
     { to = "account", from = "alb", port = local.ports.account },

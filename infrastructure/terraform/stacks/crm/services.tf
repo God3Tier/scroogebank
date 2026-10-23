@@ -235,6 +235,7 @@ module "client_service" {
     DB_SSLMODE               = "verify-full"
     DB_SSLROOTCERT           = "/tls/rds-ca.pem"
     ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
+    USER_SERVICE_BASE_URL    = "https://${local.sc.user}:${local.ports.user}" # reassigning clients (ADR-0060)
     AWS_REGION               = local.region
     AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
     COGNITO_ISSUER_URI       = local.cognito_issuer
