@@ -64,7 +64,8 @@ function TransactionsTable({ paged = false }) {
       </div>
       {empty && <p className="empty-note">No transactions yet.</p>}
       {list.loading && <p className="empty-note">Loading…</p>}
-      {!empty && (paged ? <Pager list={list} label="Transaction pages" /> : <ViewAll to="/admin/transactions" label="View all transactions" />)}
+      {!empty && paged && <Pager list={list} label="Transaction pages" />}
+      {!paged && list.hasNext && <ViewAll to="/admin/transactions" label="View all transactions" />}
     </section>
   )
 }

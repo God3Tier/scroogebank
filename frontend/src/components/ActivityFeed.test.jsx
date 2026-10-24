@@ -210,11 +210,50 @@ describe('the whole activity feed, paged', () => {
     expect(listActivities).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'cursor-2' }))
   })
 
-  it("links an admin to everyone's activities from the dashboard", async () => {
-    listActivities.mockResolvedValue(page([disabledUser]))
+  it("links an admin to everyone's activities from the dashboard when there are more", async () => {
+    listActivities.mockResolvedValue(page([disabledUser], 'cursor-2'))
     renderFeed({ admin: true })
 
     expect(await screen.findByRole('link', { name: 'View all activities' })).toHaveAttribute('href', '/admin/activities')
+  })
+
+  it('links to the whole feed with the period and user filters it shows, only when they have more', async () => {
+    listActivities
+      .mockResolvedValueOnce(page([verified, disabledUser], 'cursor-2'))
+      .mockResolvedValueOnce(page([verified], 'cursor-2'))
+      .mockResolvedValueOnce(page([verified]))
+    renderFeed({ admin: true })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Synthetic Agent' }))
+    await screen.findByRole('button', { name: /Showing only Synthetic Agent/ })
+    expect(await screen.findByRole('link', { name: 'View all activities' }))
+      .toHaveAttribute('href', `/admin/activities?user=${AGENT_SUB}&name=Synthetic+Agent`)
+
+    // The last 7 days fit on one page, so there is nothing more to view.
+    fireEvent.change(screen.getByLabelText('Period'), { target: { value: '7' } })
+    await waitFor(() => expect(listActivities).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'View all activities' })).not.toBeInTheDocument())
+  })
+
+  it('opens the whole feed with the filters from its link', async () => {
+    listActivities.mockResolvedValue(page([verified]))
+    render(
+      <MemoryRouter initialEntries={[`/admin/activities?days=7&user=${AGENT_SUB}&name=Synthetic+Agent`]}>
+        <ActivityFeed admin paged />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: /Showing only Synthetic Agent/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('Period')).toHaveValue('7')
+    expect(listActivities).toHaveBeenCalledWith(expect.objectContaining({ agentId: AGENT_SUB, from: expect.any(Date) }))
+  })
+
+  it('offers no link when every activity is already shown', async () => {
+    listActivities.mockResolvedValue(page([disabledUser]))
+    renderFeed({ admin: true })
+
+    expect(await screen.findByText(/disabled a user/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'View all activities' })).not.toBeInTheDocument()
   })
 })
 

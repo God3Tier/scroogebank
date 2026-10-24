@@ -98,7 +98,8 @@ function UserList({ role, title, paged = false }) {
           </li>
         ))}
       </ul>
-      {!empty && (paged ? <Pager list={list} label={`${title} pages`} /> : <ViewAll to={LIST_PATHS[role]} label={`View all ${LIST_NAMES[role]}`} />)}
+      {!empty && paged && <Pager list={list} label={`${title} pages`} />}
+      {!paged && list.hasNext && <ViewAll to={LIST_PATHS[role]} label={`View all ${LIST_NAMES[role]}`} />}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { listActivities } from '../api/activities.js'
 import { Pager, ViewAll } from './ListFooter.jsx'
@@ -80,11 +80,36 @@ function ActivityRow({ entry, showActor, onShowOnly }) {
   )
 }
 
+// A period fixed now, so every page of the feed covers the same window.
+function periodOf(days) {
+  return { days, from: days ? new Date(Date.now() - Number(days) * DAY_MS) : null }
+}
+
+// The filters a View all link carries, so the whole feed opens filtered the
+// same way as the panel it came from.
+function filterQuery(period, only) {
+  const params = new URLSearchParams()
+  if (period.days) params.set('days', period.days)
+  if (only) {
+    params.set('user', only.id)
+    params.set('name', only.name)
+  }
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
+
 function ActivityFeed({ admin = false, paged = false }) {
   const headingId = useId()
-  const [period, setPeriod] = useState({ days: '', from: null })
+  const [params] = useSearchParams()
+  // The whole feed starts with the filters its link carried.
+  const [period, setPeriod] = useState(() => {
+    const days = paged ? params.get('days') : null
+    return periodOf(PERIODS.some((option) => option.days && option.days === days) ? days : '')
+  })
   // Admin only: one user's activities, picked from an entry.
-  const [only, setOnly] = useState(null)
+  const [only, setOnly] = useState(() => (
+    paged && admin && params.get('user') ? { id: params.get('user'), name: params.get('name') || 'this user' } : null
+  ))
   // A new filter is a new source, so a slow answer for an old filter never
   // overwrites the current one.
   const source = useMemo(() => cursorSource(
@@ -95,9 +120,7 @@ function ActivityFeed({ admin = false, paged = false }) {
   const entries = list.rows
 
   function choosePeriod(event) {
-    const days = event.target.value
-    // Fixed when chosen, so every page of the feed covers the same window.
-    setPeriod({ days, from: days ? new Date(Date.now() - Number(days) * DAY_MS) : null })
+    setPeriod(periodOf(event.target.value))
   }
 
   return (
@@ -157,9 +180,10 @@ function ActivityFeed({ admin = false, paged = false }) {
         </p>
       )}
 
-      {entries.length > 0 && (paged
-        ? <Pager list={list} label="Activity pages" />
-        : <ViewAll to={admin ? '/admin/activities' : '/agent/activities'} label="View all activities" />)}
+      {entries.length > 0 && paged && <Pager list={list} label="Activity pages" />}
+      {!paged && list.hasNext && (
+        <ViewAll to={`${admin ? '/admin/activities' : '/agent/activities'}${filterQuery(period, only)}`} label="View all activities" />
+      )}
     </section>
   )
 }

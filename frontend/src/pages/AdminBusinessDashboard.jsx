@@ -176,7 +176,7 @@ function AdminBusinessDashboard() {
           action={<SortSelect value={sort} onChange={setSort} />}
         >
           <AgentPerformanceTable rows={(agentTable?.rows ?? []).slice(0, PAGE_SIZE)} sortedBy={agentTable?.sortedBy} />
-          {agentTable?.rows?.length > 0 && (
+          {agentTable?.rows?.length > PAGE_SIZE && (
             <ViewAll to={`/insights/admin/agents?days=${days}&sort=${sort}`} label="View all agents" />
           )}
         </PanelCard>

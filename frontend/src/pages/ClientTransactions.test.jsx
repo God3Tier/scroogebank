@@ -53,6 +53,7 @@ describe('client transactions', () => {
     expect(screen.getByText('Synthetic Client')).toBeInTheDocument()
     expect(screen.getByText('SGD 10.00')).toBeInTheDocument()
     expect(listAccountTransactions).toHaveBeenCalledWith('account-1234-5678')
+    expect(screen.queryByRole('link', { name: 'View all transactions' })).not.toBeInTheDocument()
   })
 
   it("shows each account's newest ten transactions and links to all of them", async () => {

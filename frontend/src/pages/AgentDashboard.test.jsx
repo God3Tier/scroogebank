@@ -152,11 +152,19 @@ describe('the dashboard figures and client list', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
 
     expect(await screen.findByText('Synthetic Client')).toBeInTheDocument()
-    // The newest ten, with a link to all of them.
+    // The newest ten; with every client shown, no link to all of them.
     expect(listClients).toHaveBeenCalledWith({ page: 0, size: 10 })
-    expect(screen.getByRole('link', { name: 'View all clients' })).toHaveAttribute('href', '/agent/clients')
+    expect(screen.queryByRole('link', { name: 'View all clients' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Edit Profile, Verify and Open Accounts' }))
     expect(await screen.findByText('Client page client-1')).toBeInTheDocument()
+  })
+
+  it('links to all the clients when there are more than ten', async () => {
+    listClients.mockResolvedValue(clientPage([SYNTHETIC_CLIENT], 25))
+    renderOnly()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Client Profiles and Accounts' }))
+
+    expect(await screen.findByRole('link', { name: 'View all clients' })).toHaveAttribute('href', '/agent/clients')
   })
 
   it('explains that a client with accounts cannot be deleted', async () => {

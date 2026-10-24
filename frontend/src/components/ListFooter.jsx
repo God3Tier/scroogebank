@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
 
-// The foot of a list. On a dashboard the list shows its first ten rows and
-// links to the whole list on its own page; there, the pager moves through it
-// ten rows at a time.
+// The foot of a list. On a dashboard the list shows its first ten rows and,
+// when there are more, links to the whole list on its own page; there, the
+// pager moves through it ten rows at a time.
 
 export function ViewAll({ to, label }) {
   return (

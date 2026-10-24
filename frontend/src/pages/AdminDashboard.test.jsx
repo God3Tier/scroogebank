@@ -61,7 +61,8 @@ describe('admin dashboard', () => {
     expect(screen.getByRole('link', { name: 'View all transactions' })).toHaveAttribute('href', '/admin/transactions')
   })
 
-  it('shows the first ten admins and agents and links to all of them', async () => {
+  it('shows the first ten admins and agents, and links to all of them only when there are more', async () => {
+    listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([]) : { ...page([AGENT], 11), totalPages: 2 }))
     renderDashboard()
     fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
 
@@ -71,6 +72,7 @@ describe('admin dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Manage Admins' }))
     expect(await screen.findByText('None yet.')).toBeInTheDocument()
     expect(listUsers).toHaveBeenCalledWith({ role: 'ADMIN', page: 0, size: 10 })
+    expect(screen.queryByRole('link', { name: 'View all admins' })).not.toBeInTheDocument()
   })
 
   it('creates an agent and says Cognito e-mails the password', async () => {

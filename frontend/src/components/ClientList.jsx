@@ -57,7 +57,8 @@ function ClientList({ onChanged, paged = false }) {
                     </li>
                 ))}
             </ul>
-            {!empty && (paged ? <Pager list={list} label="Client pages" /> : <ViewAll to="/agent/clients" label="View all clients" />)}
+            {!empty && paged && <Pager list={list} label="Client pages" />}
+            {!paged && list.hasNext && <ViewAll to="/agent/clients" label="View all clients" />}
         </div>
     )
 }

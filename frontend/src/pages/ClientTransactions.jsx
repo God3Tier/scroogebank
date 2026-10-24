@@ -92,7 +92,8 @@ function AccountStatus({ account, mode, onChanged }) {
     )
 }
 
-// The account's newest ten transactions, and a link to all of them.
+// The account's newest ten transactions, and a link to all of them when there
+// are more.
 function AccountTransactions({ clientId, account, statusMode, onStatusChanged }) {
     return (
         <section className="card card-flush">
@@ -105,10 +106,12 @@ function AccountTransactions({ clientId, account, statusMode, onStatusChanged })
             ) : (
                 <>
                     <AccountTransactionTable transactions={account.transactions.slice(0, PAGE_SIZE)} />
-                    <ViewAll
-                        to={`/agent/client/${encodeURIComponent(clientId)}/accounts/${encodeURIComponent(account.id)}/transactions`}
-                        label="View all transactions"
-                    />
+                    {account.transactions.length > PAGE_SIZE && (
+                        <ViewAll
+                            to={`/agent/client/${encodeURIComponent(clientId)}/accounts/${encodeURIComponent(account.id)}/transactions`}
+                            label="View all transactions"
+                        />
+                    )}
                 </>
             )}
         </section>
