@@ -103,7 +103,7 @@ None. SSM Run Command on an EC2 instance is free, and each sync runs one short E
 - Producer tests: the file is read again on every run; a run with a synced list uses only its accounts, each in its own currency; a bare ID is in SGD; an empty or missing list publishes nothing; without a file, the old behaviour stays.
 - Terraform test (`tests/producer.tftest.hcl`): the startup script passes `CRM_ACCOUNT_IDS_FILE`, mounts the directory read-only, and passes no fixed list.
 - The sync script's query was run against account-service's schema: it leaves out closed and deleted accounts, and gives each account as `<id>:<currency>` (rerun 2026-10-24 on Postgres 16).
-- Not yet run against the deployed stack.
+- Deployed stack, 2026-10-24: the sync wrote `<id>:<currency>` entries to `/etc/producer/account-ids`, and the producer's files were imported; a USD account's transactions were listed in USD, and the SGD accounts' in SGD.
 
 ## References
 

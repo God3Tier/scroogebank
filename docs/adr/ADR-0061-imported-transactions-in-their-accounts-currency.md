@@ -88,7 +88,7 @@ None.
 
 - account-service: the lookup controller test returns each account's currency; `make test` passes.
 - Receiver: a poller test imports a lower-case code on an SGD account as `SGD`, rejects a USD row and a row with no currency on that account with their row numbers and reasons, keeps an `Unmatched` row without a currency, and moves the file to `rejected/`; a lookup-client test fails when an account comes back without a currency.
-- Not yet run end to end against the deployed stack.
+- Deployed stack, 2026-10-24: a file of three rows on an SGD account imported the row in `sgd` and rejected the row in USD and the row with no currency, with those reasons. A run while account-service's new tasks were still rolling out logged `lookup returned account … without a currency` and saved nothing from its file; the next run imported a producer file normally.
 
 ## References
 
