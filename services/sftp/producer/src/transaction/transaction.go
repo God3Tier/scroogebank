@@ -3,6 +3,8 @@ package transaction
 import (
 	"math/rand"
 	"time"
+
+	"producer/src/accounts"
 )
 
 //	type Transaction struct {
@@ -27,7 +29,7 @@ type Transaction struct {
 	Description     string    `json:"description"`
 }
 
-func GenerateRandomSet(accountIDs ...string) []Transaction {
+func GenerateRandomSet(list ...accounts.Account) []Transaction {
 	roll := rand.Intn(10)
 	roll += 1
 	transactionSet := make([]Transaction, 0, roll)
@@ -35,7 +37,7 @@ func GenerateRandomSet(accountIDs ...string) []Transaction {
 	for _ = range roll {
 		weight := rand.Float64()
 
-		baseTransaction := generateTransaction(accountIDs)
+		baseTransaction := generateTransaction(list)
 
 		// TODO: Add very very small chance of failure
 		switch {
