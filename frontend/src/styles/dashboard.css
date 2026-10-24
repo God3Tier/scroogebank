@@ -242,6 +242,11 @@
   line-height: 30px;
 }
 
+.metric-note {
+  color: var(--on-surface-variant);
+  font-size: 12px;
+}
+
 /* ---------- Charts ---------- */
 
 .chart-box {
@@ -440,6 +445,13 @@
 }
 
 /* ---------- Agent table ---------- */
+
+.inline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
 
 .inline-select {
   display: flex;

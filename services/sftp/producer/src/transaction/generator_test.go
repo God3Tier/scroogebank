@@ -26,7 +26,7 @@ func TestGenerateUsesTheAccountsCurrency(t *testing.T) {
 }
 
 // A random external reference has no CRM account, so it is in the
-// deployment's currency.
+// default currency.
 func TestGenerateWithoutAccountsUsesSGD(t *testing.T) {
 	for range 1000 {
 		if got := Generate(nil).Currency; got != "SGD" {

@@ -3,7 +3,7 @@
 const numberFormat = new Intl.NumberFormat('en-SG')
 
 // Shown for a figure the API left out: a rate with nothing to divide, or a
-// value summed only when every row shares one currency (ADR-0038).
+// value in more than one currency, which is never added up (ADR-0038).
 export const NO_FIGURE = '—'
 
 const missing = (value) => value === null || value === undefined || value === ''
@@ -16,22 +16,36 @@ export function formatPercent(ratio) {
   return missing(ratio) ? NO_FIGURE : `${(ratio * 100).toFixed(1)}%`
 }
 
-// Decimal strings from the API, shown in SGD. Compact for tiles, full in tables.
-export function formatSGD(decimal, { compact = false } = {}) {
+// Decimal strings from the API, shown with their currency. Compact for tiles,
+// full in tables.
+export function formatMoney(decimal, currency, { compact = false } = {}) {
   if (missing(decimal)) return NO_FIGURE
   const value = Number(decimal)
-  if (compact && value >= 1_000_000) return `SGD ${(value / 1_000_000).toFixed(2)}M`
-  if (compact && value >= 10_000) return `SGD ${(value / 1_000).toFixed(1)}K`
-  return `SGD ${value.toLocaleString('en-SG', { maximumFractionDigits: 0 })}`
+  const prefix = currency ? `${currency} ` : ''
+  if (compact && value >= 1_000_000) return `${prefix}${(value / 1_000_000).toFixed(2)}M`
+  if (compact && value >= 10_000) return `${prefix}${(value / 1_000).toFixed(1)}K`
+  return `${prefix}${value.toLocaleString('en-SG', { maximumFractionDigits: 0 })}`
 }
 
-// Transaction values carry no currency column, so they stay unlabelled.
-export function formatValue(decimal, { compact = false } = {}) {
-  if (missing(decimal)) return NO_FIGURE
-  const value = Number(decimal)
-  if (compact && value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-  if (compact && value >= 10_000) return `${(value / 1_000).toFixed(1)}K`
-  return value.toLocaleString('en-SG', { maximumFractionDigits: 0 })
+// Amounts by currency, such as booked initial deposits, one per currency and
+// never added together (ADR-0062). An empty map is no amounts at all.
+export function formatAmounts(byCurrency, options) {
+  if (missing(byCurrency)) return NO_FIGURE
+  const entries = Object.entries(byCurrency).sort(([a], [b]) => a.localeCompare(b))
+  if (entries.length === 0) return formatNumber(0)
+  return entries.map(([currency, decimal]) => formatMoney(decimal, currency, options)).join(' · ')
+}
+
+// A total summed only when its rows share one currency, such as transaction
+// value: shown in that currency, or left out when there are several.
+export function formatTotal(decimal, currencies, options) {
+  if ((currencies?.length ?? 0) > 1) return NO_FIGURE
+  return formatMoney(decimal, currencies?.[0], options)
+}
+
+// Says why formatTotal left a total out.
+export function currenciesNote(currencies) {
+  return (currencies?.length ?? 0) > 1 ? `In ${currencies.join(', ')}; not added` : undefined
 }
 
 export function formatDate(iso) {

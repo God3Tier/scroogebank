@@ -157,7 +157,7 @@ describe("one account's transactions on their own page", () => {
 describe('every agent on its own page', () => {
   const row = (n) => ({
     agentId: `sub-${n}`, name: `Agent Number${n}`, enabled: true, clientsOnboarded: 30 - n, verified: 1, unverified: 0,
-    verificationRate: 1, accountsOpened: 0, bookedInitialDeposits: 0,
+    verificationRate: 1, accountsOpened: 0, bookedInitialDeposits: {},
   })
 
   it('continues the ranking from the link, ten a page', async () => {
@@ -183,5 +183,31 @@ describe('every agent on its own page', () => {
     // A new window starts the ranking again from the top.
     fireEvent.click(screen.getByRole('button', { name: '7 days' }))
     expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument()
+  })
+
+  it('ranks deposits in a chosen currency when the window has more than one', async () => {
+    getDashboard.mockImplementation((endpoint, params) => Promise.resolve({
+      generatedAt: '2026-10-16T03:00:00Z', window: { from: params.from, to: params.to }, scope: 'ADMIN',
+      panels: { agents: { status: 'OK', reason: null, data: {
+        rows: [{ ...row(1), bookedInitialDeposits: { SGD: '700.00', USD: '50.00' } }],
+        sortedBy: params.sort, currencies: ['SGD', 'USD'], sortCurrency: params.currency ?? 'SGD',
+      } } },
+    }))
+    render(
+      <MemoryRouter initialEntries={['/insights/admin/agents?days=30&sort=accountsOpened']}>
+        <Routes><Route path="/insights/admin/agents" element={<AgentPerformance />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    // Another metric takes no currency, so none is offered or sent.
+    expect(await screen.findByText('SGD 700 · USD 50')).toBeInTheDocument()
+    expect(screen.queryByLabelText('In')).not.toBeInTheDocument()
+    expect(getDashboard).toHaveBeenLastCalledWith('agents', expect.not.objectContaining({ currency: expect.anything() }))
+
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'bookedInitialDeposits' } })
+    fireEvent.change(await screen.findByLabelText('In'), { target: { value: 'USD' } })
+
+    expect(await screen.findByText('Booked deposits (USD)')).toBeInTheDocument()
+    expect(getDashboard).toHaveBeenLastCalledWith('agents', expect.objectContaining({ sort: 'bookedInitialDeposits', currency: 'USD' }))
   })
 })

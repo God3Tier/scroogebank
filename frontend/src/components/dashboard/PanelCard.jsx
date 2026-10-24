@@ -9,7 +9,6 @@ const REASONS = {
   upstream_timeout: 'The source service did not answer in time.',
   upstream_error: 'The source service returned an error.',
   upstream_forbidden: 'You do not have access to this figure.',
-  mixed_currencies: 'Amounts are in more than one currency, so they are not summed.',
   unsupported_window: 'Only shown for the last 7, 30 or 90 days.',
 }
 
