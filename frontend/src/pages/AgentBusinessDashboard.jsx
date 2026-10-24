@@ -51,7 +51,7 @@ function AgentBusinessDashboard() {
   const byStatus = upperKeys(tx?.byStatus)
   const verifiedShare = clients ? ratio(clients.byVerificationStatus?.VERIFIED ?? 0, clients.total) : null
   const failureRate = tx ? ratio(byStatus.FAILED ?? 0, tx.total) : null
-  const trend = dailyTrend(null, tx?.daily)
+  const trend = dailyTrend(null, tx?.daily, period)
 
   const actionGroups = [
     {
