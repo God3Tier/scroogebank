@@ -991,4 +991,5 @@
   account-service, client-service and SFTP; frontend lint, 210 tests and
   build passed; the search spike's 9 unit tests passed. OSV-Scanner v2.6.0
   then reported none beyond the three accepted in `osv-scanner.toml` (see
-  the previous entry), down from 276. Not deployed or run end to end.
+  the previous entry), down from 276. Deployed the upgraded
+  services and confirmed every service runs as expected.
