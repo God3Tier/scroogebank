@@ -108,8 +108,8 @@ class DashboardCacheTest {
     @ParameterizedTest
     @EnumSource(value = PanelReason.class, names = {"UPSTREAM_TIMEOUT", "UPSTREAM_ERROR"}, mode = EnumSource.Mode.EXCLUDE)
     void keepsAResponseWhoseFailuresAskingAgainWouldNotChange(PanelReason reason) {
-        // Not wired up, refused, mixed currencies, an unsupported window: the
-        // next request would get the same answer.
+        // Not wired up, refused, an unsupported window: the next request
+        // would get the same answer.
         AtomicInteger computations = new AtomicInteger();
         Supplier<DashboardResponse> settled = () -> {
             computations.incrementAndGet();

@@ -10,17 +10,20 @@ import java.util.Map;
  *
  * <p>{@code bookedInitialDeposits} is the opening deposit of each account
  * opened in the window, never a balance: no balance exists anywhere in the
- * system. account-service sums it only when those accounts share one
- * currency, named in {@code currency}; otherwise it refuses, and the panel
- * reports {@code mixed_currencies}.
+ * system. account-service sums it per currency and never across currencies
+ * (ADR-0062).
  *
- * @param total          every account in scope, whatever its opening date;
- *                       the four breakdowns cover the same accounts
- * @param openedInWindow accounts opened in the window
- * @param currency       their currency, or null when none were opened
- * @param dailyOpened    per day, with that day's deposits as {@code value}
- * @param byAgent        per-agent figures for the window; only for an admin
- *                       who asks for them
+ * @param total                 every account in scope, whatever its opening
+ *                              date; the four breakdowns cover the same accounts
+ * @param openedInWindow        accounts opened in the window
+ * @param bookedInitialDeposits their opening deposits by currency; empty when
+ *                              none were opened
+ * @param currencies            their currencies, sorted
+ * @param dailyOpened           per day, with that day's deposits as
+ *                              {@code value} only when the window is in one
+ *                              currency
+ * @param byAgent               per-agent figures for the window; only for an
+ *                              admin who asks for them
  */
 public record AccountStats(
         long total,
@@ -29,13 +32,13 @@ public record AccountStats(
         Map<String, Long> byCurrency,
         Map<String, Long> byBranch,
         long openedInWindow,
-        BigDecimal bookedInitialDeposits,
-        String currency,
+        Map<String, BigDecimal> bookedInitialDeposits,
+        List<String> currencies,
         List<DailyCount> dailyOpened,
         List<AgentAccountCounts> byAgent
 ) {
 
-    /** One agent's accounts opened in the window, keyed by Cognito sub. */
-    public record AgentAccountCounts(String agentId, long accountsOpened, BigDecimal bookedInitialDeposits) {
+    /** One agent's accounts opened in the window, keyed by Cognito sub, with their deposits by currency. */
+    public record AgentAccountCounts(String agentId, long accountsOpened, Map<String, BigDecimal> bookedInitialDeposits) {
     }
 }

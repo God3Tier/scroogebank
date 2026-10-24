@@ -27,10 +27,10 @@ import java.util.function.Function;
 public class AgentPerformanceTable {
 
     /**
-     * @param currency the deposits' currency, or null when no account was
-     *                 opened in the window
+     * @param currencies   the currencies of the accounts opened in the window
+     * @param sortCurrency the currency deposits are ranked in (ADR-0062)
      */
-    public record AgentPerformance(List<AgentRow> rows, String sortedBy, String currency) {
+    public record AgentPerformance(List<AgentRow> rows, String sortedBy, List<String> currencies, String sortCurrency) {
     }
 
     /**
@@ -39,8 +39,10 @@ public class AgentPerformanceTable {
      * @param name             null when the sub is not an agent on the roster,
      *                         such as an admin who created a client
      * @param enabled          null on the same condition
-     * @param verificationRate verified clients over clients onboarded, or null
-     *                         when the agent onboarded none
+     * @param verificationRate      verified clients over clients onboarded, or
+     *                              null when the agent onboarded none
+     * @param bookedInitialDeposits by currency, never added across currencies;
+     *                              empty when the agent opened none
      */
     public record AgentRow(
             String agentId,
@@ -51,7 +53,7 @@ public class AgentPerformanceTable {
             long unverified,
             Double verificationRate,
             long accountsOpened,
-            BigDecimal bookedInitialDeposits
+            Map<String, BigDecimal> bookedInitialDeposits
     ) {
     }
 
@@ -59,8 +61,11 @@ public class AgentPerformanceTable {
      * Every enabled agent appears, with zeros if they did nothing in the
      * window, and so does anyone with figures. A disabled agent with no
      * figures is left out.
+     *
+     * @param sortCurrency the currency whose deposits a deposits sort ranks by
      */
-    public AgentPerformance build(List<AgentSummary> roster, ClientStats clients, AccountStats accounts, AgentSortMetric sort) {
+    public AgentPerformance build(List<AgentSummary> roster, ClientStats clients, AccountStats accounts,
+                                  AgentSortMetric sort, String sortCurrency) {
         Map<String, AgentSummary> agents = new LinkedHashMap<>();
         roster.stream().filter(agent -> agent.idpSub() != null).forEach(agent -> agents.put(agent.idpSub(), agent));
         Map<String, ClientStats.AgentClientCounts> clientRows = index(clients.byAgent(), ClientStats.AgentClientCounts::agentId);
@@ -73,9 +78,10 @@ public class AgentPerformanceTable {
 
         List<AgentRow> rows = ids.stream()
                 .map(id -> row(id, agents.get(id), clientRows.get(id), accountRows.get(id)))
-                .sorted(order(sort))
+                .sorted(order(sort, sortCurrency))
                 .toList();
-        return new AgentPerformance(rows, sort.wireValue(), accounts.currency());
+        List<String> currencies = accounts.currencies() == null ? List.of() : accounts.currencies();
+        return new AgentPerformance(rows, sort.wireValue(), currencies, sortCurrency);
     }
 
     private AgentRow row(String id, AgentSummary agent, ClientStats.AgentClientCounts clients,
@@ -91,18 +97,23 @@ public class AgentPerformanceTable {
                 clients == null ? 0 : clients.unverified(),
                 onboarded == 0 ? null : (double) verified / onboarded,
                 accounts == null ? 0 : accounts.accountsOpened(),
-                accounts == null ? BigDecimal.ZERO : accounts.bookedInitialDeposits());
+                accounts == null || accounts.bookedInitialDeposits() == null ? Map.of() : accounts.bookedInitialDeposits());
     }
 
-    /** Highest first; agents without a figure last; then by name, then sub, so the order is stable. */
-    private Comparator<AgentRow> order(AgentSortMetric sort) {
+    /**
+     * Highest first; agents without a figure last; then by name, then sub, so
+     * the order is stable. Deposits compare in one currency only, and an
+     * agent with none in it counts as zero.
+     */
+    private Comparator<AgentRow> order(AgentSortMetric sort, String sortCurrency) {
         Comparator<AgentRow> byMetric = switch (sort) {
             case CLIENTS_ONBOARDED -> Comparator.comparingLong(AgentRow::clientsOnboarded).reversed();
             case VERIFICATION_RATE -> Comparator.comparing(AgentRow::verificationRate,
                     Comparator.nullsLast(Comparator.reverseOrder()));
             case ACCOUNTS_OPENED -> Comparator.comparingLong(AgentRow::accountsOpened).reversed();
-            case BOOKED_INITIAL_DEPOSITS -> Comparator.comparing(AgentRow::bookedInitialDeposits,
-                    Comparator.nullsLast(Comparator.reverseOrder()));
+            case BOOKED_INITIAL_DEPOSITS -> Comparator.comparing(
+                    (AgentRow row) -> row.bookedInitialDeposits().getOrDefault(sortCurrency, BigDecimal.ZERO))
+                    .reversed();
         };
         return byMetric
                 .thenComparing(AgentRow::name, Comparator.nullsLast(Comparator.naturalOrder()))

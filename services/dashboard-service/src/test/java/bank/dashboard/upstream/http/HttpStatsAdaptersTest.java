@@ -2,8 +2,6 @@ package bank.dashboard.upstream.http;
 
 import bank.dashboard.config.DashboardProperties;
 import bank.dashboard.dto.DashboardWindow;
-import bank.dashboard.dto.PanelReason;
-import bank.dashboard.exception.UpstreamUnavailableException;
 import bank.dashboard.security.CurrentUser;
 import bank.dashboard.upstream.dto.AccountStats;
 import bank.dashboard.upstream.dto.ClientActionItems;
@@ -13,7 +11,6 @@ import bank.dashboard.upstream.dto.TeamComparison;
 import bank.dashboard.upstream.dto.TransactionStats;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -22,12 +19,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -122,26 +117,33 @@ class HttpStatsAdaptersTest {
         server.expect(requestTo("http://account-service/aggregates/accounts/stats?from=2026-09-01&to=2026-09-30"))
                 .andRespond(withSuccess("""
                         {"total":3,"byType":{"savings":2},"byStatus":{"active":3},"byCurrency":{"SGD":3},"byBranch":{"B1":3},
-                         "openedInWindow":2,"bookedInitialDeposits":"350.50","currency":"SGD",
+                         "openedInWindow":2,"bookedInitialDeposits":{"SGD":"350.50"},"currencies":["SGD"],
                          "dailyOpened":[{"date":"2026-09-01","count":1,"value":"100.00"}]}
                         """, MediaType.APPLICATION_JSON));
 
         AccountStats stats = accounts.stats(SEPTEMBER, false);
 
-        assertThat(stats.bookedInitialDeposits()).isEqualByComparingTo(new BigDecimal("350.50"));
-        assertThat(stats.currency()).isEqualTo("SGD");
+        assertThat(stats.bookedInitialDeposits().get("SGD")).isEqualByComparingTo(new BigDecimal("350.50"));
+        assertThat(stats.currencies()).containsExactly("SGD");
         assertThat(stats.dailyOpened().get(0).value()).isEqualByComparingTo(new BigDecimal("100.00"));
     }
 
     @Test
-    void reportsMixedCurrenciesRatherThanAWrongTotal() {
+    void readsAccountFiguresInMoreThanOneCurrency() {
+        // Each currency's deposits on their own, and no day's value (ADR-0062).
         server.expect(requestTo("http://account-service/aggregates/accounts/stats?from=2026-09-01&to=2026-09-30"))
-                .andRespond(withStatus(HttpStatus.CONFLICT));
+                .andRespond(withSuccess("""
+                        {"total":2,"byType":{"savings":2},"byStatus":{"active":2},"byCurrency":{"SGD":1,"USD":1},"byBranch":{"B1":2},
+                         "openedInWindow":2,"bookedInitialDeposits":{"SGD":"7.00","USD":"5.00"},"currencies":["SGD","USD"],
+                         "dailyOpened":[{"date":"2026-09-01","count":2}]}
+                        """, MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> accounts.stats(SEPTEMBER, false))
-                .isInstanceOf(UpstreamUnavailableException.class)
-                .extracting(ex -> ((UpstreamUnavailableException) ex).reason())
-                .isEqualTo(PanelReason.MIXED_CURRENCIES);
+        AccountStats stats = accounts.stats(SEPTEMBER, false);
+
+        assertThat(stats.bookedInitialDeposits()).containsOnlyKeys("SGD", "USD");
+        assertThat(stats.bookedInitialDeposits().get("USD")).isEqualByComparingTo(new BigDecimal("5.00"));
+        assertThat(stats.currencies()).containsExactly("SGD", "USD");
+        assertThat(stats.dailyOpened().get(0).value()).isNull();
     }
 
     @Test
