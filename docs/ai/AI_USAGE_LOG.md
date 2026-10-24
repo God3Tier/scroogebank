@@ -934,3 +934,61 @@
   again verbosely; frontend lint and the affected test files passed;
   `terraform fmt -check` passed. Terraform was not planned or applied. Not run
   end to end.
+
+## 2026-10-24 — CodeQL and dependency scanning in CI (ADR-0028)
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: add CodeQL (Java, Go, JavaScript/TypeScript, Python, Actions) and
+  OSV-Scanner to `.github/workflows/ci.yml`. The repository has no GitHub
+  Code Security, so CodeQL results are not uploaded: the job fails on any
+  alert and keeps the SARIF report as an artifact. OSV-Scanner fails on any
+  known vulnerability in a dependency except the three accepted, each with a
+  reason and an expiry date, in `osv-scanner.toml`: two `spring-webmvc`
+  advisories for features no service uses (`XsltView`, server-sent event
+  fragments), fixed only in Spring Boot 4, and `x/crypto/openpgp`, which no
+  service imports and no release fixes. Go call analysis and OSV's Python
+  resolver are turned off (see the comments in the workflow). One CodeQL rule
+  (`java/spring-disabled-csrf-protection`) is excluded in
+  `.github/codeql/codeql-config.yml`, because every Java service is a
+  stateless bearer-token API.
+- Human verification required: confirm with the course that running CodeQL
+  on this private repository is allowed under its licence; review the
+  accepted vulnerabilities before they expire on 2027-01-31. The 276 known
+  vulnerabilities OSV-Scanner reported in existing dependencies are upgraded
+  in the next entry.
+- Data: repository content only. No credentials, real client data or AWS
+  resources were used.
+- Verification: CodeQL CLI 2.27.3 run locally on a clean export of `dev`:
+  Java (Maven build), JavaScript/TypeScript and Python had no alerts once the
+  CSRF rule was excluded. Go and Actions were not run locally (Go code
+  generation needs Docker; the Actions extractor failed on Windows).
+  OSV-Scanner v2.6.0 run locally with the workflow's arguments on this
+  branch: exit 0 with `osv-scanner.toml`, exit 1 without it. actionlint
+  passed. The workflow has not run on GitHub yet.
+
+## 2026-10-24 — Security upgrades for dependencies
+
+- Human owner: Neo Jia Wen. The owners of each changed service should review.
+- Tool: Claude Code (Anthropic).
+- Use: upgrade the dependencies OSV-Scanner reported as vulnerable, except
+  `spring-webmvc`, which is fixed only in Spring Boot 4. Go: `golang.org/x/crypto`
+  0.57.0, `x/net` 0.60.0, `x/sys` 0.48.0, `x/text` 0.42.0 and `quic-go` 0.59.1 in
+  account-service, client-service and the SFTP receiver; the same `x/*`
+  versions and gRPC 1.83.2 in the auditor. Java: the root `pom.xml` overrides
+  the versions Spring Boot 3.5.16 manages for Jackson, Netty, Log4j, Tomcat,
+  the PostgreSQL driver, commons-lang3, commons-compress and HttpComponents;
+  user-service moves to gRPC 1.84.2 and protobuf 3.25.9. Frontend: Vite
+  8.3.4 and Vitest 5.0.3, with zod 4.6.7 and undici 7.30.1 updated in the
+  lockfile (build and test tools only). Search spike: every package pinned,
+  with `urllib3` at 2.8.0. Each version is the newest patch release at least two weeks old,
+  except zod and undici, whose only fixed releases are newer.
+- Human verification required: review by the owners of the changed services.
+- Data: repository content only. No credentials, real client data or AWS
+  resources were used.
+- Verification: `mvn -B verify` passed (491 tests across the six Java modules,
+  Testcontainers on Docker); `make test` passed for the auditor,
+  account-service, client-service and SFTP; frontend lint, 210 tests and
+  build passed; the search spike's 9 unit tests passed. OSV-Scanner v2.6.0
+  then reported none beyond the three accepted in `osv-scanner.toml` (see
+  the previous entry), down from 276. Not deployed or run end to end.
