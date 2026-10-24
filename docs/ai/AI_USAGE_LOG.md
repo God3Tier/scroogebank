@@ -1073,9 +1073,10 @@
   after about 30 s idle, with no deploy needed. Switching user-service to
   `HttpURLConnection` through an environment variable made the panel load
   after every idle pause. Made that permanent in user-service's
-  `application.yml` with 2 s connect and 3 s read timeouts, returned
-  dashboard-service's budgets to 2 s and 3 s at the owner's request,
-  amended ADR-0033, and updated both READMEs and the feature plan. The
+  `application.yml` with 2 s connect and 3 s read timeouts. Returned
+  dashboard-service's budgets to 2 s and 3 s at the owner's request; after
+  the transactions panel timed out on the first load after a restart, set
+  them to 5 s and 8 s, as the owner chose. Amended ADR-0033, and updated both READMEs and the feature plan. The
   temporary Terraform changes were removed before this branch.
 - Human verification required: review by the user-service owner; after
   deploying user-service and dashboard-service, load the dashboard after a
