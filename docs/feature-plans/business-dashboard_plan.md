@@ -125,7 +125,7 @@ Shared: window of 7, 30 or 90 days or explicit dates, at most 365 days, in Singa
 | One upstream times out, errors or is not configured | That panel is `UNAVAILABLE` with a reason; HTTP 200 |
 | Every panel fails | HTTP 503, every panel `UNAVAILABLE` |
 | Upstream refuses the caller | Panel `UNAVAILABLE`, reason `upstream_forbidden` |
-| Accounts in the window use two currencies | Account panel `UNAVAILABLE`, reason `mixed_currencies`; transaction value omitted |
+| Accounts or transactions in the window use two currencies | Counts and breakdowns shown; booked initial deposits shown per currency, never added; each day's deposit value omitted; per-agent deposits ranked in one chosen currency (default SGD); transaction value shown in its currency, or omitted with the currencies listed when there are several ([ADR-0062](../adr/ADR-0062-dashboard-account-figures-per-currency.md)) |
 | Bad window, sort or `staleDays` | HTTP 400, no upstream call |
 | An agent's window is not the last 7, 30 or 90 days | `teamComparison` panel `UNAVAILABLE`, reason `unsupported_window` |
 | Agent calls `/api/dashboard/agents` | HTTP 403 |

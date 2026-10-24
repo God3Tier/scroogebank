@@ -22,7 +22,7 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 Request `{"ids": ["<uuid>", ...]}`; response `{"accounts": [{"id": "<uuid>", "client_id": "<uuid>"}]}`. IDs that are not UUIDs are ignored.
 
-`/aggregates` routes take the caller's user access token, forwarded by the dashboard or user-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed only when the window's accounts share one currency, otherwise 409 ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
+`/aggregates` routes take the caller's user access token, forwarded by the dashboard or user-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed per currency, never across currencies, and each day's value is left out when the window's accounts span more than one ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0062](../../docs/adr/ADR-0062-dashboard-account-figures-per-currency.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
 
 ## Deleting an account
 
