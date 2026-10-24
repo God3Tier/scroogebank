@@ -22,8 +22,9 @@ import java.util.UUID;
  * with the caller's own token, as account-service does (ADR-0035). 401, 403 and
  * 404 all mean "not yours"; anything else is client-service being unavailable.
  *
- * <p>The body is read as text and parsed here: client-service writes JSON
- * without a JSON content type, so Spring's converters would refuse it.
+ * <p>The body is read as text and parsed here: client-service wrote JSON
+ * without a JSON content type until contract tests were added (ADR-0063), and
+ * Spring's converters would refuse that.
  */
 @Component
 public class HttpClientDirectory implements ClientDirectory {

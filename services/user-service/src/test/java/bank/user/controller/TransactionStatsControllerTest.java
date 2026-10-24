@@ -42,6 +42,11 @@ class TransactionStatsControllerTest {
     private static final LocalDate FROM = LocalDate.of(2026, 9, 1);
     private static final LocalDate TO = LocalDate.of(2026, 9, 30);
 
+    /** The receiver's figures, which user-service passes on unchanged. */
+    private static final String STATS = """
+            {"total":3,"byStatus":{"Completed":3},"byType":{"Deposit":3},"currencies":["SGD"],
+             "totalValue":"30.00","daily":[],"pendingBacklog":0}""";
+
     @Autowired
     private MockMvc mvc;
 
@@ -57,17 +62,18 @@ class TransactionStatsControllerTest {
     private JwtDecoder jwtDecoder;
 
     @BeforeEach
-    void tokens() {
+    void tokens() throws Exception {
         when(jwtDecoder.decode("agent-token")).thenReturn(token("agent-sub", List.of("AGENT")));
         when(jwtDecoder.decode("admin-token")).thenReturn(token("admin-sub", List.of("ADMIN")));
         when(jwtDecoder.decode("no-role-token")).thenReturn(token("someone", List.of()));
-        when(proxy.getStats(any(), any(), anyBoolean(), anyString())).thenReturn(ResponseEntity.ok().build());
+        when(proxy.getStats(any(), any(), anyBoolean(), anyString()))
+                .thenReturn(ResponseEntity.ok(new ObjectMapper().readTree(STATS)));
     }
 
     @Test
     void anAgentIsScopedAsAnAgentWhateverTheParametersSay() throws Exception {
         when(proxy.getStats(any(), any(), anyBoolean(), anyString()))
-                .thenReturn(ResponseEntity.ok(new ObjectMapper().readTree("{\"total\":3}")));
+                .thenReturn(ResponseEntity.ok(new ObjectMapper().readTree(STATS)));
 
         mvc.perform(get("/aggregates/transactions/stats")
                         .param("from", "2026-09-01").param("to", "2026-09-30")

@@ -61,7 +61,8 @@ class TransactionListControllerTest {
 
     @Test
     void parametersAreOptional() throws Exception {
-        when(proxy.listTransactions(null, null, null)).thenReturn(ResponseEntity.ok().build());
+        when(proxy.listTransactions(null, null, null)).thenReturn(ResponseEntity.ok(
+                new ObjectMapper().readTree("{\"content\":[],\"nextCursor\":null}")));
 
         mvc.perform(get("/api/transactions").with(admin()))
                 .andExpect(status().isOk());

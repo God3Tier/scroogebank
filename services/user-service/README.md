@@ -2,6 +2,8 @@
 
 Implements **Feature 1: CRM User Management** — admin/agent enrollment and authentication.
 
+API contracts: [`users-api.yaml`](../../docs/api/users-api.yaml), [`audit-activity.yaml`](../../docs/api/audit-activity.yaml), [`transactions-api.yaml`](../../docs/api/transactions-api.yaml), [`corrupted-logs-api.yaml`](../../docs/api/corrupted-logs-api.yaml) and `GET /aggregates/transactions/stats` in [`dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). Every MockMvc response in the tests is checked against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## What it owns
 
 - The `User` table (`users_db`): `id`, `firstName`, `lastName`, `email`, `role` (ADMIN/AGENT), `enabled`, `deletable`, `idp_sub`, timestamps — matches Appendix 2's User attributes plus the bookkeeping fields needed to enforce "root admin cannot be deleted" and to link a local user row to its identity-provider account.

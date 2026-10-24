@@ -18,6 +18,7 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import static bank.dashboard.contract.OpenApiContract.upstream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -58,11 +59,11 @@ class HttpStatsAdaptersTest {
     void readsClientFigures() {
         server.expect(requestTo("http://client-service/aggregates/clients/stats?from=2026-09-01&to=2026-09-30&groupBy=agent"))
                 .andExpect(header("Authorization", "Bearer the-callers-token"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":6,"byVerificationStatus":{"UNVERIFIED":4,"VERIFIED":2},"createdInWindow":4,
                          "dailyCreated":[{"date":"2026-09-02","count":2}],
                          "byAgent":[{"agentId":"sub-a","clientsOnboarded":2,"verified":1,"unverified":1}]}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         ClientStats stats = clients.stats(SEPTEMBER, true);
 
@@ -76,8 +77,8 @@ class HttpStatsAdaptersTest {
     @Test
     void asksForPerAgentClientFiguresOnlyWhenTold() {
         server.expect(requestTo("http://client-service/aggregates/clients/stats?from=2026-09-01&to=2026-09-30"))
-                .andRespond(withSuccess("{\"total\":0,\"byVerificationStatus\":{},\"createdInWindow\":0,\"dailyCreated\":[]}",
-                        MediaType.APPLICATION_JSON));
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("{\"total\":0,\"byVerificationStatus\":{},\"createdInWindow\":0,\"dailyCreated\":[]}",
+                        MediaType.APPLICATION_JSON)));
 
         assertThat(clients.stats(SEPTEMBER, false).byAgent()).isNull();
         server.verify();
@@ -86,10 +87,10 @@ class HttpStatsAdaptersTest {
     @Test
     void readsTheWorkQueue() {
         server.expect(requestTo("http://client-service/aggregates/clients/action-items?staleDays=7"))
-                .andRespond(withSuccess("""
-                        {"staleUnverified":[{"clientId":"c1","firstName":"Ann","lastName":"Tan","createdAt":"2026-09-02T02:00:00Z"}],
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
+                        {"staleUnverified":[{"clientId":"00000000-0000-4000-8000-0000000000c1","firstName":"Ann","lastName":"Tan","createdAt":"2026-09-02T02:00:00Z"}],
                          "staleUnverifiedTotal":3}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         ClientActionItems items = clients.actionItems(7);
 
@@ -101,9 +102,9 @@ class HttpStatsAdaptersTest {
     void readsTheTeamComparison() {
         server.expect(requestTo("http://client-service/aggregates/clients/team-comparison?days=30"))
                 .andExpect(header("Authorization", "Bearer the-callers-token"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"days":30,"from":"2026-09-01","to":"2026-09-30","clientsOnboarded":3,"teamMedian":null,"cohortSize":4}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         TeamComparison comparison = clients.teamComparison(30);
 
@@ -115,11 +116,11 @@ class HttpStatsAdaptersTest {
     @Test
     void readsAccountFiguresWithExactAmounts() {
         server.expect(requestTo("http://account-service/aggregates/accounts/stats?from=2026-09-01&to=2026-09-30"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":3,"byType":{"savings":2},"byStatus":{"active":3},"byCurrency":{"SGD":3},"byBranch":{"B1":3},
                          "openedInWindow":2,"bookedInitialDeposits":{"SGD":"350.50"},"currencies":["SGD"],
                          "dailyOpened":[{"date":"2026-09-01","count":1,"value":"100.00"}]}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         AccountStats stats = accounts.stats(SEPTEMBER, false);
 
@@ -132,11 +133,11 @@ class HttpStatsAdaptersTest {
     void readsAccountFiguresInMoreThanOneCurrency() {
         // Each currency's deposits on their own, and no day's value (ADR-0062).
         server.expect(requestTo("http://account-service/aggregates/accounts/stats?from=2026-09-01&to=2026-09-30"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":2,"byType":{"savings":2},"byStatus":{"active":2},"byCurrency":{"SGD":1,"USD":1},"byBranch":{"B1":2},
                          "openedInWindow":2,"bookedInitialDeposits":{"SGD":"7.00","USD":"5.00"},"currencies":["SGD","USD"],
                          "dailyOpened":[{"date":"2026-09-01","count":2}]}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         AccountStats stats = accounts.stats(SEPTEMBER, false);
 
@@ -150,10 +151,10 @@ class HttpStatsAdaptersTest {
     void readsTransactionFiguresFromUserService() {
         server.expect(requestTo("http://user-service/aggregates/transactions/stats?from=2026-09-01&to=2026-09-30"))
                 .andExpect(header("Authorization", "Bearer the-callers-token"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":5,"byStatus":{"Completed":3},"byType":{"Deposit":4},"currencies":["SGD"],
                          "totalValue":"156.50","daily":[],"pendingBacklog":1,"unmatched":1}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         TransactionStats stats = transactions.stats(SEPTEMBER);
 
@@ -165,9 +166,9 @@ class HttpStatsAdaptersTest {
     @Test
     void leavesTheValueEmptyWhenTransactionsSpanCurrencies() {
         server.expect(requestTo("http://user-service/aggregates/transactions/stats?from=2026-09-01&to=2026-09-30"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":2,"byStatus":{},"byType":{},"currencies":["SGD","USD"],"daily":[],"pendingBacklog":0}
-                        """, MediaType.APPLICATION_JSON));
+                        """, MediaType.APPLICATION_JSON)));
 
         TransactionStats stats = transactions.stats(SEPTEMBER);
 
