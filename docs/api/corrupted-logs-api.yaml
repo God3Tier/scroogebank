@@ -1,0 +1,170 @@
+openapi: 3.0.3
+
+# Corrupted audit logs (ADR-0021, ADR-0022). Written from the code when
+# contract tests were added (ADR-0063).
+#
+# Two services serve these paths. The Auditor serves them over Service
+# Connect and checks the admin's access token itself; user-service serves
+# them through API Gateway and forwards the caller's token to the Auditor,
+# passing its answer on. The Auditor's errors are plain text.
+
+info:
+  title: Scrooge CRM - Corrupted audit logs
+  version: v1
+  description: |
+    Audit log entries found to break the hash chain, for admins to review.
+    Chain verification records its findings with a reason; entries can also
+    be added and removed by hand.
+
+servers:
+  - url: /
+
+tags:
+  - name: corrupted-logs
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/corrupted-logs:
+    get:
+      tags: [corrupted-logs]
+      summary: Every corrupted audit log
+      operationId: listCorruptedLogs
+      responses:
+        '200':
+          description: The corrupted logs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CorruptedAuditLog' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/TextError' }
+    post:
+      tags: [corrupted-logs]
+      summary: Record a corrupted audit log by hand
+      operationId: createCorruptedLog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, payload]
+              properties:
+                id: { type: string, format: uuid }
+                payload: { $ref: '#/components/schemas/AuditLog' }
+      responses:
+        '201':
+          description: Recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400':
+          description: The Auditor refused the entry (text), or user-service refused the request (JSON).
+          content:
+            text/plain:
+              schema: { type: string }
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/TextError' }
+
+  /api/corrupted-logs/{id}:
+    delete:
+      tags: [corrupted-logs]
+      summary: Remove a corrupted audit log
+      operationId: deleteCorruptedLog
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Removed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TextError' }
+        '500': { $ref: '#/components/responses/TextError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An admin's Cognito access token.
+
+  responses:
+    Unauthorized:
+      description: No valid access token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The caller is not an admin.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TextError:
+      description: The request was refused or failed.
+      content:
+        text/plain:
+          schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      description: |
+        `{"error": ...}` from the Auditor's middleware; user-service's own
+        errors add `timestamp`, `status` and `message` (or `path`).
+      required: [error]
+      properties:
+        error: { type: string }
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        message: { type: string }
+        path: { type: string }
+
+    Message:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+
+    AuditLog:
+      type: object
+      required: [id, sequence_no, event_type, action, actor_id, source_service, timestamp, payload, parent_hash, hash]
+      properties:
+        id: { type: string }
+        sequence_no: { type: integer, format: int64 }
+        event_id: { type: string }
+        event_type: { type: string }
+        action: { type: string }
+        actor_id: { type: string }
+        source_service: { type: string }
+        timestamp: { type: string, format: date-time }
+        payload: { type: string, description: 'The event''s payload as stored, a JSON document in a string.' }
+        parent_hash: { type: string }
+        hash: { type: string }
+
+    CorruptedAuditLog:
+      type: object
+      required: [id, payload, date_of_detect]
+      properties:
+        id: { type: string }
+        audit_log_id: { type: string, description: 'Set on chain verification''s findings only.' }
+        reason:
+          type: string
+          enum: [HASH_MISMATCH, PARENT_MISMATCH, SEQUENCE_GAP, ANCHOR_MISMATCH]
+          description: Set on chain verification's findings only (ADR-0022 decision 4).
+        payload: { $ref: '#/components/schemas/AuditLog' }
+        date_of_detect: { type: string, format: date-time }

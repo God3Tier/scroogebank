@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
   title: CRM Audit Activity API
   version: 1.0.0
@@ -53,10 +53,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ActivityPage'
-        '400': { description: Invalid time window or page size. }
+        '400':
+          description: Invalid time window, page size or client ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '401': { description: Missing or invalid Cognito access token. }
-        '403': { description: Caller is not an agent or admin. }
-        '503': { description: Auditor is unavailable. }
+        '403':
+          description: Caller is not an agent or admin, or is an agent asking for another agent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Auditor is unavailable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 components:
   securitySchemes:
     bearerAuth:
@@ -64,6 +76,15 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    Error:
+      type: object
+      required: [status, error]
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        error: { type: string }
+        message: { type: string }
+        path: { type: string }
     ActivityPage:
       type: object
       required: [content]
@@ -72,7 +93,8 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Activity' }
         nextCursor:
-          type: [string, 'null']
+          type: string
+          nullable: true
     Activity:
       type: object
       required: [id, sourceService, action, actorId, timestamp, payload]
@@ -81,6 +103,7 @@ components:
         sourceService: { type: string }
         action: { type: string }
         actorId: { type: string }
-        actorName: { type: [string, 'null'] }
+        actorName: { type: string, nullable: true }
         timestamp: { type: string, format: date-time }
-        payload: { type: object, additionalProperties: true }
+        payload:
+          description: The event's own detail, whose shape depends on sourceService and action; a string when it is not JSON.
