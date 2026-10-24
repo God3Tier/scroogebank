@@ -5,6 +5,10 @@ on:
   push:
     branches: [main, dev, staging]
 
+# Read-only by default; a job that needs more sets its own permissions.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Build & test backend services
