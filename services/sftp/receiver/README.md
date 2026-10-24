@@ -129,7 +129,7 @@ Internal endpoint: `GET /api/transactions?cursor&size&status`, every account's t
 
 Internal endpoint: `POST /aggregates/transactions/stats`, the business dashboard's transaction figures ([ADR-0039](../../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). It is also unauthenticated and private: only user-service calls it, after checking the caller and choosing the scope. The body is `{"from", "to"}` plus exactly one of `"all": true` or `"accountIds": [...]` (UUIDs, at most 20,000), so a request that forgets the account list is refused rather than read as "everything". It returns counts by status and type, a daily series, the pending backlog, and, for `all`, the unmatched count. Amounts are summed only when the window's transactions share one currency ([ADR-0038](../../../docs/adr/ADR-0038-dashboard-metric-definitions.md)).
 
-The receiver keeps the file's account reference in `source_account_ref`. For local demo data, create an account through account-service, then set `CRM_ACCOUNT_IDS` to its returned `account_id` before starting the producer. Multiple UUIDs can be comma-separated.
+The receiver keeps the file's account reference in `source_account_ref`. For local demo data, create an account through account-service, then set `CRM_ACCOUNT_IDS` to its returned `account_id` before starting the producer. Multiple UUIDs can be comma-separated. An account opened in a currency other than SGD needs `<id>:<currency>`, so its transactions are in its currency.
 
 ## Running as a Lambda function
 
