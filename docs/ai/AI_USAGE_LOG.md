@@ -1057,3 +1057,41 @@
   `payload` one; breaking a spec on purpose failed the expected tests; OSV-Scanner
   2.6.0 found no new vulnerability once Rhino was pinned; actionlint and
   shellcheck passed.
+
+## 2026-10-24 — Business dashboard timing out on first load
+
+- Human owner: Neo Jia Wen. The user-service owner should review the
+  user-service change.
+- Tool: Claude Code (Anthropic).
+- Use: find why the business dashboard's transactions panel timed out on
+  first load although the budgets had been raised to 10 s and 15 s. With the
+  owner running each test in AWS: a first guess (cold start in user-service)
+  and a second (stale connections after a deploy) were ruled out by
+  CloudWatch logs; temporary Service Connect access logs and JDK HttpClient
+  request logging then showed the SFTP receiver answering in under 50 ms
+  while user-service never finished reading the response, on the first call
+  after about 30 s idle, with no deploy needed. Switching user-service to
+  `HttpURLConnection` through an environment variable made the panel load
+  after every idle pause. Made that permanent in user-service's
+  `application.yml` with 2 s connect and 3 s read timeouts. Returned
+  dashboard-service's budgets to 2 s and 3 s at the owner's request; after
+  the transactions panel timed out on the first load after a restart, set
+  them to 5 s and 8 s, as the owner chose. The panel still timed out after
+  an idle pause; temporary Tomcat access logging in user-service and JDK
+  HttpClient logging in dashboard-service showed user-service answering in
+  under 220 ms while dashboard-service's JDK client got the headers and
+  never finished the chunked HTTP/1.1 body. That disproved the first
+  explanation recorded (the JDK client's h2c upgrade), since this call is
+  HTTPS. Switched dashboard-service's client to `HttpURLConnection` too.
+  Amended ADR-0033, and updated both READMEs and the feature plan. All
+  temporary Terraform changes were removed before committing.
+- Human verification required: review by the user-service owner; after
+  deploying user-service and dashboard-service, load the dashboard after a
+  2-minute pause several times, and once just after a restart.
+- Data: CloudWatch logs and ECS events from the team's AWS account, read by
+  the owner and pasted in; synthetic test data. No credentials or real
+  client data were shared.
+- Verification: user-service `mvn test` passed (87 tests) and
+  dashboard-service `mvn test` passed (109 tests). The user-service change
+  is deployed and its stall no longer appears; the dashboard-service change
+  is not yet deployed.

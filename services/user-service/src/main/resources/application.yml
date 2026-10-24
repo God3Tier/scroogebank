@@ -11,6 +11,18 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  # The clients that call account-service, the SFTP receiver and the Auditor's
+  # HTTP API. HttpURLConnection rather than the JDK HttpClient: in AWS, after
+  # about 30 s without a call, the JDK client received the receiver's HTTP/1.1
+  # response headers but never finished reading the body, which the receiver
+  # had sent in full, so the first business dashboard after a pause hung
+  # until dashboard-service gave up (ADR-0033). The timeouts make any such
+  # stall fail fast instead of holding a request thread.
+  http:
+    client:
+      factory: simple
+      connect-timeout: 2s
+      read-timeout: 3s
   security:
     oauth2:
       resourceserver:
