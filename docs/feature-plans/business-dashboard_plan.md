@@ -92,7 +92,7 @@ Shared: window of 7, 30 or 90 days or explicit dates, at most 365 days, in Singa
 
 ## 8. Relevant non-functional requirements
 
-- **Performance:** upstream calls run in parallel, 10 s each and 15 s in total (raised from 2 s and 3 s, then from 5 s and 8 s, ADR-0033), under API Gateway's 29 s integration timeout; aggregation happens in Postgres on indexed columns.
+- **Performance:** upstream calls run in parallel, 2 s each and 3 s in total (raised to 10 s and 15 s, then returned once the stall behind the timeouts was fixed in user-service, ADR-0033), under API Gateway's 29 s integration timeout; aggregation happens in Postgres on indexed columns.
 - **Availability:** one failing upstream costs one panel. No retries. A response with a timed-out or failed panel is not cached, so the next refresh asks again rather than serving the failure for 3 minutes.
 - **Consistency:** up to 3 minutes stale, shown by `generatedAt`.
 
@@ -194,6 +194,7 @@ Owners marked TBC must be confirmed before more parallel work starts (`project_p
 | BD-T12 | UI | TBC | Frontend | `frontend/src/pages`, `frontend/src/api/dashboard.*` | `task/frontend/real-data` | The mockup pages now read dashboard-service; panels it does not serve are hidden (open item 25) | Implemented; frontend tests, lint and build pass; not yet run against a deployed dashboard-service | 2026-10-16 |
 | BD-T13 | Longer upstream budgets: 10 s per call and 15 s overall, from 5 s and 8 s (ADR-0033, amended 2026-10-20) | Neo Jia Wen | — | `services/dashboard-service/src/main/resources/application.yml`, README, ADR-0033 | `task/business-dashboard/longer-upstream-budgets` | Must stay under API Gateway's 29 s integration timeout | Implemented; dashboard-service tests pass; not yet checked in AWS | 2026-10-20 |
 | BD-T14 | Daily trend charts evenly spaced in time: the services send only days with any rows, so the UI fills every day of the window with zero | Neo Jia Wen | — | `frontend/src/components/dashboard/figures.js` and its test, `pages/{Admin,Agent}BusinessDashboard.jsx` | `task/frontend/list-paging` | — | Implemented; frontend tests, lint and build pass | 2026-10-24 |
+| BD-T15 | First load after an idle pause: user-service's call to the SFTP receiver stalled for minutes (JDK HttpClient h2c upgrade behind Service Connect). user-service uses HTTP/1.1 clients with 2 s connect and 3 s read timeouts; budgets back to 2 s and 3 s (ADR-0033, amended 2026-10-24) | Neo Jia Wen | user-service owner (review) | `services/user-service/src/main/resources/application.yml`, `services/dashboard-service/src/main/resources/application.yml`, both READMEs, ADR-0033 | `task/business-dashboard/first-load-timeouts` | user-service's other clients (account transactions, corrupted logs) get the same client | Implemented; the HTTP/1.1 client was checked in AWS through an environment variable (loaded after every idle pause); the yml change is not yet deployed | 2026-10-24 |
 
 Merge path: `task/business-dashboard/<subtask>` → `feat/business-dashboard` → `dev`.
 

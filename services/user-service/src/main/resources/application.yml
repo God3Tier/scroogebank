@@ -11,6 +11,18 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  # The clients that call account-service, the SFTP receiver and the Auditor's
+  # HTTP API. HttpURLConnection (HTTP/1.1 only) rather than the JDK HttpClient:
+  # on each new plain-HTTP connection the JDK client asks to upgrade to HTTP/2
+  # (h2c), and behind Service Connect the receiver's response body then never
+  # finished arriving. Connections close after 30 s idle, so the first business
+  # dashboard after a pause hung until dashboard-service gave up. The timeouts
+  # make any such stall fail fast instead of holding a request thread.
+  http:
+    client:
+      factory: simple
+      connect-timeout: 2s
+      read-timeout: 3s
   security:
     oauth2:
       resourceserver:
