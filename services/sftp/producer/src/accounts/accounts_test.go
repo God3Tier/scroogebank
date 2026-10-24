@@ -23,7 +23,7 @@ func TestListIsSplitOnCommas(t *testing.T) {
 }
 
 // The sync writes each account with its currency; an ID alone, as in
-// CRM_ACCOUNT_IDS, is in the deployment's currency.
+// CRM_ACCOUNT_IDS, is in the default currency.
 func TestEntryMayGiveItsCurrency(t *testing.T) {
 	list, err := Source{List: first + ":USD," + second + ": ,:EUR"}.Accounts()
 	if err != nil {

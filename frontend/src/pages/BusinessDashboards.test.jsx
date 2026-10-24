@@ -20,10 +20,12 @@ const unavailable = (reason) => ({ status: 'UNAVAILABLE', data: null, reason })
 // Shaped like dashboard-service's responses (docs/api/dashboard-api.yaml).
 const CLIENTS = { total: 40, createdInWindow: 6, byVerificationStatus: { VERIFIED: 30, UNVERIFIED: 10 }, dailyCreated: [] }
 const ACCOUNTS = {
-  total: 55, openedInWindow: 4, bookedInitialDeposits: '125000.00', byType: {}, byStatus: {}, byCurrency: { SGD: 55 }, byBranch: {},
+  total: 55, openedInWindow: 4, bookedInitialDeposits: { SGD: '125000.00' }, currencies: ['SGD'],
+  byType: {}, byStatus: {}, byCurrency: { SGD: 55 }, byBranch: {},
 }
 const TRANSACTIONS = {
-  total: 20, byStatus: { Completed: 18, Failed: 2 }, byType: { Deposit: 20 }, totalValue: '5000.00', daily: [], pendingBacklog: 1,
+  total: 20, byStatus: { Completed: 18, Failed: 2 }, byType: { Deposit: 20 }, currencies: ['SGD'], totalValue: '5000.00',
+  daily: [], pendingBacklog: 1,
 }
 const STALE = {
   staleUnverified: [{ clientId: 'client-9', firstName: 'Stale', lastName: 'Client', createdAt: '2026-09-01T00:00:00Z' }],
@@ -54,7 +56,7 @@ describe('business dashboards', () => {
       portfolio: { clients: ok(CLIENTS), accounts: ok(ACCOUNTS), accountsPerClient: ok({ ratio: 1.375 }) },
       transactions: { transactions: ok(TRANSACTIONS) },
       'action-items': { clients: ok(STALE), transactions: ok(TRANSACTIONS) },
-      agents: { agents: ok({ rows: [{ agentId: 'sub-1', name: null, enabled: null, clientsOnboarded: 2, verified: 1, unverified: 1, verificationRate: null, accountsOpened: 0, bookedInitialDeposits: 0 }], sortedBy: 'clientsOnboarded' }) },
+      agents: { agents: ok({ rows: [{ agentId: 'sub-1', name: null, enabled: null, clientsOnboarded: 2, verified: 1, unverified: 1, verificationRate: null, accountsOpened: 0, bookedInitialDeposits: {} }], sortedBy: 'clientsOnboarded', currencies: [], sortCurrency: 'SGD' }) },
     })
     renderPage(AdminBusinessDashboard)
 
@@ -72,13 +74,34 @@ describe('business dashboards', () => {
   })
 
   it('shows the top ten agents and links to all of them, keeping the window and sort', async () => {
-    const row = (n) => ({ agentId: `sub-${n}`, name: `Agent Number${n}`, enabled: true, clientsOnboarded: n, verified: 0, unverified: 0, verificationRate: null, accountsOpened: 0, bookedInitialDeposits: 0 })
+    const row = (n) => ({ agentId: `sub-${n}`, name: `Agent Number${n}`, enabled: true, clientsOnboarded: n, verified: 0, unverified: 0, verificationRate: null, accountsOpened: 0, bookedInitialDeposits: {} })
     respond('ADMIN', { agents: { agents: ok({ rows: Array.from({ length: 11 }, (_, i) => row(i + 1)), sortedBy: 'clientsOnboarded' }) } })
     renderPage(AdminBusinessDashboard)
 
     expect(await screen.findByRole('link', { name: 'View all agents' })).toHaveAttribute('href', '/insights/admin/agents?days=30&sort=clientsOnboarded')
     expect(screen.getByText('Agent Number10')).toBeInTheDocument()
     expect(screen.queryByText('Agent Number11')).not.toBeInTheDocument()
+  })
+
+  it('shows amounts in their currencies and never adds them across currencies', async () => {
+    const accounts = { ...ACCOUNTS, bookedInitialDeposits: { USD: '5000.00', SGD: '125000.00' }, currencies: ['SGD', 'USD'] }
+    const transactions = { ...TRANSACTIONS, currencies: ['SGD', 'USD'], totalValue: undefined }
+    respond('AGENT', {
+      overview: { clients: ok(CLIENTS), accounts: ok(accounts), transactions: ok(transactions) },
+      transactions: { transactions: ok(transactions) },
+    })
+    renderPage(AgentBusinessDashboard)
+
+    const deposits = await screen.findByRole('list', { name: 'Booked initial deposits by currency' })
+    expect([...deposits.querySelectorAll('li')].map((line) => line.textContent)).toEqual(['SGD 125.0K', 'USD 5,000'])
+    expect(screen.getByText('In SGD, USD; not added')).toBeInTheDocument()
+  })
+
+  it('labels a transaction value with its one currency', async () => {
+    respond('AGENT', { transactions: { transactions: ok(TRANSACTIONS) } })
+    renderPage(AgentBusinessDashboard)
+
+    expect(await screen.findByText('SGD 5,000')).toBeInTheDocument()
   })
 
   it('shows an unavailable panel without failing the page', async () => {

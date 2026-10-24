@@ -163,13 +163,16 @@ paths:
         Ranks named employees by an explicit metric. Admin-only, and every view
         is audited. No composite score or rating is computed — see ADR-0038.
 
-        The `agents` panel's data is `{"rows", "sortedBy", "currency"}`. Each
+        The `agents` panel's data is `{"rows", "sortedBy", "currencies",
+        "sortCurrency"}`: `currencies` are those of the accounts opened in the
+        window, and `sortCurrency` is the one deposits were ranked in. Each
         row joins user-service's roster to the client and account figures by
         Cognito sub: `agentId`, `name` and `enabled` (null for a sub not on the
         agent roster), `clientsOnboarded`, `verified`, `unverified`,
         `verificationRate` (null with no clients), `accountsOpened` and
-        `bookedInitialDeposits`. Every enabled agent appears; a disabled agent
-        appears only with figures in the window.
+        `bookedInitialDeposits`, an object of amounts by currency, never added
+        across currencies (ADR-0062). Every enabled agent appears; a disabled
+        agent appears only with figures in the window.
       operationId: getAgentPerformance
       parameters:
         - $ref: '#/components/parameters/From'
@@ -180,17 +183,23 @@ paths:
             The metric to order by, highest first. Always an explicit metric,
             never a derived rank (ADR-0038).
 
-            `bookedInitialDeposits` is well defined only because the deployment
-            is single-currency by specification — Appendix 2 gives the account
-            currency as "SGD for Singapore Dollar" and NFR 12 scopes an
-            instance to one legal entity. If the window's accounts use more
-            than one currency, the panel is unavailable with
-            `mixed_currencies`. See ADR-0038.
+            `bookedInitialDeposits` ranks by the deposits in `currency` only;
+            an agent with none in it counts as zero (ADR-0062).
           required: false
           schema:
             type: string
             enum: [clientsOnboarded, verificationRate, accountsOpened, bookedInitialDeposits]
             default: clientsOnboarded
+        - name: currency
+          in: query
+          description: |
+            The currency whose deposits `sort=bookedInitialDeposits` ranks by.
+            Ignored by the other metrics. Returned as `sortCurrency`.
+          required: false
+          schema:
+            type: string
+            pattern: '^[A-Z]{3}$'
+            default: SGD
       responses:
         '200':
           description: Panel is `agents`.
@@ -237,7 +246,8 @@ components:
         A parameter is invalid. Either the window — `from` after `to`, an
         unparseable date, or a span longer than 365 days — or a parameter
         outside the schema above, such as a `sort` metric that is not in the
-        enum or a `staleDays` outside 1..3650. No upstream call is made.
+        enum, a `currency` that is not three upper-case letters or a
+        `staleDays` outside 1..3650. No upstream call is made.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -305,11 +315,9 @@ components:
             Machine-readable cause, present only when the panel did not fully
             resolve. `upstream_not_deployed`: no base URL is configured for the
             service. `upstream_forbidden`: the service refused the caller.
-            `mixed_currencies`: the accounts opened in the window use more than
-            one currency, so their deposits are not added up (ADR-0038).
             `unsupported_window`: the team comparison covers only the last 7,
             30 or 90 days ending today.
-          enum: [upstream_not_deployed, upstream_timeout, upstream_error, upstream_forbidden, mixed_currencies, unsupported_window]
+          enum: [upstream_not_deployed, upstream_timeout, upstream_error, upstream_forbidden, unsupported_window]
 
     Window:
       type: object

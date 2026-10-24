@@ -9,9 +9,9 @@ import (
 	"unicode"
 )
 
-// DefaultCurrency is the currency of an account listed without one: the
-// deployment serves one legal entity, whose accounts are in SGD (Appendix 2,
-// ADR-0038).
+// DefaultCurrency is the currency of an account listed without one: SGD, the
+// currency the specification gives as its example (Appendix 2). Accounts in
+// other currencies are listed with theirs (ADR-0045).
 const DefaultCurrency = "SGD"
 
 // Account is one CRM account and the currency it is held in, so its

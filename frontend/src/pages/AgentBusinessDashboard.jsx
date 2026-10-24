@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { panelData, windowForDays } from '../api/dashboard.js'
 import StatCard from '../components/StatCard.jsx'
 import ActionList from '../components/dashboard/ActionList.jsx'
+import AmountLines from '../components/dashboard/AmountLines.jsx'
 import BreakdownChart from '../components/dashboard/BreakdownChart.jsx'
 import DashboardHeader from '../components/dashboard/DashboardHeader.jsx'
 import MetricDefinitions from '../components/dashboard/MetricDefinitions.jsx'
@@ -12,7 +13,7 @@ import useDashboards, { panelOf, upperKeys } from '../components/dashboard/useDa
 import { hintFor } from '../components/dashboard/definitions.js'
 import { dailyTrend, ratio } from '../components/dashboard/figures.js'
 import {
-  NO_FIGURE, daysSince, formatNumber, formatPercent, formatSGD, formatValue, toRows,
+  NO_FIGURE, currenciesNote, daysSince, formatNumber, formatPercent, formatTotal, toRows,
 } from '../components/dashboard/format.js'
 
 const STATUS_LABELS = { COMPLETED: 'Completed', PENDING: 'Pending', FAILED: 'Failed' }
@@ -112,7 +113,7 @@ function AgentBusinessDashboard() {
         <StatCard
           loading={tilesLoading}
           label="Booked initial deposits"
-          value={formatSGD(accounts?.bookedInitialDeposits, { compact: true })}
+          value={<AmountLines amounts={accounts?.bookedInitialDeposits} label="Booked initial deposits by currency" compact />}
           icon="savings"
           caption="Opening deposits, not a balance"
           hint={hintFor('bookedInitialDeposits')}
@@ -151,7 +152,8 @@ function AgentBusinessDashboard() {
             </div>
             <div className="metric" title={hintFor('transactionValue')}>
               <span className="metric-label">Value</span>
-              <span className="metric-value">{formatValue(tx?.totalValue, { compact: true })}</span>
+              <span className="metric-value">{formatTotal(tx?.totalValue, tx?.currencies, { compact: true })}</span>
+              {currenciesNote(tx?.currencies) && <span className="metric-note">{currenciesNote(tx?.currencies)}</span>}
             </div>
             <div className="metric" title={hintFor('failureRate')}>
               <span className="metric-label">Failure rate</span>

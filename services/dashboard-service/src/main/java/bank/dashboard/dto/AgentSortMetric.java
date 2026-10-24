@@ -20,12 +20,8 @@ import java.util.stream.Collectors;
  * values are camelCase because {@code docs/api/dashboard-api.yaml} fixes them
  * that way.
  *
- * <p>{@code bookedInitialDeposits} is well defined here only because the
- * deployment is single-currency by specification (ADR-0038, "The
- * single-currency assumption"). Were that to stop holding, deposits would
- * become a per-currency figure and this value would need a companion currency
- * parameter before it could mean anything -- so it is one of the entries that
- * changes if the legal-entity scope does.
+ * <p>Deposits are a per-currency figure, so {@code bookedInitialDeposits}
+ * ranks by the deposits in one named currency, given with it (ADR-0062).
  */
 public enum AgentSortMetric {
 

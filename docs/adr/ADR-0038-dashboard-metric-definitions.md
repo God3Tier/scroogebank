@@ -7,7 +7,7 @@
 - Feature/branch: `feat/business-dashboard`
 - Related issue/PR: TBD
 - Supersedes: N/A (replaces the unmerged branch ADR-0002, "Dashboard metric definitions", whose number is taken on `dev`)
-- Superseded by: N/A
+- Superseded by: ADR-0062 in part, on acceptance (the account-service refusal and `mixed_currencies` in the currency rules, the single-currency premise after them, and "Booked initial deposits" as one sum)
 
 ## Context
 

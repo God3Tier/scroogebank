@@ -155,6 +155,17 @@ class DashboardControllerTest {
     }
 
     @Test
+    void ranksDepositsInACurrencyGivenAsThreeUpperCaseLetters() throws Exception {
+        mockMvc.perform(asAdmin(get("/api/dashboard/agents").param("sort", "bookedInitialDeposits").param("currency", "USD")))
+                .andExpect(status().isServiceUnavailable());
+        for (String currency : new String[] {"usd", "US", "1234", "US$"}) {
+            mockMvc.perform(asAdmin(get("/api/dashboard/agents").param("currency", currency)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("currency must be three upper-case letters"));
+        }
+    }
+
+    @Test
     void rejectsAStaleDaysOutsideTheContractRange() throws Exception {
         // dashboard-api.yaml fixes staleDays to 1..3650. The ceiling guards
         // downstream date arithmetic; it is not a cost limit, because a

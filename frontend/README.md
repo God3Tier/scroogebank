@@ -154,7 +154,7 @@ The calendar, follow-up emails and upcoming-meetings layouts follow the Stitch s
 `/insights/admin` is the bank-wide dashboard: KPI tiles, daily activity, transaction health, portfolio composition, agent performance and stale unverified clients. `/insights/agent` is one agent's own book: KPI tiles, stale unverified clients, team comparison, client verification, transactions and accounts. The window selector (7, 30 or 90 days, ending today in Singapore) reloads every panel.
 
 - Each panel shows its own state. An unavailable panel says why (`reason` in the response), and a request that fails marks only its panels as unavailable.
-- A figure the API leaves out, such as a rate with nothing to divide or a value in more than one currency, shows as "—".
+- A figure the API leaves out, such as a rate with nothing to divide or a transaction value in more than one currency, shows as "—", with the currencies listed. Booked initial deposits are shown per currency, and the agent table ranks them in one currency at a time ([ADR-0062](../docs/adr/ADR-0062-dashboard-account-figures-per-currency.md)).
 - The mockup also showed most active clients, ingestion freshness, clients without an account, rejected verifications and flagged transactions. dashboard-service does not serve these yet, so they are not shown ([open item 25](../docs/architecture/open-items.md#25-business-dashboard-panels-not-served-yet)).
 - Styling: Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision) — the same tokens the rest of the app uses. Dashboard-specific styles are in `src/styles/dashboard.css`, chart colours in `src/styles/chartTheme.js`. Charts: Recharts.
 

@@ -993,3 +993,30 @@
   then reported none beyond the three accepted in `osv-scanner.toml` (see
   the previous entry), down from 276. Deployed the upgraded
   services and confirmed every service runs as expected.
+
+## 2026-10-24 — Dashboard account figures per currency
+
+- Human owner: Neo Jia Wen. Joseph Yau should review the account-service
+  change (ADR-0062 names him for agreement).
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0062 and implement it. account-service no longer refuses
+  account figures (HTTP 409) when the window's accounts use more than one
+  currency: it sums booked initial deposits per currency, in total and per
+  agent, and leaves each day's value out. dashboard-service passes the
+  per-currency amounts through, ranks the per-agent table's deposits in a
+  `currency` parameter (default SGD), caches each currency apart, and drops
+  the `mixed_currencies` panel reason. The frontend shows each currency's
+  amount, labels the transaction value with its currency (or lists the
+  currencies when there are several), and offers a currency choice for the
+  deposits ranking. The contracts, feature plan, READMEs, demo script and
+  comments that assumed one currency were updated.
+- Human verification required: review of ADR-0062 and the changed services
+  by their owners; a check on the deployed stack with an SGD and a USD account.
+- Data: repository content only, plus the project specification and the
+  Q&A spreadsheet in `references/`, searched for currency rules. No
+  credentials, real client data or AWS resources were used.
+- Verification: account-service `make test` passed, including new
+  repository tests with two currencies; dashboard-service `mvn test` passed
+  (108 tests); frontend lint, 243 tests and build passed; SFTP producer tests
+  passed; Redocly CLI 1.34.5 found both dashboard specs valid, with the same
+  two warnings as before. Not yet run end to end.

@@ -4,18 +4,19 @@ import { panelData, windowForDays } from '../api/dashboard.js'
 import { ViewAll } from '../components/ListFooter.jsx'
 import StatCard from '../components/StatCard.jsx'
 import ActionList from '../components/dashboard/ActionList.jsx'
-import AgentPerformanceTable, { SortSelect } from '../components/dashboard/AgentPerformanceTable.jsx'
+import AmountLines from '../components/dashboard/AmountLines.jsx'
+import AgentPerformanceTable, { AgentTableControls } from '../components/dashboard/AgentPerformanceTable.jsx'
 import BreakdownChart from '../components/dashboard/BreakdownChart.jsx'
 import DashboardHeader from '../components/dashboard/DashboardHeader.jsx'
 import MetricDefinitions from '../components/dashboard/MetricDefinitions.jsx'
 import PanelCard from '../components/dashboard/PanelCard.jsx'
 import TrendChart from '../components/dashboard/TrendChart.jsx'
 import useDashboards, { panelOf, upperKeys } from '../components/dashboard/useDashboards.js'
-import { hintFor } from '../components/dashboard/definitions.js'
+import { DEFAULT_CURRENCY, hintFor, rankingParams } from '../components/dashboard/definitions.js'
 import { dailyTrend, ratio } from '../components/dashboard/figures.js'
 import { PAGE_SIZE } from '../components/paging.js'
 import {
-  NO_FIGURE, daysSince, formatNumber, formatPercent, formatSGD, formatValue, toRows,
+  NO_FIGURE, currenciesNote, daysSince, formatNumber, formatPercent, formatTotal, toRows,
 } from '../components/dashboard/format.js'
 
 const STATUS_LABELS = { COMPLETED: 'Completed', PENDING: 'Pending', FAILED: 'Failed' }
@@ -29,7 +30,9 @@ const STALE_DAYS = 7
 function AdminBusinessDashboard() {
   const [days, setDays] = useState(30)
   const [sort, setSort] = useState('clientsOnboarded')
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY)
   const period = windowForDays(days)
+  const ranking = rankingParams(sort, currency)
 
   const { responses } = useDashboards({
     overview: ['overview', period],
@@ -37,7 +40,7 @@ function AdminBusinessDashboard() {
     transactions: ['transactions', period],
     actions: ['action-items', { ...period, staleDays: STALE_DAYS }],
   })
-  const { responses: ranked } = useDashboards({ agents: ['agents', { ...period, sort }] })
+  const { responses: ranked } = useDashboards({ agents: ['agents', { ...period, ...ranking }] })
   const { overview, portfolio, transactions, actions } = responses
   // The stat tiles all come from the overview.
   const tilesLoading = overview === undefined
@@ -112,7 +115,7 @@ function AdminBusinessDashboard() {
         <StatCard
           loading={tilesLoading}
           label="Booked initial deposits"
-          value={formatSGD(accounts?.bookedInitialDeposits, { compact: true })}
+          value={<AmountLines amounts={accounts?.bookedInitialDeposits} label="Booked initial deposits by currency" compact />}
           icon="savings"
           caption="Opening deposits, not a balance"
           hint={hintFor('bookedInitialDeposits')}
@@ -149,7 +152,8 @@ function AdminBusinessDashboard() {
             </div>
             <div className="metric" title={hintFor('transactionValue')}>
               <span className="metric-label">Value</span>
-              <span className="metric-value">{formatValue(tx?.totalValue, { compact: true })}</span>
+              <span className="metric-value">{formatTotal(tx?.totalValue, tx?.currencies, { compact: true })}</span>
+              {currenciesNote(tx?.currencies) && <span className="metric-note">{currenciesNote(tx?.currencies)}</span>}
             </div>
           </div>
           <BreakdownChart title="By status" rows={toRows(byStatus, STATUS_LABELS)} />
@@ -173,11 +177,26 @@ function AdminBusinessDashboard() {
           title="Agent performance"
           panel={panelOf(ranked.agents, 'agents')}
           className="span-12 card-flush"
-          action={<SortSelect value={sort} onChange={setSort} />}
+          action={(
+            <AgentTableControls
+              sort={sort}
+              onSortChange={setSort}
+              currency={currency}
+              currencies={agentTable?.currencies}
+              onCurrencyChange={setCurrency}
+            />
+          )}
         >
-          <AgentPerformanceTable rows={(agentTable?.rows ?? []).slice(0, PAGE_SIZE)} sortedBy={agentTable?.sortedBy} />
+          <AgentPerformanceTable
+            rows={(agentTable?.rows ?? []).slice(0, PAGE_SIZE)}
+            sortedBy={agentTable?.sortedBy}
+            sortCurrency={agentTable?.sortCurrency}
+          />
           {agentTable?.rows?.length > PAGE_SIZE && (
-            <ViewAll to={`/insights/admin/agents?days=${days}&sort=${sort}`} label="View all agents" />
+            <ViewAll
+              to={`/insights/admin/agents?${new URLSearchParams({ days: String(days), ...ranking })}`}
+              label="View all agents"
+            />
           )}
         </PanelCard>
 

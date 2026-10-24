@@ -124,13 +124,6 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: |
-            Accounts opened in the window use more than one currency, so their
-            deposits are not added into one figure (ADR-0038).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
 
   /aggregates/accounts/ids:
     get:
@@ -335,7 +328,7 @@ components:
 
     AccountStats:
       type: object
-      required: [total, byType, byStatus, byCurrency, byBranch, openedInWindow, bookedInitialDeposits, dailyOpened]
+      required: [total, byType, byStatus, byCurrency, byBranch, openedInWindow, bookedInitialDeposits, currencies, dailyOpened]
       properties:
         total: { type: integer, format: int64, description: 'Accounts in scope, whatever their opening date.' }
         byType: { type: object, additionalProperties: { type: integer, format: int64 } }
@@ -344,11 +337,20 @@ components:
         byBranch: { type: object, additionalProperties: { type: integer, format: int64 } }
         openedInWindow: { type: integer, format: int64 }
         bookedInitialDeposits:
-          allOf: [{ $ref: '#/components/schemas/Amount' }]
-          description: Opening deposits of accounts opened in the window. Not a balance.
-        currency: { type: string, description: Their currency; absent when none were opened. }
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Amount' }
+          description: |
+            Opening deposits of accounts opened in the window, summed per
+            currency and never across currencies (ADR-0062). Not a balance.
+            Empty when none were opened.
+          example: { SGD: '350.50', USD: '5.00' }
+        currencies:
+          type: array
+          items: { type: string }
+          description: The currencies of the accounts opened in the window, sorted; empty when none were.
         dailyOpened:
           type: array
+          description: Each day's value is left out when the window's accounts span more than one currency.
           items: { $ref: '#/components/schemas/DailyCount' }
         byAgent:
           type: array
@@ -359,7 +361,10 @@ components:
             properties:
               agentId: { type: string, description: The owner's Cognito sub. }
               accountsOpened: { type: integer, format: int64 }
-              bookedInitialDeposits: { $ref: '#/components/schemas/Amount' }
+              bookedInitialDeposits:
+                type: object
+                additionalProperties: { $ref: '#/components/schemas/Amount' }
+                description: The agent's opening deposits per currency.
 
     TransactionStats:
       type: object

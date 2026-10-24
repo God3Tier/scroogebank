@@ -84,13 +84,13 @@ class DashboardServiceTest {
     void theRatioIsUnavailableWhenEitherSideIs() {
         when(clients.stats(WINDOW, false)).thenReturn(clientStats(4));
         when(accounts.stats(WINDOW, false))
-                .thenThrow(new UpstreamUnavailableException(PanelReason.MIXED_CURRENCIES, "two currencies"));
+                .thenThrow(new UpstreamUnavailableException(PanelReason.UPSTREAM_FORBIDDEN, "refused"));
 
         DashboardResponse response = service.portfolio(WINDOW).response();
 
         assertThat(response.panels().get("clients").status()).isEqualTo(PanelStatus.OK);
         assertThat(response.panels().get("accountsPerClient").status()).isEqualTo(PanelStatus.UNAVAILABLE);
-        assertThat(response.panels().get("accountsPerClient").reason()).isEqualTo(PanelReason.MIXED_CURRENCIES);
+        assertThat(response.panels().get("accountsPerClient").reason()).isEqualTo(PanelReason.UPSTREAM_FORBIDDEN);
     }
 
     @Test
@@ -151,7 +151,7 @@ class DashboardServiceTest {
         when(accounts.stats(WINDOW, true)).thenAnswer(slowly(400, agentAccountStats()));
 
         long startedAt = System.nanoTime();
-        DashboardResponse response = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response();
+        DashboardResponse response = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED, "SGD").response();
         long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 
         assertThat(response.panels().get("agents").status()).isEqualTo(PanelStatus.OK);
@@ -163,9 +163,25 @@ class DashboardServiceTest {
         when(clients.stats(WINDOW, true)).thenReturn(agentClientStats());
         when(accounts.stats(WINDOW, true)).thenReturn(agentAccountStats());
 
-        DashboardResponse response = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response();
+        DashboardResponse response = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED, "SGD").response();
 
         assertThat(response.panels()).containsOnlyKeys("agents");
+    }
+
+    @Test
+    void theAgentsTableIsCachedPerCurrency() {
+        // A ranking in USD is a different answer from one in SGD.
+        when(clients.stats(WINDOW, true)).thenReturn(agentClientStats());
+        when(accounts.stats(WINDOW, true)).thenReturn(agentAccountStats());
+
+        service.agentPerformance(WINDOW, AgentSortMetric.BOOKED_INITIAL_DEPOSITS, "SGD");
+        boolean sameCurrencyWasAHit = service.agentPerformance(WINDOW, AgentSortMetric.BOOKED_INITIAL_DEPOSITS, "SGD").cacheHit();
+        ServedResponse usd = service.agentPerformance(WINDOW, AgentSortMetric.BOOKED_INITIAL_DEPOSITS, "USD");
+
+        assertThat(sameCurrencyWasAHit).isTrue();
+        assertThat(usd.cacheHit()).isFalse();
+        assertThat(((AgentPerformanceTable.AgentPerformance) usd.response().panels().get("agents").data()).sortCurrency())
+                .isEqualTo("USD");
     }
 
     @Test
@@ -174,7 +190,7 @@ class DashboardServiceTest {
         when(accounts.stats(WINDOW, true))
                 .thenThrow(new UpstreamUnavailableException(PanelReason.UPSTREAM_ERROR, "account-service returned 500"));
 
-        Panel agents = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response().panels().get("agents");
+        Panel agents = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED, "SGD").response().panels().get("agents");
 
         assertThat(agents.status()).isEqualTo(PanelStatus.UNAVAILABLE);
         assertThat(agents.reason()).isEqualTo(PanelReason.UPSTREAM_ERROR);
@@ -187,7 +203,7 @@ class DashboardServiceTest {
         when(clients.stats(WINDOW, true)).thenReturn(agentClientStats());
         when(accounts.stats(WINDOW, true)).thenReturn(agentAccountStats());
 
-        Panel agents = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED).response().panels().get("agents");
+        Panel agents = service.agentPerformance(WINDOW, AgentSortMetric.CLIENTS_ONBOARDED, "SGD").response().panels().get("agents");
 
         assertThat(agents.status()).isEqualTo(PanelStatus.UNAVAILABLE);
         assertThat(agents.reason()).isEqualTo(PanelReason.UPSTREAM_ERROR);
@@ -205,8 +221,8 @@ class DashboardServiceTest {
     }
 
     private static AccountStats agentAccountStats() {
-        return new AccountStats(1, Map.of(), Map.of(), Map.of(), Map.of(), 1, BigDecimal.TEN, "SGD", List.of(),
-                List.of(new AccountStats.AgentAccountCounts("sub-a", 1, BigDecimal.TEN)));
+        return new AccountStats(1, Map.of(), Map.of(), Map.of(), Map.of(), 1, Map.of("SGD", BigDecimal.TEN), List.of("SGD"),
+                List.of(), List.of(new AccountStats.AgentAccountCounts("sub-a", 1, Map.of("SGD", BigDecimal.TEN))));
     }
 
     private static ClientStats clientStats(long total) {
@@ -214,6 +230,6 @@ class DashboardServiceTest {
     }
 
     private static AccountStats accountStats(long total) {
-        return new AccountStats(total, Map.of(), Map.of(), Map.of(), Map.of(), 0, BigDecimal.ZERO, null, List.of(), null);
+        return new AccountStats(total, Map.of(), Map.of(), Map.of(), Map.of(), 0, Map.of(), List.of(), List.of(), null);
     }
 }

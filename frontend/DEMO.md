@@ -47,16 +47,18 @@ Figures depend on today's date, because each window ends today. The script there
    - The line under the window selector shows the date range and "Figures as of …, cached up to 60 s". Responses are cached for up to 60 seconds, so figures are not real-time.
 4. **KPI tiles.**
    - Hover over **Booked initial deposits**. The tooltip explains that it is the sum of opening deposits, not a balance.
+   - If accounts in more than one currency were opened in the window, the tile lists one amount per currency, each on its own line. Amounts are never added up or converted across currencies. To show this, open a USD account for a client first.
    - Hover over **Verified share** to show another definition.
 5. **Window selector.** Click **7 days**, then **90 days**, then back to **30 days**. The tiles, the chart, the table and the date range all change.
 6. **Daily activity.** Clients created (left axis) and transactions (right axis). Each line has its own dash pattern, so the chart reads without colour.
-7. **Transaction health.** Failure rate, pending backlog (pending for more than 24 hours) and value, plus the split by status and by type. The value has no currency label because transactions carry no currency column.
+7. **Transaction health.** Failure rate, pending backlog (pending for more than 24 hours) and value, plus the split by status and by type. The value is shown in its currency. When the window's transactions span more than one currency, it shows "—" and lists the currencies instead of adding them up.
 8. **Ingestion freshness.** Shows how long ago the transaction import last synced. Today this signal is visible nowhere else in the UI.
 9. **Portfolio composition.**
    - Accounts by type, status and branch; clients by verification status.
    - Account keys are lowercase and client keys uppercase. The dashboard mirrors what each database stores rather than re-casing it.
 10. **Agent performance.**
     - Change **Sort by** to **Booked initial deposits**, then to **Verification rate**. The highlighted column follows the sort.
+    - With deposits in more than one currency, sorting by **Booked initial deposits** shows an **In** menu. Pick **USD** to rank by USD deposits. The column header names the currency, and an agent with none in it counts as zero.
     - The table is always sorted by one explicit metric. It computes no composite score or rating.
     - Rachel Wong shows as **Disabled**.
 11. **Action items.**
@@ -116,11 +118,11 @@ The agent performance table sorts by one of four metrics: clients onboarded, ver
 | Verified / unverified / rejected | Clients created in the window, split by verification status. `PENDING` counts as unverified. | — |
 | Total accounts / My accounts | All accounts in scope. | — |
 | Accounts opened | Accounts whose opening date is in the window. | — |
-| Booked initial deposits | Sum of opening deposits for accounts opened in the window. | Opening deposit only, not a current balance. Single currency (SGD). |
+| Booked initial deposits | Sum of opening deposits for accounts opened in the window. | Opening deposit only, not a current balance. Shown per currency; never added across currencies. |
 | Accounts per client | Accounts divided by clients over the same scope. | At most 6: a client can hold one account of each type. |
 | Active agents | Agents whose user account is enabled. The tile caption shows the full roster. | Admin only. |
 | Transaction count | Transactions dated in the window. | — |
-| Transaction value | Sum of transaction amounts in the window. | Unlabelled: transactions carry no currency column. |
+| Transaction value | Sum of transaction amounts in the window. | Shown in its currency; not added up when transactions span more than one. |
 | Transaction failure rate | Failed transactions divided by all transactions dated in the window. | Status is as supplied by the external source. |
 | Pending backlog | Pending transactions dated more than 24 hours ago. | — |
 | Counts by status / by type | Transactions in the window by status (`COMPLETED`, `PENDING`, `FAILED`) and by type (`DEPOSIT`, `WITHDRAWAL`). | — |
