@@ -64,6 +64,35 @@ jobs:
             echo "$base has no buf.yaml yet; nothing to compare against."
           fi
 
+  # The OpenAPI contracts in docs/api (ADR-0063). Each service's own tests
+  # check its responses against them; this job checks the files themselves.
+  openapi-contract:
+    name: Check the OpenAPI contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The breaking-change check reads the base branch from git history.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate docs/api
+        run: |
+          pip install openapi-spec-validator==0.9.0
+          for spec in docs/api/*.yaml; do
+            openapi-spec-validator "$spec"
+          done
+
+      # Pull requests only: compare with the branch the change would merge
+      # into, as buf breaking does for the gRPC contracts.
+      - name: Check docs/api for breaking changes
+        if: github.event_name == 'pull_request'
+        run: bash .github/scripts/check-openapi-breaking.sh "origin/${{ github.base_ref }}"
+
   # One job per Go service. Each runs the service's own `make test`, which
   # starts a disposable PostgreSQL (and LocalStack where a test needs it) and
   # generates the git-ignored ORM, mocks and gRPC code first, so CI and a local
