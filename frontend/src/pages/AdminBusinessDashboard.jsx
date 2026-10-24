@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { panelData, windowForDays } from '../api/dashboard.js'
+import { ViewAll } from '../components/ListFooter.jsx'
 import StatCard from '../components/StatCard.jsx'
 import ActionList from '../components/dashboard/ActionList.jsx'
 import AgentPerformanceTable, { SortSelect } from '../components/dashboard/AgentPerformanceTable.jsx'
@@ -12,6 +13,7 @@ import TrendChart from '../components/dashboard/TrendChart.jsx'
 import useDashboards, { panelOf, upperKeys } from '../components/dashboard/useDashboards.js'
 import { hintFor } from '../components/dashboard/definitions.js'
 import { dailyTrend, ratio } from '../components/dashboard/figures.js'
+import { PAGE_SIZE } from '../components/paging.js'
 import {
   NO_FIGURE, daysSince, formatNumber, formatPercent, formatSGD, formatValue, toRows,
 } from '../components/dashboard/format.js'
@@ -54,7 +56,7 @@ function AdminBusinessDashboard() {
   const byStatus = upperKeys(tx?.byStatus)
   const failureRate = tx ? ratio(byStatus.FAILED ?? 0, tx.total) : null
   const verifiedShare = clients ? ratio(clients.byVerificationStatus?.VERIFIED ?? 0, clients.total) : null
-  const trend = dailyTrend(clients?.dailyCreated, tx?.daily)
+  const trend = dailyTrend(clients?.dailyCreated, tx?.daily, period)
 
   const actionGroups = [
     {
@@ -173,7 +175,10 @@ function AdminBusinessDashboard() {
           className="span-12 card-flush"
           action={<SortSelect value={sort} onChange={setSort} />}
         >
-          <AgentPerformanceTable rows={agentTable?.rows ?? []} sortedBy={agentTable?.sortedBy} />
+          <AgentPerformanceTable rows={(agentTable?.rows ?? []).slice(0, PAGE_SIZE)} sortedBy={agentTable?.sortedBy} />
+          {agentTable?.rows?.length > 0 && (
+            <ViewAll to={`/insights/admin/agents?days=${days}&sort=${sort}`} label="View all agents" />
+          )}
         </PanelCard>
 
         <PanelCard title="Action items" panel={panelOf(actions, 'clients')} className="span-12">

@@ -96,7 +96,7 @@ Until the client is verified, **Open account** offers only Pending, and account-
 
 Documents are optional, because the requirements Q&A does not expect an upload (CPM06). With no document checked, the agent confirms "I have checked this client's identity without an uploaded document" and clicks **Verify without a document**. That verification is never hidden: the page shows a **Without a document** badge and says the client was verified without an uploaded document, client-service returns `verified_with_documents: false`, and the audit event says so. The calls are in `src/api/clients.js`. Locally, Vite's `/api` rule sends them to client-profile-management-service on port 8080, which `make run` starts with its LocalStack bucket (see its README).
 
-Agent Home's **Manage Client Profiles and Accounts** list comes from `GET /api/clients`; **Edit** on a row opens this page, where **Open account** opens a bank account for the client through account-service.
+Agent Home's **Manage Client Profiles and Accounts** list comes from `GET /api/clients`; **Edit Profile, Verify and Open Accounts** on a row opens this page, where **Open account** opens a bank account for the client through account-service.
 
 The page uses the existing tokens and components from the Stitch project "Scrooge Global Bank CRM" (design system: Institutional Precision), in `src/styles/index.css`.
 
@@ -109,8 +109,8 @@ Admin Home's **Recent Activities** and Agent Home's **My Recent Activities** rea
 - **IDs, not names.** Audit events hold no client personal data ([ADR-0030](../docs/adr/ADR-0030-client-data-envelope-encryption.md)), so an entry shows the first 8 characters of the client, account or user ID (the full ID on hover) and **Open client** where the client still exists. The acting user's name comes from user-service; a user it does not know shows as "Unknown user", and system work as "System". `src/components/activityText.js` turns each event's payload into words.
 - **Verification.** A verification shows how many documents it used, or a **Without a document** badge.
 - **Filters.** **Period** limits the feed to the last 24 hours, 7 or 30 days; the window is fixed when chosen, so every page covers the same one. An admin can select a name to see only that user's changes, and remove the chip to see everyone's again.
-- **Pages.** 10 entries at a time, newest first; **Load more** asks for the next page with the previous page's cursor.
-- **Failures.** If the auditor is down, user-service answers `503` and the panel says "Activity is temporarily unavailable." with **Try again**. A failed later page keeps the entries already shown.
+- **Pages.** The panel shows the newest 10; **View all activities** opens the whole feed on its own page (`/admin/activities`, `/agent/activities`), 10 entries a page with first, previous, next and last. The feed has no count, so that page fetches 100 entries at a time with the previous chunk's cursor, and shows "of N" once the last has been reached.
+- **Failures.** If the auditor is down, user-service answers `503` and the panel says "Activity is temporarily unavailable." with **Try again**. A failed later page keeps the page already shown.
 
 Locally, Vite sends `/api/activities` to user-service on port 8081, like `/api/users`. The feed also needs the auditor's gRPC server (`AUDITOR_GRPC_TARGET`, see the user-service README). The design is the "Admin Dashboard" screen with the Recent Activities card in the Stitch project "Scrooge Global Bank CRM".
 
@@ -133,14 +133,17 @@ Every page reads the deployed services except Client Health Monitor, whose servi
 
 | Page | Data |
 |---|---|
-| `/agent` | My Clients and the client list from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit (on the client page) and Delete through client-service; Upcoming meetings (the next 7 days) from `GET /api/engagement/events`, with client names from `GET /api/clients`, hidden when engagement-service is unavailable |
-| `/admin` | Admin and agent totals and lists from `GET /api/users`; Create Admin / Agent with `POST /api/users` (Cognito e-mails the temporary password); Disable with `PATCH /api/users/{id}/disable` (users are never deleted, and the root admin cannot be disabled); All Transactions from `GET /api/transactions`, 20 at a time |
+| `/agent` | My Clients and the client list (the newest 10) from `GET /api/clients` ([ADR-0043](../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)); transaction counts for the last 90 days from `GET /api/dashboard/transactions`; Create, Edit and Verify (on the client page) and Delete through client-service; Upcoming meetings (the next 7 days) from `GET /api/engagement/events`, with client names from `GET /api/clients`, hidden when engagement-service is unavailable |
+| `/admin` | Admin and agent totals and lists from `GET /api/users`; Create Admin / Agent with `POST /api/users` (Cognito e-mails the temporary password); Disable with `PATCH /api/users/{id}/disable` (users are never deleted, and the root admin cannot be disabled); All Transactions from `GET /api/transactions`. Each list shows its first 10 |
+| `/admin/admins`, `/admin/agents`, `/admin/transactions`, `/admin/activities`, `/agent/clients`, `/agent/activities` | The whole of a Home list, 10 rows a page, opened with its **View all** link. Users come alphabetically by last name; the rest newest first. Lists paged by cursor (transactions, activities) are fetched 100 rows at a time (`src/components/paging.js`) |
 | `/clients/:id` | client-service: profile, edit, documents, verification. Open account with `POST /api/accounts` on account-service |
-| `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions` |
-| `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)) |
+| `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions`; each account shows its newest 10 |
+| `/agent/client/:id/accounts/:accountId/transactions` | All of one account's transactions, 10 a page, opened with the account's **View all transactions**. The account must be one of the client's |
+| `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)). Agent performance shows the top 10 |
+| `/insights/admin/agents` | Every agent's figures from `GET /api/dashboard/agents`, 10 a page, opened with **View all agents**; the link carries the window and sort |
 | `/agent/client-health` | Synthetic, from `src/data/clientHealthTasks.js` |
 | `/agent/calendar` | engagement-service ([`docs/api/engagement-api.yaml`](../docs/api/engagement-api.yaml)): the month's meetings and Singapore public holidays, up to the last month the holiday list covers ([ADR-0057](../docs/adr/ADR-0057-holiday-sync-from-data-gov-sg.md)); create, edit and cancel meetings, each emailed to the agent as a calendar invite ([ADR-0052](../docs/adr/ADR-0052-calendar-invites-by-email.md)); notification preferences. Times are shown and entered in Singapore time |
-| `/agent/drafts` | engagement-service: AI or template follow-up drafts ([ADR-0054](../docs/adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)), edited as plain text with the names filled in ([ADR-0056](../docs/adr/ADR-0056-drafts-edited-as-plain-text.md)), sent after a confirmation, or discarded. Client names come from `GET /api/clients` |
+| `/agent/drafts` | engagement-service: AI or template follow-up drafts ([ADR-0054](../docs/adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md)), edited as plain text with the names filled in ([ADR-0056](../docs/adr/ADR-0056-drafts-edited-as-plain-text.md)), sent after a confirmation, or discarded. The list pages 10 at a time through the newest 100, the most engagement-service sends. Client names come from `GET /api/clients` |
 
 Locally, `vite.config.js` sends each `/api` path to the service that owns it, in the same order as the deployed load balancer's rules.
 

@@ -64,6 +64,7 @@ describe('business dashboards', () => {
     expect(screen.getByText('10.0%')).toBeInTheDocument()
     expect(screen.getByText('1.4')).toBeInTheDocument()
     expect(screen.getByText('Unknown agent')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View all agents' })).toHaveAttribute('href', '/insights/admin/agents?days=30&sort=clientsOnboarded')
     expect(screen.getByRole('link', { name: 'Open client' })).toHaveAttribute('href', '/clients/client-9')
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.queryByText(/Ingestion freshness/)).not.toBeInTheDocument()
