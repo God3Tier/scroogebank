@@ -57,11 +57,9 @@ dashboard:
   # Budgets for the upstream fan-out. No retries: a read-only dashboard should
   # surface a failure immediately rather than amplify load on a struggling
   # upstream (see nfr-notes.md, "Resiliency scope"). Down to 5 s and 8 s from
-  # 10 s and 15 s, which were raised for a user-service call that stalled for
-  # minutes; that is fixed. Not back to 2 s and 3 s: the transactions panel
-  # still timed out on the first load after a restart, when user-service's
-  # two calls behind it are cold (ADR-0033). The overall budget must stay
-  # under API Gateway's 29 s integration timeout.
+  # 10 s and 15 s, which were raised for calls that stalled in the JDK
+  # HttpClient; that is fixed (see RestClientConfig). The overall budget must
+  # stay under API Gateway's 29 s integration timeout (ADR-0033).
   upstream:
     per-call-timeout-ms: 5000
     overall-budget-ms: 8000

@@ -12,12 +12,12 @@ spring:
   flyway:
     enabled: true
   # The clients that call account-service, the SFTP receiver and the Auditor's
-  # HTTP API. HttpURLConnection (HTTP/1.1 only) rather than the JDK HttpClient:
-  # on each new plain-HTTP connection the JDK client asks to upgrade to HTTP/2
-  # (h2c), and behind Service Connect the receiver's response body then never
-  # finished arriving. Connections close after 30 s idle, so the first business
-  # dashboard after a pause hung until dashboard-service gave up. The timeouts
-  # make any such stall fail fast instead of holding a request thread.
+  # HTTP API. HttpURLConnection rather than the JDK HttpClient: in AWS, after
+  # about 30 s without a call, the JDK client received the receiver's HTTP/1.1
+  # response headers but never finished reading the body, which the receiver
+  # had sent in full, so the first business dashboard after a pause hung
+  # until dashboard-service gave up (ADR-0033). The timeouts make any such
+  # stall fail fast instead of holding a request thread.
   http:
     client:
       factory: simple

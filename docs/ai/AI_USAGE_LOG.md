@@ -1076,8 +1076,15 @@
   `application.yml` with 2 s connect and 3 s read timeouts. Returned
   dashboard-service's budgets to 2 s and 3 s at the owner's request; after
   the transactions panel timed out on the first load after a restart, set
-  them to 5 s and 8 s, as the owner chose. Amended ADR-0033, and updated both READMEs and the feature plan. The
-  temporary Terraform changes were removed before this branch.
+  them to 5 s and 8 s, as the owner chose. The panel still timed out after
+  an idle pause; temporary Tomcat access logging in user-service and JDK
+  HttpClient logging in dashboard-service showed user-service answering in
+  under 220 ms while dashboard-service's JDK client got the headers and
+  never finished the chunked HTTP/1.1 body. That disproved the first
+  explanation recorded (the JDK client's h2c upgrade), since this call is
+  HTTPS. Switched dashboard-service's client to `HttpURLConnection` too.
+  Amended ADR-0033, and updated both READMEs and the feature plan. All
+  temporary Terraform changes were removed before committing.
 - Human verification required: review by the user-service owner; after
   deploying user-service and dashboard-service, load the dashboard after a
   2-minute pause several times, and once just after a restart.
@@ -1085,6 +1092,6 @@
   the owner and pasted in; synthetic test data. No credentials or real
   client data were shared.
 - Verification: user-service `mvn test` passed (87 tests) and
-  dashboard-service `mvn test` passed (109 tests). The yml change itself is
-  not yet deployed; only its environment-variable equivalent was checked in
-  AWS.
+  dashboard-service `mvn test` passed (109 tests). The user-service change
+  is deployed and its stall no longer appears; the dashboard-service change
+  is not yet deployed.

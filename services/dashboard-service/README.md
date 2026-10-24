@@ -19,6 +19,7 @@ So the dashboard can read nothing the caller could not, and each service scopes 
 
 - **Panels degrade one at a time.** Upstream calls run in parallel (5 s each, 8 s in total). A failing or unconfigured upstream makes its panels `UNAVAILABLE` with a reason; the response is 200 unless every panel failed (503). An upstream that times out, answers with an error or cannot be reached is logged as a `WARN` naming the panel and the cause.
 - **Warm-up:** at startup, before the task takes traffic, the service calls each configured upstream's health endpoint once, without a token, and logs `Warm-up: <service> took N ms`. The first dashboard then does not pay the HTTP client, TLS and JSON first-use costs, which on Fargate made every call of the first page take 1.5 to 2 s. A down upstream is logged, never fatal.
+- **HTTP client:** `HttpURLConnection`, not the JDK HttpClient Spring Boot would pick. In AWS, after about 30 s without a call, the JDK client received user-service's response headers but never finished reading the HTTP/1.1 body, so the transactions panel timed out on the first load after a pause (ADR-0033, amended 2026-10-24).
 - **Cache:** each task caches each caller's response for 3 minutes. `generatedAt` says when the figures were computed. A response with an `upstream_timeout` or `upstream_error` panel is not cached, so the next request asks again.
 - **Audit:** every view, cache hits included, sends a `DASHBOARD_VIEW` event to the shared audit queue, best-effort. The auditor accepts `source_service: DASHBOARD`.
 - **Days** are Singapore days; "today" is the Singapore date.
@@ -64,7 +65,7 @@ Tunables in `application.yml`:
 | `dashboard.window.max-days` | 365 | Bounds what one request asks an upstream to aggregate |
 | `dashboard.cache.ttl-seconds` | 180 | Per-task cache lifetime (ADR-0033) |
 | `dashboard.cache.max-entries` | 1000 | A starting value, not a measured one |
-| `dashboard.upstream.per-call-timeout-ms` | 5000 | Per-upstream budget. Raised to 10000 for timeouts that turned out to be a stall in user-service, then lowered once that was fixed; 2000 is too short for the transactions panel's two cold calls after a restart (ADR-0033) |
+| `dashboard.upstream.per-call-timeout-ms` | 5000 | Per-upstream budget. Raised to 10000 for timeouts that turned out to be a stall in the JDK HttpClient, then lowered once that was fixed (ADR-0033) |
 | `dashboard.upstream.overall-budget-ms` | 8000 | Whole-request budget. Keep it under API Gateway's 29 s integration timeout, or the caller gets the gateway's error instead of a partial dashboard |
 
 ## Port
