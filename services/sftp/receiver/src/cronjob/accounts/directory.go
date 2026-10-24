@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"receiver/src/internal/models"
 )
 
 // batchSize is account-service's limit per lookup request.
@@ -74,11 +76,11 @@ func New(cfg Config) *Directory {
 	return &Directory{config: cfg, http: &http.Client{Timeout: 5 * time.Second}}
 }
 
-// Lookup returns, for each of accountIDs that is a CRM account, its client ID.
-// Deleted accounts are not returned (ADR-0036). Any failure is an error: the
-// caller must not treat "could not ask" as "no such account".
-func (d *Directory) Lookup(ctx context.Context, accountIDs []string) (map[string]string, error) {
-	found := make(map[string]string, len(accountIDs))
+// Lookup returns, for each of accountIDs that is a CRM account, its client ID
+// and currency. Deleted accounts are not returned (ADR-0036). Any failure is
+// an error: the caller must not treat "could not ask" as "no such account".
+func (d *Directory) Lookup(ctx context.Context, accountIDs []string) (map[string]models.Account, error) {
+	found := make(map[string]models.Account, len(accountIDs))
 	for start := 0; start < len(accountIDs); start += batchSize {
 		if err := d.lookupBatch(ctx, accountIDs[start:min(start+batchSize, len(accountIDs))], found); err != nil {
 			return nil, err
@@ -87,7 +89,7 @@ func (d *Directory) Lookup(ctx context.Context, accountIDs []string) (map[string
 	return found, nil
 }
 
-func (d *Directory) lookupBatch(ctx context.Context, ids []string, found map[string]string) error {
+func (d *Directory) lookupBatch(ctx context.Context, ids []string, found map[string]models.Account) error {
 	token, err := d.accessToken(ctx)
 	if err != nil {
 		return err
@@ -115,13 +117,20 @@ func (d *Directory) lookupBatch(ctx context.Context, ids []string, found map[str
 		Accounts []struct {
 			ID       string `json:"id"`
 			ClientID string `json:"client_id"`
+			Currency string `json:"currency"`
 		} `json:"accounts"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&payload); err != nil || payload.Accounts == nil {
 		return fmt.Errorf("account-service lookup returned no account list")
 	}
 	for _, account := range payload.Accounts {
-		found[strings.ToLower(account.ID)] = account.ClientID
+		// Without the currency, no transaction could be checked against it,
+		// so this is a failure to ask, not an answer: an account-service
+		// older than the receiver must not get every row rejected.
+		if account.Currency == "" {
+			return fmt.Errorf("account-service lookup returned account %s without a currency", account.ID)
+		}
+		found[strings.ToLower(account.ID)] = models.Account{ClientID: account.ClientID, Currency: account.Currency}
 	}
 	return nil
 }

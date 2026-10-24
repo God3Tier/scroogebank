@@ -30,6 +30,9 @@ func normalizeTransaction(transaction *models.Transaction) error {
 	if transaction.Amount < 0 || math.IsNaN(transaction.Amount) || math.IsInf(transaction.Amount, 0) {
 		return fmt.Errorf("amount must be a finite non-negative number")
 	}
+	// Account currencies are upper case, and a Matched transaction's must
+	// equal its account's (ADR-0037).
+	transaction.Currency = strings.ToUpper(transaction.Currency)
 	if transaction.Currency != "" && len(transaction.Currency) != 3 {
 		return fmt.Errorf("currency must contain a three-character code")
 	}

@@ -19,8 +19,9 @@ Transactions have their own database. Clients and accounts live in their service
 1. It reads and validates every row of the file.
 2. It sends the distinct account references that are UUIDs to `POST {ACCOUNT_SERVICE_BASE_URL}/internal/accounts/lookup`, in batches of 500, once per file.
 3. Rows whose account exists get `account_id`, `client_id` and `import_status = 'Matched'`. All others, including deleted accounts and external references such as `ACC-000123`, are stored as `Unmatched` with no `account_id`, and this API never returns them.
+4. A row whose account exists must be in the account's currency, which the lookup also returns ([ADR-0061](../../../docs/adr/ADR-0061-imported-transactions-in-their-accounts-currency.md)). The code is upper-cased first. A row with no currency, or another one, is rejected like any invalid row: `FILE_PROCESSING_COMPLETED` lists it, the file's other rows are imported, and the file moves to `rejected/`. `Unmatched` rows have no account to compare with and are kept.
 
-If account-service cannot answer, nothing from the file is saved, and the file stays in place for the next poll. Only the first failed attempt on each file sends a `SYSTEM_EXCEPTION` audit event; retries stay quiet until a lookup succeeds. `Unmatched` therefore only ever means "no such account".
+If account-service cannot answer, or returns an account without a currency, as one older than the receiver does, nothing from the file is saved, and the file stays in place for the next poll. Deploy account-service first. Only the first failed attempt on each file sends a `SYSTEM_EXCEPTION` audit event; retries stay quiet until a lookup succeeds. `Unmatched` therefore only ever means "no such account".
 
 The poller has no user, so it signs in with its own Cognito app client using the client-credentials grant (ADR-0025). Set these in `services/sftp/.env`; never commit the secret:
 
@@ -129,7 +130,7 @@ Internal endpoint: `GET /api/transactions?cursor&size&status`, every account's t
 
 Internal endpoint: `POST /aggregates/transactions/stats`, the business dashboard's transaction figures ([ADR-0039](../../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). It is also unauthenticated and private: only user-service calls it, after checking the caller and choosing the scope. The body is `{"from", "to"}` plus exactly one of `"all": true` or `"accountIds": [...]` (UUIDs, at most 20,000), so a request that forgets the account list is refused rather than read as "everything". It returns counts by status and type, a daily series, the pending backlog, and, for `all`, the unmatched count. Amounts are summed only when the window's transactions share one currency ([ADR-0038](../../../docs/adr/ADR-0038-dashboard-metric-definitions.md)).
 
-The receiver keeps the file's account reference in `source_account_ref`. For local demo data, create an account through account-service, then set `CRM_ACCOUNT_IDS` to its returned `account_id` before starting the producer. Multiple UUIDs can be comma-separated.
+The receiver keeps the file's account reference in `source_account_ref`. For local demo data, create an account through account-service, then set `CRM_ACCOUNT_IDS` to its returned `account_id` before starting the producer. Multiple UUIDs can be comma-separated. An account opened in a currency other than SGD needs `<id>:<currency>`, so its transactions are in its currency.
 
 ## Running as a Lambda function
 

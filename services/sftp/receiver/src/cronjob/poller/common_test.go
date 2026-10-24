@@ -102,22 +102,22 @@ func (s *fakeStore) SaveAuditEvent(_ context.Context, event models.AuditEvent) e
 }
 
 // fakeDirectory stands in for account-service: accounts maps account ID to
-// client ID.
+// the account's client and currency.
 type fakeDirectory struct {
-	accounts map[string]string
+	accounts map[string]models.Account
 	err      error
 	asked    [][]string
 }
 
-func (d *fakeDirectory) Lookup(_ context.Context, ids []string) (map[string]string, error) {
+func (d *fakeDirectory) Lookup(_ context.Context, ids []string) (map[string]models.Account, error) {
 	d.asked = append(d.asked, ids)
 	if d.err != nil {
 		return nil, d.err
 	}
-	found := make(map[string]string)
+	found := make(map[string]models.Account)
 	for _, id := range ids {
-		if clientID, ok := d.accounts[id]; ok {
-			found[id] = clientID
+		if account, ok := d.accounts[id]; ok {
+			found[id] = account
 		}
 	}
 	return found, nil

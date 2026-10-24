@@ -40,7 +40,7 @@ if [ -n "${producer_image}" ]; then
   dnf install -y docker
   systemctl enable --now docker
   aws ecr get-login-password --region "${region}" | docker login --username AWS --password-stdin "${registry}"
-  # The CRM accounts the transactions may use, one ID per line, written by
+  # The CRM accounts the transactions may use, one <id>:<currency> per line, written by
   # scripts/sync-producer-accounts.sh (ADR-0045). It starts empty, so nothing
   # is published until the first sync. The directory is mounted, not the
   # file: the sync replaces the file by renaming, which a file mount misses.

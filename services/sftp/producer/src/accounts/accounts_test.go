@@ -13,12 +13,24 @@ const (
 )
 
 func TestListIsSplitOnCommas(t *testing.T) {
-	ids, err := Source{List: " " + first + ", ," + second + " "}.IDs()
+	list, err := Source{List: " " + first + ", ," + second + " "}.Accounts()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{first, second}; !slices.Equal(ids, want) {
-		t.Fatalf("IDs() = %q, want %q", ids, want)
+	if want := []Account{{first, "SGD"}, {second, "SGD"}}; !slices.Equal(list, want) {
+		t.Fatalf("Accounts() = %v, want %v", list, want)
+	}
+}
+
+// The sync writes each account with its currency; an ID alone, as in
+// CRM_ACCOUNT_IDS, is in the deployment's currency.
+func TestEntryMayGiveItsCurrency(t *testing.T) {
+	list, err := Source{List: first + ":USD," + second + ": ,:EUR"}.Accounts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Account{{first, "USD"}, {second, "SGD"}}; !slices.Equal(list, want) {
+		t.Fatalf("Accounts() = %v, want %v", list, want)
 	}
 }
 
@@ -26,29 +38,29 @@ func TestFileIsReadOnEveryCall(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "account-ids")
 	source := Source{File: path, List: "ignored-when-a-file-is-set"}
 
-	write(t, path, first+"\r\n"+second+"\n\n")
-	ids, err := source.IDs()
+	write(t, path, first+":SGD\r\n"+second+":USD\n\n")
+	list, err := source.Accounts()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{first, second}; !slices.Equal(ids, want) {
-		t.Fatalf("IDs() = %q, want %q", ids, want)
+	if want := []Account{{first, "SGD"}, {second, "USD"}}; !slices.Equal(list, want) {
+		t.Fatalf("Accounts() = %v, want %v", list, want)
 	}
 
 	write(t, path, "")
-	ids, err = source.IDs()
+	list, err = source.Accounts()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ids) != 0 {
-		t.Fatalf("IDs() after the file was emptied = %q, want none", ids)
+	if len(list) != 0 {
+		t.Fatalf("Accounts() after the file was emptied = %v, want none", list)
 	}
 }
 
 func TestMissingFileIsAnError(t *testing.T) {
-	_, err := Source{File: filepath.Join(t.TempDir(), "missing")}.IDs()
+	_, err := Source{File: filepath.Join(t.TempDir(), "missing")}.Accounts()
 	if err == nil {
-		t.Fatal("IDs() of a missing file returned no error")
+		t.Fatal("Accounts() of a missing file returned no error")
 	}
 }
 

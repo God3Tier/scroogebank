@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Gives the bank's producer, on the simulated SFTP server, the CRM accounts
-# its transactions may use (ADR-0045): the accounts that are neither deleted
-# nor closed, the 100 most recently opened. With none, the producer publishes
-# nothing. Run it after opening, closing or deleting accounts in the app, and
+# its transactions may use and each one's currency (ADR-0045): the accounts
+# that are neither deleted nor closed, the 100 most recently opened. With
+# none, the producer publishes nothing. Run it after opening, closing or deleting accounts in the app, and
 # after the SFTP instance is replaced, which starts with an empty list.
 #
 # It reads the accounts database with scripts/db-run-sql.sh, so the crm stack
@@ -20,12 +20,13 @@ limit=100 # keeps the Run Command request small
 instance=$(terraform -chdir="$sftp_dir" output -raw instance_id)
 file=$(terraform -chdir="$sftp_dir" output -raw producer_account_ids_file)
 
-# Each ID is tagged, and a marker ends the output, so output that could not be
-# read is never taken for a CRM without accounts.
+# Each account is tagged and given as <id>:<currency>, and a marker ends the
+# output, so output that could not be read is never taken for a CRM without
+# accounts.
 sql=$(mktemp)
 trap 'rm -f "$sql"' EXIT
 printf '%s\n' \
-  "SELECT 'sync-account ' || id FROM accounts WHERE deleted_at IS NULL AND status <> 'closed' ORDER BY opening_date DESC, id LIMIT $limit;" \
+  "SELECT 'sync-account ' || id || ':' || currency FROM accounts WHERE deleted_at IS NULL AND status <> 'closed' ORDER BY opening_date DESC, id LIMIT $limit;" \
   "SELECT 'sync-end';" > "$sql"
 output=$("$(dirname "$0")/db-run-sql.sh" accounts "$sql" "$crm_dir")
 if ! grep -q 'sync-end' <<<"$output"; then
@@ -33,9 +34,10 @@ if ! grep -q 'sync-end' <<<"$output"; then
   exit 1
 fi
 
-# Only IDs that match the UUID pattern reach the instance's command line.
-uuid='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-ids=$(grep -oE "sync-account $uuid" <<<"$output" | cut -d' ' -f2 | tr '\n' ' ' || true)
+# Only entries that match a UUID and a three-letter currency code reach the
+# instance's command line.
+entry='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Z]{3}'
+ids=$(grep -oE "sync-account $entry" <<<"$output" | cut -d' ' -f2 | tr '\n' ' ' || true)
 ids=${ids% }
 count=$(wc -w <<<"$ids" | tr -d ' ')
 

@@ -567,9 +567,9 @@ The producer writes transactions only for the accounts in its list, and nothing 
    scripts/sync-producer-accounts.sh
    ```
 
-   It prints how many accounts it synced: those neither closed nor deleted, at most the 100 most recently opened. The producer uses them from its next file, within `publish_interval_seconds` (5 minutes by default).
+   It prints how many accounts it synced: those neither closed nor deleted, at most the 100 most recently opened. Each is copied with its currency, and its transactions are in that currency. The producer uses them from its next file, within `publish_interval_seconds` (5 minutes by default).
 
-Run it again after opening, closing or deleting accounts, and after the sftp-server stack replaces the instance, which starts with an empty list. Stopping the instance between sessions keeps the list. To see the list on the server, open a Session Manager shell (9.4) and run `cat /etc/producer/account-ids`; `sudo docker logs --tail 5 producer` says when a run published nothing.
+Run it again after opening, closing or deleting accounts, and after the sftp-server stack replaces the instance, which starts with an empty list. Stopping the instance between sessions keeps the list. To see the list on the server, open a Session Manager shell (9.4) and run `cat /etc/producer/account-ids`, one `<id>:<currency>` per line; `sudo docker logs --tail 5 producer` says when a run published nothing.
 
 ## Pausing a deployment
 
