@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
-import { ADMIN, inAnyGroup } from '../auth/roles.js'
+import { ADMIN, homeFor, inAnyGroup } from '../auth/roles.js'
 import AccountTransactionTable from '../components/AccountTransactionTable.jsx'
 import { ViewAll } from '../components/ListFooter.jsx'
 import { PAGE_SIZE } from '../components/paging.js'
@@ -117,7 +117,6 @@ function AccountTransactions({ clientId, account, statusMode, onStatusChanged })
 
 function ClientTransactions() {
     const { clientId } = useParams()
-    const navigate = useNavigate()
     const auth = useAuth()
     const [state, setState] = useState({ clientId: null, error: '', data: null })
 
@@ -147,11 +146,8 @@ function ClientTransactions() {
 
     return (
         <div className="page">
-            <div className="back-row">
-                <button onClick={() => navigate(-1)}>
-                    Back
-                </button>
-            </div>
+            {/* Home, not the browser's last page, which may be one of these accounts' transaction pages. */}
+            <div className="back-row"><Link to={homeFor(auth.user)}>Back</Link></div>
 
             {loading && <p className="empty-note" role="status">Loading…</p>}
             {!loading && state.error && (

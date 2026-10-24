@@ -711,13 +711,23 @@ textarea:focus {
 /* ---------- Client profile and verification (ADR-0041) ---------- */
 
 .back-row a {
+  display: inline-block;
+  font: 600 14px/20px var(--sans);
+  padding: 8px 16px;
+  border: 1px solid var(--primary-container);
+  border-radius: var(--radius);
   color: var(--primary-container);
-  font-weight: 600;
   text-decoration: none;
+  transition: background-color 0.2s ease;
 }
 
 .back-row a:hover {
-  text-decoration: underline;
+  background: var(--surface-container);
+}
+
+.back-row a:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
 }
 
 .client-header__text {

@@ -70,6 +70,14 @@ describe('client transactions', () => {
       .toHaveAttribute('href', '/agent/client/client-1/accounts/account-1234-5678/transactions')
   })
 
+  it("goes back to the user's Home, not the last page they saw", async () => {
+    getClient.mockResolvedValue(CLIENT)
+    listAccounts.mockResolvedValue([])
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: 'Back' })).toHaveAttribute('href', '/agent')
+  })
+
   it('says when the client has no accounts', async () => {
     getClient.mockResolvedValue(CLIENT)
     listAccounts.mockResolvedValue([])
