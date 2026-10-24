@@ -65,7 +65,7 @@ func TestUpdateAccountStatus(t *testing.T) {
 			assert.Equal(t, audit.Change{Attribute: "status", Before: "PENDING", After: "ACTIVE"}, *change)
 			var body map[string]string
 			require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body))
-			assert.Equal(t, map[string]string{"account_id": accountID, "status": "ACTIVE"}, body)
+			assert.Equal(t, map[string]string{"account_id": accountID, "status": "active"}, body)
 		})
 	}
 }

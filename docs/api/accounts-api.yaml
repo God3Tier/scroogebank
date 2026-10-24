@@ -159,7 +159,7 @@ paths:
                 status: { $ref: '#/components/schemas/AccountStatusInput' }
       responses:
         '200':
-          description: The status after the change, in capitals.
+          description: The status after the change, in lower case as GET returns it.
           content:
             application/json:
               schema:
@@ -167,7 +167,7 @@ paths:
                 required: [account_id, status]
                 properties:
                   account_id: { type: string }
-                  status: { $ref: '#/components/schemas/AccountStatusInput' }
+                  status: { $ref: '#/components/schemas/AccountStatus' }
         '400': { $ref: '#/components/responses/TextError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403':
@@ -383,6 +383,10 @@ components:
       type: string
       enum: [ACTIVE, INACTIVE, PENDING, CLOSED]
 
+    AccountStatus:
+      type: string
+      enum: [active, inactive, pending, closed]
+
     Account:
       type: object
       required: [id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id, created_at, updated_at]
@@ -393,9 +397,7 @@ components:
         account_type:
           type: string
           enum: [savings, checking, business, credit, loan, investment]
-        status:
-          type: string
-          enum: [active, inactive, pending, closed]
+        status: { $ref: '#/components/schemas/AccountStatus' }
         opening_date: { type: string, format: date-time }
         initial_deposit: { type: string, pattern: '^\d+\.\d{2}$', example: '1000.00' }
         currency: { type: string, pattern: '^[A-Z]{3}$' }

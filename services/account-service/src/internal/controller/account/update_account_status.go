@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 )
 
 type updateAccountStatusInput struct {
@@ -50,9 +51,10 @@ func (c *accountController) UpdateAccountStatus(w http.ResponseWriter, r *http.R
 	// The audit event records the status before and after.
 	audit.Record(r.Context(), "status", string(before), string(after))
 
+	// In lower case, as the account itself is stored and read (GET).
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"account_id": accountID,
-		"status":     string(after),
+		"status":     strings.ToLower(string(after)),
 	})
 }
