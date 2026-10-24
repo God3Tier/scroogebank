@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"receiver/src/internal/models"
 )
 
 // fakeServices plays both Cognito's token endpoint and account-service.
@@ -55,7 +57,7 @@ func (f *fakeServices) start(t *testing.T) Config {
 			_, _ = fmt.Fprint(w, f.lookupBody)
 			return
 		}
-		_, _ = fmt.Fprint(w, `{"accounts":[{"id":"A0000000-0000-0000-0000-000000000231","client_id":"client-1"}]}`)
+		_, _ = fmt.Fprint(w, `{"accounts":[{"id":"A0000000-0000-0000-0000-000000000231","client_id":"client-1","currency":"SGD"}]}`)
 	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -68,14 +70,14 @@ func (f *fakeServices) start(t *testing.T) Config {
 func TestLookup(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("returns found accounts keyed by lowercase ID and reuses the token", func(t *testing.T) {
+	t.Run("returns found accounts with their client and currency, keyed by lowercase ID, and reuses the token", func(t *testing.T) {
 		fake := &fakeServices{}
 		directory := New(fake.start(t))
 
 		for range 2 {
 			found, err := directory.Lookup(ctx, []string{"a0000000-0000-0000-0000-000000000231"})
 			require.NoError(t, err)
-			assert.Equal(t, map[string]string{"a0000000-0000-0000-0000-000000000231": "client-1"}, found)
+			assert.Equal(t, map[string]models.Account{"a0000000-0000-0000-0000-000000000231": {ClientID: "client-1", Currency: "SGD"}}, found)
 		}
 		assert.Equal(t, 1, fake.tokenCalls)
 	})
@@ -99,6 +101,9 @@ func TestLookup(t *testing.T) {
 		"account-service errors":        {lookupStatus: http.StatusInternalServerError},
 		"account-service sends no list": {lookupBody: `{"accounts":null}`},
 		"account-service sends garbage": {lookupBody: `{`},
+		"account-service sends no currency": {
+			lookupBody: `{"accounts":[{"id":"a0000000-0000-0000-0000-000000000231","client_id":"client-1"}]}`,
+		},
 	}
 	for name, fake := range failures {
 		t.Run("fails when "+name, func(t *testing.T) {
