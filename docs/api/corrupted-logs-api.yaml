@@ -6,7 +6,7 @@ openapi: 3.0.3
 # Two services serve these paths. The Auditor serves them over Service
 # Connect and checks the admin's access token itself; user-service serves
 # them through API Gateway and forwards the caller's token to the Auditor,
-# passing its answer on. The Auditor's errors are plain text.
+# passing its answer on. Every error is JSON, so user-service can read it.
 
 info:
   title: Scrooge CRM - Corrupted audit logs
@@ -41,7 +41,7 @@ paths:
                 items: { $ref: '#/components/schemas/CorruptedAuditLog' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '500': { $ref: '#/components/responses/TextError' }
+        '500': { $ref: '#/components/responses/Error' }
     post:
       tags: [corrupted-logs]
       summary: Record a corrupted audit log by hand
@@ -62,16 +62,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Message' }
-        '400':
-          description: The Auditor refused the entry (text), or user-service refused the request (JSON).
-          content:
-            text/plain:
-              schema: { type: string }
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '500': { $ref: '#/components/responses/TextError' }
+        '500': { $ref: '#/components/responses/Error' }
 
   /api/corrupted-logs/{id}:
     delete:
@@ -89,11 +83,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Message' }
-        '400': { $ref: '#/components/responses/TextError' }
+        '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/TextError' }
-        '500': { $ref: '#/components/responses/TextError' }
+        '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
 
 components:
   securitySchemes:
@@ -114,17 +108,17 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-    TextError:
+    Error:
       description: The request was refused or failed.
       content:
-        text/plain:
-          schema: { type: string }
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
     Error:
       type: object
       description: |
-        `{"error": ...}` from the Auditor's middleware; user-service's own
+        `{"error": ...}` from the Auditor; user-service's own
         errors add `timestamp`, `status` and `message` (or `path`).
       required: [error]
       properties:
