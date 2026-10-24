@@ -67,6 +67,9 @@ jobs:
   go:
     name: Test Go service (${{ matrix.name }})
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +119,124 @@ jobs:
           for dir in ${{ matrix.modules }}; do
             (cd "$dir" && go list ./... | grep -v -e /repository/orm -e /src/gen | xargs go vet)
           done
+
+      # CodeQL for Go runs here rather than in the codeql job because it needs
+      # the code the test loop generated, as Vet does. It extracts what the
+      # traced `go build` compiles.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: manual
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Build for CodeQL
+        run: |
+          for dir in ${{ matrix.modules }}; do
+            (cd "$dir" && go build ./...)
+          done
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@v4
+        with:
+          upload: never
+          output: codeql-results
+
+      - name: Fail on CodeQL alerts
+        run: bash .github/scripts/check-codeql-results.sh codeql-results
+
+      - name: Upload the CodeQL report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-go-${{ matrix.name }}
+          path: codeql-results
+          if-no-files-found: ignore
+
+  # Static analysis for security bugs (ADR-0028). The repository has no GitHub
+  # Code Security, so results are not uploaded to code scanning: the job fails
+  # on any alert, shows each one as an annotation and keeps the SARIF report as
+  # an artifact. Go is scanned in the go job.
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      # CodeQL extracts only the Java sources that this build compiles.
+      - name: Build for CodeQL
+        if: matrix.build-mode == 'manual'
+        run: mvn -B -DskipTests compile
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@v4
+        with:
+          upload: never
+          output: codeql-results
+
+      - name: Fail on CodeQL alerts
+        run: bash .github/scripts/check-codeql-results.sh codeql-results
+
+      - name: Upload the CodeQL report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-${{ matrix.language }}
+          path: codeql-results
+          if-no-files-found: ignore
+
+  # Dependency scanning (ADR-0028). OSV-Scanner fails on any known
+  # vulnerability in a dependency, except those accepted in osv-scanner.toml,
+  # each with a reason and an expiry date.
+  dependencies:
+    name: Scan dependencies for known vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Go call analysis is off: it compiles each service, which needs the
+      # generated code that only the go job builds. Python resolution is off
+      # because it ignores botocore's python_version markers and rejects
+      # urllib3 2.x; the search spike pins every package instead.
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v2.6.0
+        with:
+          scan-args: |-
+            --config=./osv-scanner.toml
+            --no-call-analysis=go
+            --experimental-disable-plugins=transitivedependency/requirements
+            --recursive
+            ./
 
   frontend:
     name: Lint, test and build the frontend
