@@ -22,17 +22,16 @@ func TestAccountStats(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		"returns figures":           {wantStatus: http.StatusOK, wantBody: `"bookedInitialDeposits":"350.50"`},
-		"maps bad input":            {serviceErr: fmt.Errorf("%w: bad window", accounterrors.ErrBadInput), wantStatus: http.StatusBadRequest},
-		"maps forbidden":            {serviceErr: fmt.Errorf("%w: admins only", accounterrors.ErrForbidden), wantStatus: http.StatusForbidden},
-		"maps more than 1 currency": {serviceErr: accounterrors.ErrMultipleCurrencies, wantStatus: http.StatusConflict},
-		"hides database errors":     {serviceErr: errors.New("connection refused"), wantStatus: http.StatusInternalServerError, wantBody: "unable to compute account figures"},
+		"returns figures":       {wantStatus: http.StatusOK, wantBody: `"bookedInitialDeposits":{"SGD":"350.50","USD":"5.00"}`},
+		"maps bad input":        {serviceErr: fmt.Errorf("%w: bad window", accounterrors.ErrBadInput), wantStatus: http.StatusBadRequest},
+		"maps forbidden":        {serviceErr: fmt.Errorf("%w: admins only", accounterrors.ErrForbidden), wantStatus: http.StatusForbidden},
+		"hides database errors": {serviceErr: errors.New("connection refused"), wantStatus: http.StatusInternalServerError, wantBody: "unable to compute account figures"},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			svc := servicemock.NewMockService(t)
 			svc.On("AccountStats", mock.Anything, caller, "2026-09-01", "2026-09-30", "").
-				Return(models.AccountStats{BookedInitialDeposits: "350.50"}, test.serviceErr).Once()
+				Return(models.AccountStats{BookedInitialDeposits: map[string]string{"SGD": "350.50", "USD": "5.00"}}, test.serviceErr).Once()
 			req := httptest.NewRequest(http.MethodGet, "/aggregates/accounts/stats?from=2026-09-01&to=2026-09-30", nil)
 			res := httptest.NewRecorder()
 

@@ -50,8 +50,6 @@ func respond(w http.ResponseWriter, body any, err error) {
 			status, message = http.StatusBadRequest, err.Error()
 		case errors.Is(err, accounterrors.ErrForbidden):
 			status, message = http.StatusForbidden, err.Error()
-		case errors.Is(err, accounterrors.ErrMultipleCurrencies):
-			status, message = http.StatusConflict, err.Error()
 		default:
 			log.Printf("account aggregates failed: %v", err)
 		}
