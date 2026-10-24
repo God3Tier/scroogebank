@@ -19,8 +19,9 @@ Transactions have their own database. Clients and accounts live in their service
 1. It reads and validates every row of the file.
 2. It sends the distinct account references that are UUIDs to `POST {ACCOUNT_SERVICE_BASE_URL}/internal/accounts/lookup`, in batches of 500, once per file.
 3. Rows whose account exists get `account_id`, `client_id` and `import_status = 'Matched'`. All others, including deleted accounts and external references such as `ACC-000123`, are stored as `Unmatched` with no `account_id`, and this API never returns them.
+4. A row whose account exists must be in the account's currency, which the lookup also returns ([ADR-0061](../../../docs/adr/ADR-0061-imported-transactions-in-their-accounts-currency.md)). The code is upper-cased first. A row with no currency, or another one, is rejected like any invalid row: `FILE_PROCESSING_COMPLETED` lists it, the file's other rows are imported, and the file moves to `rejected/`. `Unmatched` rows have no account to compare with and are kept.
 
-If account-service cannot answer, nothing from the file is saved, and the file stays in place for the next poll. Only the first failed attempt on each file sends a `SYSTEM_EXCEPTION` audit event; retries stay quiet until a lookup succeeds. `Unmatched` therefore only ever means "no such account".
+If account-service cannot answer, or returns an account without a currency, as one older than the receiver does, nothing from the file is saved, and the file stays in place for the next poll. Deploy account-service first. Only the first failed attempt on each file sends a `SYSTEM_EXCEPTION` audit event; retries stay quiet until a lookup succeeds. `Unmatched` therefore only ever means "no such account".
 
 The poller has no user, so it signs in with its own Cognito app client using the client-credentials grant (ADR-0025). Set these in `services/sftp/.env`; never commit the secret:
 

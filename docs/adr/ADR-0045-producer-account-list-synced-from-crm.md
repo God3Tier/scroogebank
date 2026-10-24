@@ -79,7 +79,7 @@ Option B gives the demo realistic, linked transactions without making the simula
 ### Negative
 
 - The list is only as fresh as the last sync. A transaction for an account deleted since then is stored as `Unmatched`, which is harmless.
-- The import still does not compare a row's currency with its account's. Files from the producer match, because the sync copies the currency, but a file from elsewhere could still differ.
+- An account whose currency changes after a sync gets transactions in its old currency until the next sync, and the import rejects them ([ADR-0061](ADR-0061-imported-transactions-in-their-accounts-currency.md)).
 - A new instance starts with an empty list, so the script must be run again after the sftp-server stack replaces it.
 - Regular files still include about 1% invalid rows on purpose (`transaction.GenerateRandomSet`); this decision does not change that.
 
