@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"receiver/src/internal/contract"
 	"receiver/src/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -26,19 +27,21 @@ func (s *statsStub) TransactionStats(_ context.Context, query models.Transaction
 	return models.TransactionStats{Total: 3, ByStatus: map[string]int64{}, ByType: map[string]int64{}, Currencies: []string{"SGD"}, Daily: []models.DailyTransactions{}}, s.err
 }
 
-func postStats(stats *statsStub, body string) *httptest.ResponseRecorder {
+func postStats(t *testing.T, stats *statsStub, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router, nil, stats)
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/aggregates/transactions/stats", strings.NewReader(body)))
+	contract.Check(t, "dashboard-aggregates.yaml", http.MethodPost, "/aggregates/transactions/stats", res)
 	return res
 }
 
 func TestTransactionStatsForAccounts(t *testing.T) {
 	stats := &statsStub{}
 
-	res := postStats(stats, `{"from":"2026-09-01","to":"2026-09-30","accountIds":["A0000000-0000-0000-0000-000000000001"]}`)
+	res := postStats(t, stats, `{"from":"2026-09-01","to":"2026-09-30","accountIds":["A0000000-0000-0000-0000-000000000001"]}`)
 
 	assert.Equal(t, http.StatusOK, res.Code)
 	assert.Contains(t, res.Body.String(), `"total":3`)
@@ -53,7 +56,7 @@ func TestTransactionStatsForAccounts(t *testing.T) {
 func TestTransactionStatsForEveryTransaction(t *testing.T) {
 	stats := &statsStub{}
 
-	res := postStats(stats, `{"from":"2026-09-01","to":"2026-09-30","all":true}`)
+	res := postStats(t, stats, `{"from":"2026-09-01","to":"2026-09-30","all":true}`)
 
 	assert.Equal(t, http.StatusOK, res.Code)
 	require.Len(t, stats.queries, 1)
@@ -64,7 +67,7 @@ func TestTransactionStatsForEveryTransaction(t *testing.T) {
 func TestTransactionStatsForAnAgentWithNoAccounts(t *testing.T) {
 	stats := &statsStub{}
 
-	res := postStats(stats, `{"from":"2026-09-01","to":"2026-09-30","accountIds":[]}`)
+	res := postStats(t, stats, `{"from":"2026-09-01","to":"2026-09-30","accountIds":[]}`)
 
 	assert.Equal(t, http.StatusOK, res.Code)
 	require.Len(t, stats.queries, 1)
@@ -86,7 +89,7 @@ func TestTransactionStatsRefusesUnclearRequests(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stats := &statsStub{}
 
-			res := postStats(stats, body)
+			res := postStats(t, stats, body)
 
 			assert.Equal(t, http.StatusBadRequest, res.Code)
 			assert.Empty(t, stats.queries)
@@ -97,7 +100,7 @@ func TestTransactionStatsRefusesUnclearRequests(t *testing.T) {
 func TestTransactionStatsHidesDatabaseErrors(t *testing.T) {
 	stats := &statsStub{err: errors.New("connection refused")}
 
-	res := postStats(stats, `{"from":"2026-09-01","to":"2026-09-30","all":true}`)
+	res := postStats(t, stats, `{"from":"2026-09-01","to":"2026-09-30","all":true}`)
 
 	assert.Equal(t, http.StatusInternalServerError, res.Code)
 	assert.NotContains(t, res.Body.String(), "connection refused")

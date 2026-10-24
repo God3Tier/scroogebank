@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"receiver/src/internal/contract"
 	"receiver/src/internal/models"
 	"receiver/src/internal/repository/orm"
 
@@ -76,6 +77,7 @@ func TestGetTransactions(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/api/accounts/"+test.accountID+"/transactions", nil)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
+			contract.Check(t, "transactions-api.yaml", http.MethodGet, "/api/accounts/{accountId}/transactions", response)
 
 			if response.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d; body=%s", response.Code, test.wantStatus, response.Body.String())
@@ -88,4 +90,14 @@ func TestGetTransactions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Every route is in an OpenAPI contract (ADR-0063), including routes no test
+// calls.
+func TestEveryRouteIsInAContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router, nil, nil)
+
+	contract.CheckRoutes(t, router.Routes(), "transactions-api.yaml", "dashboard-aggregates.yaml")
 }

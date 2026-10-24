@@ -8,10 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"receiver/src/internal/contract"
 	"receiver/src/internal/models"
 	"receiver/src/internal/repository"
 	"receiver/src/internal/repository/orm"
 
+	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/types"
+	"github.com/ericlagergren/decimal"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -25,6 +29,7 @@ func serveList(t *testing.T, repo repository.Transaction, query string) *httptes
 	RegisterRoutes(router, repo, nil)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/transactions"+query, nil))
+	contract.Check(t, "transactions-api.yaml", http.MethodGet, "/api/transactions", response)
 	return response
 }
 
@@ -32,10 +37,17 @@ func rows(n int) orm.TransactionSlice {
 	start := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	slice := orm.TransactionSlice{}
 	for i := 0; i < n; i++ {
+		amount, _ := new(decimal.Big).SetString("250.00")
 		slice = append(slice, &orm.Transaction{
-			TransactionID:   "tx-" + string(rune('a'+i)),
-			TransactionDate: start.Add(-time.Duration(i) * time.Hour),
-			Status:          "Completed",
+			TransactionID:    "tx-" + string(rune('a'+i)),
+			SourceAccountRef: "ACC-1",
+			TransactionType:  "Deposit",
+			Amount:           types.NewDecimal(amount),
+			Currency:         null.StringFrom("SGD"),
+			TransactionDate:  start.Add(-time.Duration(i) * time.Hour),
+			Status:           "Completed",
+			ImportedAt:       start,
+			ImportStatus:     "Unmatched",
 		})
 	}
 	return slice

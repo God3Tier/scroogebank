@@ -2,6 +2,8 @@
 
 Owns bank accounts. Split out of `client-profile-management-service`, which still owns clients, so each has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)). Written in Go because it was extracted from that service's existing account code.
 
+API contract: [`docs/api/accounts-api.yaml`](../../docs/api/accounts-api.yaml), and the `/aggregates` routes in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks the controllers' responses and the router's routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |
