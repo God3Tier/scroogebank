@@ -53,6 +53,30 @@ describe('client transactions', () => {
     expect(screen.getByText('Synthetic Client')).toBeInTheDocument()
     expect(screen.getByText('SGD 10.00')).toBeInTheDocument()
     expect(listAccountTransactions).toHaveBeenCalledWith('account-1234-5678')
+    expect(screen.queryByRole('link', { name: 'View all transactions' })).not.toBeInTheDocument()
+  })
+
+  it("shows each account's newest ten transactions and links to all of them", async () => {
+    getClient.mockResolvedValue(CLIENT)
+    listAccounts.mockResolvedValue([ACCOUNT])
+    listAccountTransactions.mockResolvedValue(Array.from({ length: 12 }, (_, i) => ({
+      transaction_id: `txn-${i + 1}`, transaction_type: 'Deposit', amount: '10.00', currency: 'SGD',
+      transaction_date: '2026-10-01T09:00:00Z', status: 'Completed',
+    })))
+    renderPage()
+
+    expect(await screen.findByText('txn-10')).toBeInTheDocument()
+    expect(screen.queryByText('txn-11')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View all transactions' }))
+      .toHaveAttribute('href', '/agent/client/client-1/accounts/account-1234-5678/transactions')
+  })
+
+  it("goes back to the user's Home, not the last page they saw", async () => {
+    getClient.mockResolvedValue(CLIENT)
+    listAccounts.mockResolvedValue([])
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: 'Back' })).toHaveAttribute('href', '/agent')
   })
 
   it('says when the client has no accounts', async () => {

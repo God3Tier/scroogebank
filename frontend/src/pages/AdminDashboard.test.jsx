@@ -50,19 +50,29 @@ describe('admin dashboard', () => {
     expect(screen.getByText('5')).toBeInTheDocument()
   })
 
-  it('lists every transaction and pages with the cursor', async () => {
-    listTransactions
-      .mockResolvedValueOnce({ content: [TRANSACTION], nextCursor: 'next-1' })
-      .mockResolvedValueOnce({ content: [{ ...TRANSACTION, transaction_id: 'txn-2' }], nextCursor: null })
+  it('shows the newest ten transactions and links to all of them', async () => {
+    listTransactions.mockResolvedValue({ content: [TRANSACTION], nextCursor: 'next-1' })
     renderDashboard()
 
     expect(await screen.findByText('txn-1')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '00000000' })).toHaveAttribute('href', `/clients/${TRANSACTION.client_id}`)
-    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(listTransactions).toHaveBeenCalledTimes(1)
+    expect(listTransactions).toHaveBeenCalledWith({ cursor: null, size: 10 })
+    expect(screen.getByRole('link', { name: 'View all transactions' })).toHaveAttribute('href', '/admin/transactions')
+  })
 
-    expect(await screen.findByText('txn-2')).toBeInTheDocument()
-    expect(listTransactions).toHaveBeenLastCalledWith({ cursor: 'next-1', size: 20 })
-    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+  it('shows the first ten admins and agents, and links to all of them only when there are more', async () => {
+    listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([]) : { ...page([AGENT], 11), totalPages: 2 }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+
+    expect(await screen.findByRole('link', { name: 'View all agents' })).toHaveAttribute('href', '/admin/agents')
+    expect(listUsers).toHaveBeenCalledWith({ role: 'AGENT', page: 0, size: 10 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Admins' }))
+    expect(await screen.findByText('None yet.')).toBeInTheDocument()
+    expect(listUsers).toHaveBeenCalledWith({ role: 'ADMIN', page: 0, size: 10 })
+    expect(screen.queryByRole('link', { name: 'View all admins' })).not.toBeInTheDocument()
   })
 
   it('creates an agent and says Cognito e-mails the password', async () => {
@@ -101,7 +111,9 @@ describe('admin dashboard', () => {
 
     const row = (await screen.findByText(/Leaving Agent/)).closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Reassign clients' }))
-    const select = within(row).getByLabelText('New agent')
+    const select = await within(row).findByLabelText('New agent')
+    // Every enabled agent is asked for, not only the ones on this page.
+    expect(listUsers).toHaveBeenLastCalledWith({ role: 'AGENT', enabled: true, size: 100 })
     // Only other enabled agents can receive them.
     expect([...select.options].map((option) => option.value)).toEqual(['', 'user-2', 'user-4'])
     fireEvent.change(select, { target: { value: 'user-4' } })
@@ -119,7 +131,7 @@ describe('admin dashboard', () => {
 
     const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
     fireEvent.click(within(row).getByRole('button', { name: 'Reassign clients' }))
-    fireEvent.change(within(row).getByLabelText('New agent'), { target: { value: 'user-4' } })
+    fireEvent.change(await within(row).findByLabelText('New agent'), { target: { value: 'user-4' } })
     fireEvent.click(within(row).getByRole('button', { name: "Move all of Synthetic Agent's clients" }))
 
     expect(await within(row).findByRole('alert')).toHaveTextContent('nothing was moved')

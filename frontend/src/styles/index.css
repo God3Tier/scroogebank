@@ -711,13 +711,23 @@ textarea:focus {
 /* ---------- Client profile and verification (ADR-0041) ---------- */
 
 .back-row a {
+  display: inline-block;
+  font: 600 14px/20px var(--sans);
+  padding: 8px 16px;
+  border: 1px solid var(--primary-container);
+  border-radius: var(--radius);
   color: var(--primary-container);
-  font-weight: 600;
   text-decoration: none;
+  transition: background-color 0.2s ease;
 }
 
 .back-row a:hover {
-  text-decoration: underline;
+  background: var(--surface-container);
+}
+
+.back-row a:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
 }
 
 .client-header__text {
@@ -896,13 +906,32 @@ textarea:focus {
   gap: var(--stack-sm);
 }
 
-/* An account's status and, for an agent, the control to change it. */
+/* An account's status and, for an agent, the control to change it, between
+   the account's heading and its transactions. */
 .account-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--stack-sm) var(--stack-lg);
+  padding: var(--stack-md) var(--stack-lg);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.account-status-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--stack-sm);
-  padding: 0 var(--stack-md) var(--stack-md);
+}
+
+.account-status-form select {
+  width: auto;
+  min-width: 160px;
+}
+
+.account-status .form-error {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .verify-done > p:first-child {
@@ -1169,11 +1198,52 @@ textarea:focus {
   background: var(--surface-lowest);
 }
 
-.activity-feed__more {
+/* The foot of a list: View all on a dashboard, the pager on the list's own page. */
+.list-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
+  gap: var(--stack-sm);
   padding: var(--stack-md);
   border-top: 1px solid var(--outline-variant);
+}
+
+.list-footer__link {
+  font: 600 14px/20px var(--sans);
+  padding: 8px 16px;
+  border: 1px solid var(--primary-container);
+  border-radius: var(--radius);
+  color: var(--primary-container);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.list-footer__link:hover {
+  background: var(--surface-container);
+}
+
+.list-footer__link:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+.main .pager button {
+  min-width: 40px;
+  padding: 4px 10px;
+  font-size: 16px;
+}
+
+.main .pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pager__position {
+  min-width: 112px;
+  color: var(--on-surface-variant);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 640px) {

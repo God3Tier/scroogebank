@@ -64,10 +64,21 @@ describe('business dashboards', () => {
     expect(screen.getByText('10.0%')).toBeInTheDocument()
     expect(screen.getByText('1.4')).toBeInTheDocument()
     expect(screen.getByText('Unknown agent')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'View all agents' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open client' })).toHaveAttribute('href', '/clients/client-9')
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.queryByText(/Ingestion freshness/)).not.toBeInTheDocument()
     expect(getDashboard).toHaveBeenCalledWith('action-items', expect.objectContaining({ staleDays: 7 }))
+  })
+
+  it('shows the top ten agents and links to all of them, keeping the window and sort', async () => {
+    const row = (n) => ({ agentId: `sub-${n}`, name: `Agent Number${n}`, enabled: true, clientsOnboarded: n, verified: 0, unverified: 0, verificationRate: null, accountsOpened: 0, bookedInitialDeposits: 0 })
+    respond('ADMIN', { agents: { agents: ok({ rows: Array.from({ length: 11 }, (_, i) => row(i + 1)), sortedBy: 'clientsOnboarded' }) } })
+    renderPage(AdminBusinessDashboard)
+
+    expect(await screen.findByRole('link', { name: 'View all agents' })).toHaveAttribute('href', '/insights/admin/agents?days=30&sort=clientsOnboarded')
+    expect(screen.getByText('Agent Number10')).toBeInTheDocument()
+    expect(screen.queryByText('Agent Number11')).not.toBeInTheDocument()
   })
 
   it('shows an unavailable panel without failing the page', async () => {

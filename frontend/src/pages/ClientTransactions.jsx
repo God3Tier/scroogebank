@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
-import { ADMIN, inAnyGroup } from '../auth/roles.js'
+import { ADMIN, homeFor, inAnyGroup } from '../auth/roles.js'
+import AccountTransactionTable from '../components/AccountTransactionTable.jsx'
+import { ViewAll } from '../components/ListFooter.jsx'
+import { PAGE_SIZE } from '../components/paging.js'
 
 // account-service's four statuses. An agent may move an account of a verified
 // client to any of them, in any direction (ADR-0050).
@@ -32,10 +35,6 @@ function loadProblem(error) {
     // client-service answers 404 for another agent's client too.
     if (error.status === 404) return 'Client not found.'
     return 'The client could not be loaded. Try again.'
-}
-
-function formatDate(value) {
-    return new Date(value).toLocaleDateString('en-SG', { dateStyle: 'medium' })
 }
 
 // A client's transactions, grouped by account: account-service lists the
@@ -74,7 +73,7 @@ function AccountStatus({ account, mode, onChanged }) {
                 Status: <span className={`badge badge-${current.toLowerCase()}`}>{STATUS_LABELS[current] || account.status}</span>
             </span>
             {mode === 'change' && (
-                <form className="account-status" onSubmit={handleSave}>
+                <form className="account-status-form" onSubmit={handleSave}>
                     <select
                         aria-label={`New status for account ${account.id.slice(0, 8)}`}
                         value={choice}
@@ -93,7 +92,9 @@ function AccountStatus({ account, mode, onChanged }) {
     )
 }
 
-function AccountTransactions({ account, statusMode, onStatusChanged }) {
+// The account's newest ten transactions, and a link to all of them when there
+// are more.
+function AccountTransactions({ clientId, account, statusMode, onStatusChanged }) {
     return (
         <section className="card card-flush">
             <h2>
@@ -103,32 +104,15 @@ function AccountTransactions({ account, statusMode, onStatusChanged }) {
             {account.transactions.length === 0 ? (
                 <p className="empty-state">No transactions found.</p>
             ) : (
-                <div className="table-wrap">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th>Transaction ID</th>
-                                <th>Type</th>
-                                <th className="num">Amount</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {account.transactions.map((transaction) => (
-                                <tr key={transaction.transaction_id}>
-                                    <td className="mono">{transaction.transaction_id}</td>
-                                    <td>{transaction.transaction_type}</td>
-                                    <td className="num">{transaction.currency ? `${transaction.currency} ` : ''}{transaction.amount}</td>
-                                    <td>{formatDate(transaction.transaction_date)}</td>
-                                    <td>
-                                        <span className={`badge badge-${String(transaction.status).toLowerCase()}`}>{transaction.status}</span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                <>
+                    <AccountTransactionTable transactions={account.transactions.slice(0, PAGE_SIZE)} />
+                    {account.transactions.length > PAGE_SIZE && (
+                        <ViewAll
+                            to={`/agent/client/${encodeURIComponent(clientId)}/accounts/${encodeURIComponent(account.id)}/transactions`}
+                            label="View all transactions"
+                        />
+                    )}
+                </>
             )}
         </section>
     )
@@ -136,7 +120,6 @@ function AccountTransactions({ account, statusMode, onStatusChanged }) {
 
 function ClientTransactions() {
     const { clientId } = useParams()
-    const navigate = useNavigate()
     const auth = useAuth()
     const [state, setState] = useState({ clientId: null, error: '', data: null })
 
@@ -166,11 +149,8 @@ function ClientTransactions() {
 
     return (
         <div className="page">
-            <div className="back-row">
-                <button onClick={() => navigate(-1)}>
-                    Back
-                </button>
-            </div>
+            {/* Home, not the browser's last page, which may be one of these accounts' transaction pages. */}
+            <div className="back-row"><Link to={homeFor(auth.user)}>Back</Link></div>
 
             {loading && <p className="empty-note" role="status">Loading…</p>}
             {!loading && state.error && (
@@ -199,7 +179,7 @@ function ClientTransactions() {
                         </section>
                     ) : (
                         state.data.accounts.map((account) => (
-                            <AccountTransactions key={account.id} account={account} statusMode={statusMode} onStatusChanged={handleStatusChanged} />
+                            <AccountTransactions key={account.id} clientId={clientId} account={account} statusMode={statusMode} onStatusChanged={handleStatusChanged} />
                         ))
                     )}
                 </>

@@ -63,6 +63,20 @@ async function openDraft() {
 }
 
 describe('AgentDrafts', () => {
+  it('pages the emails ten at a time, asking for as many as engagement-service sends', async () => {
+    listDrafts.mockResolvedValue(Array.from({ length: 12 }, (_, i) => ({ ...AI_DRAFT, id: `draft-${i + 1}` })))
+    renderDrafts()
+
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(10)
+    expect(listDrafts).toHaveBeenCalledWith({ status: 'DRAFT', limit: 100 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last page' }))
+    expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(2)
+    expect(screen.getByText('12 emails')).toBeInTheDocument()
+  })
+
   it('asks for a draft for the chosen client and opens it', async () => {
     listDrafts.mockResolvedValueOnce([])
     createDraft.mockResolvedValue(AI_DRAFT)
