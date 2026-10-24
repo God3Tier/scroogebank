@@ -242,6 +242,32 @@
   line-height: 30px;
 }
 
+.amount-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.amount-lines li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* The code is smaller than the amount, in its own column, so the lines read
+   as a list of currencies rather than one figure. */
+.amount-currency {
+  min-width: 2.6em;
+  color: var(--on-surface-variant);
+  font-size: 0.55em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.num .amount-lines li {
+  justify-content: flex-end;
+}
+
 .metric-note {
   color: var(--on-surface-variant);
   font-size: 12px;

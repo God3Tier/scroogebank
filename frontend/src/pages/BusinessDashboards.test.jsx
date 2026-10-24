@@ -92,7 +92,8 @@ describe('business dashboards', () => {
     })
     renderPage(AgentBusinessDashboard)
 
-    expect(await screen.findByText('SGD 125.0K · USD 5,000')).toBeInTheDocument()
+    const deposits = await screen.findByRole('list', { name: 'Booked initial deposits by currency' })
+    expect([...deposits.querySelectorAll('li')].map((line) => line.textContent)).toEqual(['SGD 125.0K', 'USD 5,000'])
     expect(screen.getByText('In SGD, USD; not added')).toBeInTheDocument()
   })
 

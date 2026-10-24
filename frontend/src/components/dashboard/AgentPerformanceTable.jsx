@@ -1,3 +1,4 @@
+import AmountLines from './AmountLines.jsx'
 import { DEFAULT_CURRENCY, DEPOSITS, SORT_OPTIONS } from './definitions.js'
 import { formatAmounts, formatNumber, formatPercent } from './format.js'
 
@@ -93,7 +94,7 @@ function AgentPerformanceTable({ rows, sortedBy, sortCurrency }) {
               <td className="num">{formatPercent(row.verificationRate)}</td>
               <td className="num">{formatNumber(row.accountsOpened)}</td>
               <td className="num" title={formatAmounts(row.bookedInitialDeposits)}>
-                {formatAmounts(row.bookedInitialDeposits, { compact: true })}
+                <AmountLines amounts={row.bookedInitialDeposits} compact />
               </td>
             </tr>
             )

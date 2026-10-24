@@ -47,7 +47,7 @@ Figures depend on today's date, because each window ends today. The script there
    - The line under the window selector shows the date range and "Figures as of …, cached up to 60 s". Responses are cached for up to 60 seconds, so figures are not real-time.
 4. **KPI tiles.**
    - Hover over **Booked initial deposits**. The tooltip explains that it is the sum of opening deposits, not a balance.
-   - If accounts in more than one currency were opened in the window, the tile shows one amount per currency, such as `SGD 125.0K · USD 5,000`. Amounts are never added across currencies. To show this, open a USD account for a client first.
+   - If accounts in more than one currency were opened in the window, the tile lists one amount per currency, each on its own line. Amounts are never added up or converted across currencies. To show this, open a USD account for a client first.
    - Hover over **Verified share** to show another definition.
 5. **Window selector.** Click **7 days**, then **90 days**, then back to **30 days**. The tiles, the chart, the table and the date range all change.
 6. **Daily activity.** Clients created (left axis) and transactions (right axis). Each line has its own dash pattern, so the chart reads without colour.

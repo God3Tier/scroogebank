@@ -4,6 +4,7 @@ import { panelData, windowForDays } from '../api/dashboard.js'
 import { ViewAll } from '../components/ListFooter.jsx'
 import StatCard from '../components/StatCard.jsx'
 import ActionList from '../components/dashboard/ActionList.jsx'
+import AmountLines from '../components/dashboard/AmountLines.jsx'
 import AgentPerformanceTable, { AgentTableControls } from '../components/dashboard/AgentPerformanceTable.jsx'
 import BreakdownChart from '../components/dashboard/BreakdownChart.jsx'
 import DashboardHeader from '../components/dashboard/DashboardHeader.jsx'
@@ -15,7 +16,7 @@ import { DEFAULT_CURRENCY, hintFor, rankingParams } from '../components/dashboar
 import { dailyTrend, ratio } from '../components/dashboard/figures.js'
 import { PAGE_SIZE } from '../components/paging.js'
 import {
-  NO_FIGURE, currenciesNote, daysSince, formatAmounts, formatNumber, formatPercent, formatTotal, toRows,
+  NO_FIGURE, currenciesNote, daysSince, formatNumber, formatPercent, formatTotal, toRows,
 } from '../components/dashboard/format.js'
 
 const STATUS_LABELS = { COMPLETED: 'Completed', PENDING: 'Pending', FAILED: 'Failed' }
@@ -114,7 +115,7 @@ function AdminBusinessDashboard() {
         <StatCard
           loading={tilesLoading}
           label="Booked initial deposits"
-          value={formatAmounts(accounts?.bookedInitialDeposits, { compact: true })}
+          value={<AmountLines amounts={accounts?.bookedInitialDeposits} label="Booked initial deposits by currency" compact />}
           icon="savings"
           caption="Opening deposits, not a balance"
           hint={hintFor('bookedInitialDeposits')}

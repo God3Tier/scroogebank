@@ -28,12 +28,20 @@ export function formatMoney(decimal, currency, { compact = false } = {}) {
 }
 
 // Amounts by currency, such as booked initial deposits, one per currency and
-// never added together (ADR-0062). An empty map is no amounts at all.
+// never added together (ADR-0062): [{ currency, amount }] in currency order,
+// each amount without its code.
+export function amountEntries(byCurrency, options) {
+  return Object.entries(byCurrency ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, decimal]) => ({ currency, amount: formatMoney(decimal, null, options) }))
+}
+
+// The same on one line, for a tooltip. An empty map is no amounts at all.
 export function formatAmounts(byCurrency, options) {
   if (missing(byCurrency)) return NO_FIGURE
-  const entries = Object.entries(byCurrency).sort(([a], [b]) => a.localeCompare(b))
+  const entries = amountEntries(byCurrency, options)
   if (entries.length === 0) return formatNumber(0)
-  return entries.map(([currency, decimal]) => formatMoney(decimal, currency, options)).join(' · ')
+  return entries.map(({ currency, amount }) => `${currency} ${amount}`).join(' · ')
 }
 
 // A total summed only when its rows share one currency, such as transaction

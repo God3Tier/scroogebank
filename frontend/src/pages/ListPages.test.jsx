@@ -200,7 +200,7 @@ describe('every agent on its own page', () => {
     )
 
     // Another metric takes no currency, so none is offered or sent.
-    expect(await screen.findByText('SGD 700 · USD 50')).toBeInTheDocument()
+    expect(await screen.findByTitle('SGD 700 · USD 50')).toHaveTextContent('SGD 700USD 50')
     expect(screen.queryByLabelText('In')).not.toBeInTheDocument()
     expect(getDashboard).toHaveBeenLastCalledWith('agents', expect.not.objectContaining({ currency: expect.anything() }))
 
