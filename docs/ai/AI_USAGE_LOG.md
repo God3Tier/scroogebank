@@ -1039,7 +1039,9 @@
   copy to 3.0 first, with deliberate breaking changes listed in
   `docs/api/accepted-breaking-changes.txt`. Fixed what the checks
   found where the code was clearly wrong (four Go handlers sent JSON without
-  a JSON content type), corrected the existing specs where they were
+  a JSON content type; the Auditor's plain-text errors reached admins as 500s
+  through user-service, so they are now JSON; account-service's PATCH
+  answered the status in capitals, unlike GET), corrected the existing specs where they were
   (undocumented error bodies and statuses, the RFC 9457 `instance` field, a
   payload that is not always an object), made test fixtures realistic, and
   gave account-service's security tests their own account IDs, which had

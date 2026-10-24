@@ -94,12 +94,14 @@ None beyond a short CI job: the specs are validated, and oasdiff runs in a conta
 
 ## Operational Impact
 
-Service owners keep their specs in step with their code. When a test fails on a contract, either the code or the spec is wrong, and the pull request says which. Defects found while writing the specs and left for their owners:
+Service owners keep their specs in step with their code. When a test fails on a contract, either the code or the spec is wrong, and the pull request says which.
 
-- user-service passes the Auditor's replies on by parsing them as JSON, but the Auditor's errors are plain text, so a 400 or 404 from the Auditor reaches the caller as a 500.
-- account-service's `PATCH /api/accounts/{id}` answers the status in capitals while `GET` answers it in lower case.
+Defects found while writing the specs, and fixed here:
 
-Fixed here because they were clear defects: four Go handlers wrote JSON without a JSON `Content-Type` (account delete; client get, update and delete), so it was sniffed as `text/plain`. Separately, account-service's security tests and repository tests used the same account IDs against one database in parallel packages, which made `TestSetOwner` fail at random.
+- Four Go handlers wrote JSON without a JSON `Content-Type` (account delete; client get, update and delete), so it was sniffed as `text/plain`.
+- user-service passes the Auditor's corrupted-log replies on by parsing them as JSON, but the Auditor wrote its errors as plain text, so a 400 or 404 from the Auditor reached the admin as a 500. The Auditor now writes those errors as JSON `{"error": ...}`, like its authentication middleware. No frontend page calls these routes.
+- account-service's `PATCH /api/accounts/{id}` answered the new status in capitals, while `GET` and the stored row use lower case. It now answers in lower case. The frontend ignores this reply and compares statuses in any case; the audit event still records the statuses in capitals.
+- account-service's security tests and repository tests used the same account IDs against one database in parallel packages, which made `TestSetOwner` fail at random.
 
 ## Validation
 
