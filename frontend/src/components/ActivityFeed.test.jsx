@@ -46,6 +46,12 @@ function page(content, nextCursor = null) {
   return { content, nextCursor }
 }
 
+// count client creations, numbered from first, newest first.
+function creations(count, first = 1) {
+  return Array.from({ length: count }, (_, i) => ({ ...created, id: `c-${first + i}` }))
+}
+
+
 function renderFeed(props = {}) {
   return render(
     <MemoryRouter>
@@ -102,18 +108,14 @@ describe('an agent\'s activity panel', () => {
     expect(await screen.findByText(/No changes yet\. Clients you create, update or verify appear here\./)).toBeInTheDocument()
   })
 
-  it('loads the next page after the ones shown, and stops on the last', async () => {
-    listActivities
-      .mockResolvedValueOnce(page([verified], 'cursor-2'))
-      .mockResolvedValueOnce(page([created]))
+  it('shows the newest ten on the dashboard and links to the whole feed', async () => {
+    listActivities.mockResolvedValue(page([verified], 'cursor-2'))
     renderFeed()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }))
-
-    expect(await screen.findByText('Created a client profile')).toBeInTheDocument()
-    expect(screen.getByText('Verified a client')).toBeInTheDocument()
-    expect(listActivities).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'cursor-2' }))
-    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'View all activities' })).toHaveAttribute('href', '/agent/activities')
+    expect(listActivities).toHaveBeenCalledTimes(1)
+    expect(listActivities).toHaveBeenCalledWith(expect.objectContaining({ size: 10, cursor: null }))
+    expect(screen.queryByRole('navigation', { name: 'Activity pages' })).not.toBeInTheDocument()
   })
 
   it('narrows the feed to a period fixed when it is chosen', async () => {
@@ -144,20 +146,75 @@ describe('an agent\'s activity panel', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('keeps the entries shown when a later page fails, and retries that page', async () => {
-    listActivities
-      .mockResolvedValueOnce(page([verified], 'cursor-2'))
-      .mockRejectedValueOnce(Object.assign(new Error('Request failed (500)'), { status: 500 }))
-      .mockResolvedValueOnce(page([created]))
-    renderFeed()
+})
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }))
+describe('the whole activity feed, paged', () => {
+  afterEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('shows ten at a time, fetching a hundred at once, and counts the pages once the end is reached', async () => {
+    listActivities.mockResolvedValueOnce(page(creations(15)))
+    renderFeed({ paged: true })
+
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument()
+    expect(listActivities).toHaveBeenCalledWith(expect.objectContaining({ size: 100, cursor: null }))
+    expect(screen.getAllByText('Created a client profile')).toHaveLength(10)
+    expect(screen.getByRole('button', { name: 'First page' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument()
+    expect(screen.getAllByText('Created a client profile')).toHaveLength(5)
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Last page' })).toBeDisabled()
+    expect(listActivities).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('link', { name: 'View all activities' })).not.toBeInTheDocument()
+  })
+
+  it('jumps to the last page by following the cursor, and back to the first without asking again', async () => {
+    listActivities
+      .mockResolvedValueOnce(page(creations(100), 'cursor-2'))
+      .mockResolvedValueOnce(page(creations(100, 101), 'cursor-3'))
+      .mockResolvedValueOnce(page(creations(5, 201)))
+    renderFeed({ paged: true })
+
+    // Until the end is reached, the number of pages is not known.
+    expect(await screen.findByText('Page 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Last page' }))
+
+    expect(await screen.findByText('Page 21 of 21')).toBeInTheDocument()
+    expect(screen.getAllByText('Created a client profile')).toHaveLength(5)
+    expect(listActivities.mock.calls.map(([params]) => params.cursor)).toEqual([null, 'cursor-2', 'cursor-3'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'First page' }))
+    expect(await screen.findByText('Page 1 of 21')).toBeInTheDocument()
+    expect(listActivities).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps the page shown when the next one fails, and retries it', async () => {
+    listActivities
+      .mockResolvedValueOnce(page(creations(100), 'cursor-2'))
+      .mockRejectedValueOnce(Object.assign(new Error('Request failed (500)'), { status: 500 }))
+      .mockResolvedValueOnce(page([verified]))
+    renderFeed({ paged: true })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Last page' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Activities could not be loaded.')
-    expect(screen.getByText('Verified a client')).toBeInTheDocument()
+    expect(screen.getByText('Page 1')).toBeInTheDocument()
+    expect(screen.getAllByText('Created a client profile')).toHaveLength(10)
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(await screen.findByText('Created a client profile')).toBeInTheDocument()
+    expect(await screen.findByText('Page 11 of 11')).toBeInTheDocument()
+    expect(screen.getByText('Verified a client')).toBeInTheDocument()
     expect(listActivities).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'cursor-2' }))
+  })
+
+  it("links an admin to everyone's activities from the dashboard", async () => {
+    listActivities.mockResolvedValue(page([disabledUser]))
+    renderFeed({ admin: true })
+
+    expect(await screen.findByRole('link', { name: 'View all activities' })).toHaveAttribute('href', '/admin/activities')
   })
 })
 
