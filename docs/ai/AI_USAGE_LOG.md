@@ -1020,3 +1020,40 @@
   (108 tests); frontend lint, 243 tests and build passed; SFTP producer tests
   passed; Redocly CLI 1.34.5 found both dashboard specs valid, with the same
   two warnings as before. Not yet run end to end.
+
+## 2026-10-24 — OpenAPI contract tests (ADR-0063)
+
+- Human owner: Neo Jia Wen. The owners of user-service, client-profile-
+  management-service, account-service, the SFTP receiver and the Auditor
+  should review the specs written for their services.
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0063 and implement it. Wrote OpenAPI 3.0.3 specs from the
+  code for users, clients, accounts, transactions and corrupted logs, and
+  moved the alerts and activity specs from 3.1 to 3.0.3. Added a contract
+  check to every service's tests: Java services check every MockMvc response
+  (swagger-request-validator) and Go services check controller responses
+  (kin-openapi); route tests fail on any route missing from a contract, and
+  dashboard-service and engagement-service check their canned upstream
+  replies against the provider's contract. Added a CI job that validates the
+  specs and runs `oasdiff breaking` on pull requests, converting a 3.1 base
+  copy to 3.0 first, with deliberate breaking changes listed in
+  `docs/api/accepted-breaking-changes.txt`. Fixed what the checks
+  found where the code was clearly wrong (four Go handlers sent JSON without
+  a JSON content type; the Auditor's plain-text errors reached admins as 500s
+  through user-service, so they are now JSON; account-service's PATCH
+  answered the status in capitals, unlike GET), corrected the existing specs where they were
+  (undocumented error bodies and statuses, the RFC 9457 `instance` field, a
+  payload that is not always an object), made test fixtures realistic, and
+  gave account-service's security tests their own account IDs, which had
+  collided with a repository test's.
+- Human verification required: review of ADR-0063 and of each new spec by
+  its service's owner; a check that the CI job passes on the pull request.
+- Data: repository content only. No credentials, real client data or AWS
+  resources were used.
+- Verification: `mvn verify` passed for every Java module; `make test` passed
+  for account-service, client-profile-management-service, the SFTP receiver
+  and the Auditor; every spec passed openapi-spec-validator 0.9.0; oasdiff
+  1.33.0 found one breaking change against `dev`, the accepted activity
+  `payload` one; breaking a spec on purpose failed the expected tests; OSV-Scanner
+  2.6.0 found no new vulnerability once Rhino was pinned; actionlint and
+  shellcheck passed.

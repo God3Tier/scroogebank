@@ -8,6 +8,7 @@ import (
 	"testing"
 	"uuid"
 
+	"account-service/src/internal/contract"
 	clienterrors "account-service/src/internal/errors"
 	"account-service/src/internal/models"
 	servicemock "account-service/src/internal/service/account"
@@ -63,6 +64,7 @@ func TestCreateAccount(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer caller-token")
 			res := httptest.NewRecorder()
 			NewAccountController(svc).CreateAccount(res, req, caller)
+			contract.Check(t, "accounts-api.yaml", http.MethodPost, "/api/accounts", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

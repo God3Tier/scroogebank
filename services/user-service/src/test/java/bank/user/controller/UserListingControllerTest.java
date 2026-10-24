@@ -15,8 +15,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,6 +55,9 @@ class UserListingControllerTest {
     @Test
     void adminGetsPagedUsers() throws Exception {
         User agent = new User(UUID.randomUUID(), "Alice", "Agent", "alice@scroogebank.com", Role.AGENT, "sub-alice");
+        // Set by Hibernate when the row is saved.
+        ReflectionTestUtils.setField(agent, "createdAt", Instant.parse("2026-09-01T00:00:00Z"));
+        ReflectionTestUtils.setField(agent, "updatedAt", Instant.parse("2026-09-02T00:00:00Z"));
         when(userService.listUsers(Role.AGENT, true, 1, 5))
                 .thenReturn(new PageImpl<>(List.of(agent), PageRequest.of(1, 5), 6));
 

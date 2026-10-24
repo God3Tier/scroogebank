@@ -56,6 +56,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/clients/action-items:
     get:
@@ -77,6 +78,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/clients/team-comparison:
     get:
@@ -104,6 +106,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/accounts/stats:
     get:
@@ -124,6 +127,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/accounts/ids:
     get:
@@ -149,6 +153,7 @@ paths:
                     items: { type: string, format: uuid }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/transactions/stats:
     get:
@@ -173,6 +178,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
         '502':
           description: account-service answered without an account list.
     post:
@@ -206,6 +212,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TransactionStats' }
         '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
 components:
   securitySchemes:
@@ -247,13 +254,25 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: The figures could not be computed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
     Error:
       type: object
+      description: |
+        `{"error": ...}` from the Go services and the receiver; user-service's
+        own errors add `timestamp`, `status` and `message` (or `path`).
       required: [error]
       properties:
         error: { type: string }
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        message: { type: string }
+        path: { type: string }
 
     Amount:
       type: string

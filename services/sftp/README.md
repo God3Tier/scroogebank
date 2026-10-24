@@ -10,6 +10,8 @@
 | `db-migrate` | Applies `receiver/data/` to `db` with Flyway, from the image that transaction-service's db-migrate container runs in AWS, then exits. `receiver-api` starts after it, and `make db-up` runs it too ([Schema migrations](../../docs/database/migrations.md)). |
 | `receiver-api` | transaction-service's internal read API, run with `go run` in the development image. The receiver's Dockerfile builds the production image by default; [the deployment runbook](../../docs/runbooks/deploy-aws.md) pushes it. |
 
+The read API's contract is [`docs/api/transactions-api.yaml`](../../docs/api/transactions-api.yaml), and its figures route is in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks its responses and routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 The import itself, the poller, runs from `receiver/`. [receiver/README.md](receiver/README.md) explains how it links rows to accounts, rejects files, retries the connection and audits.
 
 ## Running it

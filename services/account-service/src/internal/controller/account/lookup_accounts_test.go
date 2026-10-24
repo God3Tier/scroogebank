@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"account-service/src/internal/contract"
 	accounterrors "account-service/src/internal/errors"
 	orm "account-service/src/internal/repository/orm"
 	servicemock "account-service/src/internal/service/account"
@@ -23,6 +24,7 @@ func TestLookupAccounts(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/internal/accounts/lookup", strings.NewReader(body))
 		res := httptest.NewRecorder()
 		NewAccountController(svc).LookupAccounts(res, req)
+		contract.Check(t, "accounts-api.yaml", http.MethodPost, "/internal/accounts/lookup", res)
 		return res
 	}
 

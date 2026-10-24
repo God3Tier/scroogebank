@@ -131,6 +131,7 @@ class CorruptedAuditLogControllerTest {
     }
 
     private static ResponseEntity<JsonNode> auditorReply(HttpStatus status) {
-        return ResponseEntity.status(status).body(JsonNodeFactory.instance.objectNode().put("status", "ok"));
+        String key = status.isError() ? "error" : "status";
+        return ResponseEntity.status(status).body(JsonNodeFactory.instance.objectNode().put(key, "ok"));
     }
 }

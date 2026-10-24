@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	ownedAccountID   = "00000000-0000-0000-0000-000000000251"
-	deletedAccountID = "00000000-0000-0000-0000-000000000252"
+	ownedAccountID   = "00000000-0000-0000-0000-000000000281"
+	deletedAccountID = "00000000-0000-0000-0000-000000000282"
 	ownerSubject     = "agent-sub-owner"
 )
 
@@ -41,8 +41,8 @@ func openAuthorizationTestDB(t *testing.T) *sql.DB {
 		DELETE FROM accounts WHERE id IN ('` + ownedAccountID + `', '` + deletedAccountID + `');
 		INSERT INTO accounts (id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id, deleted_at)
 		VALUES
-			('` + ownedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'savings', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', NULL),
-			('` + deletedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'checking', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', CURRENT_TIMESTAMP);`)
+			('` + ownedAccountID + `', '00000000-0000-0000-0000-000000000280', '` + ownerSubject + `', 'savings', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', NULL),
+			('` + deletedAccountID + `', '00000000-0000-0000-0000-000000000280', '` + ownerSubject + `', 'checking', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', CURRENT_TIMESTAMP);`)
 	if err != nil {
 		t.Fatalf("load account fixture: %v", err)
 	}

@@ -2,6 +2,8 @@
 
 Owns client profiles. Accounts moved to [`account-service`](../account-service/README.md), which has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)).
 
+API contract: [`docs/api/clients-api.yaml`](../../docs/api/clients-api.yaml), and the `/aggregates` routes in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks the controllers' responses and the router's routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Start locally
 
 The local service still verifies Cognito access tokens and records a CRM audit event for the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:

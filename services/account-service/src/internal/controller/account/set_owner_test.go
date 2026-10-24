@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"account-service/src/internal/contract"
 	accounterrors "account-service/src/internal/errors"
 	servicemock "account-service/src/internal/service/account"
 
@@ -21,6 +22,7 @@ func TestSetOwner(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/ownership/accounts", strings.NewReader(body))
 		res := httptest.NewRecorder()
 		NewAccountController(svc).SetOwner(res, req)
+		contract.Check(t, "accounts-api.yaml", http.MethodPut, "/ownership/accounts", res)
 		return res
 	}
 

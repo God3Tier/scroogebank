@@ -2,6 +2,8 @@
 
 Owns bank accounts. Split out of `client-profile-management-service`, which still owns clients, so each has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)). Written in Go because it was extracted from that service's existing account code.
 
+API contract: [`docs/api/accounts-api.yaml`](../../docs/api/accounts-api.yaml), and the `/aggregates` routes in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks the controllers' responses and the router's routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |
@@ -10,7 +12,7 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
 | DELETE | `/api/accounts/{accountId}` | AGENT | Soft-delete one of the caller's accounts (others 404). Admins get 403 (ADR-0059) |
-| PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Audited with the status before and after (ADR-0050) |
+| PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Answers `{"account_id", "status"}` with the new status in lower case, as `GET` returns it. Audited with the status before and after (ADR-0050) |
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs and currencies. Used by the transaction import, which rejects a transaction not in its account's currency |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
 | GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |

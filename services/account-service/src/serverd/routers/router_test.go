@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"account-service/src/internal/contract"
 	accountcontroller "account-service/src/internal/controller/account"
 	"account-service/src/internal/models"
 	"account-service/src/internal/security"
@@ -160,4 +161,15 @@ func TestOwnershipIsForAdminsOnly(t *testing.T) {
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}
+}
+
+// Every route is in an OpenAPI contract (ADR-0063), including routes no test
+// calls.
+func TestEveryRouteIsInAContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	pass := func(c *gin.Context) { c.Next() }
+	RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, pass, pass, pass)
+
+	contract.CheckRoutes(t, router.Routes(), "accounts-api.yaml", "dashboard-aggregates.yaml")
 }

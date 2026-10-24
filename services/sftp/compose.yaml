@@ -75,7 +75,10 @@ services:
     working_dir: /workspace
     volumes:
       - ./receiver:/workspace
+      # The OpenAPI contracts the tests check responses against (ADR-0063).
+      - ../../docs/api:/openapi:ro
     environment:
+      OPENAPI_DIR: /openapi
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: ${POSTGRES_USER:-crm}

@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 import java.util.UUID;
 
+import static bank.engagement.contract.OpenApiContract.upstream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -51,10 +52,15 @@ class HttpClientDirectoryTest {
     void readsTheClientWithTheAgentsToken() {
         server.expect(requestTo(URL))
                 .andExpect(header("Authorization", "Bearer agent-token"))
-                .andRespond(withSuccess("""
+                .andRespond(upstream("clients-api.yaml", withSuccess("""
                         {"client_id":"%s","first_name":"Synthetic","last_name":"Client",
-                         "email":"synthetic.client@example.test","country":"Singapore","gender":"F"}
-                        """.formatted(CLIENT), MediaType.TEXT_PLAIN));
+                         "date_of_birth":"1990-01-01T00:00:00Z","gender":"F",
+                         "email":"synthetic.client@example.test","phone_number":"+6590000000",
+                         "address":"1 Synthetic Road","city":"Singapore","state":"Singapore",
+                         "country":"Singapore","postal_code":"000001","verification_status":"VERIFIED",
+                         "assigned_agent_id":"agent-sub","created_at":"2026-09-01T00:00:00Z",
+                         "updated_at":"2026-09-01T00:00:00Z"}
+                        """.formatted(CLIENT), MediaType.APPLICATION_JSON)));
 
         ClientRecord client = directory.findOwned(CLIENT);
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"client-profile-management-service/src/internal/auditnote"
+	"client-profile-management-service/src/internal/contract"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	servicemock "client-profile-management-service/src/internal/service/client"
@@ -28,6 +29,7 @@ func TestReassignClients(t *testing.T) {
 		req.Header.Set("Authorization", authorization)
 		res := httptest.NewRecorder()
 		New(svc).ReassignClients(res, req)
+		contract.Check(t, "clients-api.yaml", http.MethodPost, "/api/clients/reassignments", res)
 		return res, notes
 	}
 

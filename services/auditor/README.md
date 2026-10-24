@@ -2,6 +2,8 @@
 
 Go service for recording and reading audit-chain entries.
 
+The corrupted-log REST API is [`docs/api/corrupted-logs-api.yaml`](../../docs/api/corrupted-logs-api.yaml); `make test` checks its responses and routes against it ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Prerequisites
 
 Install the following on your computer:

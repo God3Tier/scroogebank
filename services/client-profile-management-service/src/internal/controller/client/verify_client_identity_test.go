@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"client-profile-management-service/src/internal/contract"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	servicemock "client-profile-management-service/src/internal/service/client"
 
@@ -46,6 +47,7 @@ func TestVerifyClientIdentity(t *testing.T) {
 			req.Header.Set("X-Agent-ID", "agent-1")
 			res := httptest.NewRecorder()
 			New(svc).VerifyClientIdentity(res, req)
+			contract.Check(t, "clients-api.yaml", http.MethodPost, "/api/clients/{clientId}/verify", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

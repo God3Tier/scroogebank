@@ -1,6 +1,7 @@
 package main
 
 import (
+	"auditor/src/internal/contract"
 	"auditor/src/internal/controller/corrupted_log"
 	"auditor/src/internal/models"
 	"auditor/src/internal/security"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,14 +68,15 @@ func TestCorruptedLogRoutes(t *testing.T) {
 	tests := map[string]struct {
 		method string
 		path   string
+		route  string
 		token  string
 		status int
 	}{
-		"get collection":         {method: http.MethodGet, path: "/api/corrupted-logs", token: "admin-token", status: http.StatusOK},
-		"create collection":      {method: http.MethodPost, path: "/api/corrupted-logs", token: "admin-token", status: http.StatusBadRequest},
-		"delete item":            {method: http.MethodDelete, path: "/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000", token: "admin-token", status: http.StatusOK},
-		"refuses no token":       {method: http.MethodGet, path: "/api/corrupted-logs", status: http.StatusUnauthorized},
-		"refuses an other token": {method: http.MethodDelete, path: "/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174001", token: "forged", status: http.StatusUnauthorized},
+		"get collection":         {method: http.MethodGet, path: "/api/corrupted-logs", route: "/api/corrupted-logs", token: "admin-token", status: http.StatusOK},
+		"create collection":      {method: http.MethodPost, path: "/api/corrupted-logs", route: "/api/corrupted-logs", token: "admin-token", status: http.StatusBadRequest},
+		"delete item":            {method: http.MethodDelete, path: "/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174000", route: "/api/corrupted-logs/{id}", token: "admin-token", status: http.StatusOK},
+		"refuses no token":       {method: http.MethodGet, path: "/api/corrupted-logs", route: "/api/corrupted-logs", status: http.StatusUnauthorized},
+		"refuses an other token": {method: http.MethodDelete, path: "/api/corrupted-logs/123e4567-e89b-12d3-a456-426614174001", route: "/api/corrupted-logs/{id}", token: "forged", status: http.StatusUnauthorized},
 	}
 
 	for name, test := range tests {
@@ -84,8 +87,17 @@ func TestCorruptedLogRoutes(t *testing.T) {
 			}
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
+			contract.Check(t, "corrupted-logs-api.yaml", test.method, test.route, response)
 			assert.Equal(t, test.status, response.Code)
 		})
 	}
 	assert.Equal(t, "123e4567-e89b-12d3-a456-426614174000", svc.deletedID)
+}
+
+// Every route is in an OpenAPI contract (ADR-0063), including routes no test
+// calls.
+func TestEveryRouteIsInAContract(t *testing.T) {
+	routes := newHandler(corrupted_log.Controller{}, adminVerifier{}).(*gin.Engine).Routes()
+
+	contract.CheckRoutes(t, routes, "corrupted-logs-api.yaml")
 }
