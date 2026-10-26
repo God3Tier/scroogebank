@@ -11,3 +11,9 @@
 # always passed a payload that is not JSON on as a string. The spec now says
 # so; the frontend already treats a payload that is not an object as empty.
 GET /api/activities the `content/items/payload` response's property `type` changed from `object` to `any` for status `200`
+
+# The SFTP receiver's private, unauthenticated stats route had one caller,
+# user-service, which no longer reads transactions. transaction-service now
+# serves GET /aggregates/transactions/stats itself, scoped by the caller's token
+# (ADR-0064).
+POST /aggregates/transactions/stats api removed without deprecation

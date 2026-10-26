@@ -17,8 +17,7 @@
 | Auditor | Accepts `source_service: DASHBOARD` with `event_type: DASHBOARD_VIEW` and checks the payload |
 | client-service | `GET /aggregates/clients/stats`, `/aggregates/clients/action-items` and `/aggregates/clients/team-comparison`; index on `clients(created_at)` |
 | account-service | `GET /aggregates/accounts/stats` and `/aggregates/accounts/ids`; index on `accounts(opening_date)` |
-| user-service | `GET /aggregates/transactions/stats`, in front of the receiver |
-| SFTP receiver | Private `POST /aggregates/transactions/stats`; index on `transactions(transaction_date)` |
+| SFTP receiver (transaction-service) | `GET /aggregates/transactions/stats`, scoped by the caller's token ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)); index on `transactions(transaction_date)` |
 | End-to-end checks with real tokens | Not run |
 | Deployment | Defined in Terraform as its own stack, `infrastructure/terraform/stacks/business-dashboard` (ADR-0047, 2026-10-20); plan-tested with mocked providers, and applied to the team's AWS account, where dashboard-service runs (confirmed 2026-10-20) |
 | UI | Not possible yet: there is no `frontend/` on `dev`. `task/frontend-building` holds one of the three mockup commits (`851f737`); `task/business-dashboard/frontend-mockup` holds all three on an old base and must not be merged |
@@ -74,7 +73,7 @@ Stateless fan-out (ADR-0033): dashboard-service forwards the caller's token to t
 | Agent roster | user-service `GET /api/users` (admin-only, paged) | Admins only |
 | Client figures, work queue | client-service `/aggregates/clients/*` | `assigned_agent_id` = caller (ADR-0060) |
 | Account figures | account-service `/aggregates/accounts/stats` | `owner_agent_id` = caller |
-| Transaction figures | user-service `/aggregates/transactions/stats`, which asks account-service for the caller's account IDs and then the receiver | Caller's accounts; `Matched` rows only |
+| Transaction figures | transaction-service `/aggregates/transactions/stats`, which asks account-service for the caller's account IDs | Caller's accounts; `Matched` rows only |
 
 `/aggregates` sits outside `/api`, so API Gateway never routes it, and the owning services do not audit it; the dashboard audits each view (ADR-0039).
 
@@ -98,7 +97,7 @@ Shared: window of 7, 30 or 90 days or explicit dates, at most 365 days, in Singa
 
 ## 9. APIs, schema and jobs
 
-- **APIs:** as §7 and the two contracts above. All `GET` except the receiver's private `POST`.
+- **APIs:** as §7 and the two contracts above. All `GET`.
 - **Schema:** three indexes, added to each service's V1 SQL (nothing is deployed): `clients(created_at)`, `accounts(opening_date)`, `transactions(transaction_date)`. No new tables or columns.
 - **Jobs:** none.
 
@@ -170,7 +169,8 @@ One ECS Fargate service, 1 task × 1 vCPU / 2 GB at minimum: roughly USD 45 a mo
 |---|---|---|
 | [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) | Stateless fan-out, caller's JWT, 3-minute cache, best-effort audit | Accepted 2026-10-09; owner Neo Jia Wen |
 | [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) | What each figure means, and what is left out | Accepted 2026-10-09; owner Neo Jia Wen |
-| [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) | Private `/aggregates` routes, token scoping, user-service in front of the receiver | Proposed; Neo Jia Wen and Joseph Yau (agreement pending) |
+| [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) | Private `/aggregates` routes, token scoping, user-service in front of the receiver | Proposed; Neo Jia Wen and Joseph Yau (agreement pending); decisions 4–5 superseded by ADR-0064 |
+| [ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md) | transaction-service checks its own callers; the dashboard calls it directly for transaction figures | Accepted 2026-10-26; Neo Jia Wen and Joseph Yau |
 
 The first branch's ADR-0001, 0003 and 0004 are replaced by ADR-0033 and were not carried over; its ADR-0002 is rewritten as ADR-0038.
 
@@ -195,6 +195,7 @@ Owners marked TBC must be confirmed before more parallel work starts (`project_p
 | BD-T13 | Longer upstream budgets: 10 s per call and 15 s overall, from 5 s and 8 s (ADR-0033, amended 2026-10-20) | Neo Jia Wen | — | `services/dashboard-service/src/main/resources/application.yml`, README, ADR-0033 | `task/business-dashboard/longer-upstream-budgets` | Must stay under API Gateway's 29 s integration timeout | Implemented; dashboard-service tests pass; not yet checked in AWS | 2026-10-20 |
 | BD-T14 | Daily trend charts evenly spaced in time: the services send only days with any rows, so the UI fills every day of the window with zero | Neo Jia Wen | — | `frontend/src/components/dashboard/figures.js` and its test, `pages/{Admin,Agent}BusinessDashboard.jsx` | `task/frontend/list-paging` | — | Implemented; frontend tests, lint and build pass | 2026-10-24 |
 | BD-T15 | First load after an idle pause: the JDK HttpClient got HTTP/1.1 response headers but never finished the body, in user-service's call to the SFTP receiver and in dashboard-service's call to user-service. Both use `HttpURLConnection` instead, user-service with 2 s connect and 3 s read timeouts; budgets down to 5 s and 8 s (ADR-0033, amended 2026-10-24) | Neo Jia Wen | user-service owner (review) | `services/user-service/src/main/resources/application.yml`, `services/dashboard-service/src/main/java/bank/dashboard/config/RestClientConfig.java`, `services/dashboard-service/src/main/resources/application.yml`, both READMEs, ADR-0033 | `task/business-dashboard/first-load-timeouts` | user-service's other clients (account transactions, corrupted logs) get the same client | user-service change deployed and its stall gone; dashboard-service change not yet deployed | 2026-10-25 |
+| BD-T16 | Transaction figures straight from transaction-service, which scopes them by the caller's token; `TRANSACTION_SERVICE_BASE_URL` and warm-up of the new upstream ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)) | Neo Jia Wen | Joseph Yau (review) | `services/dashboard-service` (`HttpTransactionStatsAdapter`, `DashboardProperties`, `UpstreamWarmUp`), `stacks/business-dashboard` | `task/transaction-integration/direct-transaction-reads` | transaction-service's stats route (F3-READ-03) | Implemented; dashboard-service tests pass; not yet deployed | 2026-10-26 |
 
 Merge path: `task/business-dashboard/<subtask>` → `feat/business-dashboard` → `dev`.
 
