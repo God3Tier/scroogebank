@@ -1,6 +1,11 @@
 package bank.clienthealth.task;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import bank.clienthealth.activity.application.ActivityBaselineService;
+import bank.clienthealth.activity.application.ActivityProjectionService;
+import bank.clienthealth.activity.persistence.JdbcActivityProjectionRepository;
+import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
 import bank.clienthealth.task.api.RelationshipTaskActionController;
 import bank.clienthealth.task.api.RelationshipTaskQueryController;
 import bank.clienthealth.task.application.RelationshipTaskQueryService;
@@ -33,6 +38,10 @@ class TaskRuntimeConfigurationTest {
     @Autowired RelationshipTaskQueryService queries;
     @Autowired RelationshipTaskActionController actions;
     @Autowired RelationshipTaskQueryController reads;
+    @Autowired JdbcActivityProjectionRepository activityRepository;
+    @Autowired ActivityProjectionService activityProjection;
+    @Autowired ActivityBaselineService activityBaselines;
+    @Autowired JdbcAnalysisRunRepository analysisRuns;
 
     @Test
     void applicationStartsWithEveryProductionTaskApiDependency() {
@@ -43,5 +52,9 @@ class TaskRuntimeConfigurationTest {
         assertThat(queries).isNotNull();
         assertThat(actions).isNotNull();
         assertThat(reads).isNotNull();
+        assertThat(activityRepository).isNotNull();
+        assertThat(activityProjection).isNotNull();
+        assertThat(activityBaselines).isNotNull();
+        assertThat(analysisRuns).isNotNull();
     }
 }

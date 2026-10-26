@@ -851,3 +851,20 @@
 - Verification: application-level reassignment and paging tests pass; the full
   Maven suite reports 108 tests with no failures and 14 Docker-dependent tests
   skipped locally because Docker is unavailable.
+
+## 2026-10-26 — Client Health SF02/SF04 production persistence
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: add V4 activity-projection/replay-coverage/analysis-run tables, a
+  transactional JDBC activity adapter, a fenced renewable lease/watermark
+  adapter, Spring runtime wiring, and PostgreSQL integration coverage.
+- Human verification required: Java 25 CI with Docker must execute V1-V4 and
+  the new activity/run Testcontainers suite; the migration is additive and
+  previously merged migrations remain unchanged.
+- Data: repository-owned synthetic opaque transactions and analysis-run IDs
+  only. No credentials, real client data, AWS calls or external services were
+  used.
+- Verification: all source and tests compile with the local Java 24 override;
+  94 non-Docker tests passed and 17 Docker-dependent tests were skipped because
+  local Docker was unavailable.
