@@ -29,7 +29,9 @@ RH-SF02 atomically applies complete replays by transaction ID, permits only
 Pending-to-terminal status changes, and fails closed on immutable conflicts.
 For an 08:00 Asia/Singapore analysis date it retains six months for recurring
 credits and calculates a 90-day baseline plus 30-day comparison. Activity counts
-use explicit ADR-0051 classification; net-flow summaries are SGD-only.
+use explicit ADR-0051 classification; net-flow summaries are SGD-only. V4 and
+`JdbcActivityProjectionRepository` persist projected transactions and complete
+replay-coverage windows atomically across restarts.
 
 RH-SF03 independently evaluates recurring-credit interruption, customer
 activity decline, and two-period material net outflow under ADR-0052. Outcomes
@@ -41,8 +43,9 @@ RH-SF04 uses deterministic daily run, finding, signal, correlation and evidence
 identifiers; combines every signal for one client/run; and advances its
 watermark only after every task handoff returns an explicit outcome. The
 task-stream contract now distinguishes created, attached, duplicate, cooldown
-suppression and daily-cap suppression. Production lease/watermark persistence
-still belongs in health-db.
+suppression and daily-cap suppression. V4 and `JdbcAnalysisRunRepository`
+persist attempts, renewable fenced leases, redacted failure categories and
+success-only watermarks.
 
 RH-SF05 task persistence migrations now create tasks, assignment snapshots,
 evidence, history, daily admissions and idempotent processed-finding outcomes.
@@ -142,15 +145,11 @@ months of reproducible synthetic history. RH-SF01 then replaces the mock with
 the HTTP/service-token adapter and runs the same contract tests end to end,
 without reading another service's database.
 
-For RH-SF02, coordinate health-db migration ownership with Swayam before adding
-the production projection repository. The current repository port and in-memory
-tests intentionally keep database technology out of the rule-facing domain.
-
-Garvit's provider-independent RH-SF01-SF04 stream is now implemented. Remaining
-integration work includes the real Feature 3 replay adapter, production
-projection/run repositories, and Java 25 CI. The client-profile Contract-B
-provider and its scoped Cognito registration remain external prerequisites for
-live current-assignment authorization.
+Garvit's RH-SF01-SF04 stream and production SF02/SF04 persistence adapters are
+implemented. Remaining integration work includes the real Feature 3 replay
+adapter and Java 25 CI. The client-profile Contract-B provider and its scoped
+Cognito registration remain external prerequisites for live current-assignment
+authorization.
 
 RH-SF08 production follow-up implements the JDBC task/outbox repository against
 V1-V3, then an IAM-scoped SQS gateway and the Auditor's reviewed

@@ -49,12 +49,17 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
   event IDs, allowlisted relationship-health actions, JSON-object payloads,
   bounded delivery failure categories, lease consistency, and ready/expired
   lease indexes. Rows are deleted only after gateway acceptance.
+- V4 creates the minimum activity projection, complete replay-coverage windows,
+  and durable analysis-run state. It constrains transaction type/status/activity
+  classification, permits only service-safe source fingerprints, and persists
+  renewable leases, attempts, redacted failure categories, and success-only
+  watermarks.
 
 Task creation/evidence/transition/suppression paths now enqueue their redacted
-audit events through `TaskRepository.Session`, so a production JDBC adapter
-must persist task state, processed finding and outbox row in one transaction
-under ADR-0020 and ADR-0053. The JDBC repository and SQS/Auditor adapters remain
-follow-up work.
+audit events through `TaskRepository.Session`; the JDBC adapter persists task
+state, processed finding and outbox row in one transaction under ADR-0020 and
+ADR-0053. JDBC adapters also persist the SF02 activity projection and SF04
+lease/watermark state. SQS/Auditor adapters remain follow-up work.
 
 ## Why one RDS instance per service: balancing cost and isolation
 

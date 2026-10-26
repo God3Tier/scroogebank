@@ -32,12 +32,14 @@ class RelationshipTaskMigrationTest {
         flyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load();
-        assertEquals(3, flyway.migrate().migrationsExecuted);
+        assertEquals(4, flyway.migrate().migrationsExecuted);
     }
 
     @BeforeEach
     void clearTables() throws SQLException {
-        execute("TRUNCATE relationship_health_audit_outbox, "
+        execute("TRUNCATE relationship_health_analysis_runs, "
+                + "client_health_replay_coverage, client_health_activity_projection, "
+                + "relationship_health_audit_outbox, "
                 + "processed_client_health_findings, relationship_task_history, "
                 + "relationship_task_evidence, task_assignment_snapshots, relationship_tasks, "
                 + "agent_daily_task_admissions "
@@ -59,11 +61,14 @@ class RelationshipTaskMigrationTest {
                               'relationship_task_history',
                               'agent_daily_task_admissions',
                               'processed_client_health_findings',
-                              'relationship_health_audit_outbox')
+                              'relationship_health_audit_outbox',
+                              'client_health_activity_projection',
+                              'client_health_replay_coverage',
+                              'relationship_health_analysis_runs')
                         """)) {
             try (var result = statement.executeQuery()) {
                 result.next();
-                assertEquals(7, result.getInt(1));
+                assertEquals(10, result.getInt(1));
             }
         }
     }

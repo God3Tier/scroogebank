@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF05, offline rule evaluation and RH-SF08 foundation are merged; SF08 V3 outbox and atomic task enqueue are implemented on its task branch
+- Status: In progress; SF00-SF06, offline rule evaluation and RH-SF08 task-audit foundation are merged; SF02/SF04 production persistence is implemented on its task branch
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/audit-outbox`
+- Current task branch: `task/client-health-monitor/activity-run-persistence`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-22 from `origin/feat/client-health-monitor` at `9f211c7`
+- Last repository sync: 2026-10-26 from `origin/feat/client-health-monitor` at `d83b11c`
 - AI-assisted planning: Yes; Cursor
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -492,10 +492,10 @@ Decisions:
 |---|---|---|---|---|---|---|---|
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
 | RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer complete and merged; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
-| RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; future migration ownership | `task/client-health-monitor/activity-projection` | Provider-independent projection, replay coverage and account/client baselines complete and merged; production DB adapter pending coordinated migration ownership | 2026-10-21 |
+| RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; health-db migrations | `task/client-health-monitor/activity-projection` | Domain/baselines merged; V4 projection/coverage schema and JDBC adapter implemented on `task/client-health-monitor/activity-run-persistence`; Java 25 Docker CI pending | 2026-10-26 |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; ADR-0052; shared fixtures | `task/client-health-monitor/signal-rules` | V1 recurring-credit, activity-decline and sustained-net-outflow rules complete and merged; Java 25 CI pending | 2026-10-21 |
 | RH-SF03-EVAL | Offline labelled rule evaluation | Garvit | rule evaluation harness, labelled synthetic scenarios, evaluation evidence | RH-SF03; ADR-0052 | `task/client-health-monitor/rule-evaluation` | Complete and merged: six labelled positive/negative/boundary/sufficiency scenarios pass deterministically; synthetic-only limitations documented | 2026-10-22 |
-| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Provider-independent deterministic orchestration complete and merged; production run repository pending | 2026-10-21 |
+| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; health-db migrations | `task/client-health-monitor/analysis-orchestration` | Deterministic orchestration merged; V4 durable run/lease/watermark schema and JDBC adapter implemented on `task/client-health-monitor/activity-run-persistence`; Java 25 Docker CI pending | 2026-10-26 |
 | RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy | `task/client-health-monitor/task-persistence` | Domain, V1/V2 schema, suppression/admission rules, JDBC repository adapter and atomic SF08 task/finding/outbox writes implemented | 2026-10-23 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API/runtime wiring, current-assignment reads/actions, opaque keyset pagination, bounded notes, Contract-B consumer and PostgreSQL/runtime integration suites implemented; client-profile Contract-B provider and Cognito provisioning remain pending | 2026-10-23 |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Planned | N/A |
