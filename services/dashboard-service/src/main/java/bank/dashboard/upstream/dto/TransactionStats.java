@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Transaction figures from user-service's
- * {@code GET /aggregates/transactions/stats}, computed by the receiver for an
- * admin's every transaction or an agent's own accounts (ADR-0039).
+ * Transaction figures from transaction-service's
+ * {@code GET /aggregates/transactions/stats}, for an admin's every
+ * transaction or an agent's own accounts (ADR-0064).
  *
  * @param total          transactions in the window
  * @param currencies     the currencies among them

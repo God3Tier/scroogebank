@@ -2,7 +2,7 @@ function formatDate(value) {
     return new Date(value).toLocaleDateString('en-SG', { dateStyle: 'medium' })
 }
 
-// One account's transactions, newest first as user-service sends them.
+// One account's transactions, newest first as transaction-service sends them.
 function AccountTransactionTable({ transactions }) {
     return (
         <div className="table-wrap">

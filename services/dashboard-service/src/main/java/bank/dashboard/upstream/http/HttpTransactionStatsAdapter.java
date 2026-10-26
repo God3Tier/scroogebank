@@ -11,9 +11,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Transaction figures from user-service's {@code /aggregates/transactions/stats}.
- * The receiver that holds the transactions has no authentication of its own,
- * so user-service decides the caller's scope in front of it (ADR-0039).
+ * Transaction figures from transaction-service's
+ * {@code /aggregates/transactions/stats}, which scopes them by the caller's
+ * token (ADR-0064).
  */
 @Component
 @RequiredArgsConstructor
@@ -27,7 +27,7 @@ public class HttpTransactionStatsAdapter implements TransactionStatsPort {
         Map<String, Object> query = new LinkedHashMap<>();
         query.put("from", window.from());
         query.put("to", window.to());
-        return upstream.get("user-service", properties.upstream().userServiceBaseUrl(),
+        return upstream.get("transaction-service", properties.upstream().transactionServiceBaseUrl(),
                 "/aggregates/transactions/stats", query, TransactionStats.class);
     }
 }

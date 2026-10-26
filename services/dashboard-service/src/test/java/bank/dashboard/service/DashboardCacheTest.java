@@ -26,7 +26,7 @@ class DashboardCacheTest {
     private final DashboardCache cache = new DashboardCache(new DashboardProperties(
             new DashboardProperties.Window(30, 365),
             new DashboardProperties.Cache(60, 1000),
-            new DashboardProperties.Upstream(2000, 3000, "", "", "")));
+            new DashboardProperties.Upstream(2000, 3000, "", "", "", "")));
 
     @Test
     void neverServesOneCallersFiguresToAnother() {

@@ -162,6 +162,6 @@ class HttpUserRosterAdapterTest {
         return new DashboardProperties(
                 new DashboardProperties.Window(30, 365),
                 new DashboardProperties.Cache(60, 1000),
-                new DashboardProperties.Upstream(2000, 3000, userServiceUrl, "", ""));
+                new DashboardProperties.Upstream(2000, 3000, userServiceUrl, "", "", ""));
     }
 }

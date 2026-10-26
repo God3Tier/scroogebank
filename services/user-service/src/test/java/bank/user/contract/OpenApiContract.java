@@ -35,8 +35,7 @@ public final class OpenApiContract implements ResultMatcher {
 
     /** The contracts this service serves, in docs/api. */
     private static final List<String> SPECS = List.of(
-            "users-api.yaml", "audit-activity.yaml", "transactions-api.yaml",
-            "corrupted-logs-api.yaml", "dashboard-aggregates.yaml");
+            "users-api.yaml", "audit-activity.yaml", "corrupted-logs-api.yaml");
 
     private static final String PATH_MISSING = "validation.request.path.missing";
     private static final String OPERATION_MISSING = "validation.request.operation.notAllowed";

@@ -13,7 +13,7 @@ Feature plan: [`docs/feature-plans/business-dashboard_plan.md`](../../docs/featu
 | Agent roster (admins only) | user-service `GET /api/users` |
 | Clients, the work queue and an agent's team comparison | client-profile-management-service `GET /aggregates/clients/*` |
 | Accounts | account-service `GET /aggregates/accounts/stats` |
-| Transactions | user-service `GET /aggregates/transactions/stats`, in front of the SFTP receiver |
+| Transactions | transaction-service `GET /aggregates/transactions/stats` ([ADR-0064](../../docs/adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)) |
 
 So the dashboard can read nothing the caller could not, and each service scopes its own answer: an agent sees only their own clients, accounts and matched transactions. No endpoint takes an agent ID.
 
@@ -35,6 +35,7 @@ COGNITO_APP_CLIENT_ID=<crm-app-client-id> \
 USER_SERVICE_BASE_URL=http://localhost:8081 \
 CLIENT_SERVICE_BASE_URL=http://localhost:8080 \
 ACCOUNT_SERVICE_BASE_URL=http://localhost:8083 \
+TRANSACTION_SERVICE_BASE_URL=http://localhost:8082 \
   mvn -pl services/dashboard-service spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
@@ -43,7 +44,7 @@ Then:
 - `http://localhost:8085/actuator/health` → `{"status":"UP"}`, unauthenticated
 - `http://localhost:8085/swagger-ui.html` → the API spec, served only under the `local` profile
 
-Leave out a base URL and its panels report `upstream_not_deployed`; that is the degradation path working. For transaction figures, user-service also needs `ACCOUNT_SERVICE_BASE_URL` and `SFTP_RECEIVER_BASE_URL`, and the SFTP stack must be running.
+Leave out a base URL and its panels report `upstream_not_deployed`; that is the degradation path working. For transaction figures, the SFTP stack's transaction API must be running, with account-service reachable from it.
 
 ## Configuration
 
@@ -51,9 +52,10 @@ Leave out a base URL and its panels report `upstream_not_deployed`; that is the 
 |---|---|
 | `OIDC_ISSUER_URI` | Cognito user pool issuer. Required |
 | `COGNITO_APP_CLIENT_ID` | The CRM app client. Only access tokens issued to it are accepted. Required |
-| `USER_SERVICE_BASE_URL` | Roster and transaction figures. Blank: those panels are unavailable |
+| `USER_SERVICE_BASE_URL` | Agent roster. Blank: the panels that use it are unavailable |
 | `CLIENT_SERVICE_BASE_URL` | Client figures and work queue. Blank: unavailable |
 | `ACCOUNT_SERVICE_BASE_URL` | Account figures. Blank: unavailable |
+| `TRANSACTION_SERVICE_BASE_URL` | Transaction figures. Blank: unavailable |
 | `AUDIT_QUEUE_URL` | The shared audit queue. Blank: no audit events are sent (local use only) |
 | `AWS_REGION` | For SQS. Default `ap-southeast-1` |
 
