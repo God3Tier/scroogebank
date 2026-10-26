@@ -95,8 +95,9 @@ class JdbcRelationshipTaskRepositoryIntegrationTest {
                 .extracting(RelationshipTask.Evidence::findingId).isEqualTo("finding-1");
         assertThat(reloaded.history()).extracting(RelationshipTask.HistoryEntry::action)
                 .containsExactly(RelationshipTask.Action.CREATED, RelationshipTask.Action.ACCEPTED);
-        assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM relationship_health_audit_outbox", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForList(
+                "SELECT action FROM relationship_health_audit_outbox", String.class))
+                .containsExactlyInAnyOrder("SIGNAL_DETECTED", "TASK_CREATED", "TASK_ACCEPTED");
         assertThatThrownBy(() -> service.accept("task-1", 1, "agent-1", "stale"))
                 .isInstanceOf(OptimisticLockException.class);
     }

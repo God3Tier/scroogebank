@@ -8,6 +8,8 @@ import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.SignalEvidence;
 import bank.clienthealth.contract.TaskUpsertResult.Outcome;
 import bank.clienthealth.task.domain.RelationshipTask.HistoryEntry;
+import bank.clienthealth.task.domain.RelationshipTask;
+import bank.clienthealth.explanation.ExplanationResult;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -103,6 +105,18 @@ public final class RelationshipHealthAuditEventFactory {
         Payload payload = new Payload(
                 "1", EntityType.ANALYSIS_RUN, runId, occurredAt,
                 correlationId, null, null, null, dispositionCode);
+        return envelope(action, "SYSTEM", payload);
+    }
+
+    public static RelationshipHealthAuditEvent explanation(
+            String explanationId, RelationshipTask task, String correlationId,
+            Instant occurredAt, ExplanationResult.Source source, String promptVersion
+    ) {
+        Action action = source == ExplanationResult.Source.BEDROCK
+                ? Action.EXPLANATION_GENERATED : Action.EXPLANATION_FALLBACK_USED;
+        Payload payload = new Payload("1", EntityType.EXPLANATION, explanationId, occurredAt,
+                correlationId, hash(task.clientId()), null,
+                new AuditState(task.status(), task.severity(), task.version()), promptVersion);
         return envelope(action, "SYSTEM", payload);
     }
 

@@ -1,0 +1,8 @@
+client-health:
+  ai:
+    enabled: ${CLIENT_HEALTH_AI_ENABLED:false}
+    model-id: ${CLIENT_HEALTH_AI_MODEL_ID:}
+    timeout: ${CLIENT_HEALTH_AI_TIMEOUT:5s}
+    max-attempts: ${CLIENT_HEALTH_AI_MAX_ATTEMPTS:2}
+    max-input-characters: ${CLIENT_HEALTH_AI_MAX_INPUT_CHARACTERS:6000}
+    max-output-tokens: ${CLIENT_HEALTH_AI_MAX_OUTPUT_TOKENS:256}

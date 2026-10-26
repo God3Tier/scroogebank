@@ -869,6 +869,24 @@
   94 non-Docker tests passed and 17 Docker-dependent tests were skipped because
   local Docker was unavailable.
 
+## 2026-10-26 — Client Health SF07 safe explanation and fallback
+
+- Human owner: Swayam.
+- Tool: OpenAI Codex.
+- Use: implement identifier-free derived-fact mapping, strict model-output
+  validation, deterministic templates, a bounded Bedrock Converse adapter and
+  kill switch, versioned explanation persistence, atomic redacted audit enqueue,
+  and Contract-D response attachment.
+- Human verification required: select and approve a Singapore-supported model,
+  token pricing, IAM permissions and environment rollout before enabling
+  Bedrock; CloudWatch publication remains in RH-SF09.
+- Data: repository-owned synthetic task and signal facts only. No credentials,
+  real client data, live AWS calls, raw transactions or external services were
+  used.
+- Verification: Java 25 unit, PostgreSQL migration/repository, rollback and
+  full Spring runtime tests; Docker-dependent coverage runs when Docker is
+  available.
+
 ## 2026-10-26 — Client Health SF08 audit delivery
 
 - Human owner: Garvit; Auditor-owner and infrastructure reviews remain required.

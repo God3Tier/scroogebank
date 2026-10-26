@@ -32,12 +32,13 @@ class RelationshipTaskMigrationTest {
         flyway = Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load();
-        assertEquals(4, flyway.migrate().migrationsExecuted);
+        assertEquals(5, flyway.migrate().migrationsExecuted);
     }
 
     @BeforeEach
     void clearTables() throws SQLException {
-        execute("TRUNCATE relationship_health_analysis_runs, "
+        execute("TRUNCATE relationship_task_explanations, "
+                + "relationship_health_analysis_runs, "
                 + "client_health_replay_coverage, client_health_activity_projection, "
                 + "relationship_health_audit_outbox, "
                 + "processed_client_health_findings, relationship_task_history, "
@@ -64,13 +65,43 @@ class RelationshipTaskMigrationTest {
                               'relationship_health_audit_outbox',
                               'client_health_activity_projection',
                               'client_health_replay_coverage',
-                              'relationship_health_analysis_runs')
+                              'relationship_health_analysis_runs',
+                              'relationship_task_explanations')
                         """)) {
             try (var result = statement.executeQuery()) {
                 result.next();
-                assertEquals(10, result.getInt(1));
+                assertEquals(11, result.getInt(1));
             }
         }
+    }
+
+    @Test
+    void enforcesVersionedExplanationContract() throws SQLException {
+        insertTask("task-1", "client-1", "OPEN", 1);
+        execute("INSERT INTO processed_client_health_findings VALUES "
+                + "('finding-1', 'task-1', '{}'::jsonb, 'CREATED', 1, now())");
+        String values = "(repeat('a', 64), 'task-1', 'finding-1', 1, 'Summary.', "
+                + "'Review verified activity.', 'Human review required', "
+                + "ARRAY['RECURRING_CREDIT_INTERRUPTION'], 'TEMPLATE_FALLBACK', "
+                + "'relationship-health-explanation-v1', NULL, now())";
+        execute("INSERT INTO relationship_task_explanations VALUES " + values);
+
+        assertThrows(SQLException.class, () -> execute(
+                "INSERT INTO relationship_task_explanations VALUES " + values));
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_task_explanations VALUES
+                (repeat('b', 64), 'task-1', 'finding-1', 2, 'Summary.',
+                 'Review verified activity.', 'Human review required',
+                 ARRAY['RECURRING_CREDIT_INTERRUPTION'], 'BEDROCK',
+                 'relationship-health-explanation-v1', NULL, now())
+                """));
+        assertThrows(SQLException.class, () -> execute("""
+                INSERT INTO relationship_task_explanations VALUES
+                (repeat('c', 64), 'task-1', 'finding-1', 2, 'Summary.',
+                 'Review verified activity.', 'Human review required',
+                 ARRAY['UNKNOWN'], 'TEMPLATE_FALLBACK',
+                 'relationship-health-explanation-v1', NULL, now())
+                """));
     }
 
     @Test

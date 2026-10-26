@@ -523,8 +523,8 @@ components:
       additionalProperties: false
       required: [text, source, generatedAt]
       properties:
-        text: {type: string}
-        source: {type: string}
+        text: {type: string, maxLength: 400}
+        source: {type: string, enum: [BEDROCK, TEMPLATE_FALLBACK]}
         generatedAt: {type: string, format: date-time}
     RelationshipTaskEvidence:
       type: object

@@ -72,6 +72,14 @@ property-gated SQS gateway serializes the Auditor's snake_case envelope; task,
 signal and analysis-run events are wired. IAM/Terraform, Auditor allowlisting
 and SF07 explanation events remain pending.
 
+RH-SF07 generates wording only after a deterministic task create or evidence
+attachment succeeds. It sends identifier-free derived facts to Bedrock when
+explicitly enabled and otherwise uses deterministic templates. Unsafe,
+malformed, timed-out or failed model responses also use templates; explanation
+failures cannot alter signal detection, severity, suppression or task admission.
+Versioned explanations and their redacted SF08 audit events are committed in
+one health-db transaction.
+
 ## Ownership boundary
 
 - Garvit owns RH-SF00 through RH-SF04: contracts, transaction intake, activity
@@ -114,6 +122,10 @@ properties through environment variables or an external Spring configuration:
 | `client-health.assignment.oauth.client-id` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID` | health-service machine client |
 | `client-health.assignment.oauth.client-secret` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET` | secret supplied outside Git |
 | `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | assignment-read scope |
+| `client-health.ai.enabled` | `CLIENT_HEALTH_AI_ENABLED` | Bedrock kill switch; defaults to `false` |
+| `client-health.ai.model-id` | `CLIENT_HEALTH_AI_MODEL_ID` | approved model or inference-profile ID; required when enabled |
+| `client-health.ai.timeout` | `CLIENT_HEALTH_AI_TIMEOUT` | per-call timeout; defaults to `5s` |
+| `client-health.ai.max-attempts` | `CLIENT_HEALTH_AI_MAX_ATTEMPTS` | bounded total attempts, from 1 to 2 |
 | `client-health.audit.publisher-enabled` | `CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED` | enable the SQS relay; defaults false |
 | `client-health.audit.queue-url` | `CLIENT_HEALTH_AUDIT_QUEUE_URL` | existing `audit-insert` queue URL |
 | `client-health.audit.region` | `CLIENT_HEALTH_AUDIT_REGION` | AWS Region for SQS |
@@ -134,7 +146,9 @@ implements the currently proposed Contract-B endpoint and provisions the scoped
 Cognito client. Blank or unreachable assignment configuration produces `503`
 without exposing or mutating a task. AWS still runs Flyway in the separate
 `db-migrate` container required by ADR-0028; application-start Flyway is for
-local development and tests only.
+local development and tests only. Live Bedrock remains disabled until a model,
+token pricing, IAM permissions and environment rollout are approved. Prompts
+and generated wording are excluded from logs and audit payloads.
 
 Contract documentation and fixtures:
 

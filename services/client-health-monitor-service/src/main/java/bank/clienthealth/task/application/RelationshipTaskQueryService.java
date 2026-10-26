@@ -14,15 +14,23 @@ import bank.clienthealth.task.port.RelationshipTaskQueryPort.AgentViewer;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
+import bank.clienthealth.explanation.ExplanationRepository;
 
 /** Application read service used by the SF06 HTTP adapter. */
 public final class RelationshipTaskQueryService {
     private final RelationshipTaskQueryPort queries;
     private final ClientAssignmentPort assignments;
+    private final ExplanationRepository explanations;
 
     public RelationshipTaskQueryService(RelationshipTaskQueryPort queries, ClientAssignmentPort assignments) {
+        this(queries, assignments, null);
+    }
+
+    public RelationshipTaskQueryService(RelationshipTaskQueryPort queries, ClientAssignmentPort assignments,
+            ExplanationRepository explanations) {
         this.queries = Objects.requireNonNull(queries);
         this.assignments = Objects.requireNonNull(assignments);
+        this.explanations = explanations;
     }
 
     public Page list(Viewer viewer, TaskFilter filter) {
@@ -30,7 +38,7 @@ public final class RelationshipTaskQueryService {
         Objects.requireNonNull(filter);
         var page = queries.findTasks(viewer, filter);
         if (viewer instanceof AdminViewer admin && admin.assignedAgentSubject() == null) {
-            return RelationshipTaskView.page(page.tasks(), page.nextCursor());
+            return page(page.tasks(), page.nextCursor());
         }
         String expectedSubject = viewer instanceof AgentViewer agent
                 ? agent.subject() : ((AdminViewer) viewer).assignedAgentSubject();
@@ -51,11 +59,12 @@ public final class RelationshipTaskQueryService {
             page = queries.findTasks(viewer, new TaskFilter(
                     filter.statuses(), filter.severities(), filter.limit() - visible.size(), nextCursor));
         }
-        return RelationshipTaskView.page(visible, nextCursor);
+        return page(visible, nextCursor);
     }
 
     public Task detail(String taskId, Viewer viewer) {
-        return RelationshipTaskView.task(find(taskId, viewer));
+        var task = find(taskId, viewer);
+        return RelationshipTaskView.task(task, explanation(task).orElse(null));
     }
 
     public History history(String taskId, Viewer viewer) {
@@ -96,5 +105,22 @@ public final class RelationshipTaskQueryService {
             return Optional.empty();
         }
         return Optional.of(task.withAssignment(assignment));
+    }
+
+    private Page page(java.util.List<bank.clienthealth.task.domain.RelationshipTask> tasks, String cursor) {
+        return RelationshipTaskView.pageViews(tasks.stream()
+                .map(task -> RelationshipTaskView.task(task, explanation(task).orElse(null))).toList(), cursor);
+    }
+
+    private Optional<ExplanationRepository.Record> explanation(
+            bank.clienthealth.task.domain.RelationshipTask task
+    ) {
+        if (explanations == null) return Optional.empty();
+        long evidenceVersion = task.history().stream()
+                .filter(item -> item.action() == bank.clienthealth.task.domain.RelationshipTask.Action.CREATED
+                        || item.action() == bank.clienthealth.task.domain.RelationshipTask.Action.EVIDENCE_ADDED)
+                .mapToLong(bank.clienthealth.task.domain.RelationshipTask.HistoryEntry::taskVersion)
+                .max().orElseThrow();
+        return explanations.findForTaskVersion(task.taskId(), evidenceVersion);
     }
 }

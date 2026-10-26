@@ -8,6 +8,7 @@ import bank.clienthealth.task.domain.RelationshipTask.Status;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
+import bank.clienthealth.explanation.ExplanationRepository;
 
 /** Contract-D response models; internal fingerprints and evidence details are excluded. */
 public final class RelationshipTaskView {
@@ -19,14 +20,24 @@ public final class RelationshipTaskView {
         return new Page(SCHEMA_VERSION, tasks.stream().map(RelationshipTaskView::task).toList(), nextCursor);
     }
 
+    public static Page pageViews(List<Task> tasks, String nextCursor) {
+        return new Page(SCHEMA_VERSION, List.copyOf(tasks), nextCursor);
+    }
+
     public static Task task(RelationshipTask value) {
+        return task(value, null);
+    }
+
+    public static Task task(RelationshipTask value, ExplanationRepository.Record explanation) {
         List<Evidence> evidence = value.evidence().stream()
                 .map(item -> new Evidence(item.signal().type(), item.signal().accountId(),
                         item.signal().ruleVersion(), item.signal().severity()))
                 .toList();
         return new Task(SCHEMA_VERSION, value.taskId(), value.clientId(),
                 value.assignment().agentSubject(), value.status(), value.severity(),
-                null, evidence, value.version(), value.createdAt(), value.updatedAt());
+                explanation == null ? null : new Explanation(explanation.displayText(),
+                        explanation.source().name(), explanation.generatedAt()),
+                evidence, value.version(), value.createdAt(), value.updatedAt());
     }
 
     public static History history(RelationshipTask value) {

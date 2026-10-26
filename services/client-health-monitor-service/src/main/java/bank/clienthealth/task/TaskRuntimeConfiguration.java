@@ -8,6 +8,7 @@ import bank.clienthealth.task.assignment.HttpClientAssignmentAdapter;
 import bank.clienthealth.task.persistence.JdbcRelationshipTaskRepository;
 import bank.clienthealth.task.port.ClientAssignmentPort;
 import bank.clienthealth.task.port.DispositionPolicy;
+import bank.clienthealth.explanation.ExplanationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Duration;
@@ -78,9 +79,9 @@ public class TaskRuntimeConfiguration {
 
     @Bean
     RelationshipTaskQueryService relationshipTaskQueryService(
-            JdbcRelationshipTaskRepository repository,
-            ClientAssignmentPort assignments
+            JdbcRelationshipTaskRepository repository, ClientAssignmentPort assignments,
+            ExplanationRepository explanations
     ) {
-        return new RelationshipTaskQueryService(repository, assignments);
+        return new RelationshipTaskQueryService(repository, assignments, explanations);
     }
 }
