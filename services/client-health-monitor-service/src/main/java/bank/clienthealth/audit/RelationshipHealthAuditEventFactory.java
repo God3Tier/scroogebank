@@ -5,6 +5,7 @@ import bank.clienthealth.audit.RelationshipHealthAuditEvent.AuditState;
 import bank.clienthealth.audit.RelationshipHealthAuditEvent.EntityType;
 import bank.clienthealth.audit.RelationshipHealthAuditEvent.Payload;
 import bank.clienthealth.contract.ClientHealthFinding;
+import bank.clienthealth.contract.ClientHealthFinding.SignalEvidence;
 import bank.clienthealth.contract.TaskUpsertResult.Outcome;
 import bank.clienthealth.task.domain.RelationshipTask.HistoryEntry;
 import java.nio.charset.StandardCharsets;
@@ -57,6 +58,34 @@ public final class RelationshipHealthAuditEventFactory {
                 new AuditState(null, finding.priorityInputs().highestSeverity(), null),
                 outcome.name());
         return envelope(Action.SIGNAL_SUPPRESSED, "SYSTEM", payload);
+    }
+
+    public static RelationshipHealthAuditEvent signalDetected(
+            ClientHealthFinding finding,
+            SignalEvidence<? extends ClientHealthFinding.EvidenceDetails> signal
+    ) {
+        Payload payload = new Payload(
+                "1",
+                EntityType.SIGNAL,
+                signal.signalId(),
+                finding.detectedAt(),
+                finding.correlationId(),
+                hash(finding.clientId()),
+                null,
+                new AuditState(null, signal.severity(), null),
+                signal.type().name());
+        return envelope(Action.SIGNAL_DETECTED, "SYSTEM", payload);
+    }
+
+    public static RelationshipHealthAuditEvent analysis(
+            String runId,
+            Action action,
+            Instant occurredAt,
+            String dispositionCode
+    ) {
+        return analysis(
+                runId, action, occurredAt,
+                "correlation-" + hash(runId), dispositionCode);
     }
 
     public static RelationshipHealthAuditEvent analysis(

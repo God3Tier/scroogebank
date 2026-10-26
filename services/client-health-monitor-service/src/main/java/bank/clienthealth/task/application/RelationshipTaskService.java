@@ -61,6 +61,8 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             var processed = session.findProcessedFinding(finding.findingId());
             if (processed.isPresent()) return replay(processed.get(), finding);
 
+            finding.signals().forEach(signal -> session.enqueueAudit(
+                    RelationshipHealthAuditEventFactory.signalDetected(finding, signal)));
             var active = session.findActiveTask(finding.clientId());
             active.ifPresent(task -> {
                 if (!task.assignment().agentSubject().equals(assignment.agentSubject())) {

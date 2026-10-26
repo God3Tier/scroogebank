@@ -48,6 +48,7 @@ public record RelationshipHealthAuditEvent(
         ANALYSIS_RUN,
         RELATIONSHIP_TASK,
         FINDING,
+        SIGNAL,
         EXPLANATION,
         OUTBOX
     }

@@ -65,6 +65,20 @@ class RelationshipHealthAuditEventFactoryTest {
     }
 
     @Test
+    void mapsDetectedSignalWithoutRawClientOrEvidenceDetails() {
+        ClientHealthFinding finding = finding();
+        var event = RelationshipHealthAuditEventFactory.signalDetected(
+                finding, finding.signals().getFirst());
+
+        assertEquals(Action.SIGNAL_DETECTED, event.action());
+        assertEquals("SIGNAL", event.payload().entityType().name());
+        assertEquals("signal-1", event.payload().entityId());
+        assertEquals("RECURRING_CREDIT_INTERRUPTION", event.payload().dispositionCode());
+        assertFalse(event.toString().contains("client-1"));
+        assertFalse(event.toString().contains("daysSinceLastOccurrence"));
+    }
+
+    @Test
     void acceptsOnlyAnalysisActionsForAnalysisEvents() {
         var event = RelationshipHealthAuditEventFactory.analysis(
                 "run-1", Action.ANALYSIS_RUN_FAILED, NOW,

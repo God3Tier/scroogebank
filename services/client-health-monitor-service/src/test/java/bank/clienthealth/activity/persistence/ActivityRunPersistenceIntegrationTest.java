@@ -11,11 +11,14 @@ import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository.LeaseConflictException;
 import bank.clienthealth.analysis.port.AnalysisRunPort.AcquisitionStatus;
 import bank.clienthealth.analysis.port.AnalysisRunPort.FailureCategory;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
 import bank.clienthealth.transaction.application.TransactionReplayService.ReplayResult;
 import bank.clienthealth.transaction.contract.MatchedTransaction;
 import bank.clienthealth.transaction.contract.MatchedTransaction.ActivityKind;
 import bank.clienthealth.transaction.contract.MatchedTransaction.Status;
 import bank.clienthealth.transaction.contract.MatchedTransaction.TransactionType;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -53,7 +56,8 @@ class ActivityRunPersistenceIntegrationTest {
         Flyway.configure().dataSource(dataSource).load().migrate();
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("""
-                TRUNCATE relationship_health_analysis_runs,
+                TRUNCATE relationship_health_audit_outbox,
+                    relationship_health_analysis_runs,
                     client_health_replay_coverage,
                     client_health_activity_projection
                 RESTART IDENTITY
@@ -61,8 +65,13 @@ class ActivityRunPersistenceIntegrationTest {
         var transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
         activityRepository = new JdbcActivityProjectionRepository(jdbc, transactions);
         AtomicInteger leaseSequence = new AtomicInteger();
+        var auditOutbox = new JdbcAuditOutboxRepository(
+                jdbc, transactions,
+                JsonMapper.builder().addModule(new JavaTimeModule()).build(),
+                () -> "audit-lease-" + leaseSequence.incrementAndGet());
         runRepository = new JdbcAnalysisRunRepository(
-                jdbc, transactions, () -> "lease-" + leaseSequence.incrementAndGet());
+                jdbc, transactions, () -> "run-lease-" + leaseSequence.incrementAndGet(),
+                auditOutbox);
     }
 
     @Test
@@ -114,6 +123,10 @@ class ActivityRunPersistenceIntegrationTest {
         assertEquals(TO, jdbc.queryForObject(
                 "SELECT watermark FROM relationship_health_analysis_runs WHERE run_id = 'run-1'",
                 java.time.OffsetDateTime.class).toInstant());
+        assertEquals(2, jdbc.queryForObject("""
+                SELECT count(*) FROM relationship_health_audit_outbox
+                WHERE action IN ('ANALYSIS_RUN_STARTED', 'ANALYSIS_RUN_COMPLETED')
+                """, Integer.class));
     }
 
     @Test
@@ -141,6 +154,10 @@ class ActivityRunPersistenceIntegrationTest {
         assertEquals(0, jdbc.queryForObject("""
                 SELECT count(*) FROM relationship_health_analysis_runs
                 WHERE run_id = 'run-retry' AND watermark IS NOT NULL
+                """, Integer.class));
+        assertEquals(3, jdbc.queryForObject("""
+                SELECT count(*) FROM relationship_health_audit_outbox
+                WHERE action IN ('ANALYSIS_RUN_STARTED', 'ANALYSIS_RUN_FAILED')
                 """, Integer.class));
     }
 

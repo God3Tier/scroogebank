@@ -4,6 +4,7 @@ import bank.clienthealth.activity.application.ActivityBaselineService;
 import bank.clienthealth.activity.application.ActivityProjectionService;
 import bank.clienthealth.activity.persistence.JdbcActivityProjectionRepository;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
 import java.util.UUID;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,10 +40,11 @@ public class AnalysisPersistenceConfiguration {
     @Bean
     JdbcAnalysisRunRepository analysisRunRepository(
             JdbcTemplate jdbc,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            JdbcAuditOutboxRepository auditOutbox
     ) {
         return new JdbcAnalysisRunRepository(
                 jdbc, new TransactionTemplate(transactionManager),
-                () -> UUID.randomUUID().toString());
+                () -> UUID.randomUUID().toString(), auditOutbox);
     }
 }

@@ -6,6 +6,8 @@ import bank.clienthealth.activity.application.ActivityBaselineService;
 import bank.clienthealth.activity.application.ActivityProjectionService;
 import bank.clienthealth.activity.persistence.JdbcActivityProjectionRepository;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
+import bank.clienthealth.audit.AuditOutboxRelay;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
 import bank.clienthealth.task.api.RelationshipTaskActionController;
 import bank.clienthealth.task.api.RelationshipTaskQueryController;
 import bank.clienthealth.task.application.RelationshipTaskQueryService;
@@ -16,6 +18,7 @@ import bank.clienthealth.task.port.DispositionPolicy;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -42,6 +45,8 @@ class TaskRuntimeConfigurationTest {
     @Autowired ActivityProjectionService activityProjection;
     @Autowired ActivityBaselineService activityBaselines;
     @Autowired JdbcAnalysisRunRepository analysisRuns;
+    @Autowired JdbcAuditOutboxRepository auditOutbox;
+    @Autowired ApplicationContext context;
 
     @Test
     void applicationStartsWithEveryProductionTaskApiDependency() {
@@ -56,5 +61,7 @@ class TaskRuntimeConfigurationTest {
         assertThat(activityProjection).isNotNull();
         assertThat(activityBaselines).isNotNull();
         assertThat(analysisRuns).isNotNull();
+        assertThat(auditOutbox).isNotNull();
+        assertThat(context.getBeansOfType(AuditOutboxRelay.class)).isEmpty();
     }
 }
