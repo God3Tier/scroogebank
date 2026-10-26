@@ -247,6 +247,78 @@ func dashboardView() ValidDashboardViewPayload {
 	}
 }
 
+// transaction-service's records of transaction reads (ADR-0064).
+func TestValidatePayload_TransactionReads(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		payload ValidUserAuditPayload
+	}{
+		{"an account's transactions", userOperation("ACCOUNT", id, "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"another agent's account, refused, needs no resource id", userOperation("ACCOUNT", "", "/api/accounts/{accountId}/transactions", "GET", 404)},
+		{"the transaction list has no resource id", userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+		{"an agent refused the transaction list", userOperation("TRANSACTION", "", "/api/transactions", "GET", 403)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", "READ", string(models.TransactionServiceType), tt.payload)
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected the read to pass, got error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_TransactionReadsRejectInvalidEvents(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		action  string
+		actorID string
+		payload any
+	}{
+		{"transactions are only read", "DELETE", "agent-sub",
+			userOperation("TRANSACTION", id, "/api/transactions", "DELETE", 200)},
+		{"an ingestion action is not a read", "FILE_PROCESSING_COMPLETED", "agent-sub",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+		{"a resource transaction-service does not serve", "READ", "agent-sub",
+			userOperation("USER", id, "/api/users/{id}", "GET", 200)},
+		{"a successful account read needs its account", "READ", "agent-sub",
+			userOperation("ACCOUNT", "", "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"a read needs an actor", "READ", "",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+		{"a read needs an endpoint", "READ", "agent-sub",
+			userOperation("TRANSACTION", "", "", "GET", 200)},
+		{"a read needs a real status", "READ", "agent-sub",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 0)},
+		{"a read needs a time", "READ", "agent-sub",
+			ValidUserAuditPayload{ResourceType: "TRANSACTION", Endpoint: "/api/transactions", HTTPMethod: "GET", StatusCode: 200}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", tt.action, string(models.TransactionServiceType), tt.payload)
+			event.ActorID = tt.actorID
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected an error, got nil")
+			}
+		})
+	}
+}
+
+// A read is CRUD, so it cannot arrive as an ingestion event.
+func TestValidatePayload_TransactionReadIsNotAnIngestionEvent(t *testing.T) {
+	event := buildEvent(t, "TRANSACTION_INGESTION", "READ", string(models.TransactionServiceType),
+		userOperation("TRANSACTION", "", "/api/transactions", "GET", 200))
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected an error, got nil")
+	}
+}
+
 func TestValidatePayload_ValidDashboardView(t *testing.T) {
 	for _, action := range []string{"VIEW_OVERVIEW", "VIEW_PORTFOLIO", "VIEW_TRANSACTIONS", "VIEW_ACTION_ITEMS"} {
 		t.Run(action, func(t *testing.T) {

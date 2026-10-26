@@ -12,11 +12,11 @@ import (
 	"receiver/src/internal/models"
 	"receiver/src/internal/repository"
 	"receiver/src/internal/repository/orm"
+	"receiver/src/serverd/security"
 
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/types"
 	"github.com/ericlagergren/decimal"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -24,9 +24,12 @@ import (
 
 func serveList(t *testing.T, repo repository.Transaction, query string) *httptest.ResponseRecorder {
 	t.Helper()
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	RegisterRoutes(router, repo, nil)
+	return serveListAs(t, repo, nil, admin, query)
+}
+
+func serveListAs(t *testing.T, repo repository.Transaction, audit *auditStub, caller *security.Principal, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	router := newRouter(repo, nil, nil, audit, caller)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/transactions"+query, nil))
 	contract.Check(t, "transactions-api.yaml", http.MethodGet, "/api/transactions", response)
@@ -118,4 +121,39 @@ func TestListTransactions(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, response.Code)
 		})
 	}
+}
+
+func TestListTransactionsIsForAdminsOnly(t *testing.T) {
+	t.Run("an admin's read is audited with no resource ID", func(t *testing.T) {
+		repo := repository.NewMockTransaction(t)
+		repo.On("ListTransactions", mock.Anything, mock.Anything).Return(orm.TransactionSlice{}, nil).Once()
+		audit := &auditStub{}
+
+		response := serveListAs(t, repo, audit, admin, "")
+
+		assert.Equal(t, http.StatusOK, response.Code)
+		require.Len(t, audit.payloads(t), 1)
+		assert.Equal(t, "TRANSACTION", audit.payloads(t)[0]["resource_type"])
+		assert.NotContains(t, audit.payloads(t)[0], "resource_id")
+	})
+
+	t.Run("an agent is refused, and the refusal is audited", func(t *testing.T) {
+		// The mock fails the test if the repository is called.
+		audit := &auditStub{}
+
+		response := serveListAs(t, repository.NewMockTransaction(t), audit, agent, "")
+
+		assert.Equal(t, http.StatusForbidden, response.Code)
+		require.Len(t, audit.payloads(t), 1)
+		assert.Equal(t, float64(http.StatusForbidden), audit.payloads(t)[0]["status_code"])
+	})
+
+	t.Run("a caller with no token is refused, unaudited", func(t *testing.T) {
+		audit := &auditStub{}
+
+		response := serveListAs(t, repository.NewMockTransaction(t), audit, nil, "")
+
+		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Empty(t, audit.events)
+	})
 }
