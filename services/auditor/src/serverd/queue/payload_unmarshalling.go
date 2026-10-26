@@ -105,7 +105,7 @@ var userAuditActions = map[string]map[string]bool{
 	// An account's transactions, and every account's for an admin (ADR-0043),
 	// read through user-service until transaction-service served them itself
 	// (ADR-0064). Kept for events still queued from before.
-	"ACCOUNT": {"READ": true},
+	"ACCOUNT":     {"READ": true},
 	"TRANSACTION": {"READ": true},
 	// The auditor's corrupted-log table, managed through user-service.
 	"CORRUPTED_AUDIT_LOG": {"CREATE": true, "READ": true, "DELETE": true},
