@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import bank.clienthealth.contract.ClientHealthFinding;
+import bank.clienthealth.contract.RelationshipTaskPort;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
 import bank.clienthealth.contract.ClientHealthFinding.PriorityInputs;
 import bank.clienthealth.contract.ClientHealthFinding.RecurringCreditInterruptionEvidence;
@@ -15,7 +16,6 @@ import bank.clienthealth.contract.ClientHealthFinding.Severity;
 import bank.clienthealth.contract.ClientHealthFinding.SignalEvidence;
 import bank.clienthealth.contract.ClientHealthFinding.SignalType;
 import bank.clienthealth.contract.ClientHealthFinding.SignalWindow;
-import bank.clienthealth.task.application.RelationshipTaskService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -77,7 +77,7 @@ class RelationshipTaskRuntimeIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
     @Autowired
-    private RelationshipTaskService tasks;
+    private RelationshipTaskPort tasks;
     @Autowired
     private JdbcTemplate jdbc;
 
@@ -85,7 +85,7 @@ class RelationshipTaskRuntimeIntegrationTest {
     void clearDatabase() {
         CURRENT_AGENT.set("agent-old");
         jdbc.execute("""
-                TRUNCATE relationship_health_audit_outbox,
+                TRUNCATE relationship_task_explanations, relationship_health_audit_outbox,
                     processed_client_health_findings, relationship_task_history,
                     relationship_task_evidence, task_assignment_snapshots, relationship_tasks,
                     agent_daily_task_admissions RESTART IDENTITY CASCADE
@@ -105,6 +105,9 @@ class RelationshipTaskRuntimeIntegrationTest {
                   AND table_name IN ('relationship_tasks', 'relationship_health_audit_outbox')
                 """, Integer.class)).isEqualTo(2);
         String taskId = tasks.upsertFinding(finding()).taskId();
+        assertThat(tasks.upsertFinding(finding()).taskId()).isEqualTo(taskId);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM relationship_task_explanations", Integer.class)).isEqualTo(1);
 
         mockMvc.perform(get("/api/relationship-health/tasks").with(agent("agent-old")))
                 .andExpect(status().isOk())
@@ -115,7 +118,10 @@ class RelationshipTaskRuntimeIntegrationTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/relationship-health/tasks/{taskId}", taskId).with(agent("agent-new")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.assignedAgentSubject").value("agent-new"));
+                .andExpect(jsonPath("$.assignedAgentSubject").value("agent-new"))
+                .andExpect(jsonPath("$.explanation.source").value("TEMPLATE_FALLBACK"))
+                .andExpect(jsonPath("$.explanation.text").value(
+                        org.hamcrest.Matchers.containsString("Human review required")));
         mockMvc.perform(post("/api/relationship-health/tasks/{taskId}/accept", taskId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"expectedVersion\":1}")
@@ -127,7 +133,7 @@ class RelationshipTaskRuntimeIntegrationTest {
                 "SELECT status FROM relationship_tasks WHERE task_id = ?", String.class, taskId))
                 .isEqualTo("IN_REVIEW");
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM relationship_health_audit_outbox", Integer.class)).isEqualTo(2);
+                "SELECT count(*) FROM relationship_health_audit_outbox", Integer.class)).isEqualTo(3);
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor agent(String subject) {

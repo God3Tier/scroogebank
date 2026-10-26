@@ -1,11 +1,15 @@
 package bank.clienthealth.task.api;
 
+import bank.clienthealth.explanation.ExplanationRepository;
+import bank.clienthealth.task.domain.RelationshipTask;
 import bank.clienthealth.task.application.RelationshipTaskService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -22,9 +26,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class RelationshipTaskActionController {
     private static final String IDENTIFIER = "[A-Za-z0-9][A-Za-z0-9._:-]{0,127}";
     private final RelationshipTaskService tasks;
+    private final ExplanationRepository explanations;
 
     public RelationshipTaskActionController(RelationshipTaskService tasks) {
         this.tasks = tasks;
+        this.explanations = null;
+    }
+
+    @Autowired
+    public RelationshipTaskActionController(RelationshipTaskService tasks,
+            ObjectProvider<ExplanationRepository> explanations) {
+        this.tasks = tasks;
+        this.explanations = explanations.getIfAvailable();
     }
 
     @PostMapping("/{taskId}/accept")
@@ -36,7 +49,7 @@ public class RelationshipTaskActionController {
             @Valid @RequestBody RelationshipTaskActionRequest.Accept request,
             Authentication authentication
     ) {
-        return RelationshipTaskView.task(tasks.accept(
+        return view(tasks.accept(
                 taskId, request.expectedVersion(), authentication.getName(), correlation(correlationId)));
     }
 
@@ -49,7 +62,7 @@ public class RelationshipTaskActionController {
             @Valid @RequestBody RelationshipTaskActionRequest.Complete request,
             Authentication authentication
     ) {
-        return RelationshipTaskView.task(tasks.complete(
+        return view(tasks.complete(
                 taskId, request.expectedVersion(), authentication.getName(), correlation(correlationId),
                 request.outcomeCode(), request.note()));
     }
@@ -63,9 +76,19 @@ public class RelationshipTaskActionController {
             @Valid @RequestBody RelationshipTaskActionRequest.Dismiss request,
             Authentication authentication
     ) {
-        return RelationshipTaskView.task(tasks.dismiss(
+        return view(tasks.dismiss(
                 taskId, request.expectedVersion(), authentication.getName(), correlation(correlationId),
                 request.reasonCode(), request.note()));
+    }
+
+    private RelationshipTaskView.Task view(RelationshipTask task) {
+        if (explanations == null) return RelationshipTaskView.task(task);
+        long evidenceVersion = task.history().stream()
+                .filter(item -> item.action() == RelationshipTask.Action.CREATED
+                        || item.action() == RelationshipTask.Action.EVIDENCE_ADDED)
+                .mapToLong(RelationshipTask.HistoryEntry::taskVersion).max().orElseThrow();
+        return RelationshipTaskView.task(task,
+                explanations.findForTaskVersion(task.taskId(), evidenceVersion).orElse(null));
     }
 
     private static String correlation(String supplied) {
