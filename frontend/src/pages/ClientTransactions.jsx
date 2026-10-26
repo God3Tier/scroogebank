@@ -38,8 +38,8 @@ function loadProblem(error) {
 }
 
 // A client's transactions, grouped by account: account-service lists the
-// client's accounts, and user-service reads each account's transactions after
-// checking the caller may (ADR-0006, ADR-0035).
+// client's accounts, and transaction-service reads each account's transactions
+// after checking the caller may (ADR-0035, ADR-0064).
 async function loadClientTransactions(clientId) {
     const [client, accounts] = await Promise.all([getClient(clientId), listAccounts(clientId)])
     const transactions = await Promise.all(accounts.map((account) => listAccountTransactions(account.id)))

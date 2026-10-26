@@ -7,7 +7,7 @@ openapi: 3.0.3
 # middleware answer JSON.
 #
 # The dashboard's /aggregates routes are in dashboard-aggregates.yaml, and an
-# account's transactions (served by user-service) in transactions-api.yaml.
+# account's transactions (served by transaction-service) in transactions-api.yaml.
 
 info:
   title: Scrooge CRM - Accounts

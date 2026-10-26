@@ -53,7 +53,7 @@ class DashboardServiceTest {
         DashboardProperties properties = new DashboardProperties(
                 new DashboardProperties.Window(30, 365),
                 new DashboardProperties.Cache(60, 1000),
-                new DashboardProperties.Upstream(2000, 3000, "", "", ""));
+                new DashboardProperties.Upstream(2000, 3000, "", "", "", ""));
         service = new DashboardService(clients, accounts, mock(TransactionStatsPort.class), roster,
                 new PanelAssembler(properties), new DashboardCache(properties), currentUser,
                 Clock.fixed(Instant.parse("2026-09-30T04:00:00Z"), ZoneOffset.UTC));

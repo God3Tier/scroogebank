@@ -39,11 +39,13 @@ public record DashboardProperties(Window window, Cache cache, Upstream upstream)
      * @param perCallTimeoutMs      budget for a single upstream call
      * @param overallBudgetMs       budget for the whole fan-out, so a request
      *                              cannot take the sum of its slowest upstreams
-     * @param userServiceBaseUrl    the agent roster and transaction figures
-     * @param clientServiceBaseUrl  client figures and the work queue
-     * @param accountServiceBaseUrl account figures
+     * @param userServiceBaseUrl        the agent roster
+     * @param clientServiceBaseUrl      client figures and the work queue
+     * @param accountServiceBaseUrl     account figures
+     * @param transactionServiceBaseUrl transaction figures (ADR-0064)
      */
     public record Upstream(long perCallTimeoutMs, long overallBudgetMs, String userServiceBaseUrl,
-                           String clientServiceBaseUrl, String accountServiceBaseUrl) {
+                           String clientServiceBaseUrl, String accountServiceBaseUrl,
+                           String transactionServiceBaseUrl) {
     }
 }

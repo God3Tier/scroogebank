@@ -44,9 +44,10 @@ override_data {
         }
         alb_sg = "sg-0a1b"
         upstreams = {
-          user    = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
-          client  = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
-          account = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
+          user        = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
+          client      = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
+          account     = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
+          transaction = { security_group = "sg-0transaction", port = 8080, url = "https://transaction-service:8080" }
         }
         ca_pem                   = "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----"
         cognito_issuer           = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_example"
@@ -87,12 +88,13 @@ run "prod" {
   }
   assert {
     condition = (
-      length(aws_vpc_security_group_ingress_rule.upstream) == 3 &&
+      length(aws_vpc_security_group_ingress_rule.upstream) == 4 &&
       aws_vpc_security_group_ingress_rule.upstream["user"].security_group_id == "sg-0user" && aws_vpc_security_group_ingress_rule.upstream["user"].from_port == 8081 &&
       aws_vpc_security_group_ingress_rule.upstream["client"].security_group_id == "sg-0client" && aws_vpc_security_group_ingress_rule.upstream["client"].from_port == 8080 &&
-      aws_vpc_security_group_ingress_rule.upstream["account"].security_group_id == "sg-0account" && aws_vpc_security_group_ingress_rule.upstream["account"].from_port == 8083
+      aws_vpc_security_group_ingress_rule.upstream["account"].security_group_id == "sg-0account" && aws_vpc_security_group_ingress_rule.upstream["account"].from_port == 8083 &&
+      aws_vpc_security_group_ingress_rule.upstream["transaction"].security_group_id == "sg-0transaction" && aws_vpc_security_group_ingress_rule.upstream["transaction"].from_port == 8080
     )
-    error_message = "The dashboard may call user-, client- and account-service, each on its own port, and nothing else."
+    error_message = "The dashboard may call user-, client-, account- and transaction-service, each on its own port, and nothing else."
   }
   assert {
     condition     = module.dashboard_service.service_name == "dashboard-service"
@@ -129,9 +131,11 @@ run "stopped_teardown_ready_with_ci" {
           }
           alb_sg = "sg-0a1b"
           upstreams = {
-            user    = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
-            client  = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
-            account = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
+            user        = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
+            client      = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
+            account     = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
+            transaction = { security_group = "sg-0transaction", port = 8080, url = "https://transaction-service:8080" }
+            transaction = { security_group = "sg-0transaction", port = 8080, url = "https://transaction-service:8080" }
           }
           ca_pem                   = "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----"
           cognito_issuer           = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_example"
@@ -186,9 +190,11 @@ run "audit_queue_does_not_allow_the_role" {
           }
           alb_sg = "sg-0a1b"
           upstreams = {
-            user    = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
-            client  = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
-            account = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
+            user        = { security_group = "sg-0user", port = 8081, url = "https://user-service:8081" }
+            client      = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
+            account     = { security_group = "sg-0account", port = 8083, url = "https://account-service:8083" }
+            transaction = { security_group = "sg-0transaction", port = 8080, url = "https://transaction-service:8080" }
+            transaction = { security_group = "sg-0transaction", port = 8080, url = "https://transaction-service:8080" }
           }
           ca_pem                   = "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----"
           cognito_issuer           = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_example"

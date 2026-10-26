@@ -6,13 +6,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // The first matching rule wins, in the same order as the deployed ALB's
-    // rules. Locally, user-service listens on 8081 (users, activities and
-    // transactions), account-service on 8083, dashboard-service on 8085,
-    // engagement-service on 8086 and client-profile-management-service on
-    // 8080.
+    // rules. Locally, transaction-service (the SFTP stack's receiver-api)
+    // listens on 8082, user-service on 8081 (users and activities),
+    // account-service on 8083, dashboard-service on 8085, engagement-service
+    // on 8086 and client-profile-management-service on 8080.
     proxy: {
       '^/api/accounts/[^/]+/transactions': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:8082',
         changeOrigin: true,
       },
       '/api/users': {
@@ -24,7 +24,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/api/transactions': {
-        target: 'http://localhost:8081',
+        target: 'http://localhost:8082',
         changeOrigin: true,
       },
       '/api/accounts': {

@@ -15,7 +15,7 @@ API contract: [`docs/api/accounts-api.yaml`](../../docs/api/accounts-api.yaml), 
 | PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Answers `{"account_id", "status"}` with the new status in lower case, as `GET` returns it. Audited with the status before and after (ADR-0050) |
 | POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs and currencies. Used by the transaction import, which rejects a transaction not in its account's currency |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
-| GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |
+| GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. transaction-service scopes an agent's transaction figures by them |
 | PUT | `/ownership/accounts` | ADMIN | Give every account of the clients, deleted ones included, to a new owner: body `{"client_ids": [...], "owner_agent_id": "<sub>"}` (1 to 1,000 UUIDs), answer `{"accounts": n}`. Only client-profile-management-service calls it, with the admin's token, while it reassigns those clients. Outside `/api`, so API Gateway never routes it; not audited here, as client-service audits each client moved (ADR-0060) |
 
 `GET /health` is public; all `/api` routes require a Cognito user **access token**.
@@ -24,13 +24,13 @@ API contract: [`docs/api/accounts-api.yaml`](../../docs/api/accounts-api.yaml), 
 
 Request `{"ids": ["<uuid>", ...]}`; response `{"accounts": [{"id": "<uuid>", "client_id": "<uuid>"}]}`. IDs that are not UUIDs are ignored.
 
-`/aggregates` routes take the caller's user access token, forwarded by the dashboard or user-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed per currency, never across currencies, and each day's value is left out when the window's accounts span more than one ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0062](../../docs/adr/ADR-0062-dashboard-account-figures-per-currency.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
+`/aggregates` routes take the caller's user access token, forwarded by the dashboard or transaction-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed per currency, never across currencies, and each day's value is left out when the window's accounts span more than one ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0062](../../docs/adr/ADR-0062-dashboard-account-figures-per-currency.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
 
 ## Deleting an account
 
 `DELETE /api/accounts/{accountId}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at`, keeps the row, and leaves `status` as it was.
 
-**Deleted is not the same as closed.** `status = 'closed'` is a business state of an account that still exists: it is still listed and readable. A deleted account is treated as missing by every endpoint, for admins and agents alike: reads and a second delete return 404, and lists leave it out. Its transactions also return 404 through user-service, whose ownership check reads the account. Nothing restores a deleted account. A deleted account's type can be opened again for the same client.
+**Deleted is not the same as closed.** `status = 'closed'` is a business state of an account that still exists: it is still listed and readable. A deleted account is treated as missing by every endpoint, for admins and agents alike: reads and a second delete return 404, and lists leave it out. Its transactions also return 404 from transaction-service, whose ownership check reads the account. Nothing restores a deleted account. A deleted account's type can be opened again for the same client.
 
 Because the row is kept, imported transactions that refer to it are never orphaned.
 

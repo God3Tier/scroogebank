@@ -65,11 +65,12 @@ dashboard:
     overall-budget-ms: 8000
     # Blank by default on purpose, unlike the settings above: an unset
     # upstream is a supported state that degrades its panels, not a startup
-    # failure. user-service serves the agent roster and the transaction
-    # figures (ADR-0039).
+    # failure. user-service serves the agent roster, and transaction-service
+    # the transaction figures (ADR-0064).
     user-service-base-url: ${USER_SERVICE_BASE_URL:}
     client-service-base-url: ${CLIENT_SERVICE_BASE_URL:}
     account-service-base-url: ${ACCOUNT_SERVICE_BASE_URL:}
+    transaction-service-base-url: ${TRANSACTION_SERVICE_BASE_URL:}
 
 logging:
   level:

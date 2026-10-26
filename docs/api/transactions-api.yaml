@@ -3,13 +3,10 @@ openapi: 3.0.3
 # Transaction reads (ADR-0006, ADR-0037, ADR-0043). Written from the code when
 # contract tests were added (ADR-0063).
 #
-# Two services serve these paths. user-service serves them through API
-# Gateway: it checks the caller, and for one account asks account-service
-# whether the caller may see it, then passes the SFTP receiver's answer on
-# unchanged. The receiver serves the same paths privately, with no
-# authentication of its own (ADR-0006 decision 5), to user-service only.
-# Responses below are the union of both; the 401 and 403 come only from
-# user-service.
+# transaction-service (the SFTP receiver's read API) serves these paths
+# through API Gateway (ADR-0064). It checks the caller's token, and for one
+# account asks account-service, with that token, whether the caller may see
+# it.
 #
 # The dashboard's transaction figures are in dashboard-aggregates.yaml.
 
@@ -56,6 +53,11 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/Error' }
         '500': { $ref: '#/components/responses/Error' }
+        '502':
+          description: account-service could not say whether the caller may see the account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/transactions:
     get:
@@ -101,13 +103,13 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: A Cognito access token from the CRM app client, checked by user-service. The receiver takes none.
+      description: A Cognito access token from the CRM app client, with the ADMIN or AGENT group.
 
   responses:
     Unauthorized:
-      description: No valid access token (user-service only).
+      description: No valid access token.
     Forbidden:
-      description: The caller's role may not use this route (user-service only).
+      description: The caller's role may not use this route.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -120,15 +122,10 @@ components:
   schemas:
     Error:
       type: object
-      description: |
-        `{"error": ...}` from the receiver and account-service; user-service's
-        own errors add `timestamp`, `status` and `message`.
+      description: '`{"error": ...}`.'
       required: [error]
       properties:
         error: { type: string }
-        timestamp: { type: string, format: date-time }
-        status: { type: integer }
-        message: { type: string }
 
     Transaction:
       type: object

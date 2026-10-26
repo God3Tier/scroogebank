@@ -31,7 +31,7 @@ class PanelAssemblerTest {
             new DashboardProperties(
                     new DashboardProperties.Window(30, 365),
                     new DashboardProperties.Cache(60, 1000),
-                    new DashboardProperties.Upstream(200, 500, "", "", "")));
+                    new DashboardProperties.Upstream(200, 500, "", "", "", "")));
 
     private final List<ListAppender<ILoggingEvent>> appenders = new ArrayList<>();
 

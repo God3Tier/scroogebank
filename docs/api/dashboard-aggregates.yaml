@@ -34,7 +34,7 @@ tags:
   - name: accounts
     description: account-service (Go)
   - name: transactions
-    description: user-service (Java) in front of the SFTP receiver (Go)
+    description: transaction-service, the SFTP receiver's read API (Go)
 
 paths:
   /aggregates/clients/stats:
@@ -134,7 +134,7 @@ paths:
       tags: [accounts]
       summary: The IDs of the accounts the caller owns
       description: |
-        Used by user-service to scope an agent's transaction figures. Returns
+        Used by transaction-service to scope an agent's transaction figures. Returns
         the accounts whose owner is the caller, whatever their role; deleted
         accounts are left out.
       operationId: getOwnedAccountIds
@@ -158,12 +158,12 @@ paths:
   /aggregates/transactions/stats:
     get:
       tags: [transactions]
-      summary: Transaction figures (user-service)
+      summary: Transaction figures (transaction-service)
       description: |
         For an admin, every transaction in the window. For an agent,
-        user-service asks account-service for the caller's account IDs and
-        passes only those to the receiver. The caller's token never reaches
-        the receiver.
+        transaction-service asks account-service for the caller's account IDs,
+        with the caller's own token, and totals only those (ADR-0064). No
+        parameter widens the scope.
       operationId: getTransactionStats
       security: [{ bearerAuth: [] }]
       parameters:
@@ -180,39 +180,10 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/ServerError' }
         '502':
-          description: account-service answered without an account list.
-    post:
-      tags: [transactions]
-      summary: Transaction figures (SFTP receiver, private)
-      description: |
-        Served by the receiver, which has no authentication of its own and
-        must stay private (ADR-0006 decision 5). Only user-service calls it,
-        after deciding the scope. The body must name exactly one of `all` or
-        `accountIds`, so "every transaction" is never a default.
-      operationId: computeTransactionStats
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [from, to]
-              properties:
-                from: { type: string, format: date }
-                to: { type: string, format: date }
-                all: { type: boolean, description: 'Every transaction, including unmatched ones.' }
-                accountIds:
-                  type: array
-                  maxItems: 20000
-                  items: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
+          description: account-service could not say which accounts the caller owns.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TransactionStats' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '500': { $ref: '#/components/responses/ServerError' }
+              schema: { $ref: '#/components/schemas/Error' }
 
 components:
   securitySchemes:

@@ -28,7 +28,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 /**
  * The client, account and transaction adapters against the JSON the Go
- * services and user-service actually return.
+ * services actually return.
  */
 class HttpStatsAdaptersTest {
 
@@ -49,7 +49,8 @@ class HttpStatsAdaptersTest {
         DashboardProperties properties = new DashboardProperties(
                 new DashboardProperties.Window(30, 365),
                 new DashboardProperties.Cache(60, 1000),
-                new DashboardProperties.Upstream(2000, 3000, "http://user-service", "http://client-service", "http://account-service"));
+                new DashboardProperties.Upstream(2000, 3000, "http://user-service", "http://client-service", "http://account-service",
+                        "http://transaction-service"));
         clients = new HttpClientStatsAdapter(upstream, properties);
         accounts = new HttpAccountStatsAdapter(upstream, properties);
         transactions = new HttpTransactionStatsAdapter(upstream, properties);
@@ -148,8 +149,8 @@ class HttpStatsAdaptersTest {
     }
 
     @Test
-    void readsTransactionFiguresFromUserService() {
-        server.expect(requestTo("http://user-service/aggregates/transactions/stats?from=2026-09-01&to=2026-09-30"))
+    void readsTransactionFiguresFromTransactionService() {
+        server.expect(requestTo("http://transaction-service/aggregates/transactions/stats?from=2026-09-01&to=2026-09-30"))
                 .andExpect(header("Authorization", "Bearer the-callers-token"))
                 .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":5,"byStatus":{"Completed":3},"byType":{"Deposit":4},"currencies":["SGD"],
@@ -165,7 +166,7 @@ class HttpStatsAdaptersTest {
 
     @Test
     void leavesTheValueEmptyWhenTransactionsSpanCurrencies() {
-        server.expect(requestTo("http://user-service/aggregates/transactions/stats?from=2026-09-01&to=2026-09-30"))
+        server.expect(requestTo("http://transaction-service/aggregates/transactions/stats?from=2026-09-01&to=2026-09-30"))
                 .andRespond(upstream("dashboard-aggregates.yaml", withSuccess("""
                         {"total":2,"byStatus":{},"byType":{},"currencies":["SGD","USD"],"daily":[],"pendingBacklog":0}
                         """, MediaType.APPLICATION_JSON)));
