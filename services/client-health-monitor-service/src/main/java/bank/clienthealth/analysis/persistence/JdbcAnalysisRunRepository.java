@@ -1,6 +1,9 @@
 package bank.clienthealth.analysis.persistence;
 
 import bank.clienthealth.analysis.port.AnalysisRunPort;
+import bank.clienthealth.audit.AuditOutboxRepository;
+import bank.clienthealth.audit.RelationshipHealthAuditEvent.Action;
+import bank.clienthealth.audit.RelationshipHealthAuditEventFactory;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -18,15 +21,18 @@ public final class JdbcAnalysisRunRepository implements AnalysisRunPort {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
     private final Supplier<String> leaseTokens;
+    private final AuditOutboxRepository auditOutbox;
 
     public JdbcAnalysisRunRepository(
             JdbcTemplate jdbc,
             TransactionTemplate transactions,
-            Supplier<String> leaseTokens
+            Supplier<String> leaseTokens,
+            AuditOutboxRepository auditOutbox
     ) {
         this.jdbc = Objects.requireNonNull(jdbc);
         this.transactions = Objects.requireNonNull(transactions);
         this.leaseTokens = Objects.requireNonNull(leaseTokens);
+        this.auditOutbox = Objects.requireNonNull(auditOutbox);
     }
 
     @Override
@@ -53,6 +59,8 @@ public final class JdbcAnalysisRunRepository implements AnalysisRunPort {
                 throw new LeaseConflictException("run ID reused with another analysis cutoff");
             }
             if (inserted == 1) {
+                auditOutbox.enqueue(RelationshipHealthAuditEventFactory.analysis(
+                        runId, Action.ANALYSIS_RUN_STARTED, now, null));
                 return new Acquisition(
                         AcquisitionStatus.ACQUIRED, new Lease(runId, token, expiresAt));
             }
@@ -72,6 +80,8 @@ public final class JdbcAnalysisRunRepository implements AnalysisRunPort {
             if (changed != 1) {
                 throw new LeaseConflictException("analysis run could not be recovered");
             }
+            auditOutbox.enqueue(RelationshipHealthAuditEventFactory.analysis(
+                    runId, Action.ANALYSIS_RUN_STARTED, now, null));
             return new Acquisition(
                     AcquisitionStatus.ACQUIRED, new Lease(runId, token, expiresAt));
         });
@@ -96,30 +106,38 @@ public final class JdbcAnalysisRunRepository implements AnalysisRunPort {
 
     @Override
     public void succeed(Lease lease, Instant watermark, Instant now) {
-        int changed = jdbc.update("""
-                UPDATE relationship_health_analysis_runs
-                SET status = 'SUCCEEDED', lease_token = NULL, lease_expires_at = NULL,
-                    watermark = ?, failure_category = NULL, updated_at = ?
-                WHERE run_id = ? AND status = 'RUNNING' AND lease_token = ?
-                  AND lease_expires_at > ?
-                """, Timestamp.from(watermark), Timestamp.from(now),
-                lease.runId(), lease.token(), Timestamp.from(now));
-        if (changed != 1) {
-            throw new LeaseConflictException("analysis lease cannot complete the run");
-        }
+        transactions.executeWithoutResult(status -> {
+            int changed = jdbc.update("""
+                    UPDATE relationship_health_analysis_runs
+                    SET status = 'SUCCEEDED', lease_token = NULL, lease_expires_at = NULL,
+                        watermark = ?, failure_category = NULL, updated_at = ?
+                    WHERE run_id = ? AND status = 'RUNNING' AND lease_token = ?
+                      AND lease_expires_at > ?
+                    """, Timestamp.from(watermark), Timestamp.from(now),
+                    lease.runId(), lease.token(), Timestamp.from(now));
+            if (changed != 1) {
+                throw new LeaseConflictException("analysis lease cannot complete the run");
+            }
+            auditOutbox.enqueue(RelationshipHealthAuditEventFactory.analysis(
+                    lease.runId(), Action.ANALYSIS_RUN_COMPLETED, now, null));
+        });
     }
 
     @Override
     public void fail(Lease lease, FailureCategory category, Instant now) {
-        int changed = jdbc.update("""
-                UPDATE relationship_health_analysis_runs
-                SET status = 'FAILED', lease_token = NULL, lease_expires_at = NULL,
-                    watermark = NULL, failure_category = ?, updated_at = ?
-                WHERE run_id = ? AND status = 'RUNNING' AND lease_token = ?
-                """, category.name(), Timestamp.from(now), lease.runId(), lease.token());
-        if (changed != 1) {
-            throw new LeaseConflictException("analysis lease cannot fail the run");
-        }
+        transactions.executeWithoutResult(status -> {
+            int changed = jdbc.update("""
+                    UPDATE relationship_health_analysis_runs
+                    SET status = 'FAILED', lease_token = NULL, lease_expires_at = NULL,
+                        watermark = NULL, failure_category = ?, updated_at = ?
+                    WHERE run_id = ? AND status = 'RUNNING' AND lease_token = ?
+                    """, category.name(), Timestamp.from(now), lease.runId(), lease.token());
+            if (changed != 1) {
+                throw new LeaseConflictException("analysis lease cannot fail the run");
+            }
+            auditOutbox.enqueue(RelationshipHealthAuditEventFactory.analysis(
+                    lease.runId(), Action.ANALYSIS_RUN_FAILED, now, category.name()));
+        });
     }
 
     private RunRow lock(String runId) {

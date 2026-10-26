@@ -886,3 +886,20 @@
 - Verification: Java 25 unit, PostgreSQL migration/repository, rollback and
   full Spring runtime tests; Docker-dependent coverage runs when Docker is
   available.
+
+## 2026-10-26 — Client Health SF08 audit delivery
+
+- Human owner: Garvit; Auditor-owner and infrastructure reviews remain required.
+- Tool: Cursor.
+- Use: implement JDBC outbox leasing/fencing/recovery, bounded retry release,
+  snake_case SQS serialization, property-gated AWS/LocalStack configuration,
+  scheduled relay wiring, and atomic signal/analysis-run audit events.
+- Human verification required: Java 25 CI with Docker must execute the outbox
+  and activity/run PostgreSQL suites; Hayyun must review Auditor validation;
+  Neo must review task-role IAM and Terraform environment wiring.
+- Data: repository-owned synthetic opaque IDs and task/run states only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: 117 tests compiled with the local Java 24 override; 97
+  non-Docker tests passed and 20 Docker-dependent tests were skipped because
+  local Docker was unavailable. Unit coverage includes redacted SQS envelopes,
+  provider error classification, signal/run events, retry and lease fencing.

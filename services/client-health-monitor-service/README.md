@@ -66,8 +66,11 @@ leased relay that continues after individual delivery failures. V3 creates the
 health-db outbox, and task creation/evidence/transition/suppression paths enqueue
 through the same repository transaction boundary. The production JDBC
 task repository now persists those events atomically with task and finding
-writes. The leased outbox JDBC adapter, SQS gateway and Auditor allowlist remain
-pending.
+writes. The leased JDBC relay recovers expired leases, fences stale workers,
+deletes only accepted rows, and releases failures with bounded backoff. A
+property-gated SQS gateway serializes the Auditor's snake_case envelope; task,
+signal and analysis-run events are wired. IAM/Terraform, Auditor allowlisting
+and SF07 explanation events remain pending.
 
 RH-SF07 generates wording only after a deterministic task create or evidence
 attachment succeeds. It sends identifier-free derived facts to Bedrock when
@@ -123,6 +126,13 @@ properties through environment variables or an external Spring configuration:
 | `client-health.ai.model-id` | `CLIENT_HEALTH_AI_MODEL_ID` | approved model or inference-profile ID; required when enabled |
 | `client-health.ai.timeout` | `CLIENT_HEALTH_AI_TIMEOUT` | per-call timeout; defaults to `5s` |
 | `client-health.ai.max-attempts` | `CLIENT_HEALTH_AI_MAX_ATTEMPTS` | bounded total attempts, from 1 to 2 |
+| `client-health.audit.publisher-enabled` | `CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED` | enable the SQS relay; defaults false |
+| `client-health.audit.queue-url` | `CLIENT_HEALTH_AUDIT_QUEUE_URL` | existing `audit-insert` queue URL |
+| `client-health.audit.region` | `CLIENT_HEALTH_AUDIT_REGION` | AWS Region for SQS |
+| `client-health.audit.endpoint` | `CLIENT_HEALTH_AUDIT_ENDPOINT` | optional LocalStack endpoint |
+| `client-health.audit.batch-size` | `CLIENT_HEALTH_AUDIT_BATCH_SIZE` | bounded relay batch, default 50 |
+| `client-health.audit.lease-seconds` | `CLIENT_HEALTH_AUDIT_LEASE_SECONDS` | delivery lease, default 60 seconds |
+| `client-health.audit.relay-delay-ms` | `CLIENT_HEALTH_AUDIT_RELAY_DELAY_MS` | scheduled relay delay, default 2000 ms |
 
 With configuration supplied, run from the repository root:
 
@@ -165,6 +175,6 @@ adapter and Java 25 CI. The client-profile Contract-B provider and its scoped
 Cognito registration remain external prerequisites for live current-assignment
 authorization.
 
-RH-SF08 production follow-up implements the JDBC task/outbox repository against
-V1-V3, then an IAM-scoped SQS gateway and the Auditor's reviewed
-`RELATIONSHIP_HEALTH_SERVICE` allowlist.
+RH-SF08 production follow-up now needs the IAM/Terraform queue permission and
+environment wiring, the Auditor's reviewed `RELATIONSHIP_HEALTH_SERVICE`
+allowlist, and SF07 explanation-generated/fallback event integration.

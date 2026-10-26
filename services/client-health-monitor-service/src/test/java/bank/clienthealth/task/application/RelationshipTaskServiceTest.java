@@ -68,8 +68,11 @@ class RelationshipTaskServiceTest {
         assertEquals(RelationshipTask.Action.CREATED, task.history().getFirst().action());
         assertEquals(1, assignmentCalls.get());
         assertEquals(1, repository.taskCount());
-        assertEquals(1, repository.auditEventCount());
-        assertEquals(Action.TASK_CREATED, repository.auditEvents().iterator().next().action());
+        assertEquals(2, repository.auditEventCount());
+        assertEquals(
+                java.util.Set.of(Action.SIGNAL_DETECTED, Action.TASK_CREATED),
+                repository.auditEvents().stream().map(event -> event.action())
+                        .collect(java.util.stream.Collectors.toSet()));
     }
 
     @Test
@@ -149,7 +152,7 @@ class RelationshipTaskServiceTest {
         assertEquals(Status.COMPLETED, completed.status());
         assertEquals(3, completed.version());
         assertEquals(3, completed.history().size());
-        assertEquals(3, repository.auditEventCount());
+        assertEquals(4, repository.auditEventCount());
     }
 
     @Test
@@ -230,7 +233,7 @@ class RelationshipTaskServiceTest {
         assertEquals(Outcome.EVIDENCE_ATTACHED, attachment.outcome());
         assertEquals(20, repository.taskCount());
         assertEquals(22, repository.processedFindingCount());
-        assertEquals(22, repository.auditEventCount());
+        assertEquals(44, repository.auditEventCount());
     }
 
     @Test
@@ -295,7 +298,7 @@ class RelationshipTaskServiceTest {
         assertEquals(1, stored.evidence().size());
         assertEquals(1, repository.processedFindingCount());
         assertEquals(1, repository.creationCount(AGENT, LocalDate.of(2026, 9, 29)));
-        assertEquals(1, repository.auditEventCount());
+        assertEquals(2, repository.auditEventCount());
     }
 
     private RelationshipTaskService service(ClientAssignmentPort assignments, bank.clienthealth.task.port.DispositionPolicy policy) {

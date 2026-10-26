@@ -620,10 +620,11 @@ Queue target accepted in ADR-0020:
 audit-insert
 ```
 
-The provider-independent Client Health envelope/factory and leased outbox relay
-are implemented in RH-SF08. The feature's service type/action/payload still
-require Auditor-owner approval before shared Auditor files or SQS adapters
-change.
+The Client Health envelope/factory, V3 outbox, leased JDBC relay and
+property-gated SQS producer are implemented in RH-SF08. Task, suppression,
+signal-detected and analysis-run events are wired. The feature's
+service/action/payload still require Auditor-owner approval before shared
+Auditor validation changes.
 
 ### Envelope
 
@@ -649,7 +650,7 @@ change.
 }
 ```
 
-Proposed actions:
+Defined actions:
 
 ```text
 ANALYSIS_RUN_STARTED
