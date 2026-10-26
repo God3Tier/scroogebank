@@ -132,8 +132,10 @@ class RelationshipTaskRuntimeIntegrationTest {
         assertThat(jdbc.queryForObject(
                 "SELECT status FROM relationship_tasks WHERE task_id = ?", String.class, taskId))
                 .isEqualTo("IN_REVIEW");
-        assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM relationship_health_audit_outbox", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForList(
+                "SELECT action FROM relationship_health_audit_outbox", String.class))
+                .containsExactlyInAnyOrder("SIGNAL_DETECTED", "TASK_CREATED",
+                        "EXPLANATION_FALLBACK_USED", "TASK_ACCEPTED");
     }
 
     private static org.springframework.test.web.servlet.request.RequestPostProcessor agent(String subject) {
