@@ -46,7 +46,8 @@ class JdbcExplanationRepositoryIntegrationTest {
                     agent_daily_task_admissions RESTART IDENTITY CASCADE
                 """);
         repository = new JdbcExplanationRepository(jdbc,
-                new TransactionTemplate(new DataSourceTransactionManager(dataSource)), new ObjectMapper());
+                new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
+                new ObjectMapper().findAndRegisterModules());
         jdbc.update("""
                 INSERT INTO relationship_tasks
                     (task_id, client_id, status, severity, version, created_at, updated_at)
