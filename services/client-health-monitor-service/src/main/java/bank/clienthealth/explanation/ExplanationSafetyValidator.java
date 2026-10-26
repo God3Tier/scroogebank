@@ -3,7 +3,6 @@ package bank.clienthealth.explanation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -51,38 +50,11 @@ public final class ExplanationSafetyValidator {
         if (IDENTIFIER.matcher(text).find() || MONEY.matcher(text).find() || PROHIBITED.matcher(text).find()) {
             throw new UnsafeExplanationException("UNSUPPORTED_CLAIM");
         }
-        Set<String> allowedNumbers = allowedNumbers(request);
-        var numbers = NUMBER.matcher(text);
-        while (numbers.find()) {
-            if (!allowedNumbers.contains(normalize(numbers.group()))) {
-                throw new UnsafeExplanationException("INVENTED_NUMBER");
-            }
+        if (NUMBER.matcher(text).find()) {
+            throw new UnsafeExplanationException("NUMERIC_TEXT_NOT_ALLOWED");
         }
         return new ExplanationResult("1", output.summary(), output.suggestedReviewStep(),
                 output.evidenceCodes(), output.disclaimer(), ExplanationResult.Source.BEDROCK, modelId);
-    }
-
-    private static Set<String> allowedNumbers(ExplanationRequest request) {
-        Set<String> allowed = new HashSet<>();
-        request.facts().forEach(fact -> {
-            add(allowed, fact.observationWindowDays()); add(allowed, fact.expectedCadenceDays());
-            add(allowed, fact.daysSinceLastOccurrence()); add(allowed, fact.previousOccurrenceCount());
-            add(allowed, fact.baselineMonthlyAverageCount()); add(allowed, fact.comparisonCount());
-            add(allowed, fact.changePercent()); add(allowed, fact.periodCount());
-            add(allowed, fact.changeFromBaselinePercent());
-        });
-        return allowed;
-    }
-
-    private static void add(Set<String> target, Number value) {
-        if (value != null) {
-            String normalized = normalize(value.toString());
-            target.add(normalized); target.add(normalized.replaceFirst("^-", ""));
-        }
-    }
-
-    private static String normalize(String value) {
-        return new BigDecimal(value).stripTrailingZeros().toPlainString().toLowerCase(Locale.ROOT);
     }
 
     private static void requireText(String value, String field) {

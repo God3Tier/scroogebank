@@ -69,8 +69,8 @@ task repository now persists those events atomically with task and finding
 writes. The leased JDBC relay recovers expired leases, fences stale workers,
 deletes only accepted rows, and releases failures with bounded backoff. A
 property-gated SQS gateway serializes the Auditor's snake_case envelope; task,
-signal and analysis-run events are wired. IAM/Terraform, Auditor allowlisting
-and SF07 explanation events remain pending.
+signal, analysis-run and explanation events are wired. IAM/Terraform and
+Auditor allowlisting remain pending.
 
 RH-SF07 generates wording only after a deterministic task create or evidence
 attachment succeeds. It sends identifier-free derived facts to Bedrock when
@@ -78,7 +78,10 @@ explicitly enabled and otherwise uses deterministic templates. Unsafe,
 malformed, timed-out or failed model responses also use templates; explanation
 failures cannot alter signal detection, severity, suppression or task admission.
 Versioned explanations and their redacted SF08 audit events are committed in
-one health-db transaction.
+one health-db transaction. Generated wording is qualitative and rejects all
+numeric text to prevent valid input values being recombined into unsupported
+claims. A duplicate-finding retry repairs an explanation missing after a prior
+generation/persistence interruption.
 
 ## Ownership boundary
 

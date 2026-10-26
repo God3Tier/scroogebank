@@ -26,7 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 class BedrockExplanationProviderTest {
     private static final String VALID = """
-            {"schemaVersion":"1","summary":"Verified activity changed over 30 days.",
+            {"schemaVersion":"1","summary":"Verified activity changed during the recent period.",
              "suggestedReviewStep":"Review verified activity before deciding whether contact is appropriate.",
              "evidenceCodes":["RECURRING_CREDIT_INTERRUPTION"],
              "disclaimer":"Human review required"}

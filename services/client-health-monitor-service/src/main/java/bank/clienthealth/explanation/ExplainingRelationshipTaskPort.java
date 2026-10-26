@@ -28,7 +28,11 @@ public final class ExplainingRelationshipTaskPort implements RelationshipTaskPor
     @Override
     public TaskUpsertResult upsertFinding(ClientHealthFinding finding) {
         TaskUpsertResult result = tasks.upsertFinding(finding);
-        if (result.outcome() != Outcome.CREATED && result.outcome() != Outcome.EVIDENCE_ATTACHED) return result;
+        if (result.outcome() != Outcome.CREATED
+                && result.outcome() != Outcome.EVIDENCE_ATTACHED
+                && result.outcome() != Outcome.DUPLICATE) {
+            return result;
+        }
         String prompt = ExplanationRequest.PROMPT_VERSION;
         if (explanations.find(result.taskId(), finding.findingId(), result.taskVersion(), prompt).isPresent()) {
             return result;

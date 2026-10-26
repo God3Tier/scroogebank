@@ -903,3 +903,22 @@
   non-Docker tests passed and 20 Docker-dependent tests were skipped because
   local Docker was unavailable. Unit coverage includes redacted SQS envelopes,
   provider error classification, signal/run events, retry and lease fencing.
+
+## 2026-10-26 — Client Health SF07 safety review fixes
+
+- Human owner: Garvit; original SF07 implementation by Swayam.
+- Tool: Cursor.
+- Use: repair missing explanations when deterministic task retries return
+  `DUPLICATE`; tighten model-output validation to reject all numeric wording and
+  prevent sign/context recombination of otherwise allowed input values; update
+  Bedrock instructions and regression coverage.
+- Human verification required: keep live Bedrock disabled until model, pricing,
+  IAM and environment rollout are approved; Java 25 CI with Docker must pass
+  before feature promotion.
+- Data: repository-owned synthetic evidence only. No credentials, real client
+  data, AWS calls, Bedrock calls or external services were used.
+- Verification: regression tests cover explanation-persistence failure followed
+  by duplicate retry, no repeated generation after repair, and rejection of
+  invented, sign-reversed and wrong-context numeric wording. The local Java 24
+  suite completed 129 tests with no failures: 106 passed and 23
+  Docker-dependent tests were skipped; Java 25 CI with Docker remains required.

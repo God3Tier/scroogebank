@@ -54,7 +54,7 @@ class ExplanationCoreTest {
     @Test
     void acceptsStrictSupportedOutput() throws Exception {
         String output = json.writeValueAsString(new Output("1",
-                "Verified activity changed across the supplied 120 day window.",
+                "Verified activity changed across the supplied observation window.",
                 "Review the verified account activity before deciding whether contact is appropriate.",
                 request.facts().stream().map(ExplanationRequest.Fact::evidenceCode).toList(),
                 ExplanationResult.DISCLAIMER));
@@ -72,6 +72,10 @@ class ExplanationCoreTest {
         assertRejected(validJson().replace("Verified activity", "Fraud and financial distress"));
         assertRejected(validJson().replace("Verified activity", "client:secret activity"));
         assertRejected(validJson().replace("Verified activity", "Verified activity changed by 999"));
+        assertRejected(validJson().replace(
+                "Verified activity", "Verified activity increased by 67 percent"));
+        assertRejected(validJson().replace(
+                "Verified activity", "Verified activity changed by -66.70 percent"));
         assertRejected(validJson().replace("Verified activity changed", "X".repeat(401)));
     }
 

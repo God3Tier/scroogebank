@@ -20,7 +20,8 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
              "disclaimer":{"const":"Human review required"}}}
             """;
     private static final String SYSTEM = "Explain only the supplied verified relationship-health facts. "
-            + "Do not add facts, numbers, identifiers, advice, products, fraud, hardship, distress or attrition claims.";
+            + "Use qualitative wording and do not include any numeric values. "
+            + "Do not add facts, identifiers, advice, products, fraud, hardship, distress or attrition claims.";
     private final BedrockRuntimeClient client;
     private final ClientHealthAiProperties properties;
     private final ExplanationSafetyValidator validator;
