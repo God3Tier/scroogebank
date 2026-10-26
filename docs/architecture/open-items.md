@@ -95,7 +95,7 @@ Choose the approved security-master or market-data provider, and how reclassific
 
 ## 16. Health-monitor activity contract
 
-Transaction-service must provide matched activity (client and account IDs, stable IDs, type, amount, time, status, source fingerprint) with six months of replay. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), the SFTP import stores `account_id` and `client_id` on every matched row; unmatched rows have neither. Still missing: a read API the analysis task can call with a service token, and the six months of replay.
+Transaction-service now has a proposed implementation for matched activity history: a scoped-token private read route, bounded time range/keyset paging, restricted matched-only fields, and deterministic six-month synthetic replay ([proposed ADR-0059](../adr/ADR-0059-client-health-matched-transaction-history.md)). The code and Terraform are present locally; generation, tests, end-to-end verification, contract-owner review, and ADR acceptance remain open before the item can be considered resolved. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), imports link matched rows to `account_id` and `client_id`; unmatched rows have neither.
 
 ## 17. Budget with the x-factors
 

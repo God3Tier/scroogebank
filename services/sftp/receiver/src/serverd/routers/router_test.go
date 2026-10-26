@@ -32,6 +32,10 @@ func (s *transactionRepositoryStub) ListTransactions(context.Context, models.Tra
 	return s.transactions, s.err
 }
 
+func (s *transactionRepositoryStub) ListClientHealthTransactions(context.Context, models.ClientHealthTransactionQuery) ([]models.ClientHealthTransaction, error) {
+	return nil, s.err
+}
+
 func TestGetTransactions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -65,6 +65,17 @@ output "cognito_user_pool_id" {
   value       = aws_cognito_user_pool.this.id
 }
 
+output "client_health_transaction_read" {
+  description = "Client Health Monitor client-credentials configuration; retrieve its secret from Secrets Manager, not Terraform output."
+  value = {
+    client_id     = aws_cognito_user_pool_client.client_health_read.id
+    secret_arn    = aws_secretsmanager_secret.client_health_read.arn
+    scope         = "crm-transactions/read"
+    service_group = local.sg["client_health"]
+    transaction_url = "https://${local.sc.transaction}:${local.ports.transaction}/internal/v1/transactions"
+  }
+}
+
 output "audit_queue_url" {
   description = "The shared audit queue."
   value       = aws_sqs_queue.audit.url

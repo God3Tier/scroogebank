@@ -1,6 +1,6 @@
 # AI usage log
 
-## 2026-10-22 — Matched transaction activity API
+## 2026-10-26 — Matched transaction activity API
 
 - Human owner: Joseph Yau (Feature 3); Garvit, Swayam, and security/platform
   review remain required before the proposed contract is accepted.
@@ -11,8 +11,10 @@
   update the feature plan, proposed ADR, API/schema docs, and run instructions.
 - Data: synthetic transaction fixtures only. No credentials, real client data,
   or production banking data were supplied.
-- Verification: pending full receiver/producer test run and SQLBoiler/Mockery
-  regeneration; contract-owner and end-to-end review are still required.
+- Verification: `gofmt`, `git diff --check`, and SQLBoiler/Mockery generation
+  passed. Terraform formatting could not run because the Terraform CLI is
+  unavailable. Receiver/producer tests, contract-owner review, and end-to-end
+  verification remain pending.
 
 ## 2026-10-14 — Auditor service layering and style
 

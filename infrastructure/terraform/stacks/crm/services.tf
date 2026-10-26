@@ -503,8 +503,9 @@ module "chain_verify" {
 }
 
 # ------------------------------------------------------ transaction-service
-# The SFTP receiver's read API. It checks no token, so it has no ALB route
-# and only user-service may reach it (security_groups.tf).
+# The SFTP receiver's private read APIs. Legacy routes are called by
+# user-service; the Client Health history route verifies a scoped service
+# token. Neither is exposed through the ALB (security_groups.tf).
 
 module "transaction_service" {
   source = "../../modules/ecs-service"
@@ -521,12 +522,15 @@ module "transaction_service" {
   app_protocol       = "http"
 
   environment = {
-    APP_ADDR       = ":${local.ports.transaction}"
-    DB_HOST        = module.db["transactions"].address
-    DB_PORT        = "5432"
-    DB_NAME        = module.db["transactions"].db_name
-    DB_SSLMODE     = "verify-full"
-    DB_SSLROOTCERT = "/tls/rds-ca.pem"
+    APP_ENV                  = "production"
+    APP_ADDR                 = ":${local.ports.transaction}"
+    COGNITO_ISSUER_URI       = local.cognito_issuer
+    COGNITO_HEALTH_CLIENT_IDS = aws_cognito_user_pool_client.client_health_read.id
+    DB_HOST                  = module.db["transactions"].address
+    DB_PORT                  = "5432"
+    DB_NAME                  = module.db["transactions"].db_name
+    DB_SSLMODE               = "verify-full"
+    DB_SSLROOTCERT           = "/tls/rds-ca.pem"
   }
   secrets = {
     DB_USER     = "${local.app_login_secret["transaction_service"]}:username::"
@@ -551,7 +555,7 @@ module "transaction_service" {
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.app_login]
+  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.app_login, aws_secretsmanager_secret_version.client_health_read]
 }
 
 # dashboard-service runs in this cluster but is deployed by the

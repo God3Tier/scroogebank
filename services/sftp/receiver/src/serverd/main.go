@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"receiver/src/internal/repository"
+	"receiver/src/internal/security"
 	"receiver/src/serverd/routers"
 
 	"github.com/gin-gonic/gin"
@@ -36,7 +37,24 @@ func run() error {
 	}
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
-	routers.RegisterRoutes(router, repository.New(db), repository.NewTransactionStats(db))
+	transactionRepository := repository.New(db)
+	routers.RegisterRoutes(router, transactionRepository, repository.NewTransactionStats(db))
+	issuer := strings.TrimSpace(os.Getenv("COGNITO_ISSUER_URI"))
+	allowedClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_HEALTH_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })
+	production := strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production")
+	if production && (issuer == "" || len(allowedClientIDs) == 0) {
+		return fmt.Errorf("production requires COGNITO_ISSUER_URI and COGNITO_HEALTH_CLIENT_IDS")
+	}
+	if issuer != "" || len(allowedClientIDs) > 0 {
+		if issuer == "" || len(allowedClientIDs) == 0 {
+			return fmt.Errorf("COGNITO_ISSUER_URI and COGNITO_HEALTH_CLIENT_IDS must be configured together")
+		}
+		serviceTokens, err := security.NewServiceTokenVerifier(issuer, allowedClientIDs, "crm-transactions/read")
+		if err != nil {
+			return fmt.Errorf("configure transaction read authentication: %w", err)
+		}
+		routers.RegisterClientHealthRoutes(router, transactionRepository, serviceTokens.Middleware())
+	}
 	return router.Run(envOrDefault("APP_ADDR", ":8080"))
 }
 

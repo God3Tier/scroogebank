@@ -22,12 +22,19 @@ import (
 
 func main() {
 	faultKind := flag.String("fault", "", "publish one fault file of this kind and exit: "+strings.Join(fault.Kinds, ", "))
+	history := flag.Bool("history", false, "publish deterministic six-month synthetic history and exit")
 	flag.Parse()
 	destDir := getenv("OUTPUT_DIR", "/output")
 	source := accounts.FromEnv()
 	if *faultKind != "" {
 		if err := publishFault(*faultKind, destDir, source); err != nil {
 			log.Fatalf("publish %s fault: %v", *faultKind, err)
+		}
+		return
+	}
+	if *history {
+		if err := publishHistory(destDir, source); err != nil {
+			log.Fatalf("publish synthetic history: %v", err)
 		}
 		return
 	}
@@ -53,6 +60,30 @@ func main() {
 			run(destDir, source)
 		}
 	}
+}
+
+func publishHistory(destDir string, source accounts.Source) error {
+	accountIDs, err := source.IDs()
+	if err != nil {
+		return err
+	}
+	if !source.Synced() || len(accountIDs) == 0 {
+		return fmt.Errorf("six-month history requires a non-empty synced CRM account list")
+	}
+	rows := transaction.GenerateHistory(accountIDs, time.Now().UTC())
+	if len(rows) == 0 {
+		return fmt.Errorf("six-month history generated no transactions")
+	}
+	content, err := json.Marshal(rows)
+	if err != nil {
+		return fmt.Errorf("encode synthetic history: %w", err)
+	}
+	name, err := stageFile(content, ".json", time.Now().UTC(), destDir)
+	if err != nil {
+		return err
+	}
+	log.Printf("published %d deterministic synthetic transactions in %s", len(rows), name)
+	return nil
 }
 
 // run publishes one file. With a synced account list, its transactions use

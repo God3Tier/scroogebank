@@ -155,3 +155,45 @@ resource "aws_secretsmanager_secret_version" "ingest_client" {
     client_secret = aws_cognito_user_pool_client.transaction_ingest.client_secret
   })
 }
+
+# Client Health Monitor is a machine caller with read-only access to matched
+# transaction history. It receives no user groups and cannot write transactions.
+resource "aws_cognito_resource_server" "transactions" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  identifier   = "crm-transactions"
+  name         = "CRM transactions"
+
+  scope {
+    scope_name        = "read"
+    scope_description = "Read matched transaction history for Client Health Monitor"
+  }
+}
+
+resource "aws_cognito_user_pool_client" "client_health_read" {
+  name         = "${local.name}-client-health-read"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["crm-transactions/read"]
+  supported_identity_providers         = ["COGNITO"]
+  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+
+  depends_on = [aws_cognito_resource_server.transactions]
+}
+
+resource "aws_secretsmanager_secret" "client_health_read" {
+  name                    = "${local.name}/cognito/client-health-read"
+  description             = "Client Health Monitor transaction read app client"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "client_health_read" {
+  secret_id = aws_secretsmanager_secret.client_health_read.id
+  secret_string = jsonencode({
+    client_id     = aws_cognito_user_pool_client.client_health_read.id
+    client_secret = aws_cognito_user_pool_client.client_health_read.client_secret
+    scope         = "crm-transactions/read"
+  })
+}

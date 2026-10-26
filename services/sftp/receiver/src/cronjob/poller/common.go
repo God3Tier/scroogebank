@@ -55,5 +55,13 @@ func normalizeTransaction(transaction *models.Transaction) error {
 	default:
 		return fmt.Errorf("unsupported transaction status %q", transaction.Status)
 	}
+	switch transaction.ActivityKind {
+	case "", "Unknown", "CustomerInitiated", "Automated":
+		if transaction.ActivityKind == "" {
+			transaction.ActivityKind = "Unknown"
+		}
+	default:
+		return fmt.Errorf("unsupported activity kind %q", transaction.ActivityKind)
+	}
 	return nil
 }

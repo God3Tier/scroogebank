@@ -32,7 +32,7 @@ No service connects as its database's master user. After every migrate, db-migra
 | Database | Login | Can | Callback |
 |---|---|---|---|
 | users, clients, accounts, alerts | `user_service`, `client_service`, `account_service`, `event_alert_service` | read and change rows in every table except `flyway_schema_history` | [`app-login/afterMigrate.sql`](../../infrastructure/db-migrate/app-login/afterMigrate.sql) |
-| transactions | `transaction_service` | read `transactions`, since it checks no token | [`transactions/afterMigrate.sql`](../../infrastructure/db-migrate/transactions/afterMigrate.sql) |
+| transactions | `transaction_service` | read transactions; the Client Health history route also validates its Cognito service token | [`transactions/afterMigrate.sql`](../../infrastructure/db-migrate/transactions/afterMigrate.sql) |
 | transactions | `transaction_ingest` (the ingest Lambda) | read and change rows in every table except `flyway_schema_history` | the same |
 | audit | `auditor_app`, `chain_verify` | the roles in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 2 | [`audit/afterMigrate.sql`](../../infrastructure/db-migrate/audit/afterMigrate.sql) |
 

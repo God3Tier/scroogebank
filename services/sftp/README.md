@@ -10,6 +10,8 @@
 | `db-migrate` | Applies `receiver/data/` to `db` with Flyway, from the image that transaction-service's db-migrate container runs in AWS, then exits. `receiver-api` starts after it, and `make db-up` runs it too ([Schema migrations](../../docs/database/migrations.md)). |
 | `receiver-api` | transaction-service's internal read API, run with `go run` in the development image. The receiver's Dockerfile builds the production image by default; [the deployment runbook](../../docs/runbooks/deploy-aws.md) pushes it. |
 
+To publish a deterministic six-complete-month history for the synced CRM account list, run the producer with `-history` (for example, `docker compose -f services/sftp/compose.yaml run --rm producer -history`). It writes one normal ready-file JSON array. Re-running with the same account IDs and calendar window keeps transaction IDs and recurring-source fingerprints stable. The command refuses an empty or unsynced account list.
+
 The import itself, the poller, runs from `receiver/`. [receiver/README.md](receiver/README.md) explains how it links rows to accounts, rejects files, retries the connection and audits.
 
 ## Running it

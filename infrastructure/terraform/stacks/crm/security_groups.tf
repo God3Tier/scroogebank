@@ -26,6 +26,7 @@ locals {
     chain_verify = "chain-verify tasks"
     transaction  = "transaction-service tasks"
     alerts       = "event-alert-service tasks"
+    client_health = "Client Health Monitor tasks"
     ingest       = "transaction-ingest Lambda"
     db_console   = "One-off database console tasks (runbook)"
     db_users     = "users-db"
@@ -49,9 +50,10 @@ locals {
     { to = "account", from = "client", port = local.ports.account },
     { to = "auditor", from = "user", port = local.ports.auditor_http },
     { to = "auditor", from = "user", port = local.ports.auditor_grpc },
-    # transaction-service checks no token, so only user-service may call it
-    # (security-model "Defense in depth").
+    # Legacy private receiver routes are used by user-service; the Client
+    # Health route independently verifies its narrow Cognito service scope.
     { to = "transaction", from = "user", port = local.ports.transaction },
+    { to = "transaction", from = "client_health", port = local.ports.transaction },
     { to = "alerts", from = "alb", port = local.ports.alerts },
 
     { to = "db_users", from = "user", port = 5432 },
@@ -72,7 +74,7 @@ locals {
 
   # Groups whose members reach AWS APIs, Cognito's keys and the SFTP server
   # through the NAT gateway, and other tasks inside the VPC.
-  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "ingest", "db_console"]
+  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "client_health", "ingest", "db_console"]
 
   sg = { for k, v in aws_security_group.this : k => v.id }
 }

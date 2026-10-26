@@ -157,11 +157,9 @@ Example:
 - Record invalid/unsupported input without creating signals/tasks.
 - Store only the minimum read projection required by the selected rules.
 
-### Historical replay proposal
+### Matched transaction history API proposal
 
-If events are selected, replay uses the same `transaction.matched.v1` payloads with stable transaction IDs and new or documented stable event IDs.
-
-If an API is selected, proposed endpoint:
+The selected proposal is a private pull API. It uses the same stable transaction IDs as ingestion and permits the consumer to request only the client's required time window.
 
 ```text
 GET /internal/v1/transactions
@@ -179,22 +177,25 @@ Proposed response:
   "schemaVersion": "1",
   "items": [
     {
-      "transactionId": "txn-000001",
+      "transactionId": "synthetic-3b71d6a4c829a1051e8d9fc2b1437a60",
       "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
-      "accountId": "acc-000001",
+      "accountId": "e3351530-f5c1-4f64-aedc-3c97d9f76816",
       "type": "Deposit",
       "amount": "4250.00",
       "currency": "SGD",
-      "transactionDate": "2026-09-28T00:30:00Z",
+      "transactionDate": "2026-09-28T05:00:00Z",
       "status": "Completed",
-      "sourceFingerprint": "synthetic-employer-001"
+      "activityKind": "Automated",
+      "sourceFingerprint": "synthetic-employer-a1b2c3d4e5f6"
     }
   ],
   "nextCursor": null
 }
 ```
 
-The transport decision remains open. SF00 freezes field meaning, not delivery mechanism.
+`activityKind` is exactly `CustomerInitiated`, `Automated`, or `Unknown`. `sourceFingerprint` is always present in the response and is either a stable source identifier or `null`. `type` and `status` retain the transaction-service values (`Deposit`/`Withdrawal` and `Completed`/`Pending`/`Failed`).
+
+The transaction owner selected this private pull API for the first implementation. The receiver accepts Cognito client-credentials tokens with the `crm-transactions/read` scope; the Client Health Monitor uses the dedicated read-only app client. The endpoint requires inclusive `from` and exclusive `to` RFC3339 timestamps, caps each page at 500 rows, and returns only matched transactions with non-null CRM client and account IDs. Descriptions and import/reconciliation fields are not part of this response. A later human-owned ADR and cross-owner review must accept this proposed contract before production use.
 
 ## Contract B: Client Assignment V1
 
