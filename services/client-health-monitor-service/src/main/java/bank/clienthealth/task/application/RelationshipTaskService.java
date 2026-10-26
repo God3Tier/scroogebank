@@ -144,9 +144,17 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             String taskId, long expectedVersion,
             java.util.function.Function<RelationshipTask, RelationshipTask> change
     ) {
+        RelationshipTask snapshot = repository.inTransaction(session -> session.findTask(taskId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId)));
+        AssignmentSnapshot assignment = assignments.resolve(snapshot.clientId());
+        validateAssignment(snapshot.clientId(), assignment);
         return repository.inTransaction(session -> {
             RelationshipTask current = session.findTask(taskId)
                     .orElseThrow(() -> new TaskNotFoundException(taskId));
+            validateAssignment(current.clientId(), assignment);
+            if (!assignment.agentSubject().equals(current.assignment().agentSubject())) {
+                current = current.withAssignment(assignment);
+            }
             RelationshipTask updated = change.apply(current);
             session.saveTask(updated, expectedVersion);
             session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(

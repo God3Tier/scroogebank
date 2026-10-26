@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Scrooge CRM Event-Driven Alerts API
+  title: Scrooge CRM API
   version: 0.1.0
   description: >-
     Proposed MVP contract. Agents are restricted to assigned clients; admins have
@@ -11,6 +11,9 @@ security:
   - bearerAuth: []
 tags:
   - name: Alerts
+    description: Event-driven client alert review operations.
+  - name: Relationship Health
+    description: Proactive relationship-health task review operations.
 paths:
   /alerts:
     get:
@@ -105,6 +108,142 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /relationship-health/tasks:
+    get:
+      tags: [Relationship Health]
+      operationId: listRelationshipHealthTasks
+      summary: List relationship-health tasks visible to the authenticated actor
+      description: Agents receive only assigned tasks. Admins have read-only cross-Agent access.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskStatusFilter'
+        - $ref: '#/components/parameters/RelationshipTaskSeverityFilter'
+        - $ref: '#/components/parameters/AssignedAgentSubject'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ownership-scoped relationship-health tasks.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTaskPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /relationship-health/tasks/{taskId}:
+    get:
+      tags: [Relationship Health]
+      operationId: getRelationshipHealthTask
+      summary: Get a relationship-health task
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+      responses:
+        '200':
+          description: Ownership-scoped task detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /relationship-health/tasks/{taskId}/history:
+    get:
+      tags: [Relationship Health]
+      operationId: getRelationshipHealthTaskHistory
+      summary: Get immutable task status and evidence history
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+      responses:
+        '200':
+          description: Ownership-scoped task history.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTaskHistory'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /relationship-health/tasks/{taskId}/accept:
+    post:
+      tags: [Relationship Health]
+      operationId: acceptRelationshipHealthTask
+      summary: Accept an assigned OPEN task
+      description: Agent-only. Admin and dual Admin/Agent tokens are read-only.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+        - $ref: '#/components/parameters/RelationshipCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AcceptRelationshipTaskRequest'}
+      responses:
+        '200':
+          description: Updated IN_REVIEW task.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /relationship-health/tasks/{taskId}/complete:
+    post:
+      tags: [Relationship Health]
+      operationId: completeRelationshipHealthTask
+      summary: Complete an assigned IN_REVIEW task
+      description: Disposition codes and note bounds are enforced by the approved policy implementation.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+        - $ref: '#/components/parameters/RelationshipCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompleteRelationshipTaskRequest'}
+      responses:
+        '200':
+          description: Updated COMPLETED task.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /relationship-health/tasks/{taskId}/dismiss:
+    post:
+      tags: [Relationship Health]
+      operationId: dismissRelationshipHealthTask
+      summary: Dismiss an assigned OPEN or IN_REVIEW task
+      description: Disposition codes and note bounds are enforced by the approved policy implementation.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+        - $ref: '#/components/parameters/RelationshipCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DismissRelationshipTaskRequest'}
+      responses:
+        '200':
+          description: Updated DISMISSED task.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
 components:
   securitySchemes:
     bearerAuth:
@@ -140,11 +279,42 @@ components:
     Cursor:
       name: cursor
       in: query
+      description: Opaque Base64URL keyset cursor returned by the preceding page; clients must not interpret it.
       schema: {type: string, maxLength: 512}
     Limit:
       name: limit
       in: query
       schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+    RelationshipTaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    RelationshipCorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Bounded opaque trace identifier; the service generates a UUID when omitted.
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    RelationshipTaskStatusFilter:
+      name: status
+      in: query
+      schema:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/components/schemas/RelationshipTaskStatus'}
+    RelationshipTaskSeverityFilter:
+      name: severity
+      in: query
+      schema:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+    AssignedAgentSubject:
+      name: assignedAgentSubject
+      in: query
+      description: Admin-only optional assignment filter.
+      schema: {type: string, minLength: 1, maxLength: 128}
   responses:
     BadRequest:
       description: Invalid request.
@@ -166,6 +336,12 @@ components:
       headers:
         Retry-After:
           schema: {type: integer, minimum: 1}
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    UnprocessableEntity:
+      description: Disposition code or note rejected by the configured policy.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    TooManyRequests:
+      description: Request rejected by an edge or service rate limit.
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
     AlertStatus:
@@ -305,6 +481,114 @@ components:
         actorSubject: {type: string, maxLength: 128}
         recordedAt: {type: string, format: date-time}
         alertVersion: {type: integer, minimum: 0}
+    RelationshipTaskStatus:
+      type: string
+      enum: [OPEN, IN_REVIEW, COMPLETED, DISMISSED]
+    RelationshipTaskSeverity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+    RelationshipTaskSignalType:
+      type: string
+      enum: [RECURRING_CREDIT_INTERRUPTION, TRANSACTION_ACTIVITY_DECLINE, SUSTAINED_NET_OUTFLOW]
+    RelationshipTaskPage:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, items]
+      properties:
+        schemaVersion: {type: string, const: '1'}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RelationshipTask'}
+        nextCursor: {type: [string, 'null'], maxLength: 512}
+    RelationshipTask:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, taskId, clientId, assignedAgentSubject, status, severity, evidence, version, createdAt, updatedAt]
+      properties:
+        schemaVersion: {type: string, const: '1'}
+        taskId: {type: string, minLength: 1, maxLength: 128}
+        clientId: {type: string, minLength: 1, maxLength: 128}
+        assignedAgentSubject: {type: string, minLength: 1, maxLength: 128}
+        status: {$ref: '#/components/schemas/RelationshipTaskStatus'}
+        severity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+        explanation: {$ref: '#/components/schemas/RelationshipTaskExplanation'}
+        evidence:
+          type: array
+          items: {$ref: '#/components/schemas/RelationshipTaskEvidence'}
+        version: {type: integer, minimum: 1}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    RelationshipTaskExplanation:
+      type: object
+      additionalProperties: false
+      required: [text, source, generatedAt]
+      properties:
+        text: {type: string}
+        source: {type: string}
+        generatedAt: {type: string, format: date-time}
+    RelationshipTaskEvidence:
+      type: object
+      additionalProperties: false
+      required: [type, accountId, ruleVersion, severity]
+      properties:
+        type: {$ref: '#/components/schemas/RelationshipTaskSignalType'}
+        accountId: {type: string, minLength: 1, maxLength: 128}
+        ruleVersion: {type: string, minLength: 1, maxLength: 128}
+        severity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+    RelationshipTaskHistory:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, taskId, items]
+      properties:
+        schemaVersion: {type: string, const: '1'}
+        taskId: {type: string, minLength: 1, maxLength: 128}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RelationshipTaskHistoryItem'}
+    RelationshipTaskHistoryItem:
+      type: object
+      additionalProperties: false
+      required: [taskVersion, action, actor, occurredAt, afterStatus, afterSeverity, evidenceAddedCount]
+      properties:
+        taskVersion: {type: integer, minimum: 1}
+        action: {type: string, enum: [CREATED, EVIDENCE_ADDED, ACCEPTED, COMPLETED, DISMISSED]}
+        actor: {type: string, minLength: 1, maxLength: 128}
+        occurredAt: {type: string, format: date-time}
+        beforeStatus:
+          oneOf:
+            - {$ref: '#/components/schemas/RelationshipTaskStatus'}
+            - {type: 'null'}
+        afterStatus: {$ref: '#/components/schemas/RelationshipTaskStatus'}
+        beforeSeverity:
+          oneOf:
+            - {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+            - {type: 'null'}
+        afterSeverity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+        evidenceAddedCount: {type: integer, minimum: 0}
+        dispositionCode: {type: [string, 'null'], maxLength: 128}
+        note: {type: [string, 'null'], maxLength: 500}
+    AcceptRelationshipTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+    CompleteRelationshipTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, outcomeCode]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+        outcomeCode: {type: string, minLength: 1, maxLength: 128}
+        note: {type: [string, 'null'], maxLength: 500}
+    DismissRelationshipTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reasonCode]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+        reasonCode: {type: string, minLength: 1, maxLength: 128}
+        note: {type: [string, 'null'], maxLength: 500}
     Problem:
       type: object
       additionalProperties: false

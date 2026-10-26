@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -152,6 +153,26 @@ class RelationshipTaskServiceTest {
     }
 
     @Test
+    void formerAgentCannotMutateAndCurrentAgentCanAcceptReassignedTask() {
+        AtomicReference<String> currentAgent = new AtomicReference<>(AGENT);
+        RelationshipTaskService reassignmentAware = service(
+                clientId -> assignment(clientId, currentAgent.get(), true),
+                (code, note) -> { });
+        String taskId = reassignmentAware.upsertFinding(
+                finding("finding-reassigned", Severity.HIGH, signal("d", Severity.HIGH))).taskId();
+        currentAgent.set("new-agent");
+
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> reassignmentAware.accept(taskId, 1, AGENT, "former-agent"));
+        RelationshipTask accepted = reassignmentAware.accept(
+                taskId, 1, "new-agent", "current-agent");
+
+        assertEquals(Status.IN_REVIEW, accepted.status());
+        assertEquals("new-agent", accepted.assignment().agentSubject());
+        assertEquals(2, accepted.version());
+    }
+
+    @Test
     void dismissesFromOpenOrInReviewAndMakesBothTasksTerminal() {
         String openTask = service.upsertFinding(
                 finding("finding-open", Severity.LOW, signal("a", Severity.LOW))).taskId();
@@ -233,6 +254,23 @@ class RelationshipTaskServiceTest {
                 () -> reassigned.upsertFinding(finding("finding-2", Severity.LOW, signal("b", Severity.LOW))));
         assertEquals(1, repository.taskCount());
         assertEquals(1, repository.processedFindingCount());
+    }
+
+    @Test
+    void revalidatesCurrentAssignmentBeforeMutation() {
+        String taskId = service.upsertFinding(
+                finding("finding-1", Severity.LOW, signal("a", Severity.LOW))).taskId();
+        RelationshipTaskService reassigned = service(
+                clientId -> new AssignmentSnapshot(clientId, "new-agent", true, 2, NOW),
+                (code, note) -> { });
+
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> reassigned.accept(taskId, 1, AGENT, "former-agent"));
+        RelationshipTask accepted = reassigned.accept(taskId, 1, "new-agent", "current-agent");
+
+        assertEquals(Status.IN_REVIEW, accepted.status());
+        assertEquals("new-agent", accepted.assignment().agentSubject());
+        assertEquals(2, accepted.assignment().assignmentVersion());
     }
 
     @Test
