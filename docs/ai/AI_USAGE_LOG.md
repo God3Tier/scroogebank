@@ -1,5 +1,33 @@
 # AI usage log
 
+## 2026-10-27 — Client Health and dev merge-conflict resolution
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: resolve all 13 conflict regions while merging `dev` into
+  `feat/client-health-monitor`; retain Client Health's accepted architecture,
+  implementation status, contracts and API-backed UI while incorporating
+  dev's transaction provider, Agent Engagement, frontend routing and governance
+  records. Resolve the local port collision by keeping engagement-service on
+  8086 and moving Client Health's default local port and Vite proxy to 8087.
+  Follow up on CI findings by converting Client Health's remaining OpenAPI 3.1
+  keywords to equivalent 3.0.3 schemas and scoping a duplicate-text UI
+  assertion to the signal-evidence panel.
+- Human verification required: review the merge commit before pushing and
+  obtain the owner/security acceptance and end-to-end evidence required by
+  proposed ADR-0065.
+- Data: repository code, documentation and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: no unmerged index entries or conflict markers remain;
+  `git diff --cached --check` passes; frontend lint, all 252 tests and the Vite
+  production build pass; the focused Client Health UI file passes all five
+  tests; event-alert-service's OpenAPI route/parser test passes; Client Health's
+  clean Java 24 override run reports 129 tests with no failures (106 passed and
+  23 Docker-dependent tests skipped). Terraform formatting was not run because
+  Terraform is unavailable locally; the Python CI validator was also
+  unavailable locally, so OpenAPI 3.0.3-incompatible keywords were checked
+  repository-wide and none remain.
+
 ## 2026-10-26 — Matched transaction activity API
 
 - Human owner: Joseph Yau (Feature 3); Garvit, Swayam, and security/platform
@@ -892,6 +920,299 @@
   ADR-0006 through ADR-0016; checked Markdown structure, Mermaid participants,
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
+
+## 2026-10-16 — Client Health SF01 transaction intake decision
+
+- Human owner: Garvit; Feature 3 owners must review provider-side changes.
+- Tool: Cursor.
+- Use: inspect the current transaction-service contracts and accepted identity,
+  ingestion and database decisions; select a bounded service-authenticated pull
+  API for six-month replay and daily Client Health intake; update ADR-0044, the
+  feature plan and contract documentation.
+- Human verification required: Feature 3 owners approve the dedicated replay
+  endpoint, stable synthetic source fingerprint and six-month provider fixtures
+  before their shared service files change.
+- Data: repository documentation and synthetic contract examples only. No
+  credentials, real client data, AWS calls or external model calls were used.
+- Verification: synchronized `feat/client-health-monitor` through PR #111,
+  reviewed ADR-0024, ADR-0025, ADR-0034, ADR-0037 and ADR-0043, and ran Git
+  whitespace/diff checks.
+
+## 2026-10-16 — Client Health SF01 consumer foundation
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: implement provider-independent matched-transaction records, bounded
+  cursor replay, complete-run validation, de-duplication and failure-path tests.
+- Human verification required: review contract fields, replay limits and the
+  fail-closed behavior before committing; Feature 3 provider changes remain
+  separately owned.
+- Data: synthetic identifiers and transaction examples only. No credentials,
+  real client data, AWS calls or external services were used.
+- Verification: 27 client-health module tests passed with the local Java 24
+  compiler override; CI must repeat them on the required Java 25 toolchain.
+
+## 2026-10-21 — Client Health architecture acceptance and SF01 mock replay
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: revise and accept ADR-0034 after owner review; add the transaction replay
+  page schema and unsafe fixtures; implement a contract-faithful six-month
+  synthetic provider covering all three planned signals and controls.
+- Human verification required: Swayam reviews the accepted architecture before
+  building SF05-SF07; Joseph Yau/Neo Jia Wen review and implement the Feature 3
+  provider side before production enablement.
+- Data: repository-owned synthetic identifiers and transactions only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: all 32 client-health tests passed with the local Java 24
+  compiler override, including contract/schema/mock coverage; CI must repeat
+  them on Java 25. Lint diagnostics and Git whitespace checks passed.
+
+## 2026-10-21 — Client Health SF02 activity projection and baselines
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: add explicit activity classification, atomic/idempotent transaction
+  projection, replay-coverage tracking, and six-month/90-day/30-day account and
+  client baseline summaries for the future deterministic rules.
+- Human verification required: review ADR-0051, the 08:00 Asia/Singapore window
+  boundaries, SGD-only failure behavior, and coordinate production health-db
+  migration ownership with Swayam before a database adapter is added.
+- Data: repository-owned synthetic transactions only. No credentials, real
+  client data, AWS calls or external services were used.
+- Verification: all 39 client-health tests passed with the local Java 24
+  compiler override, including projection, status-transition, rollback,
+  classification, currency, coverage, roll-up and synthetic baseline coverage;
+  Java 25 CI verification remains required.
+
+## 2026-10-21 — Client Health SF03 deterministic signal rules
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: record ADR-0052; add rolling 30-day period summaries; implement the
+  versioned recurring-credit interruption, customer-activity decline and
+  sustained-net-outflow rules plus typed outcomes for RH-SF04.
+- Human verification required: review project/demo thresholds and severity
+  bands before commit; they are not universal banking standards. Java 25 CI
+  must repeat local verification.
+- Data: repository-owned synthetic baseline scenarios only. No credentials,
+  real client data, AWS calls, Bedrock calls or external services were used.
+- Verification: all 42 client-health tests passed with the local Java 24
+  compiler override, covering positive signals, exact low-severity boundaries,
+  healthy controls, just-below thresholds, insufficient/Unknown activity and
+  deterministic repeatability; Java 25 CI remains required.
+
+## 2026-10-21 — Client Health SF04 analysis orchestration
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: record ADR-0053; implement renewable run-lease/watermark ports,
+  deterministic findings/signals/fingerprints, one-finding-per-client grouping,
+  retry-safe task handoff, and explicit cooldown/cap suppression outcomes.
+- Human verification required: Swayam reviews and implements task-side atomic
+  admission in RH-SF05; production run persistence and Java 25 CI remain
+  required.
+- Data: repository-owned synthetic transactions/findings only. No credentials,
+  real client data, AWS calls, Bedrock calls or external services were used.
+- Verification: all 47 client-health tests passed with the local Java 24
+  compiler override, including success, repeated-run, lease-contention,
+  suppression, partial-failure and deterministic-retry scenarios.
+
+## 2026-10-21 — Client Health offline rule evaluation
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: build a deterministic labelled-scenario harness for
+  `relationship-health-v1`, covering positive, healthy-control, exact-boundary,
+  just-below, Unknown-classification and sparse-history cases; render and
+  document fixed-set rule metrics and limitations.
+- Human verification required: treat 1.00 precision/coverage only as agreement
+  with six repository-owned synthetic scenario groups, never as real-client or
+  production accuracy; threshold changes require a new ruleset version.
+- Data: repository-owned synthetic aggregate histories only. No credentials,
+  real client data, AWS calls, Bedrock calls or external services were used.
+- Verification: all six scenario groups and repeated evaluations passed; all 49
+  client-health tests passed with the local Java 24 compiler override. Java 25
+  CI remains required.
+
+## 2026-10-22 — Client Health SF08 audit/outbox foundation
+
+- Human owner: Garvit; Auditor-owner review remains required for shared files.
+- Tool: Cursor.
+- Use: implement a deterministic redacted relationship-health audit envelope,
+  task/suppression/run event mapping, transactional outbox and delivery ports,
+  and a bounded leased relay with idempotent enqueue semantics and redacted
+  retry categories.
+- Human verification required: do not add or deploy the Flyway/JDBC outbox,
+  SQS gateway, IAM policy or Auditor allowlist until SF05 V1 is corrected and
+  the Auditor owner accepts the service/action/payload contract.
+- Data: repository-owned synthetic opaque identifiers and task states only. No
+  credentials, real client data, AWS calls, SQS calls or external services were
+  used.
+- Verification: deterministic IDs, client-reference hashing, note exclusion,
+  suppression mapping, duplicate enqueue, continue-after-failure and retry
+  release behavior passed; all 54 Client Health tests passed locally with the
+  Java 24 compiler override. Java 25 CI remains required.
+
+## 2026-10-22 — Client Health SF08 V3 and atomic task enqueue
+
+- Human owner: Garvit; Auditor-owner review remains required for SQS/Auditor
+  adapters.
+- Tool: Cursor.
+- Use: add the V3 relationship-health outbox schema and indexes; extend the
+  SF05 transaction session with deterministic audit enqueue; emit redacted
+  task-created/evidence/transition and suppression events atomically with task
+  and processed-finding changes.
+- Human verification required: production JDBC must use one transaction for
+  task/finding/outbox writes; SQS/IAM and Auditor allowlist changes remain
+  blocked on owner acceptance.
+- Data: repository-owned synthetic opaque identifiers and task states only. No
+  credentials, real client data, AWS calls, SQS calls or external services were
+  used.
+- Verification: task audit counts, deterministic mapping, suppression enqueue,
+  processed-finding rollback, outbox contract constraints and the full Client
+  Health suite are required before commit.
+
+## 2026-10-22 — Client Health SF05 persistence review fixes
+
+- Human owner: Garvit; original V1 schema/admission implementation by Swayam.
+- Tool: Cursor.
+- Use: review merged PR #131 against ADR-0053 and the frozen evidence contract;
+  add an immutable V2 migration for strict non-overlapping windows, supported
+  signal types, SHA-256 fingerprints and closed-task cooldown indexing; align
+  migration tests and database/service/feature documentation.
+- Human verification required: do not rewrite merged V1; production JDBC
+  repository and SF08 atomic outbox integration remain separate work.
+- Data: repository schema and synthetic PostgreSQL test rows only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: 57 Client Health tests compiled and completed locally with the
+  Java 24 override; 51 passed and six Testcontainers migration tests were
+  skipped because local Docker was unavailable. Java 25 CI with Docker must run
+  V1-to-V2 migration, rerun idempotency, valid evidence and malformed
+  window/type/fingerprint cases before merge.
+
+## 2026-10-23 — Client Health SF06 runtime and assignment hardening
+
+- Human owner: Swayam.
+- Tool: OpenAI Codex.
+- Use: implement Spring runtime wiring, the PostgreSQL task/query adapter,
+  Contract-B client-credentials consumer, current-assignment authorization,
+  bounded disposition notes, API schema updates, tests and startup guidance.
+- Human verification required: review the SQL mapping and authorization flow;
+  the client-profile owner must implement and approve Contract B and scoped
+  Cognito provisioning before live assignment lookups are enabled.
+- Data: repository code and synthetic identifiers only. No credentials, real
+  client data, AWS calls or external services were used.
+- Verification: focused domain/controller/adapter/configuration tests and the
+  full Client Health Maven suite; PostgreSQL Testcontainers coverage depends on
+  local Docker availability.
+
+## 2026-10-23 — Client Health SF06 reassignment, pagination and PostgreSQL completion
+
+- Human owner: Swayam.
+- Tool: OpenAI Codex.
+- Use: remove historical-assignment pre-filtering, enforce current assignment
+  for Agent reads and actions, replace numeric OFFSET cursors with opaque
+  Base64URL keyset cursors, integrate SF08 audit enqueue into the JDBC task
+  transaction, and add PostgreSQL and full Spring runtime integration tests.
+- Human verification required: run the Testcontainers suites in Docker-enabled
+  CI and review the keyset behavior when rows move ahead of an issued cursor;
+  the client-profile Contract-B provider and Cognito provisioning remain owned
+  outside this branch.
+- Data: synthetic opaque clients, Agents, tasks, findings and audit events only.
+  No real client data, secrets, AWS calls or live services were used.
+- Verification: application-level reassignment and paging tests pass; the full
+  Maven suite reports 108 tests with no failures and 14 Docker-dependent tests
+  skipped locally because Docker is unavailable.
+
+## 2026-10-26 — Client Health SF02/SF04 production persistence
+
+- Human owner: Garvit.
+- Tool: Cursor.
+- Use: add V4 activity-projection/replay-coverage/analysis-run tables, a
+  transactional JDBC activity adapter, a fenced renewable lease/watermark
+  adapter, Spring runtime wiring, and PostgreSQL integration coverage.
+- Human verification required: Java 25 CI with Docker must execute V1-V4 and
+  the new activity/run Testcontainers suite; the migration is additive and
+  previously merged migrations remain unchanged.
+- Data: repository-owned synthetic opaque transactions and analysis-run IDs
+  only. No credentials, real client data, AWS calls or external services were
+  used.
+- Verification: all source and tests compile with the local Java 24 override;
+  94 non-Docker tests passed and 17 Docker-dependent tests were skipped because
+  local Docker was unavailable.
+
+## 2026-10-26 — Client Health SF07 safe explanation and fallback
+
+- Human owner: Swayam.
+- Tool: OpenAI Codex.
+- Use: implement identifier-free derived-fact mapping, strict model-output
+  validation, deterministic templates, a bounded Bedrock Converse adapter and
+  kill switch, versioned explanation persistence, atomic redacted audit enqueue,
+  and Contract-D response attachment.
+- Human verification required: select and approve a Singapore-supported model,
+  token pricing, IAM permissions and environment rollout before enabling
+  Bedrock; CloudWatch publication remains in RH-SF09.
+- Data: repository-owned synthetic task and signal facts only. No credentials,
+  real client data, live AWS calls, raw transactions or external services were
+  used.
+- Verification: Java 25 unit, PostgreSQL migration/repository, rollback and
+  full Spring runtime tests; Docker-dependent coverage runs when Docker is
+  available.
+
+## 2026-10-26 — Client Health SF08 audit delivery
+
+- Human owner: Garvit; Auditor-owner and infrastructure reviews remain required.
+- Tool: Cursor.
+- Use: implement JDBC outbox leasing/fencing/recovery, bounded retry release,
+  snake_case SQS serialization, property-gated AWS/LocalStack configuration,
+  scheduled relay wiring, and atomic signal/analysis-run audit events.
+- Human verification required: Java 25 CI with Docker must execute the outbox
+  and activity/run PostgreSQL suites; Hayyun must review Auditor validation;
+  Neo must review task-role IAM and Terraform environment wiring.
+- Data: repository-owned synthetic opaque IDs and task/run states only. No
+  credentials, real client data, AWS calls or external services were used.
+- Verification: 117 tests compiled with the local Java 24 override; 97
+  non-Docker tests passed and 20 Docker-dependent tests were skipped because
+  local Docker was unavailable. Unit coverage includes redacted SQS envelopes,
+  provider error classification, signal/run events, retry and lease fencing.
+
+## 2026-10-26 — Client Health SF07 safety review fixes
+
+- Human owner: Garvit; original SF07 implementation by Swayam.
+- Tool: Cursor.
+- Use: repair missing explanations when deterministic task retries return
+  `DUPLICATE`; tighten model-output validation to reject all numeric wording and
+  prevent sign/context recombination of otherwise allowed input values; update
+  Bedrock instructions and regression coverage.
+- Human verification required: keep live Bedrock disabled until model, pricing,
+  IAM and environment rollout are approved; Java 25 CI with Docker must pass
+  before feature promotion.
+- Data: repository-owned synthetic evidence only. No credentials, real client
+  data, AWS calls, Bedrock calls or external services were used.
+- Verification: regression tests cover explanation-persistence failure followed
+  by duplicate retry, no repeated generation after repair, and rejection of
+  invented, sign-reversed and wrong-context numeric wording. The local Java 24
+  suite completed 129 tests with no failures: 106 passed and 23
+  Docker-dependent tests were skipped; Java 25 CI with Docker remains required.
+
+## 2026-10-27 — Client Health SF10 API-backed UI
+
+- Human owner: Garvit; shared frontend owner review remains required.
+- Tool: Cursor.
+- Use: replace seeded Client Health state with authenticated Contract-D list,
+  detail, history and action calls; add Agent actions, Admin read-only oversight,
+  filters, cursor pagination, explanation source, resilient API states and
+  frontend tests.
+- Human verification required: review shared navigation/auth changes and verify
+  the screen against a deployed Client Health API before promotion.
+- Data: repository-owned synthetic API fixtures only. No credentials, real
+  client data, AWS calls or external services were used.
+- Verification: frontend API/page/router/navigation tests, ESLint and the Vite
+  production build passed; all 139 frontend tests across 20 files passed and
+  the focused Client Health API/page tests passed independently. Vite retained
+  the existing large-chunk warning.
+
 - 2026-10-22 — Joseph Yau — Codex — Added client filtering to the authenticated, paged auditor activity query and corresponding user-service query parameters. Files: `proto/audit/v1/audit.proto`, auditor activity controller/model/repository and tests, user-service activity controller/service/record and tests, API contract, proposed ADR, and auditor feature plan. Protobuf generation, all auditor tests, SQL-backed activity query tests, focused user-service tests, and formatting checks passed; proposed ADR-0042 still needs human acceptance/review.
 
 ## 2026-10-23 — Admins read-only on client data (open item 23)

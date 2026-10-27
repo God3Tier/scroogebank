@@ -11,7 +11,12 @@ Recorded in [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 
 Terraform creates each RDS instance with an empty database, and each service owns its versioned migrations:
 
 - **client-service, account-service, the auditor and transaction-service (the SFTP receiver)** keep their migrations in their `data/` directory, named `V<n>_<description>.sql`.
-- **user-service and event-alert-service** keep theirs in `src/main/resources/db/migration`, named `V<n>__<description>.sql`. Locally and in their tests, Spring Boot runs Flyway on startup from there.
+- **user-service, event-alert-service and client-health-monitor-service** keep
+  theirs in `src/main/resources/db/migration`, named
+  `V<n>__<description>.sql`. Locally and in tests Flyway applies them; Client
+  Health migration tests run V1 task persistence followed by V2 evidence
+  constraint tightening, V3 relationship-health audit outbox creation, and V4
+  activity/run persistence against PostgreSQL 17.
 - **In AWS, every one of these services' tasks has a `db-migrate` init container:**
   - it applies the service's migrations before the app starts, and the app starts only if it succeeds;
   - it runs Flyway 11.7.2 from the db-migrate image ([`infrastructure/db-migrate/`](../../infrastructure/db-migrate/Dockerfile)), as that database's master user, against that database only. Flyway locks the database while it migrates, so tasks that start together are safe;
@@ -42,7 +47,12 @@ No service connects as its database's master user. After every migrate, db-migra
 
 ### Adding a migration
 
-**user-service and event-alert-service:** add `V<n>__<description>.sql` to `src/main/resources/db/migration`, as before; Spring Boot applies it locally and in tests. Never edit one that has been applied. To deploy it, build and push the db-migrate image with the service's image ([deploy-aws.md](../runbooks/deploy-aws.md) steps 2 and 5): the service's own image doesn't apply it in AWS.
+**user-service, event-alert-service and client-health-monitor-service:** add
+`V<n>__<description>.sql` to `src/main/resources/db/migration`, as before.
+Flyway applies it locally and in tests. Never edit one that has been applied.
+To deploy it, build and push the db-migrate image with the service's image
+([deploy-aws.md](../runbooks/deploy-aws.md) steps 2 and 5): the service's own
+image doesn't apply it in AWS.
 
 **The Go services:**
 

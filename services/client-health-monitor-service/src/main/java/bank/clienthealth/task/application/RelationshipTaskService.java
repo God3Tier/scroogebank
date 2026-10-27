@@ -1,5 +1,6 @@
 package bank.clienthealth.task.application;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEventFactory;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.RelationshipTaskPort;
 import bank.clienthealth.contract.TaskUpsertResult;
@@ -11,13 +12,19 @@ import bank.clienthealth.task.port.DispositionPolicy;
 import bank.clienthealth.task.port.TaskRepository;
 import bank.clienthealth.task.port.TaskRepository.ProcessedFinding;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Objects;
 import java.util.function.Supplier;
 
 /** Application service consumed by analysis now and by the task API later. */
 public final class RelationshipTaskService implements RelationshipTaskPort {
     private static final int MAX_ATTEMPTS = 3;
+    private static final int DAILY_TASK_CAP = 20;
+    private static final Duration COOLDOWN = Duration.ofDays(30);
+    private static final ZoneId SINGAPORE = ZoneId.of("Asia/Singapore");
 
     private final TaskRepository repository;
     private final ClientAssignmentPort assignments;
@@ -54,6 +61,8 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             var processed = session.findProcessedFinding(finding.findingId());
             if (processed.isPresent()) return replay(processed.get(), finding);
 
+            finding.signals().forEach(signal -> session.enqueueAudit(
+                    RelationshipHealthAuditEventFactory.signalDetected(finding, signal)));
             var active = session.findActiveTask(finding.clientId());
             active.ifPresent(task -> {
                 if (!task.assignment().agentSubject().equals(assignment.agentSubject())) {
@@ -77,11 +86,35 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
                 RelationshipTask current = active.get();
                 RelationshipTask updated = current.attach(finding, unseen, now);
                 session.saveTask(updated, current.version());
+                session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(
+                        updated.taskId(), updated.clientId(), updated.history().getLast()));
                 result = new TaskUpsertResult(updated.taskId(), Outcome.EVIDENCE_ATTACHED, updated.version());
             } else {
-                RelationshipTask created = RelationshipTask.create(taskIds.get(), finding, unseen, assignment, now);
-                session.saveTask(created, 0);
-                result = new TaskUpsertResult(created.taskId(), Outcome.CREATED, created.version());
+                var latestClosed = session.findLatestClosedTask(finding.clientId());
+                boolean inCooldown = latestClosed
+                        .filter(task -> now.isBefore(task.updatedAt().plus(COOLDOWN)))
+                        .filter(task -> finding.priorityInputs().highestSeverity().compareTo(task.severity()) <= 0)
+                        .isPresent();
+                if (inCooldown) {
+                    result = TaskUpsertResult.suppressed(Outcome.SUPPRESSED_COOLDOWN);
+                } else {
+                    LocalDate singaporeDate = LocalDate.ofInstant(now, SINGAPORE);
+                    if (!session.tryReserveTaskCreation(
+                            assignment.agentSubject(), singaporeDate, DAILY_TASK_CAP)) {
+                        result = TaskUpsertResult.suppressed(Outcome.SUPPRESSED_DAILY_CAP);
+                    } else {
+                        RelationshipTask created = RelationshipTask.create(
+                                taskIds.get(), finding, unseen, assignment, now);
+                        session.saveTask(created, 0);
+                        session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(
+                                created.taskId(), created.clientId(), created.history().getLast()));
+                        result = new TaskUpsertResult(created.taskId(), Outcome.CREATED, created.version());
+                    }
+                }
+            }
+            if (result.outcome().suppressed()) {
+                session.enqueueAudit(RelationshipHealthAuditEventFactory.suppression(
+                        finding, result.outcome()));
             }
             session.saveProcessedFinding(new ProcessedFinding(finding, result, now));
             return result;
@@ -113,11 +146,21 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             String taskId, long expectedVersion,
             java.util.function.Function<RelationshipTask, RelationshipTask> change
     ) {
+        RelationshipTask snapshot = repository.inTransaction(session -> session.findTask(taskId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId)));
+        AssignmentSnapshot assignment = assignments.resolve(snapshot.clientId());
+        validateAssignment(snapshot.clientId(), assignment);
         return repository.inTransaction(session -> {
             RelationshipTask current = session.findTask(taskId)
                     .orElseThrow(() -> new TaskNotFoundException(taskId));
+            validateAssignment(current.clientId(), assignment);
+            if (!assignment.agentSubject().equals(current.assignment().agentSubject())) {
+                current = current.withAssignment(assignment);
+            }
             RelationshipTask updated = change.apply(current);
             session.saveTask(updated, expectedVersion);
+            session.enqueueAudit(RelationshipHealthAuditEventFactory.taskHistory(
+                    updated.taskId(), updated.clientId(), updated.history().getLast()));
             return updated;
         });
     }

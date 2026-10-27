@@ -21,4 +21,3 @@ variable "trail_retention_days" {
   type        = number
   default     = 90
 }
-

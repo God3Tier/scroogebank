@@ -9,7 +9,8 @@ export default defineConfig({
     // rules. Locally, transaction-service (the SFTP stack's receiver-api)
     // listens on 8082, user-service on 8081 (users and activities),
     // account-service on 8083, dashboard-service on 8085, engagement-service
-    // on 8086 and client-profile-management-service on 8080.
+    // on 8086, client-health-monitor-service on 8087 and
+    // client-profile-management-service on 8080.
     proxy: {
       '^/api/accounts/[^/]+/transactions': {
         target: 'http://localhost:8082',
@@ -33,6 +34,10 @@ export default defineConfig({
       },
       '/api/dashboard': {
         target: 'http://localhost:8085',
+        changeOrigin: true,
+      },
+      '/api/relationship-health': {
+        target: 'http://localhost:8087',
         changeOrigin: true,
       },
       '/api/engagement': {
