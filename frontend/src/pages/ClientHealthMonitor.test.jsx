@@ -85,9 +85,9 @@ describe('Client Health UI integration', () => {
     renderPage()
 
     expect((await screen.findAllByText('client-1')).length).toBeGreaterThan(0)
-    const evidenceSection = (await screen.findByRole(
-      'heading', { name: 'Signal evidence' },
-    )).closest('section')
+    const evidenceHeading = await screen.findByRole('heading', { name: 'Signal evidence' })
+    const evidenceSection = evidenceHeading.closest('section')
+    expect(evidenceSection).not.toBeNull()
     expect(within(evidenceSection).getByText('Transaction Activity Decline')).toBeInTheDocument()
     expect(await screen.findByText(/Verified activity changed/)).toBeInTheDocument()
     expect(await screen.findByText('Source: Template Fallback')).toBeInTheDocument()
