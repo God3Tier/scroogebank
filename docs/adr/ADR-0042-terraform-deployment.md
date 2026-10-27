@@ -7,7 +7,7 @@
 - Feature/branch: `task/infrastructure/terraform`; decisions 1, 3, 9 and 10 amended and decision 11 added on `task/transaction-integration/ingest-lambda`
 - Related issue/PR: TBD
 - Supersedes: on acceptance, [ADR-0021](ADR-0021-audit-read-path-grpc-service-connect.md) decision 5 in part (the `appProtocol: grpc` on the auditor's port; decision 7 below)
-- Superseded by: N/A
+- Superseded by: [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) decision 1 in part, if accepted (`bootstrap` is applied and destroyed with every deployment)
 
 ## Context
 

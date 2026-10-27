@@ -45,8 +45,8 @@ services:
     networks:
       - backend
 
-  # Loads init.sql directly: it starts empty every time, so there is no
-  # applied migration for Flyway to check.
+  # Loads V1 init.sql followed by V2 directly: it starts empty every time, so
+  # there is no applied migration for Flyway to check.
   test-db:
     image: postgres:17-alpine
     profiles: ["test"]
@@ -58,6 +58,7 @@ services:
       - /var/lib/postgresql/data
     volumes:
       - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-transactions.sql:ro
+      - ./receiver/data/V2_client_health_transaction_fields.sql:/docker-entrypoint-initdb.d/002-client-health-transaction-fields.sql:ro
     networks:
       - backend
     healthcheck:
@@ -75,7 +76,10 @@ services:
     working_dir: /workspace
     volumes:
       - ./receiver:/workspace
+      # The OpenAPI contracts the tests check responses against (ADR-0063).
+      - ../../docs/api:/openapi:ro
     environment:
+      OPENAPI_DIR: /openapi
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: ${POSTGRES_USER:-crm}
@@ -147,7 +151,21 @@ services:
       DB_USER: ${POSTGRES_USER:-crm}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
       DB_NAME: ${POSTGRES_DB:-transactions}
+      APP_ENV: local
       APP_ADDR: ":8080"
+      # It checks each caller's token and asks account-service, on the host,
+      # about ownership with it (ADR-0064).
+      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI:-}
+      COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-}
+      ACCOUNT_SERVICE_BASE_URL: ${ACCOUNT_SERVICE_BASE_URL:-http://host.docker.internal:8083}
+      AWS_REGION: ${AWS_REGION:-}
+      AUDIT_QUEUE_URL: ${AUDIT_QUEUE_URL:-}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:${TRANSACTION_API_PORT:-8082}:8080"
     networks:

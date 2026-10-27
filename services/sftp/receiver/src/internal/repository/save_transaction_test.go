@@ -47,6 +47,15 @@ func TestSaveTransaction(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		"rejects source fingerprints outside the synthetic contract": {
+			transaction: models.Transaction{
+				TransactionID: "00000000-0000-0000-0000-000000000103",
+				AccountID:     "account-103", TransactionType: "Deposit", Amount: 40,
+				Currency: "SGD", TransferDate: transferDate, Status: "Completed",
+				SourceFingerprint: "synthetic-employer-001",
+			},
+			wantErr: true,
+		},
 	}
 
 	for name, test := range tests {

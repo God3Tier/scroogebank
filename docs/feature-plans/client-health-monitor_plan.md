@@ -2,19 +2,22 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF08 and offline rule evaluation are merged; RH-SF10 API-backed Agent/Admin UI integration is implemented on its task branch
+- Status: In progress; SF00-SF08, offline rule evaluation, and RH-SF10 API-backed Agent/Admin UI integration are merged; the transaction-history provider is merged from `dev` under proposed ADR-0065 and remains blocked on owner/security acceptance and end-to-end verification
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/ui-integration`
+- Current integration branch: `feat/client-health-monitor`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-27 from `origin/feat/client-health-monitor` at `278445c`
+- Last repository sync: 2026-10-27 from `origin/feat/client-health-monitor` at `555a69a` and `origin/dev` at `d9f4ed6`
 - AI-assisted planning: Yes; Cursor
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
 Bedrock-fallback, authorization, outbox and observability direction. ADR-0044
 accepts API-based transaction intake and replay for RH-SF01. Detailed assignment,
 provider, persistence and deployment contracts remain coordinated follow-up work.
+The transaction-history provider and Terraform now implement the reviewable
+ADR-0065 proposal, but that proposal is not accepted production architecture
+until the named owners and security/platform reviewers approve it.
 
 ## Problem statement
 
@@ -239,12 +242,17 @@ Required from the transaction owner:
 - schema compatibility policy; and
 - no unmatched/rejected record presented as analysable.
 
-Current state: transaction-service populates matched `account_id` and
-`client_id` values through account-service and exposes a private cursor-paged
-admin list. RH-SF01 still needs the dedicated service-authenticated, date-bounded
-replay contract accepted in ADR-0044, a stable synthetic source fingerprint,
-and six months of reproducible synthetic history. Provider-side changes require
-Feature 3 owner coordination.
+Current state: SFTP import resolves and stores `client_id` and `account_id` for
+matched rows. The merged transaction-service implementation provides the
+service-authenticated, date-bounded route accepted for the Client Health
+consumer by ADR-0044: all matched clients in a time window, global keyset
+pagination, explicit activity kind, and a nullable stable synthetic source
+fingerprint. Six-month deterministic producer history covers the three MVP
+signals and a healthy control. `make test` passes for endpoint authentication,
+pagination, and synthetic-history coverage. Provider acceptance under
+[ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md), the
+production Client Health HTTP/token adapter, and end-to-end verification remain
+outstanding.
 
 ### Client assignment
 
@@ -491,7 +499,7 @@ Decisions:
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; transaction-owner provider extension; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer complete and merged; production HTTP/token adapter and Feature 3 E2E pending | 2026-10-21 |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; proposed ADR-0065 provider; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer and provider route/history merged; production HTTP/token adapter, ADR-0065 acceptance, and Feature 3 E2E pending | 2026-10-27 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; health-db migrations | `task/client-health-monitor/activity-projection` | Domain/baselines and V4 projection/coverage JDBC persistence complete and merged | 2026-10-26 |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; ADR-0052; shared fixtures | `task/client-health-monitor/signal-rules` | V1 recurring-credit, activity-decline and sustained-net-outflow rules complete and merged; Java 25 CI pending | 2026-10-21 |
 | RH-SF03-EVAL | Offline labelled rule evaluation | Garvit | rule evaluation harness, labelled synthetic scenarios, evaluation evidence | RH-SF03; ADR-0052 | `task/client-health-monitor/rule-evaluation` | Complete and merged: six labelled positive/negative/boundary/sufficiency scenarios pass deterministically; synthetic-only limitations documented | 2026-10-22 |
@@ -499,9 +507,9 @@ Decisions:
 | RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy | `task/client-health-monitor/task-persistence` | Domain, V1/V2 schema, suppression/admission rules, JDBC repository adapter and atomic SF08 task/finding/outbox writes implemented | 2026-10-23 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API/runtime wiring, current-assignment reads/actions, opaque keyset pagination, bounded notes, Contract-B consumer and PostgreSQL/runtime integration suites implemented; client-profile Contract-B provider and Cognito provisioning remain pending | 2026-10-23 |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval | 2026-10-26 |
-| RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented locally; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
+| RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented and merged; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
 | RH-SF09 | Metrics and health | TBD | metrics/health/dashboard/alarms | Hooks across SF01-SF08 | TBD | Unassigned | N/A |
-| RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented locally against Contract D with deterministic API mocks; frontend CI and owner review pending | 2026-10-27 |
+| RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented and merged against Contract D with deterministic API mocks; deployed API verification and owner review pending | 2026-10-27 |
 | RH-SF11 | Cloud deployment | TBD | compute/database/IAM/routes/secrets/alarms | Accepted ADRs/platform owner | TBD | Unassigned | N/A |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
 
@@ -574,7 +582,7 @@ The feature branch never merges directly into `main`.
 1. V1 thresholds/severity are accepted in ADR-0052; deterministic rules expose no confidence percentage.
 2. Daily cap, cooldown, worsening and suppression ownership are accepted in ADR-0053.
 3. Completion/dismissal reason codes.
-4. Transaction integration uses the internal pull/replay API accepted in ADR-0044; Feature 3 owner approval and provider implementation remain pending.
+4. Transaction integration uses the internal pull/replay API accepted in ADR-0044; the provider implementation is merged under proposed ADR-0065, while cross-owner acceptance, the Client Health production adapter, and end-to-end verification remain pending.
 5. Assignment lookup versus assignment event.
 6. Lambda/ECS deployment shape and database connection strategy.
 7. Bedrock model/Region/retention/logging/cost caps.

@@ -22,7 +22,7 @@ type Service interface {
 	// groupBy is empty or "agent"; only admins may group by agent.
 	AccountStats(ctx context.Context, caller models.Caller, from, to, groupBy string) (models.AccountStats, error)
 	// OwnedAccountIDs lists the accounts the caller owns, whatever their role.
-	// user-service uses it to scope an agent's transaction figures.
+	// transaction-service uses it to scope an agent's transaction figures.
 	OwnedAccountIDs(ctx context.Context, caller models.Caller) (models.AccountIDs, error)
 }
 

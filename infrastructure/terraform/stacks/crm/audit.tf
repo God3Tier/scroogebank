@@ -39,6 +39,7 @@ locals {
       module.user_service.task_role_arn,
       module.client_service.task_role_arn,
       module.account_service.task_role_arn,
+      module.transaction_service.task_role_arn,
       module.event_alert_service.task_role_arn,
       aws_iam_role.cognito_triggers_replay.arn,
     ],

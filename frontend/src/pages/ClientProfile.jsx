@@ -3,8 +3,12 @@ import { useAuth } from 'react-oidc-context'
 import { Link, useParams } from 'react-router-dom'
 
 import { createAccount, listAccounts, updateAccountStatus } from '../api/accounts.js'
-import { fetchDocument, getClient, listDocuments, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
+import { fetchDocument, getClient, listDocuments, reassignClients, updateClient, uploadDocument, verifyClient } from '../api/clients.js'
+import { listUsers } from '../api/users.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
+import ReassignForm from '../components/ReassignForm.jsx'
+import { validateClient } from '../components/clientValidation.js'
+import { agentName, movedText } from '../components/reassignText.js'
 
 // One client's profile, identity documents and verification (ADR-0041). The
 // agent may upload the document the client gave them, opens it, compares it
@@ -111,6 +115,11 @@ function ProfileEditor({ client, onSaved, onCancel }) {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    const problem = validateClient(form)
+    if (problem) {
+      setSaving({ busy: false, error: problem })
+      return
+    }
     setSaving({ busy: true, error: '' })
     try {
       await updateClient(client.client_id, { ...form, date_of_birth: `${form.date_of_birth}T00:00:00Z` })
@@ -221,6 +230,68 @@ function ClientProfile() {
   const { clientId } = useParams()
   // A new client starts from a fresh page, with nothing checked.
   return <ClientProfileView key={clientId} clientId={clientId} />
+}
+
+// Admins see who the client's agent is, and may move the client, with its
+// accounts, to another enabled agent: their one write on client data
+// (requirements Q&A UM07, ADR-0060). Agents are matched to the client by
+// their Cognito sub.
+function AgentPanel({ client, onReassigned }) {
+  const [agents, setAgents] = useState({ status: 'loading', users: [] })
+  const [open, setOpen] = useState(false)
+  const [message, setMessage] = useState({ text: '', error: '' })
+
+  useEffect(() => {
+    let active = true
+    listUsers({ role: 'AGENT', size: 100 })
+      .then((page) => {
+        if (active) setAgents({ status: 'ready', users: page.content })
+      })
+      .catch(() => {
+        if (active) setAgents({ status: 'error', users: [] })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const current = agents.users.find((user) => user.idpSub === client.assigned_agent_id)
+  const receivers = agents.users.filter((user) => user.enabled && user.idpSub !== client.assigned_agent_id)
+
+  async function handleReassign(receiver) {
+    const result = await reassignClients({ toUserId: receiver.id, clientIds: [client.client_id] })
+    setOpen(false)
+    try {
+      await onReassigned()
+      setMessage({ text: movedText(result.reassigned, receiver), error: '' })
+    } catch {
+      setMessage({ text: '', error: 'The client was reassigned, but the page could not be refreshed. Reload the page.' })
+    }
+  }
+
+  let currentText = 'Loading…'
+  if (current) currentText = `${agentName(current)} (${current.email})${current.enabled ? '' : ', disabled'}`
+  else if (agents.status !== 'loading') currentText = `An agent the CRM does not list (${String(client.assigned_agent_id || '').slice(0, 8)}…)`
+
+  return (
+    <section className="card" aria-labelledby="agent-title">
+      <div className="document-preview__header">
+        <h2 id="agent-title">Agent</h2>
+        {!open && agents.status === 'ready' && (
+          <button type="button" onClick={() => { setMessage({ text: '', error: '' }); setOpen(true) }}>Reassign</button>
+        )}
+      </div>
+      <p>{currentText}</p>
+      {agents.status === 'error' && (
+        <p className="form-error" role="alert">The agents could not be loaded, so the client cannot be reassigned now.</p>
+      )}
+      {message.text && <p className="success-message" role="status">{message.text}</p>}
+      {message.error && <p className="form-error" role="alert">{message.error}</p>}
+      {open && (
+        <ReassignForm agents={receivers} submitLabel="Reassign client" onSubmit={handleReassign} onCancel={() => setOpen(false)} />
+      )}
+    </section>
+  )
 }
 
 function ClientProfileView({ clientId }) {
@@ -355,8 +426,7 @@ function ClientProfileView({ clientId }) {
       setVerification({ saving: false, error: 'The client was verified, but the page could not be refreshed. Reload the page.' })
       return
     }
-    // Agents manage client accounts; admins do not (requirements Q&A UM18).
-    if (!admin) await offerActivation()
+    await offerActivation()
   }
 
   // Asks the agent whether the newly verified client's Pending accounts
@@ -413,6 +483,10 @@ function ClientProfileView({ clientId }) {
   const { client, documents } = state
   const verified = isVerified(client)
   const accountsPath = `/agent/client/${encodeURIComponent(clientId)}/transactions`
+  // Admins only read client data: no edit, account, upload or verify control
+  // (ADR-0059).
+  const accountsLabel = admin ? 'View accounts and transactions' : 'Manage accounts and transactions'
+  const checkable = !admin && !verified
   const withoutDocument = verified && client.verified_with_documents === false
   const verifyWithDocuments = checked.size > 0
   const evidenceCount = documents.filter((doc) => doc.verification_evidence).length
@@ -440,7 +514,7 @@ function ClientProfileView({ clientId }) {
         <div className="client-header__text">
           <h1>{client.first_name} {client.last_name}</h1>
           <p>{client.email}</p>
-          <p><Link to={accountsPath}>Manage accounts and transactions</Link></p>
+          <p><Link to={accountsPath}>{accountsLabel}</Link></p>
         </div>
         <div className="client-header__badges">
           <span className={`status-badge ${verified ? 'status-badge--verified' : 'status-badge--attention'}`}>
@@ -456,10 +530,17 @@ function ClientProfileView({ clientId }) {
         </div>
       </header>
 
+      {admin && (
+        <div className="read-only-notice" role="note">
+          <span className="material-symbols-outlined" aria-hidden="true">visibility</span>
+          <span><strong>Read only.</strong> Admins can view this client, but only the client's agent can change them. An admin can only move the client to another agent.</span>
+        </div>
+      )}
+
       <section className="card" aria-labelledby="profile-title">
         <div className="document-preview__header">
           <h2 id="profile-title">Profile</h2>
-          {!editing && (
+          {!admin && !editing && (
             <button type="button" onClick={() => { setEditMessage(''); setEditing(true) }}>Edit</button>
           )}
         </div>
@@ -478,15 +559,21 @@ function ClientProfileView({ clientId }) {
         )}
       </section>
 
+      {admin && <AgentPanel client={client} onReassigned={reload} />}
+
       <section className="card" aria-labelledby="accounts-title">
         <div className="document-preview__header">
           <h2 id="accounts-title">Accounts</h2>
-          {!openingAccount && (
+          {!admin && !openingAccount && (
             <button type="button" onClick={() => { setAccountMessage(''); setOpeningAccount(true) }}>Open account</button>
           )}
         </div>
         {accountMessage && <p className="success-message" role="status">{accountMessage}</p>}
-        {openingAccount ? (
+        {admin ? (
+          <p className="section-note">
+            To see the accounts this client holds, use <Link to={accountsPath}>{accountsLabel}</Link>.
+          </p>
+        ) : openingAccount ? (
           <AccountOpener clientId={clientId} pendingOnly={!verified} onOpened={handleAccountOpened} onCancel={() => setOpeningAccount(false)} />
         ) : (
           <p className="section-note">
@@ -498,22 +585,28 @@ function ClientProfileView({ clientId }) {
 
       <section className="card card-flush" aria-labelledby="documents-title">
         <h2 id="documents-title">Identity documents</h2>
-        <div className="card-body">
-          <p className="section-note">
-            Upload the identity document the client gave you, open it and compare it with the profile.
-            Uploading a document does not verify the client. Documents are optional, but a verification
-            without one is recorded and shown as such.
-          </p>
-          <form className="document-upload" onSubmit={handleUpload}>
-            <label>
-              Document file (JPEG, PNG or PDF, up to 5 MB)
-              <input type="file" accept={ACCEPTED_FILES} onChange={(event) => setFile(event.target.files?.[0] || null)} />
-            </label>
-            <button type="submit" disabled={!file || upload.saving}>{upload.saving ? 'Uploading…' : 'Upload'}</button>
-          </form>
-          {upload.error && <p className="form-error" role="alert">{upload.error}</p>}
-          {upload.message && <p className="success-message" role="status">{upload.message}</p>}
-        </div>
+        {admin ? (
+          <div className="card-body">
+            <p className="section-note">The identity documents the client's agent uploaded. Open one to see it.</p>
+          </div>
+        ) : (
+          <div className="card-body">
+            <p className="section-note">
+              Upload the identity document the client gave you, open it and compare it with the profile.
+              Uploading a document does not verify the client. Documents are optional, but a verification
+              without one is recorded and shown as such.
+            </p>
+            <form className="document-upload" onSubmit={handleUpload}>
+              <label>
+                Document file (JPEG, PNG or PDF, up to 5 MB)
+                <input type="file" accept={ACCEPTED_FILES} onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              </label>
+              <button type="submit" disabled={!file || upload.saving}>{upload.saving ? 'Uploading…' : 'Upload'}</button>
+            </form>
+            {upload.error && <p className="form-error" role="alert">{upload.error}</p>}
+            {upload.message && <p className="success-message" role="status">{upload.message}</p>}
+          </div>
+        )}
 
         {documents.length === 0 ? (
           <p className="empty-state">No documents yet.</p>
@@ -522,7 +615,7 @@ function ClientProfileView({ clientId }) {
             <table className="data-table documents-table">
               <thead>
                 <tr>
-                  {!verified && <th scope="col">Checked</th>}
+                  {checkable && <th scope="col">Checked</th>}
                   <th scope="col">Document</th>
                   <th scope="col" className="num">Size</th>
                   <th scope="col">Uploaded</th>
@@ -537,7 +630,7 @@ function ClientProfileView({ clientId }) {
                   const uploader = who(doc.uploaded_by_agent_id)
                   return (
                     <tr key={doc.document_id}>
-                      {!verified && (
+                      {checkable && (
                         <td>
                           <input
                             type="checkbox"
@@ -568,7 +661,7 @@ function ClientProfileView({ clientId }) {
             </table>
           </div>
         )}
-        {!verified && documents.length > 0 && (
+        {checkable && documents.length > 0 && (
           <p className="section-note card-body">Open a document before you mark it as checked.</p>
         )}
       </section>
@@ -625,7 +718,10 @@ function ClientProfileView({ clientId }) {
           </p>
         )}
         {activation.message && <p className="success-message" role="status">{activation.message}</p>}
-        {!verified && (
+        {admin && !verified && (
+          <p className="section-note">Not verified yet. Only the client's agent can verify them.</p>
+        )}
+        {checkable && (
           <form className="verify-form" onSubmit={handleVerify}>
             <p>
               Verify the client once you have checked their identity against the profile. The verification

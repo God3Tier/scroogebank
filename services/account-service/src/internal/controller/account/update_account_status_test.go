@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"account-service/src/internal/audit"
+	"account-service/src/internal/contract"
 	accounterrors "account-service/src/internal/errors"
 	"account-service/src/internal/models"
 	servicemock "account-service/src/internal/service/account"
@@ -54,6 +55,7 @@ func TestUpdateAccountStatus(t *testing.T) {
 			res := httptest.NewRecorder()
 
 			NewAccountController(svc).UpdateAccountStatus(res, req.WithContext(ctx), caller, accountID)
+			contract.Check(t, "accounts-api.yaml", http.MethodPatch, "/api/accounts/{accountId}", res)
 
 			assert.Equal(t, test.wantStatus, res.Code)
 			if test.wantStatus != http.StatusOK {
@@ -63,7 +65,7 @@ func TestUpdateAccountStatus(t *testing.T) {
 			assert.Equal(t, audit.Change{Attribute: "status", Before: "PENDING", After: "ACTIVE"}, *change)
 			var body map[string]string
 			require.NoError(t, json.Unmarshal(res.Body.Bytes(), &body))
-			assert.Equal(t, map[string]string{"account_id": accountID, "status": "ACTIVE"}, body)
+			assert.Equal(t, map[string]string{"account_id": accountID, "status": "active"}, body)
 		})
 	}
 }

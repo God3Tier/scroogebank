@@ -26,7 +26,7 @@ class DashboardCacheTest {
     private final DashboardCache cache = new DashboardCache(new DashboardProperties(
             new DashboardProperties.Window(30, 365),
             new DashboardProperties.Cache(60, 1000),
-            new DashboardProperties.Upstream(2000, 3000, "", "", "")));
+            new DashboardProperties.Upstream(2000, 3000, "", "", "", "")));
 
     @Test
     void neverServesOneCallersFiguresToAnother() {
@@ -108,8 +108,8 @@ class DashboardCacheTest {
     @ParameterizedTest
     @EnumSource(value = PanelReason.class, names = {"UPSTREAM_TIMEOUT", "UPSTREAM_ERROR"}, mode = EnumSource.Mode.EXCLUDE)
     void keepsAResponseWhoseFailuresAskingAgainWouldNotChange(PanelReason reason) {
-        // Not wired up, refused, mixed currencies, an unsupported window: the
-        // next request would get the same answer.
+        // Not wired up, refused, an unsupported window: the next request
+        // would get the same answer.
         AtomicInteger computations = new AtomicInteger();
         Supplier<DashboardResponse> settled = () -> {
             computations.incrementAndGet();

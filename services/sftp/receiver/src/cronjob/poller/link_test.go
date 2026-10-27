@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"receiver/src/internal/models"
 )
 
 const (
@@ -14,6 +16,8 @@ const (
 	knownClient    = "00000000-0000-0000-0000-000000000203"
 	unknownAccount = "00000000-0000-0000-0000-000000000299"
 )
+
+var sgdAccount = models.Account{ClientID: knownClient, Currency: "SGD"}
 
 // One file: a known account twice (once in upper case), an unknown or
 // deleted account, and an external reference that is not a UUID.
@@ -35,7 +39,7 @@ func pollOnce(t *testing.T, directory *fakeDirectory, content string) (*fakeRemo
 }
 
 func TestPollLinksTransactionsToAccounts(t *testing.T) {
-	directory := &fakeDirectory{accounts: map[string]string{knownAccount: knownClient}}
+	directory := &fakeDirectory{accounts: map[string]models.Account{knownAccount: sgdAccount}}
 
 	remote, store, err := pollOnce(t, directory, linkJSON)
 
@@ -89,7 +93,7 @@ func TestPollAuditsOnlyTheFirstLookupFailureOfAnOutage(t *testing.T) {
 
 	// account-service is back: the file is imported.
 	directory.err = nil
-	directory.accounts = map[string]string{knownAccount: knownClient}
+	directory.accounts = map[string]models.Account{knownAccount: sgdAccount}
 	require.NoError(t, p.Poll(ctx))
 	require.Len(t, audit.completed, 1)
 
@@ -112,4 +116,46 @@ func TestPollSkipsTheLookupWhenNoReferenceIsAUUID(t *testing.T) {
 	assert.Empty(t, directory.asked)
 	require.Len(t, store.saved, 1)
 	assert.Equal(t, "Unmatched", store.saved[0].ImportStatus)
+}
+
+// A transaction on a CRM account must be in the account's currency. One
+// without a currency, or in another one, is rejected like any invalid row;
+// a code in lower case still matches. An Unmatched row has no account to
+// compare with, so it is kept either way.
+const currencyJSON = `[
+	{"transaction_id":"t1","account_id":"` + knownAccount + `","transfer_date":"2026-09-24T08:30:00Z","transaction_type":"CREDIT","amount":1,"currency":"sgd","status":"COMPLETED"},
+	{"transaction_id":"t2","account_id":"` + knownAccount + `","transfer_date":"2026-09-24T08:30:00Z","transaction_type":"CREDIT","amount":2,"currency":"USD","status":"COMPLETED"},
+	{"transaction_id":"t3","account_id":"` + knownAccount + `","transfer_date":"2026-09-24T08:30:00Z","transaction_type":"CREDIT","amount":3,"status":"COMPLETED"},
+	{"transaction_id":"t4","account_id":"` + unknownAccount + `","transfer_date":"2026-09-24T08:30:00Z","transaction_type":"CREDIT","amount":4,"status":"COMPLETED"}
+]`
+
+func TestPollRejectsTransactionsNotInTheirAccountsCurrency(t *testing.T) {
+	remote := newFakeRemote()
+	remote.add("currency.json", currencyJSON)
+	store := &fakeStore{}
+	audit := &fakeEvents{}
+	directory := &fakeDirectory{accounts: map[string]models.Account{knownAccount: sgdAccount}}
+	p := New(Config{RemoteDir: "/reports"}, store, directory, Audit{Events: audit, Relay: &fakeRelay{}})
+	p.connector = func(context.Context) (remoteSFTP, func(), error) { return remote, func() {}, nil }
+
+	require.NoError(t, p.Poll(context.Background()))
+
+	require.Len(t, store.saved, 2)
+	assert.Equal(t, "t1", store.saved[0].TransactionID)
+	assert.Equal(t, "SGD", store.saved[0].Currency)
+	assert.Equal(t, "Matched", store.saved[0].ImportStatus)
+	assert.Equal(t, "t4", store.saved[1].TransactionID)
+	assert.Equal(t, "Unmatched", store.saved[1].ImportStatus)
+
+	require.Len(t, audit.completed, 1)
+	completed := audit.completed[0]
+	assert.Equal(t, "Partially Successful", completed.Status)
+	assert.Equal(t, 2, completed.RecordsAccepted)
+	assert.Equal(t, 2, completed.RecordsRejected)
+	require.Len(t, completed.ParseFailures, 2)
+	assert.Equal(t, "record 2", completed.ParseFailures[0].RecordRef)
+	assert.Contains(t, completed.ParseFailures[0].Reason, "currency USD does not match")
+	assert.Equal(t, "record 3", completed.ParseFailures[1].RecordRef)
+	assert.Contains(t, completed.ParseFailures[1].Reason, "currency is required")
+	assert.Equal(t, [][2]string{{"/reports/currency.json", "/reports/rejected/currency.json"}}, remote.renamed)
 }

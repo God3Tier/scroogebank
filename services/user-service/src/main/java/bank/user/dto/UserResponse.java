@@ -11,7 +11,7 @@ import java.util.UUID;
  *
  * <p>{@code idpSub} is the user's Cognito {@code sub}. Other services identify
  * agents by it rather than by {@code id}: client-profile-management-service
- * stores it as {@code created_by_agent_id}, and audit events carry it as
+ * stores it as {@code assigned_agent_id}, and audit events carry it as
  * {@code actor_id}. Exposing it lets an admin view join those records back to
  * a named user. Every endpoint returning this record is admin-only; if a
  * non-admin endpoint ever needs a user, give it a narrower response instead.

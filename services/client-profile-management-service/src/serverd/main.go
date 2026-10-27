@@ -11,6 +11,7 @@ import (
 	"client-profile-management-service/src/internal/security"
 	aggregateservice "client-profile-management-service/src/internal/service/aggregate"
 	clientservice "client-profile-management-service/src/internal/service/client"
+	"client-profile-management-service/src/internal/users"
 	"client-profile-management-service/src/serverd/routers"
 	auditqueue "client-profile-management-service/src/serverd/sqs"
 	"context"
@@ -33,9 +34,13 @@ import (
 )
 
 // accountLookupTimeout bounds the call to account-service made before a client
-// is deleted. It runs inside the caller's request, so it must stay well under
-// the API Gateway timeout.
+// is deleted, or while clients are reassigned. It runs inside the caller's
+// request, so it must stay well under the API Gateway timeout.
 const accountLookupTimeout = 2 * time.Second
+
+// userLookupTimeout bounds each call to user-service made before clients are
+// reassigned (ADR-0060), for the same reason.
+const userLookupTimeout = 2 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -50,6 +55,10 @@ func run() error {
 	accountServiceURL := strings.TrimSpace(os.Getenv("ACCOUNT_SERVICE_BASE_URL"))
 	if accountServiceURL == "" {
 		return fmt.Errorf("ACCOUNT_SERVICE_BASE_URL is required")
+	}
+	userServiceURL := strings.TrimSpace(os.Getenv("USER_SERVICE_BASE_URL"))
+	if userServiceURL == "" {
+		return fmt.Errorf("USER_SERVICE_BASE_URL is required")
 	}
 	db, err := sql.Open("postgres", databaseURL())
 	if err != nil {
@@ -84,6 +93,7 @@ func run() error {
 	clientSvc := clientservice.NewClientService(
 		registry.GetClientRepository(),
 		accounts.NewHTTPDirectory(accountServiceURL, accountLookupTimeout),
+		users.NewHTTPDirectory(userServiceURL, userLookupTimeout),
 	)
 
 	router := gin.New()
@@ -192,6 +202,9 @@ func validateProductionSecurityConfig() error {
 	// so that hop must be encrypted too.
 	if !strings.HasPrefix(strings.TrimSpace(os.Getenv("ACCOUNT_SERVICE_BASE_URL")), "https://") {
 		return fmt.Errorf("production requires an https ACCOUNT_SERVICE_BASE_URL")
+	}
+	if !strings.HasPrefix(strings.TrimSpace(os.Getenv("USER_SERVICE_BASE_URL")), "https://") {
+		return fmt.Errorf("production requires an https USER_SERVICE_BASE_URL")
 	}
 	return nil
 }

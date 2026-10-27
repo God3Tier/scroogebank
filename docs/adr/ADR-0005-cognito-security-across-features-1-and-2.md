@@ -7,7 +7,7 @@
 - Feature/branch: `feat/refactor-feat-2`
 - Related issue/PR: Not yet assigned
 - Supersedes: ADR-0004
-- Superseded by: N/A
+- Superseded by: [ADR-0059](ADR-0059-admins-read-only-on-client-data.md) (decision 4 in part: admins read every client profile and account but no longer change them; the rest of decision 4 and the other decisions remain in force)
 
 ## Context
 

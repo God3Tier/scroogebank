@@ -2,15 +2,17 @@
 
 ## Status and ownership
 
-- Status: SF00 internal finding contract implemented; RH-SF01 pull/replay direction accepted by ADR-0044; external provider extensions pending owner review
+- Status: SF00 internal finding contract and RH-SF01 consumer implemented; pull/replay direction accepted by ADR-0044; provider implementation merged under proposed ADR-0065 and pending cross-owner acceptance and end-to-end verification
 - Feature: Client Health Monitor
 - Contract owner: Garvit
 - Required reviewer: Swayam
 - Required external reviewers: transaction owner, client-profile owner, Auditor owner, security/platform owner
 - Feature plan: [`../feature-plans/client-health-monitor_plan.md`](../feature-plans/client-health-monitor_plan.md)
-- Last updated: 2026-09-29
+- Last updated: 2026-10-27
 
-These contracts freeze boundaries for independent development. They do not select an AWS transport, authorize changes in another service, or replace required ADRs.
+These contracts freeze boundaries for independent development. Contract A uses
+the pull transport accepted by ADR-0044; provider deployment still requires the
+reviews in proposed ADR-0065. The contracts do not replace required ADRs.
 
 ## Contract principles
 
@@ -40,26 +42,29 @@ The merged SFTP receiver currently stores:
 - currency;
 - transaction timestamp;
 - Completed/Pending/Failed status;
+- explicit CustomerInitiated/Automated/Unknown activity kind;
+- nullable stable synthetic source fingerprint;
 - free-text description;
 - nullable client ID; and
 - Unmatched/Matched/Rejected import status.
 
 Current gaps:
 
-- the existing private list is an admin-UI contract rather than a
-  service-authenticated, date-bounded replay contract;
-- no stable source/counterparty fingerprint; and
-- no six-month reproducible relationship-health history.
+- cross-owner acceptance of proposed ADR-0065 and its exact service scope;
+- a real Cognito/import/read end-to-end check; and
+- the Client Health production HTTP/token adapter.
 
 Matched imports now populate `account_id` and `client_id` through
 account-service under ADR-0037. Transaction-service also exposes a private
-cursor-paged admin list under ADR-0043. ADR-0044 requires a separate internal
-replay endpoint with a least-privilege service token rather than reusing that
-human-admin route.
+cursor-paged admin list under ADR-0043. The merged provider implementation adds
+the separate matched-only, date-bounded internal replay endpoint and
+deterministic six-month producer history proposed by ADR-0065. It remains
+disabled for production use until that proposal and its security boundary are
+accepted.
 
 ### Client assignment
 
-The client-profile service stores the creating/owning Cognito subject in `created_by_agent_id`, but exposes no machine-to-machine assignment contract.
+The client-profile service stores the owning agent's Cognito subject in `assigned_agent_id`, which an admin's reassignment changes ([ADR-0060](../adr/ADR-0060-client-reassignment.md)), but exposes no machine-to-machine assignment contract.
 
 ### Auditor
 
@@ -96,7 +101,10 @@ for initial replay and daily analysis. It does not select an event stream.
 - `status`: required; `Completed`, `Pending`, or `Failed`.
 - `activityKind`: required under ADR-0051; `CustomerInitiated`, `Automated`, or
   `Unknown`. Unknown is excluded from activity counts rather than guessed.
-- `sourceFingerprint`: optional opaque stable synthetic source reference. It supports recurring-credit grouping without exposing free-text remitter details.
+- `sourceFingerprint`: required nullable field. When present, it is a stable
+  24–64 character synthetic source reference matching
+  `synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}`. It supports recurring-credit
+  grouping without exposing free-text remitter details.
 
 ### Provider guarantees requested
 
@@ -119,10 +127,11 @@ for initial replay and daily analysis. It does not select an event stream.
 - Record invalid/unsupported input without creating signals/tasks.
 - Store only the minimum read projection required by the selected rules.
 
-### Historical replay endpoint
+### Matched transaction history endpoint
 
-Accepted consumer contract in ADR-0044; provider implementation and Feature 3
-owner approval remain pending:
+ADR-0044 accepts the Client Health consumer contract. The Feature 3 provider
+implementation is merged under proposed ADR-0065; cross-owner acceptance,
+security review, and end-to-end verification remain pending.
 
 ```text
 GET /internal/v1/transactions
@@ -139,16 +148,16 @@ Proposed response:
   "schemaVersion": "1",
   "items": [
     {
-      "transactionId": "txn-000001",
+      "transactionId": "synthetic-3b71d6a4c829a1051e8d9fc2b1437a60",
       "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
-      "accountId": "acc-000001",
+      "accountId": "e3351530-f5c1-4f64-aedc-3c97d9f76816",
       "type": "Deposit",
       "amount": "4250.00",
       "currency": "SGD",
-      "transactionDate": "2026-09-28T00:30:00Z",
+      "transactionDate": "2026-09-28T05:00:00Z",
       "status": "Completed",
       "activityKind": "Automated",
-      "sourceFingerprint": "synthetic-employer-001"
+      "sourceFingerprint": "synthetic-employer-a1b2c3d4e5f6"
     }
   ],
   "nextCursor": null
@@ -158,7 +167,12 @@ Proposed response:
 The endpoint requires a scoped Cognito client-credentials token, inclusive
 `from`, exclusive `to`, bounded `limit`, and an opaque provider cursor. The
 consumer exposes no completed intake result unless every page validates and the
-provider returns the final cursor.
+provider returns the final cursor. The merged provider currently requires the
+exact `crm-transactions/read` scope, returns matched activity across all clients,
+caps pages at 500 rows, and uses a global descending
+`(transaction_date, transaction_id)` keyset cursor. Only rows with non-null CRM
+client and account IDs are returned; descriptions and import/reconciliation
+fields are excluded. Proposed ADR-0065 must be accepted before production use.
 
 Machine-readable consumer artifacts:
 
@@ -168,11 +182,11 @@ Machine-readable consumer artifacts:
 - Java records and validation under
   `bank.clienthealth.transaction.contract`
 
-Until Feature 3 delivers the production endpoint, local analysis uses
-`SyntheticTransactionReplaySource`. It follows the same paging contract and
-provides six deterministic months covering interrupted recurring credit,
-declining activity, sustained net outflow, healthy controls, and non-completed
-rows. It is a replaceable adapter, not a second contract.
+Until the production HTTP/token adapter and provider acceptance are complete,
+local analysis uses `SyntheticTransactionReplaySource`. It follows the same
+paging contract and provides six deterministic months covering interrupted
+recurring credit, declining activity, sustained net outflow, healthy controls,
+and non-completed rows. It is a replaceable adapter, not a second contract.
 
 ### RH-SF02 projection and baseline boundary
 

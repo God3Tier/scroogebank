@@ -21,12 +21,16 @@ func TestServiceTypeIsValidAction(t *testing.T) {
 		{name: "user management logout", service: UserManagementServiceType, action: "LOGOUT", want: true},
 		{name: "user management delete", service: UserManagementServiceType, action: "DELETE", want: true},
 		{name: "transaction ingestion event type", service: TransactionServiceType, action: "TRANSACTION_INGESTION", want: true},
+		{name: "transaction read event type", service: TransactionServiceType, action: "CRUD", want: true},
+		{name: "transaction service rejects dashboard views", service: TransactionServiceType, action: "DASHBOARD_VIEW", want: false},
 		{name: "event alert event type", service: EventAlertServiceType, action: "EVENT_ALERT", want: true},
 		{name: "audit security violation", service: AuditService, action: "SECURITY_VIOLATION", want: true},
 		{name: "dashboard view event type", service: DashboardServiceType, action: "DASHBOARD_VIEW", want: true},
 		{name: "dashboard rejects CRUD", service: DashboardServiceType, action: "CRUD", want: false},
 		{name: "cognito triggers authentication event type", service: CognitoTriggersServiceType, action: "AUTHENTICATION", want: true},
 		{name: "cognito triggers reject CRUD", service: CognitoTriggersServiceType, action: "CRUD", want: false},
+		{name: "engagement event type", service: EngagementServiceType, action: "ENGAGEMENT", want: true},
+		{name: "engagement rejects CRUD", service: EngagementServiceType, action: "CRUD", want: false},
 		{name: "unknown service", service: ServiceType("UNKNOWN"), action: "CREATE", want: false},
 	}
 

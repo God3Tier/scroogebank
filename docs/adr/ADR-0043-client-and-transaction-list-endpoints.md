@@ -7,7 +7,7 @@
 - Feature/branch: `task/base-features/list-endpoints`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0064 in part (decisions 2 and 3 for the transaction list: transaction-service serves and audits `GET /api/transactions` itself)
 
 ## Context
 

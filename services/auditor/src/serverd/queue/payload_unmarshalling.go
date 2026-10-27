@@ -102,9 +102,10 @@ var userAuditActions = map[string]map[string]bool{
 		"CREATE": true, "READ": true, "UPDATE": true, "DISABLE": true,
 		"PASSWORD_RESET": true, "ROLE_CHANGE": true, "LOGOUT": true,
 	},
-	// An account's transactions, read through user-service.
-	"ACCOUNT": {"READ": true},
-	// Every account's transactions, read by an admin (ADR-0043).
+	// An account's transactions, and every account's for an admin (ADR-0043),
+	// read through user-service until transaction-service served them itself
+	// (ADR-0064). Kept for events still queued from before.
+	"ACCOUNT":     {"READ": true},
 	"TRANSACTION": {"READ": true},
 	// The auditor's corrupted-log table, managed through user-service.
 	"CORRUPTED_AUDIT_LOG": {"CREATE": true, "READ": true, "DELETE": true},
@@ -117,6 +118,38 @@ func userAuditNeedsResourceID(resourceType, action string) bool {
 	return action != "READ" || (resourceType != "CORRUPTED_AUDIT_LOG" && resourceType != "TRANSACTION")
 }
 
+// transactionReadResources are what transaction-service reads (ADR-0064): an
+// account's transactions, and every account's for an admin. The first names
+// its account; the list names none.
+var transactionReadResources = map[string]bool{"ACCOUNT": true, "TRANSACTION": true}
+
+// validateTransactionReadPayload checks transaction-service's record of a
+// read. It has the fields user-service sent for these reads before ADR-0064.
+func validateTransactionReadPayload(envelope ValidEvent) error {
+	if envelope.Action != "READ" {
+		return fmt.Errorf("TRANSACTION_SERVICE is not permitted to send CRUD action %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorID) == "" {
+		return fmt.Errorf("TRANSACTION_SERVICE read event requires actor_id")
+	}
+	var payload ValidUserAuditPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid transaction read payload: %w", err)
+	}
+	if !transactionReadResources[payload.ResourceType] {
+		return fmt.Errorf("invalid transaction read resource_type: %q", payload.ResourceType)
+	}
+	missingID := payload.ResourceType == "ACCOUNT" && payload.ResourceID == "" && payload.StatusCode < 400
+	if missingID || payload.Endpoint == "" ||
+		payload.HTTPMethod == "" || payload.StatusCode < 100 || payload.StatusCode > 599 {
+		return fmt.Errorf("invalid transaction read payload: missing or invalid operation fields")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, payload.DateTime); err != nil {
+		return fmt.Errorf("invalid transaction read payload datetime: %w", err)
+	}
+	return nil
+}
+
 // dashboardViewActions are the dashboard's endpoints, one action each.
 var dashboardViewActions = map[string]bool{
 	"VIEW_OVERVIEW":          true,
@@ -124,6 +157,35 @@ var dashboardViewActions = map[string]bool{
 	"VIEW_TRANSACTIONS":      true,
 	"VIEW_ACTION_ITEMS":      true,
 	"VIEW_AGENT_PERFORMANCE": true,
+}
+
+// engagementActions are what engagement-service records (agent-engagement
+// plan §11): calendar changes, the invite and reminder emails its dispatcher
+// sends, and client follow-up drafts.
+var engagementActions = map[string]bool{
+	"EVENT_CREATE":       true,
+	"EVENT_UPDATE":       true,
+	"EVENT_CANCEL":       true,
+	"INVITE_SENT":        true,
+	"INVITE_FAILED":      true,
+	"REMINDER_SENT":      true,
+	"REMINDER_FAILED":    true,
+	"REMINDER_MISSED":    true,
+	"DRAFT_GENERATE":     true,
+	"DRAFT_DISCARD":      true,
+	"EMAIL_SEND":         true,
+	"EMAIL_SEND_FAILED":  true,
+	"PREFERENCES_UPDATE": true,
+}
+
+// ValidEngagementPayload is engagement-service's outbox envelope, the same
+// shape as event-alert-service's (ADR-0051 decision 7). data holds IDs,
+// statuses and changed field names, never titles, email bodies or addresses.
+type ValidEngagementPayload struct {
+	EventID      string                     `json:"event_id"`
+	EventVersion int                        `json:"event_version"`
+	OccurredAt   time.Time                  `json:"occurred_at"`
+	Data         map[string]json.RawMessage `json:"data"`
 }
 
 type ValidEventAlertPayload struct {
@@ -175,6 +237,9 @@ func validatePayload(envelope ValidEvent) error {
 	case models.CognitoTriggersServiceType:
 		return validateAuthenticationPayload(envelope)
 
+	case models.EngagementServiceType:
+		return validateEngagementPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
@@ -199,6 +264,25 @@ func validateEventAlertPayload(envelope ValidEvent) error {
 	}
 	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || len(payload.Data) == 0 {
 		return fmt.Errorf("invalid EventAlertPayload: required audit metadata is missing")
+	}
+	return nil
+}
+
+// validateEngagementPayload accepts engagement-service's actions. The actor is
+// the agent's sub, or "system" for what its dispatcher sends.
+func validateEngagementPayload(envelope ValidEvent) error {
+	if !engagementActions[envelope.Action] {
+		return fmt.Errorf("unrecognized action for ENGAGEMENT: %s", envelope.Action)
+	}
+	if strings.TrimSpace(envelope.ActorID) == "" {
+		return fmt.Errorf("ENGAGEMENT event requires actor_id")
+	}
+	var payload ValidEngagementPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("invalid EngagementPayload: %w", err)
+	}
+	if payload.EventID == "" || payload.EventVersion < 1 || payload.OccurredAt.IsZero() || payload.Data == nil {
+		return fmt.Errorf("invalid EngagementPayload: required audit metadata is missing")
 	}
 	return nil
 }
@@ -300,6 +384,9 @@ func validateDashboardPayload(envelope ValidEvent) error {
 }
 
 func validateTransactionPayload(envelope ValidEvent) error {
+	if strings.EqualFold(envelope.EventType, "CRUD") {
+		return validateTransactionReadPayload(envelope)
+	}
 	switch envelope.Action {
 	case "FILE_PROCESSING_COMPLETED":
 		var p ValidFileCompletedPayload

@@ -28,28 +28,33 @@ class AgentPerformanceTableTest {
             // An admin who created a client is not on the agent roster.
             new ClientStats.AgentClientCounts("sub-admin", 1, 0, 1)));
 
+    // Ben opened the most in SGD, Ada the only USD account (ADR-0062).
     private static final AccountStats ACCOUNTS = new AccountStats(0, Map.of(), Map.of(), Map.of(), Map.of(), 0,
-            BigDecimal.ZERO, "SGD", List.of(), List.of(
-            new AccountStats.AgentAccountCounts("sub-ben", 3, new BigDecimal("900.00")),
-            new AccountStats.AgentAccountCounts("sub-ada", 1, new BigDecimal("100.00"))));
+            Map.of(), List.of("SGD", "USD"), List.of(), List.of(
+            new AccountStats.AgentAccountCounts("sub-ben", 3, Map.of("SGD", new BigDecimal("900.00"))),
+            new AccountStats.AgentAccountCounts("sub-ada", 2,
+                    Map.of("SGD", new BigDecimal("100.00"), "USD", new BigDecimal("5.00")))));
 
     @Test
     void joinsNamesToFiguresBySub() {
-        AgentPerformance table = AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, AgentSortMetric.CLIENTS_ONBOARDED);
+        AgentPerformance table = build(AgentSortMetric.CLIENTS_ONBOARDED, "SGD");
 
         AgentRow ada = row(table, "sub-ada");
         assertThat(ada.name()).isEqualTo("Ada Lim");
         assertThat(ada.clientsOnboarded()).isEqualTo(2);
         assertThat(ada.verificationRate()).isEqualTo(0.5);
-        assertThat(ada.accountsOpened()).isEqualTo(1);
-        assertThat(ada.bookedInitialDeposits()).isEqualByComparingTo("100.00");
-        assertThat(table.currency()).isEqualTo("SGD");
+        assertThat(ada.accountsOpened()).isEqualTo(2);
+        assertThat(ada.bookedInitialDeposits())
+                .containsOnlyKeys("SGD", "USD")
+                .hasEntrySatisfying("USD", amount -> assertThat(amount).isEqualByComparingTo("5.00"));
+        assertThat(table.currencies()).containsExactly("SGD", "USD");
+        assertThat(table.sortCurrency()).isEqualTo("SGD");
         assertThat(table.sortedBy()).isEqualTo("clientsOnboarded");
     }
 
     @Test
     void listsEnabledAgentsAndAnyoneWithFiguresOnly() {
-        AgentPerformance table = AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, AgentSortMetric.CLIENTS_ONBOARDED);
+        AgentPerformance table = build(AgentSortMetric.CLIENTS_ONBOARDED, "SGD");
 
         // Dee is disabled and did nothing; Cai is disabled but onboarded clients.
         assertThat(table.rows()).extracting(AgentRow::agentId)
@@ -60,7 +65,7 @@ class AgentPerformanceTableTest {
 
     @Test
     void anAgentWithNoClientsHasNoVerificationRate() {
-        AgentPerformance table = AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, AgentSortMetric.CLIENTS_ONBOARDED);
+        AgentPerformance table = build(AgentSortMetric.CLIENTS_ONBOARDED, "SGD");
 
         AgentRow ben = row(table, "sub-ben");
         assertThat(ben.clientsOnboarded()).isZero();
@@ -69,13 +74,33 @@ class AgentPerformanceTableTest {
 
     @Test
     void sortsByTheChosenMetricHighestFirst() {
-        assertThat(AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, AgentSortMetric.CLIENTS_ONBOARDED).rows())
+        assertThat(build(AgentSortMetric.CLIENTS_ONBOARDED, "SGD").rows())
                 .extracting(AgentRow::agentId).containsExactly("sub-cai", "sub-ada", "sub-admin", "sub-ben");
-        assertThat(AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, AgentSortMetric.BOOKED_INITIAL_DEPOSITS).rows())
+        assertThat(build(AgentSortMetric.BOOKED_INITIAL_DEPOSITS, "SGD").rows())
                 .extracting(AgentRow::agentId).startsWith("sub-ben", "sub-ada");
         // Ben has no rate, so he sorts after everyone who has one.
-        assertThat(AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, AgentSortMetric.VERIFICATION_RATE).rows())
+        assertThat(build(AgentSortMetric.VERIFICATION_RATE, "SGD").rows())
                 .extracting(AgentRow::agentId).containsExactly("sub-cai", "sub-ada", "sub-admin", "sub-ben");
+    }
+
+    @Test
+    void ranksDepositsInTheChosenCurrencyOnly() {
+        // Ada's USD 5 outranks Ben, who has none in USD and counts as zero;
+        // nothing is added across currencies.
+        AgentPerformance table = build(AgentSortMetric.BOOKED_INITIAL_DEPOSITS, "USD");
+
+        assertThat(table.rows()).extracting(AgentRow::agentId).first().isEqualTo("sub-ada");
+        assertThat(table.sortCurrency()).isEqualTo("USD");
+        assertThat(row(table, "sub-ben").bookedInitialDeposits()).doesNotContainKey("USD");
+    }
+
+    @Test
+    void anAgentWhoOpenedNoAccountsHasNoDeposits() {
+        assertThat(row(build(AgentSortMetric.CLIENTS_ONBOARDED, "SGD"), "sub-cai").bookedInitialDeposits()).isEmpty();
+    }
+
+    private static AgentPerformance build(AgentSortMetric sort, String currency) {
+        return AgentPerformanceTable.build(ROSTER, CLIENTS, ACCOUNTS, sort, currency);
     }
 
     private static AgentRow row(AgentPerformance table, String agentId) {

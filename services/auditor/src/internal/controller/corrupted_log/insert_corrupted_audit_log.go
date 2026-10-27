@@ -11,17 +11,17 @@ import (
 func (c Controller) InsertCorruptedAuditLog(w http.ResponseWriter, r *http.Request) {
 	var request insertCorruptedAuditLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "bad input", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "bad input")
 		return
 	}
 	if _, err := uuid.Parse(request.ID); err != nil {
-		http.Error(w, "id must be a valid UUID", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "id must be a valid UUID")
 		return
 	}
 
 	if err := c.svc.InsertCorruptedAuditLog(r.Context(), request.model()); err != nil {
 		log.Printf("insert corrupted audit log: %v", err)
-		http.Error(w, "unable to save corrupted audit log", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "unable to save corrupted audit log")
 		return
 	}
 

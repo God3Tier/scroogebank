@@ -81,7 +81,7 @@ func TestCreateClientRemovesTheNewKeyWhenTheInsertFails(t *testing.T) {
 	loadTestFixture(t, db, "client_empty.sql")
 	profile := validRepositoryClient()
 	// Longer than the column allows, so the insert fails after the key exists.
-	profile.CreatedByAgentID = strings.Repeat("a", 129)
+	profile.AssignedAgentID = strings.Repeat("a", 129)
 
 	assert.Error(t, repo.CreateClient(context.Background(), profile))
 	assert.False(t, protector.HasKey(profile.ClientID.String()))

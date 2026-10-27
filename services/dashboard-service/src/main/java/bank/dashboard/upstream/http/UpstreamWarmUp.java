@@ -45,6 +45,7 @@ public class UpstreamWarmUp implements ApplicationRunner {
         addIfWired(healthUrls, "user-service", upstream.userServiceBaseUrl(), "/actuator/health");
         addIfWired(healthUrls, "client-service", upstream.clientServiceBaseUrl(), "/health");
         addIfWired(healthUrls, "account-service", upstream.accountServiceBaseUrl(), "/health");
+        addIfWired(healthUrls, "transaction-service", upstream.transactionServiceBaseUrl(), "/health");
 
         // In parallel, as the dashboard's own calls are. Closing the executor
         // waits for every call to end.

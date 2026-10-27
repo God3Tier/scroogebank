@@ -130,12 +130,12 @@ run "prod" {
     error_message = "Without domain_name: no certificates, the internal ALB on HTTP 80 and the default CloudFront name."
   }
   assert {
-    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
+    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,transaction,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
     error_message = "Every service behind the ALB in this stack, and the auditor, gets a project-CA certificate (INF-08)."
   }
   assert {
-    condition     = output.dashboard_inputs.upstreams.user.url == "https://user-service:8081"
-    error_message = "dashboard-service calls user-service over HTTPS."
+    condition     = output.dashboard_inputs.upstreams.user.url == "https://user-service:8081" && output.dashboard_inputs.upstreams.transaction.url == "https://transaction-service:8080"
+    error_message = "dashboard-service calls user-service and transaction-service over HTTPS."
   }
   assert {
     condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])

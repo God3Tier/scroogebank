@@ -11,9 +11,12 @@ type lookupRequest struct {
 	IDs []string `json:"ids"`
 }
 
+// accountRef is what the import needs to link a transaction: the account's
+// client, and its currency, which the transaction's must match (ADR-0037).
 type accountRef struct {
 	ID       string `json:"id"`
 	ClientID string `json:"client_id"`
+	Currency string `json:"currency"`
 }
 
 // LookupAccounts serves POST /internal/accounts/lookup. Only the transaction
@@ -36,7 +39,7 @@ func (c *accountController) LookupAccounts(w http.ResponseWriter, r *http.Reques
 	}
 	found := make([]accountRef, 0, len(accounts))
 	for _, account := range accounts {
-		found = append(found, accountRef{ID: account.ID, ClientID: account.ClientID})
+		found = append(found, accountRef{ID: account.ID, ClientID: account.ClientID, Currency: account.Currency})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string][]accountRef{"accounts": found})

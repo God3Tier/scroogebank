@@ -41,6 +41,9 @@ func (i impl) ListActivities(ctx context.Context, filter models.ActivityFilter) 
 	if filter.ActorID != "" {
 		mods = append(mods, qm.Where("actor_id = ?", filter.ActorID))
 	}
+	if filter.ClientID != "" {
+		mods = append(mods, qm.Where("payload->>'client_id' = ?", filter.ClientID))
+	}
 	// "timestamp" is quoted because it is also a type name in SQL.
 	if !filter.From.IsZero() {
 		mods = append(mods, qm.Where(`"timestamp" >= ?`, filter.From))

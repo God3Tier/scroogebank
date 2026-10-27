@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"producer/src/accounts"
 	"producer/src/transaction"
 )
 
@@ -28,22 +29,22 @@ const validRows = 3
 
 // Build returns the files for one kind of fault, in the order to publish
 // them.
-func Build(kind string, accountIDs []string) ([]File, error) {
+func Build(kind string, list []accounts.Account) ([]File, error) {
 	switch kind {
 	case "corrupt":
 		// Any proper prefix of a JSON array is incomplete, so the file
 		// cannot be parsed: a truncated upload.
-		content, err := json.Marshal(valid(accountIDs, validRows))
+		content, err := json.Marshal(valid(list, validRows))
 		if err != nil {
 			return nil, err
 		}
 		return []File{{Extension: ".json", Content: content[:1+rand.IntN(len(content)-1)]}}, nil
 	case "partial":
-		return jsonFile(append(valid(accountIDs, validRows), invalid(accountIDs)...))
+		return jsonFile(append(valid(list, validRows), invalid(list)...))
 	case "all-invalid":
-		return jsonFile(invalid(accountIDs))
+		return jsonFile(invalid(list))
 	case "unsupported":
-		content, err := csvFile(valid(accountIDs, validRows))
+		content, err := csvFile(valid(list, validRows))
 		if err != nil {
 			return nil, err
 		}
@@ -52,7 +53,7 @@ func Build(kind string, accountIDs []string) ([]File, error) {
 		// The same transaction twice: Pending, then Completed with another
 		// amount. The import moves the status forward and keeps the first
 		// amount (ADR-0024 decision 4).
-		first := transaction.Generate(accountIDs)
+		first := transaction.Generate(list)
 		first.Status = "PENDING"
 		second := first
 		second.Status = "COMPLETED"
@@ -72,8 +73,8 @@ func Build(kind string, accountIDs []string) ([]File, error) {
 }
 
 // invalid returns one transaction for each reason the import rejects a row.
-func invalid(accountIDs []string) []transaction.Transaction {
-	rows := valid(accountIDs, 5)
+func invalid(list []accounts.Account) []transaction.Transaction {
+	rows := valid(list, 5)
 	rows[0].TransactionID = ""
 	rows[1].Amount = -26
 	rows[2].Status = "SETTLED"
@@ -82,10 +83,10 @@ func invalid(accountIDs []string) []transaction.Transaction {
 	return rows
 }
 
-func valid(accountIDs []string, n int) []transaction.Transaction {
+func valid(list []accounts.Account, n int) []transaction.Transaction {
 	rows := make([]transaction.Transaction, n)
 	for i := range rows {
-		rows[i] = transaction.Generate(accountIDs)
+		rows[i] = transaction.Generate(list)
 	}
 	return rows
 }

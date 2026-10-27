@@ -5,10 +5,13 @@
 | Service | What it is |
 |---|---|
 | `sftp` | The external SFTP server. Files wait in `/home/reportuser/reports`. |
-| `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. Its transactions use the account IDs in `CRM_ACCOUNT_IDS`, or random `ACC-000123` references when it is empty. |
+| `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. Its transactions use the accounts in `CRM_ACCOUNT_IDS`, or random `ACC-000123` references when it is empty. Each entry is an account ID, in SGD, or `<id>:<currency>` for an account in another currency. |
 | `db` | transactions-db. |
 | `db-migrate` | Applies `receiver/data/` to `db` with Flyway, from the image that transaction-service's db-migrate container runs in AWS, then exits. `receiver-api` starts after it, and `make db-up` runs it too ([Schema migrations](../../docs/database/migrations.md)). |
 | `receiver-api` | transaction-service's internal read API, run with `go run` in the development image. The receiver's Dockerfile builds the production image by default; [the deployment runbook](../../docs/runbooks/deploy-aws.md) pushes it. |
+
+To publish a deterministic six-complete-month history for the synced CRM account list, run the producer with `-history` (for example, `docker compose -f services/sftp/compose.yaml run --rm producer -history`). It writes one normal ready-file JSON array with four cases: recurring-credit interruption, transaction-activity decline, sustained net outflow, and a healthy control. Re-running with the same four-or-more account IDs and calendar window keeps transaction IDs and recurring-source fingerprints stable. The command requires at least four synced accounts.
+The read API's contract is [`docs/api/transactions-api.yaml`](../../docs/api/transactions-api.yaml), and its figures route is in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks its responses and routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
 
 The import itself, the poller, runs from `receiver/`. [receiver/README.md](receiver/README.md) explains how it links rows to accounts, rejects files, retries the connection and audits.
 
@@ -22,7 +25,7 @@ To see audit events, set `AUDIT_QUEUE_URL` (and `AWS_ENDPOINT_URL` for LocalStac
 
 ## The producer's accounts when deployed
 
-The deployed producer reads its accounts from the file named in `CRM_ACCOUNT_IDS_FILE` instead, on every run, and publishes nothing while the file lists none. `scripts/sync-producer-accounts.sh` fills the file with the CRM's open accounts ([ADR-0045](../../docs/adr/ADR-0045-producer-account-list-synced-from-crm.md), [deploy-aws.md](../../docs/runbooks/deploy-aws.md) §9.5). To try the same locally, mount a file into the `producer` container and set `CRM_ACCOUNT_IDS_FILE` to its path. Fault files are published either way.
+The deployed producer reads its accounts from the file named in `CRM_ACCOUNT_IDS_FILE` instead, on every run, and publishes nothing while the file lists none. `scripts/sync-producer-accounts.sh` fills the file with the CRM's open accounts, one `<id>:<currency>` per line, so each account's transactions are in its currency ([ADR-0045](../../docs/adr/ADR-0045-producer-account-list-synced-from-crm.md), [deploy-aws.md](../../docs/runbooks/deploy-aws.md) §9.5). To try the same locally, mount a file into the `producer` container and set `CRM_ACCOUNT_IDS_FILE` to its path. Fault files are published either way.
 
 ## Fault files for the demo
 
