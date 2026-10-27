@@ -3,6 +3,7 @@ package bank.clienthealth.task.persistence;
 import bank.clienthealth.audit.RelationshipHealthAuditEvent;
 import bank.clienthealth.audit.AuditOutboxRepository;
 import bank.clienthealth.audit.JdbcAuditOutboxRepository;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository.OutboxConflictException;
 import bank.clienthealth.metrics.ClientHealthMetrics;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
@@ -78,7 +79,7 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
     public <T> T inTransaction(Function<Session, T> work) {
         try {
             return transactions.execute(status -> work.apply(new JdbcSession()));
-        } catch (DataIntegrityViolationException conflict) {
+        } catch (DataIntegrityViolationException | OutboxConflictException conflict) {
             throw new ConflictException("Task persistence constraint conflict");
         }
     }

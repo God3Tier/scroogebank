@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEvent;
 import bank.clienthealth.audit.RelationshipHealthAuditEventFactory;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
@@ -197,6 +198,9 @@ class JdbcRelationshipTaskRepositoryIntegrationTest {
             session.enqueueAudit(duplicateEvent);
             return null;
         });
+        var conflictingEvent = new RelationshipHealthAuditEvent(
+                duplicateEvent.eventId(), duplicateEvent.action(),
+                "DIFFERENT_ACTOR", duplicateEvent.payload());
         ClientHealthFinding rolledBackFinding = finding(
                 "finding-rollback", "client-rollback", Severity.HIGH, 'b', NOW);
         RelationshipTask rolledBack = RelationshipTask.create("task-rollback", rolledBackFinding,
@@ -206,7 +210,7 @@ class JdbcRelationshipTaskRepositoryIntegrationTest {
             session.saveTask(rolledBack, 0);
             session.saveProcessedFinding(new ProcessedFinding(rolledBackFinding,
                     new TaskUpsertResult("task-rollback", Outcome.CREATED, 1), NOW));
-            session.enqueueAudit(duplicateEvent);
+            session.enqueueAudit(conflictingEvent);
             return null;
         })).isInstanceOf(ConflictException.class);
 
