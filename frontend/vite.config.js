@@ -34,6 +34,10 @@ export default defineConfig({
         target: 'http://localhost:8085',
         changeOrigin: true,
       },
+      '/api/relationship-health': {
+        target: 'http://localhost:8086',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,

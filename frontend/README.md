@@ -19,8 +19,9 @@ npm run dev
 
 The browser uses same-origin `/api` requests. During local development Vite
 proxies `/api/users` and `/api/activities` to user-service on
-`http://localhost:8081` and the rest to `http://localhost:8080`, avoiding a
-separate CORS exception.
+`http://localhost:8081`, `/api/relationship-health` to Client Health on
+`http://localhost:8086`, and remaining default API paths to
+`http://localhost:8080`, avoiding separate CORS exceptions.
 Set `VITE_API_URL` in `.env` only when the deployed API has a different origin.
 
 ## Sign-in
@@ -123,9 +124,26 @@ Then open `/agent/alerts` for the decision workflow or `/admin/alerts` for the
 read-only oversight view. Synthetic mode uses only local example data and must
 remain disabled in deployed environments.
 
+## Client Health Monitor
+
+`/agent/client-health` loads only the authenticated Agent's currently assigned
+tasks. `/admin/client-health` provides read-only oversight and an optional
+assigned-Agent-subject filter. Both use cursor pagination, status/severity
+filters, evidence/history, and persisted Bedrock/template explanations.
+
+Agents may accept OPEN tasks, complete IN_REVIEW tasks, or dismiss OPEN/IN_REVIEW
+tasks. Every action sends the displayed `expectedVersion`; a `409` reloads the
+latest version. Admins never see mutation controls. The UI distinguishes
+expired sessions, denied scope, hidden tasks, conflicts, and assignment-service
+outages.
+
+The UI does not fabricate health scores, confidence percentages, client names,
+or raw transaction evidence that Contract D does not provide.
+
 ## Where each page's data comes from
 
-Every page reads the deployed services except Client Health Monitor, whose service is not built yet, and alerts in synthetic mode (above).
+Every page reads deployed services except alerts when synthetic mode is enabled
+(above).
 
 | Page | Data |
 |---|---|
@@ -134,7 +152,7 @@ Every page reads the deployed services except Client Health Monitor, whose servi
 | `/clients/:id` | client-service: profile, edit, documents, verification. Open account with `POST /api/accounts` on account-service |
 | `/agent/client/:id/transactions` | The client's accounts from `GET /api/accounts?clientId=`, then each account's transactions from `GET /api/accounts/{id}/transactions` |
 | `/insights/admin`, `/insights/agent` | dashboard-service (`/api/dashboard/*`, [`docs/api/dashboard-api.yaml`](../docs/api/dashboard-api.yaml)) |
-| `/agent/client-health` | Synthetic, from `src/data/clientHealthTasks.js` |
+| `/agent/client-health`, `/admin/client-health` | client-health-monitor-service `GET/POST /api/relationship-health/tasks*`; Agent actions and Admin read-only oversight |
 
 Locally, `vite.config.js` sends each `/api` path to the service that owns it, in the same order as the deployed load balancer's rules.
 
