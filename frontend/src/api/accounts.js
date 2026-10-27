@@ -20,8 +20,8 @@ export function updateAccountStatus(accountId, status) {
   return requestJson(`/api/accounts/${encodeURIComponent(accountId)}`, { method: 'PATCH', body: { status } })
 }
 
-// One account's transactions, newest first, through user-service, which
-// checks the caller may read the account first.
+// One account's transactions, newest first, from transaction-service, which
+// checks the caller may read the account first (ADR-0064).
 export function listAccountTransactions(accountId) {
   return requestJson(`/api/accounts/${encodeURIComponent(accountId)}/transactions`)
 }

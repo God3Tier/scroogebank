@@ -87,19 +87,19 @@ func publishHistory(destDir string, source accounts.Source) error {
 }
 
 // run publishes one file. With a synced account list, its transactions use
-// only the accounts the CRM has, and with none it publishes nothing
-// (ADR-0045).
+// only the accounts the CRM has, each in its account's currency, and with
+// none it publishes nothing (ADR-0045).
 func run(destDir string, source accounts.Source) {
-	accountIDs, err := source.IDs()
+	list, err := source.Accounts()
 	if err != nil {
 		log.Printf("nothing published: %v\n", err)
 		return
 	}
-	if source.Synced() && len(accountIDs) == 0 {
+	if source.Synced() && len(list) == 0 {
 		log.Printf("nothing published: %s lists no CRM accounts\n", source.File)
 		return
 	}
-	transactions := transaction.GenerateRandomSet(accountIDs...)
+	transactions := transaction.GenerateRandomSet(list...)
 	if err := stageContent(transactions, destDir); err != nil {
 		log.Printf("stage failed: %v\n", err)
 		return
@@ -133,11 +133,11 @@ func stageContent(transactions []transaction.Transaction, destDir string) error 
 // read. A fault is asked for on purpose, so it is published even when the
 // synced list is empty, with random external account references.
 func publishFault(kind, destDir string, source accounts.Source) error {
-	accountIDs, err := source.IDs()
+	list, err := source.Accounts()
 	if err != nil {
 		return err
 	}
-	files, err := fault.Build(kind, accountIDs)
+	files, err := fault.Build(kind, list)
 	if err != nil {
 		return err
 	}

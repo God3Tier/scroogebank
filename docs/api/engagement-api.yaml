@@ -491,6 +491,9 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     Unauthorized:
       description: Missing, expired or invalid token. Normally returned by API Gateway's authorizer before this service is reached.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
     Forbidden:
       description: The caller is not in the `AGENT` group.
       content:
@@ -723,9 +726,9 @@ components:
           description: Why a template was used. Null when `source` is `AI`.
           enum: [ai_disabled, daily_cap_reached, monthly_quota_reached, model_timeout, model_error, screen_rejected, null]
         holiday:
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/Holiday'
-          nullable: true
+            - $ref: '#/components/schemas/NullValue'
           description: The holiday the draft refers to, if any.
         status: { $ref: '#/components/schemas/DraftStatus' }
         sentAt: { type: string, format: date-time, nullable: true }
@@ -739,6 +742,12 @@ components:
       properties:
         invitesEnabled: { type: boolean, default: true }
         remindersEnabled: { type: boolean, default: true }
+
+    NullValue:
+      description: JSON null. OpenAPI 3.0 has no null type, so a nullable reference is anyOf the schema and this.
+      type: object
+      nullable: true
+      enum: [null]
 
     Problem:
       type: object

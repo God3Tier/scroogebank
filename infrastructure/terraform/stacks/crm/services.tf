@@ -107,21 +107,19 @@ module "user_service" {
   port_name          = "https"
 
   environment = {
-    DB_HOST                  = module.db["users"].address
-    DB_PORT                  = "5432"
-    USER_DB_NAME             = module.db["users"].db_name
-    OIDC_ISSUER_URI          = local.cognito_issuer
-    COGNITO_USER_POOL_ID     = aws_cognito_user_pool.this.id
-    COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
-    AWS_REGION               = local.region
-    AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
-    AUDITOR_BASE_URL         = "https://${local.sc.auditor}:${local.ports.auditor_http}"
-    AUDITOR_GRPC_TARGET      = "${local.sc.auditor}:${local.ports.auditor_grpc}"
-    AUDITOR_GRPC_TLS_CA      = "/tls/ca.pem"
-    ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
-    SFTP_RECEIVER_BASE_URL   = "http://${local.sc.transaction}:${local.ports.transaction}"
-    ROOT_ADMIN_EMAIL         = var.root_admin_email
-    SPRING_FLYWAY_ENABLED    = "false" # db-migrate applies its migrations
+    DB_HOST               = module.db["users"].address
+    DB_PORT               = "5432"
+    USER_DB_NAME          = module.db["users"].db_name
+    OIDC_ISSUER_URI       = local.cognito_issuer
+    COGNITO_USER_POOL_ID  = aws_cognito_user_pool.this.id
+    COGNITO_APP_CLIENT_ID = aws_cognito_user_pool_client.web.id
+    AWS_REGION            = local.region
+    AUDIT_QUEUE_URL       = aws_sqs_queue.audit.url
+    AUDITOR_BASE_URL      = "https://${local.sc.auditor}:${local.ports.auditor_http}"
+    AUDITOR_GRPC_TARGET   = "${local.sc.auditor}:${local.ports.auditor_grpc}"
+    AUDITOR_GRPC_TLS_CA   = "/tls/ca.pem"
+    ROOT_ADMIN_EMAIL      = var.root_admin_email
+    SPRING_FLYWAY_ENABLED = "false" # db-migrate applies its migrations
   }
   secrets = {
     POSTGRES_USER     = "${local.app_login_secret["user_service"]}:username::"
@@ -149,7 +147,6 @@ module "user_service" {
     protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules = [
-      { priority = 10, paths = ["/api/accounts/*/transactions", "/api/transactions"] },
       { priority = 20, paths = ["/api/users", "/api/users/*", "/api/activities", "/api/activities/*"] },
       { priority = 21, paths = ["/api/corrupted-logs", "/api/corrupted-logs/*"] },
     ]
@@ -235,6 +232,7 @@ module "client_service" {
     DB_SSLMODE               = "verify-full"
     DB_SSLROOTCERT           = "/tls/rds-ca.pem"
     ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
+    USER_SERVICE_BASE_URL    = "https://${local.sc.user}:${local.ports.user}" # reassigning clients (ADR-0060)
     AWS_REGION               = local.region
     AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
     COGNITO_ISSUER_URI       = local.cognito_issuer
@@ -503,9 +501,10 @@ module "chain_verify" {
 }
 
 # ------------------------------------------------------ transaction-service
-# The SFTP receiver's private read APIs. Legacy routes are called by
-# user-service; the Client Health history route verifies a scoped service
-# token. Neither is exposed through the ALB (security_groups.tf).
+# The SFTP receiver's read API. It checks each caller's token and asks
+# account-service about ownership with it, so the ALB and dashboard-service
+# call it directly (ADR-0064). Client Health uses a separately scoped private
+# history route and the Client Health task's security group.
 
 module "transaction_service" {
   source = "../../modules/ecs-service"
@@ -519,18 +518,24 @@ module "transaction_service" {
   image              = local.image["transaction-service"]
   cpu_architecture   = var.cpu_architecture
   port               = local.ports.transaction
-  app_protocol       = "http"
+  port_name          = "https"
 
   environment = {
     APP_ENV                  = "production"
     APP_ADDR                 = ":${local.ports.transaction}"
     COGNITO_ISSUER_URI       = local.cognito_issuer
     COGNITO_HEALTH_CLIENT_IDS = aws_cognito_user_pool_client.client_health_read.id
+    APP_TLS_CERT_FILE        = "/tls/cert.pem"
+    APP_TLS_KEY_FILE         = "/tls/key.pem"
     DB_HOST                  = module.db["transactions"].address
     DB_PORT                  = "5432"
     DB_NAME                  = module.db["transactions"].db_name
     DB_SSLMODE               = "verify-full"
     DB_SSLROOTCERT           = "/tls/rds-ca.pem"
+    ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
+    AWS_REGION               = local.region
+    AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
+    COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
   }
   secrets = {
     DB_USER     = "${local.app_login_secret["transaction_service"]}:username::"
@@ -542,20 +547,42 @@ module "transaction_service" {
     local.app_login_secret["transaction_ingest"],
     local.db_master_secret["transactions"],
   ]
-  tls        = { mode = "go", ca_pem = local.ca_pem }
+  task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
+  tls = {
+    mode            = "go"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["transaction"].arn
+  }
   migrations = local.migrations["transactions"]
 
+  # dashboard-service calls it here and checks its certificate, so Service
+  # Connect proxies the port as TCP (ADR-0042 decision 7).
   service_connect = {
     namespace_arn = aws_service_discovery_http_namespace.this.arn
-    aliases       = [{ port_name = "http", dns_name = local.sc.transaction, port = local.ports.transaction }]
+    aliases       = [{ port_name = "https", dns_name = local.sc.transaction, port = local.ports.transaction }]
   }
+
+  # Ahead of account-service's /api/accounts/* rule (priority 40).
+  load_balancer = merge(local.alb, {
+    protocol          = "HTTPS"
+    health_check_path = "/health"
+    rules = [
+      { priority = 15, paths = ["/api/accounts/*/transactions", "/api/transactions"] },
+    ]
+  })
 
   min_tasks          = local.min_tasks
   max_tasks          = local.max_tasks
   use_spot           = local.use_fargate_spot
   log_retention_days = local.log_retention_days
 
-  depends_on = [aws_ecs_cluster_capacity_providers.this, aws_secretsmanager_secret_version.app_login, aws_secretsmanager_secret_version.client_health_read]
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+    aws_secretsmanager_secret_version.client_health_read,
+  ]
 }
 
 # dashboard-service runs in this cluster but is deployed by the

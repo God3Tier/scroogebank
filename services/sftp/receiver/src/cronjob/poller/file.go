@@ -44,6 +44,7 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 	rejected := 0
 	parseFailures := make([]ParseFailure, 0)
 	transactions := make([]models.Transaction, 0, len(records))
+	recordIndex := make([]int, 0, len(records)) // each transaction's place in the file
 	for index, record := range records {
 		var transaction models.Transaction
 		if err := json.Unmarshal(record, &transaction); err != nil {
@@ -59,16 +60,31 @@ func (p *Poller) processFile(ctx context.Context, client remoteSFTP, remotePath 
 			continue
 		}
 		transactions = append(transactions, transaction)
+		recordIndex = append(recordIndex, index)
 	}
 
 	// Without account-service's answer, nothing is saved and the file stays
 	// for the next poll: Unmatched must mean "no such account", never "could
 	// not check". The file is retried on every poll, so only the first failure
 	// of each outage is audited.
-	if err := p.linkAccounts(ctx, transactions); err != nil {
+	refused, err := p.linkAccounts(ctx, transactions)
+	if err != nil {
 		return p.processingFailure(ctx, fileName, lookupFailure, fmt.Errorf("look up accounts: %w", err))
 	}
 	p.endFailure(failureKey{file: fileName, kind: lookupFailure})
+	if len(refused) > 0 {
+		kept := transactions[:0]
+		for i, transaction := range transactions {
+			if reason, ok := refused[i]; ok {
+				rejected++
+				parseFailures = append(parseFailures, ParseFailure{RecordRef: fmt.Sprintf("record %d", recordIndex[i]+1), Reason: reason.Error()})
+				log.Printf("rejecting transaction %d in %s: %v", recordIndex[i], fileName, reason)
+				continue
+			}
+			kept = append(kept, transaction)
+		}
+		transactions = kept
+	}
 	// The import saves every valid transaction or none of them.
 	accepted := len(transactions)
 
@@ -138,8 +154,11 @@ func (p *Poller) archive(client remoteSFTP, remotePath, dir string) error {
 
 // linkAccounts asks account-service once per file which account references
 // are CRM accounts, and marks each transaction Matched or Unmatched
-// (ADR-0037). References that are not UUIDs cannot be CRM accounts.
-func (p *Poller) linkAccounts(ctx context.Context, transactions []models.Transaction) error {
+// (ADR-0037). References that are not UUIDs cannot be CRM accounts. A
+// Matched transaction must be in its account's currency: it returns, by
+// position in transactions, why each one that has no currency or another
+// one is refused. An Unmatched one has no currency to compare with.
+func (p *Poller) linkAccounts(ctx context.Context, transactions []models.Transaction) (map[int]error, error) {
 	ids := make([]string, 0, len(transactions))
 	seen := make(map[string]bool)
 	for _, transaction := range transactions {
@@ -148,22 +167,29 @@ func (p *Poller) linkAccounts(ctx context.Context, transactions []models.Transac
 			ids = append(ids, id)
 		}
 	}
-	clients := map[string]string{}
+	found := map[string]models.Account{}
 	if len(ids) > 0 {
 		var err error
-		if clients, err = p.accounts.Lookup(ctx, ids); err != nil {
-			return err
+		if found, err = p.accounts.Lookup(ctx, ids); err != nil {
+			return nil, err
 		}
 	}
+	refused := make(map[int]error)
 	for i := range transactions {
 		id, _ := accountUUID(transactions[i].AccountID)
-		if clientID, ok := clients[id]; ok {
-			transactions[i].LinkedAccountID, transactions[i].ClientID, transactions[i].ImportStatus = id, clientID, "Matched"
-		} else {
+		account, ok := found[id]
+		switch {
+		case !ok:
 			transactions[i].ImportStatus = "Unmatched"
+		case transactions[i].Currency == "":
+			refused[i] = fmt.Errorf("currency is required for account %s, which is in %s", id, account.Currency)
+		case transactions[i].Currency != account.Currency:
+			refused[i] = fmt.Errorf("currency %s does not match account %s, which is in %s", transactions[i].Currency, id, account.Currency)
+		default:
+			transactions[i].LinkedAccountID, transactions[i].ClientID, transactions[i].ImportStatus = id, account.ClientID, "Matched"
 		}
 	}
-	return nil
+	return refused, nil
 }
 
 // accountUUID returns the reference in canonical lowercase form, if it is a UUID.

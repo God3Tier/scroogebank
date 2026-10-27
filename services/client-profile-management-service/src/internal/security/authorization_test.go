@@ -18,7 +18,7 @@ const (
 	ownerSubject    = "agent-sub-owner"
 )
 
-// RequireClientOwner reads created_by_agent_id from the clients table, so it
+// RequireClientOwner reads assigned_agent_id from the clients table, so it
 // needs the test database rather than a mock: the query is what is tested.
 func openAuthorizationTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -42,7 +42,7 @@ func openAuthorizationTestDB(t *testing.T) *sql.DB {
 		INSERT INTO clients (
 			client_id, first_name, last_name, date_of_birth, gender, email, email_hash, phone_number,
 			phone_number_hash, address, city, state, country, postal_code, verification_status,
-			created_by_agent_id, created_at, updated_at, deleted_at
+			assigned_agent_id, created_at, updated_at, deleted_at
 		) VALUES
 			('` + ownedClientID + `', 'Owned', 'Client', '1990-05-10', 'female', 'owned-151@example.test', 'email-hash-151', '+6560000151', 'phone-hash-151',
 			 '1 Example Street', 'Singapore', 'Singapore', 'Singapore', '123456', 'UNVERIFIED',
@@ -95,6 +95,73 @@ func TestRequireClientOwner(t *testing.T) {
 			res := httptest.NewRecorder()
 
 			router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/clients/"+test.clientID, nil))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+		})
+	}
+}
+
+// RequireAgent reads only the verified role, so it needs no database.
+func TestRequireAgent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := map[string]struct {
+		principal  *Principal
+		wantStatus int
+	}{
+		"an agent reaches the handler":       {principal: &Principal{Subject: "agent-sub", Role: "AGENT"}, wantStatus: http.StatusOK},
+		"an admin is refused":                {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, wantStatus: http.StatusForbidden},
+		"a caller without a role is refused": {principal: &Principal{Subject: "other-sub"}, wantStatus: http.StatusForbidden},
+		"an unauthenticated request too":     {wantStatus: http.StatusForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				if test.principal != nil {
+					c.Set("principal", *test.principal)
+				}
+				c.Next()
+			})
+			router.POST("/write", RequireAgent(), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/write", nil))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+		})
+	}
+}
+
+func TestRequireAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := map[string]struct {
+		principal  *Principal
+		wantStatus int
+	}{
+		"an admin reaches the handler":       {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, wantStatus: http.StatusOK},
+		"an agent is refused":                {principal: &Principal{Subject: "agent-sub", Role: "AGENT"}, wantStatus: http.StatusForbidden},
+		"a caller without a role is refused": {principal: &Principal{Subject: "other-sub"}, wantStatus: http.StatusForbidden},
+		"an unauthenticated request too":     {wantStatus: http.StatusForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				if test.principal != nil {
+					c.Set("principal", *test.principal)
+				}
+				c.Next()
+			})
+			router.POST("/api/clients/reassignments", RequireAdmin(), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/api/clients/reassignments", nil))
 
 			assert.Equal(t, test.wantStatus, res.Code)
 		})

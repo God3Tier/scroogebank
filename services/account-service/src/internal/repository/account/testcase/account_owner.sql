@@ -1,0 +1,9 @@
+-- Two clients of one agent, one with a deleted account, and a client of
+-- another agent, for reassignment (ADR-0060).
+DELETE FROM accounts WHERE client_id IN ('00000000-0000-0000-0000-000000000241', '00000000-0000-0000-0000-000000000242', '00000000-0000-0000-0000-000000000243');
+INSERT INTO accounts (id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id, created_at, updated_at, deleted_at)
+VALUES
+    ('00000000-0000-0000-0000-000000000251', '00000000-0000-0000-0000-000000000241', 'agent-old-241', 'savings', 'active', CURRENT_DATE, 100.00, 'SGD', 'SG-001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL),
+    ('00000000-0000-0000-0000-000000000252', '00000000-0000-0000-0000-000000000241', 'agent-old-241', 'checking', 'active', CURRENT_DATE, 100.00, 'SGD', 'SG-001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('00000000-0000-0000-0000-000000000253', '00000000-0000-0000-0000-000000000242', 'agent-old-241', 'savings', 'pending', CURRENT_DATE, 100.00, 'SGD', 'SG-001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL),
+    ('00000000-0000-0000-0000-000000000254', '00000000-0000-0000-0000-000000000243', 'agent-other-243', 'savings', 'active', CURRENT_DATE, 100.00, 'SGD', 'SG-001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL);

@@ -4,8 +4,8 @@ import bank.dashboard.dto.DashboardWindow;
 import bank.dashboard.upstream.dto.TransactionStats;
 
 /**
- * Transaction figures, served by user-service in front of the SFTP receiver
- * (ADR-0039).
+ * Transaction figures, served by transaction-service, the SFTP receiver's
+ * read API (ADR-0064).
  *
  * <p>{@link #stats} takes no account filter on purpose. For an agent,
  * user-service asks account-service which accounts the caller owns, so there

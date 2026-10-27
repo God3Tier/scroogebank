@@ -1,0 +1,149 @@
+openapi: 3.0.3
+
+# Transaction reads (ADR-0006, ADR-0037, ADR-0043). Written from the code when
+# contract tests were added (ADR-0063).
+#
+# transaction-service (the SFTP receiver's read API) serves these paths
+# through API Gateway (ADR-0064). It checks the caller's token, and for one
+# account asks account-service, with that token, whether the caller may see
+# it.
+#
+# The dashboard's transaction figures are in dashboard-aggregates.yaml.
+
+info:
+  title: Scrooge CRM - Transactions
+  version: v1
+  description: |
+    Transactions imported from the bank's SFTP files. Amounts are decimal
+    strings in the transaction's currency (ADR-0061).
+
+servers:
+  - url: /
+
+tags:
+  - name: transactions
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/accounts/{accountId}/transactions:
+    get:
+      tags: [transactions]
+      summary: One account's transactions, newest first
+      description: |
+        For the account's owning agent or an admin. Another agent's account,
+        or an unknown one, gets account-service's 404.
+      operationId: getAccountTransactions
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The account's transactions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Transaction' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+        '502':
+          description: account-service could not say whether the caller may see the account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/transactions:
+    get:
+      tags: [transactions]
+      summary: Every account's transactions, newest first
+      description: Admins only (ADR-0043, requirements Q&A TM14). Agents read transactions per account.
+      operationId: listTransactions
+      parameters:
+        - name: cursor
+          in: query
+          description: The `nextCursor` of the previous page.
+          schema: { type: string }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [Completed, Pending, Failed] }
+      responses:
+        '200':
+          description: One page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [content, nextCursor]
+                properties:
+                  content:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transaction' }
+                  nextCursor:
+                    type: string
+                    nullable: true
+                    description: Null on the last page.
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A Cognito access token from the CRM app client, with the ADMIN or AGENT group.
+
+  responses:
+    Unauthorized:
+      description: No valid access token.
+    Forbidden:
+      description: The caller's role may not use this route.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Error:
+      description: The request was refused or failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      description: '`{"error": ...}`.'
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Transaction:
+      type: object
+      required: [transaction_id, source_account_ref, transaction_type, amount, transaction_date, status, imported_at, import_status]
+      properties:
+        transaction_id: { type: string }
+        source_account_ref: { type: string, description: 'The account reference in the bank''s file.' }
+        account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The CRM account, set when the import matched the reference (ADR-0037).
+        client_id: { type: string, format: uuid, nullable: true }
+        transaction_type: { type: string, enum: [Deposit, Withdrawal] }
+        amount: { type: string, pattern: '^\d+(\.\d+)?$', example: '250.00' }
+        currency: { type: string, nullable: true, example: SGD }
+        transaction_date: { type: string, format: date-time }
+        status: { type: string, enum: [Completed, Pending, Failed] }
+        description: { type: string, nullable: true }
+        imported_at: { type: string, format: date-time }
+        import_status: { type: string, enum: [Unmatched, Matched, Rejected] }

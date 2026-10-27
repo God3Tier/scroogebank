@@ -50,7 +50,10 @@ func (s ServiceType) IsValidAction(action string) bool {
 			strings.EqualFold("DELETE", action)
 
 	case TransactionServiceType:
-		return strings.EqualFold("TRANSACTION_INGESTION", action)
+		// CRUD is transaction-service's record of a transaction read
+		// (ADR-0064); TRANSACTION_INGESTION is the import's.
+		return strings.EqualFold("TRANSACTION_INGESTION", action) ||
+			strings.EqualFold("CRUD", action)
 
 	case EventAlertServiceType:
 		return strings.EqualFold("EVENT_ALERT", action)

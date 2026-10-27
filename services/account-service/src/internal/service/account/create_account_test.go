@@ -51,7 +51,8 @@ func TestCreateAccount(t *testing.T) {
 		// An unverified client's accounts open as pending (ADR-0050).
 		"refuses an agent an active account for an unverified client":   {caller: agent, client: unverified, wantErr: accounterrors.ErrClientNotVerified},
 		"lets an agent open a pending account for an unverified client": {caller: agent, client: unverified, pending: true, callRepo: true},
-		"lets an admin open one for an unverified client":               {caller: admin, client: unverified, callRepo: true},
+		// Admins only read client data (ADR-0059), so nothing is looked up.
+		"refuses an admin": {caller: admin, client: verified, wantErr: accounterrors.ErrForbidden},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -60,7 +61,9 @@ func TestCreateAccount(t *testing.T) {
 				in.Status, want.Status = models.AccountStatusPending, models.AccountStatusPending
 			}
 			directory := clients.NewMockDirectory(t)
-			directory.On("Lookup", ctx, input.ClientID.String(), authorization).Return(test.client, test.lookupErr).Once()
+			if !test.caller.Admin {
+				directory.On("Lookup", ctx, input.ClientID.String(), authorization).Return(test.client, test.lookupErr).Once()
+			}
 			repo := repomock.NewMockRepository(t)
 			if test.callRepo {
 				repo.On("CreateAccount", ctx, want).Return(test.repoErr).Once()

@@ -1,5 +1,6 @@
 package bank.engagement.notifications;
 
+import jakarta.mail.internet.InternetAddress;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -16,6 +17,7 @@ import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
 import software.amazon.awssdk.services.sesv2.model.SendingPausedException;
 import software.amazon.awssdk.services.sesv2.model.TooManyRequestsException;
 
+import java.io.UnsupportedEncodingException;
 import java.time.Clock;
 import java.util.Date;
 import java.util.regex.Pattern;
@@ -40,8 +42,10 @@ public class SesMailChannel implements MailChannel {
         byte[] raw = MimeMessageFactory.build(mail, Date.from(clock.instant()));
         // FromEmailAddress names the sender explicitly, so the task role's
         // ses:FromAddress condition is checked against it (ADR-0053 decision 9).
+        // SES writes it over the raw message's From header, so it carries the
+        // display name too.
         SendEmailRequest.Builder request = SendEmailRequest.builder()
-                .fromEmailAddress(mail.fromAddress())
+                .fromEmailAddress(from(mail))
                 .content(content -> content.raw(message -> message.data(SdkBytes.fromByteArray(raw))))
                 .overrideConfiguration(config -> config.apiCallTimeout(properties.sendTimeout()));
         if (properties.configurationSet() != null && !properties.configurationSet().isBlank()) {
@@ -62,6 +66,18 @@ public class SesMailChannel implements MailChannel {
         } catch (SdkException ex) {
             log.warn("SES could not be reached: {}", ex.getClass().getSimpleName());
             throw new MailSendException("ses_error", true);
+        }
+    }
+
+    /** {@code CRM Calendar <no-reply@…>}, the name MIME-encoded when it is not ASCII. */
+    static String from(OutgoingMail mail) {
+        if (mail.fromName() == null || mail.fromName().isBlank()) {
+            return mail.fromAddress();
+        }
+        try {
+            return new InternetAddress(mail.fromAddress(), mail.fromName(), "UTF-8").toString();
+        } catch (UnsupportedEncodingException ex) {
+            throw new IllegalStateException(ex);
         }
     }
 

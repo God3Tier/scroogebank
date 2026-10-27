@@ -3,7 +3,8 @@
 # named callers -> the auditor and other services; the ALB also admits the
 # ingest Lambda for /internal calls. Rules are separate resources so groups can
 # refer to each other without cycles, and so the business-dashboard stack can
-# add its own rules to the user, client and account groups (ADR-0047).
+# add its own rules to the user, client, account and transaction groups
+# (ADR-0047).
 
 locals {
   ports = {
@@ -43,16 +44,18 @@ locals {
     { to = "alb", from = "ingest", port = local.alb_port },
 
     { to = "user", from = "alb", port = local.ports.user },
+    { to = "user", from = "client", port = local.ports.user }, # reassigning clients (ADR-0060)
     { to = "client", from = "alb", port = local.ports.client },
     { to = "client", from = "account", port = local.ports.client },
     { to = "account", from = "alb", port = local.ports.account },
-    { to = "account", from = "user", port = local.ports.account },
     { to = "account", from = "client", port = local.ports.account },
+    { to = "account", from = "transaction", port = local.ports.account }, # ownership checks (ADR-0064)
     { to = "auditor", from = "user", port = local.ports.auditor_http },
     { to = "auditor", from = "user", port = local.ports.auditor_grpc },
-    # Legacy private receiver routes are used by user-service; the Client
-    # Health route independently verifies its narrow Cognito service scope.
-    { to = "transaction", from = "user", port = local.ports.transaction },
+    # transaction-service checks each caller's token (ADR-0064); the
+    # business-dashboard stack adds dashboard-service's rule. Client Health
+    # calls its separately scoped private history route directly.
+    { to = "transaction", from = "alb", port = local.ports.transaction },
     { to = "transaction", from = "client_health", port = local.ports.transaction },
     { to = "alerts", from = "alb", port = local.ports.alerts },
 

@@ -41,7 +41,7 @@ func TestGetClientProfile(t *testing.T) {
 			assert.Equal(t, "Alice", got.FirstName)
 			assert.Equal(t, "alice-101@example.test", got.Email)
 			assert.Equal(t, seeded.DateOfBirth, got.DateOfBirth)
-			assert.Equal(t, seeded.CreatedByAgentID, got.CreatedByAgentID)
+			assert.Equal(t, seeded.AssignedAgentID, got.AssignedAgentID)
 		})
 	}
 }

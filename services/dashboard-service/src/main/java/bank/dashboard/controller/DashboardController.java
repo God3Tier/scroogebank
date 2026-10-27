@@ -13,6 +13,7 @@ import bank.dashboard.service.ServedResponse;
 import bank.dashboard.window.WindowParser;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -98,9 +99,12 @@ public class DashboardController {
     public ResponseEntity<DashboardResponse> agentPerformance(
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
-            @RequestParam(defaultValue = "clientsOnboarded") AgentSortMetric sort) {
+            @RequestParam(defaultValue = "clientsOnboarded") AgentSortMetric sort,
+            // Deposits are ranked in one currency at a time (ADR-0062).
+            @RequestParam(defaultValue = "SGD")
+            @Pattern(regexp = "[A-Z]{3}", message = "must be three upper-case letters") String currency) {
         DashboardWindow window = windowParser.parse(from, to);
-        return respond(dashboardService.agentPerformance(window, sort), DashboardAction.VIEW_AGENT_PERFORMANCE);
+        return respond(dashboardService.agentPerformance(window, sort, currency), DashboardAction.VIEW_AGENT_PERFORMANCE);
     }
 
     /**

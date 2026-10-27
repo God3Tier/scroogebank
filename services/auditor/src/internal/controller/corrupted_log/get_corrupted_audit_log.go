@@ -11,7 +11,7 @@ func (c Controller) GetCorruptedAuditLog(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		log.Printf("get corrupted audit logs: %v", err)
-		http.Error(w, "unable to retrieve corrupted audit logs", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "unable to retrieve corrupted audit logs")
 		return
 	}
 

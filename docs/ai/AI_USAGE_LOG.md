@@ -893,3 +893,207 @@
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
 - 2026-10-22 — Joseph Yau — Codex — Added client filtering to the authenticated, paged auditor activity query and corresponding user-service query parameters. Files: `proto/audit/v1/audit.proto`, auditor activity controller/model/repository and tests, user-service activity controller/service/record and tests, API contract, proposed ADR, and auditor feature plan. Protobuf generation, all auditor tests, SQL-backed activity query tests, focused user-service tests, and formatting checks passed; proposed ADR-0042 still needs human acceptance/review.
+
+## 2026-10-23 — Admins read-only on client data (open item 23)
+
+- Human owner: Neo Jia Wen (decision owner; accepted ADR-0059).
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0059 from the requirements Q&A (UM01, UM04, UM18, CPM24,
+  CPM31); add a `RequireAgent` route check to client-service and account-service
+  so admins get 403 on every client and account write; make account-service's
+  `CreateAccount` refuse admins; make the client page read-only for admins;
+  update tests, READMEs, the Feature 2 plan, the security model and open items
+  23 and 24. Client reassignment (open item 24) is left for later.
+- Human verification required: confirm that admins
+  losing every client write is acceptable until reassignment exists; run the
+  end-to-end checks in ADR-0059's Validation section.
+- Data: repository content and synthetic test data only. No credentials, real
+  client data or AWS resources were used.
+- Verification: `make test` passed for account-service and client-service
+  (Docker, with PostgreSQL); frontend lint, 204 tests and build passed (one
+  test failed once while Docker tests ran alongside and passed on rerun). Not
+  run end to end.
+
+## 2026-10-23 — Client reassignment (open item 24)
+
+- Human owner: Neo Jia Wen (decision owner; accepted ADR-0060).
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0060 from the requirements Q&A (UM07, UM15, UM17, UM18,
+  CPM30); rename `clients.created_by_agent_id` to `assigned_agent_id`; add
+  `POST /api/clients/reassignments` to client-service (user lookup in
+  user-service, account move through account-service's new
+  `PUT /ownership/accounts`, one audit event per client); add Reassign controls
+  to Admin Home and the client page; wire `USER_SERVICE_BASE_URL` and a
+  security-group rule in `stacks/crm`; update tests and docs. Also renumbered
+  the duplicate F2-SEC-02 task added with ADR-0059 to F2-SEC-04.
+- Human verification required: decide what
+  client-health-monitor-service does with open tasks of a moved client; run
+  `terraform plan` for `stacks/crm` and the end-to-end check in ADR-0060.
+- Data: repository content and synthetic test data only. No credentials, real
+  client data or AWS resources were used.
+- Verification: `make test` passed for client-service and account-service
+  (Docker, with PostgreSQL), and the reassignment repository tests were run
+  again verbosely; frontend lint and the affected test files passed;
+  `terraform fmt -check` passed. Terraform was not planned or applied. Not run
+  end to end.
+
+## 2026-10-24 — CodeQL and dependency scanning in CI (ADR-0028)
+
+- Human owner: Neo Jia Wen.
+- Tool: Claude Code (Anthropic).
+- Use: add CodeQL (Java, Go, JavaScript/TypeScript, Python, Actions) and
+  OSV-Scanner to `.github/workflows/ci.yml`. The repository has no GitHub
+  Code Security, so CodeQL results are not uploaded: the job fails on any
+  alert and keeps the SARIF report as an artifact. OSV-Scanner fails on any
+  known vulnerability in a dependency except the three accepted, each with a
+  reason and an expiry date, in `osv-scanner.toml`: two `spring-webmvc`
+  advisories for features no service uses (`XsltView`, server-sent event
+  fragments), fixed only in Spring Boot 4, and `x/crypto/openpgp`, which no
+  service imports and no release fixes. Go call analysis and OSV's Python
+  resolver are turned off (see the comments in the workflow). One CodeQL rule
+  (`java/spring-disabled-csrf-protection`) is excluded in
+  `.github/codeql/codeql-config.yml`, because every Java service is a
+  stateless bearer-token API.
+- Human verification required: confirm with the course that running CodeQL
+  on this private repository is allowed under its licence; review the
+  accepted vulnerabilities before they expire on 2027-01-31. The 276 known
+  vulnerabilities OSV-Scanner reported in existing dependencies are upgraded
+  in the next entry.
+- Data: repository content only. No credentials, real client data or AWS
+  resources were used.
+- Verification: CodeQL CLI 2.27.3 run locally on a clean export of `dev`:
+  Java (Maven build), JavaScript/TypeScript and Python had no alerts once the
+  CSRF rule was excluded. Go and Actions were not run locally (Go code
+  generation needs Docker; the Actions extractor failed on Windows).
+  OSV-Scanner v2.6.0 run locally with the workflow's arguments on this
+  branch: exit 0 with `osv-scanner.toml`, exit 1 without it. actionlint
+  passed. The workflow has not run on GitHub yet.
+
+## 2026-10-24 — Security upgrades for dependencies
+
+- Human owner: Neo Jia Wen. The owners of each changed service should review.
+- Tool: Claude Code (Anthropic).
+- Use: upgrade the dependencies OSV-Scanner reported as vulnerable, except
+  `spring-webmvc`, which is fixed only in Spring Boot 4. Go: `golang.org/x/crypto`
+  0.57.0, `x/net` 0.60.0, `x/sys` 0.48.0, `x/text` 0.42.0 and `quic-go` 0.59.1 in
+  account-service, client-service and the SFTP receiver; the same `x/*`
+  versions and gRPC 1.83.2 in the auditor. Java: the root `pom.xml` overrides
+  the versions Spring Boot 3.5.16 manages for Jackson, Netty, Log4j, Tomcat,
+  the PostgreSQL driver, commons-lang3, commons-compress and HttpComponents;
+  user-service moves to gRPC 1.84.2 and protobuf 3.25.9. Frontend: Vite
+  8.3.4 and Vitest 5.0.3, with zod 4.6.7 and undici 7.30.1 updated in the
+  lockfile (build and test tools only). Search spike: every package pinned,
+  with `urllib3` at 2.8.0. Each version is the newest patch release at least two weeks old,
+  except zod and undici, whose only fixed releases are newer.
+- Human verification required: review by the owners of the changed services.
+- Data: repository content only. No credentials, real client data or AWS
+  resources were used.
+- Verification: `mvn -B verify` passed (491 tests across the six Java modules,
+  Testcontainers on Docker); `make test` passed for the auditor,
+  account-service, client-service and SFTP; frontend lint, 210 tests and
+  build passed; the search spike's 9 unit tests passed. OSV-Scanner v2.6.0
+  then reported none beyond the three accepted in `osv-scanner.toml` (see
+  the previous entry), down from 276. Deployed the upgraded
+  services and confirmed every service runs as expected.
+
+## 2026-10-24 — Dashboard account figures per currency
+
+- Human owner: Neo Jia Wen. Joseph Yau should review the account-service
+  change (ADR-0062 names him for agreement).
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0062 and implement it. account-service no longer refuses
+  account figures (HTTP 409) when the window's accounts use more than one
+  currency: it sums booked initial deposits per currency, in total and per
+  agent, and leaves each day's value out. dashboard-service passes the
+  per-currency amounts through, ranks the per-agent table's deposits in a
+  `currency` parameter (default SGD), caches each currency apart, and drops
+  the `mixed_currencies` panel reason. The frontend shows each currency's
+  amount, labels the transaction value with its currency (or lists the
+  currencies when there are several), and offers a currency choice for the
+  deposits ranking. The contracts, feature plan, READMEs, demo script and
+  comments that assumed one currency were updated.
+- Human verification required: review of ADR-0062 and the changed services
+  by their owners; a check on the deployed stack with an SGD and a USD account.
+- Data: repository content only, plus the project specification and the
+  Q&A spreadsheet in `references/`, searched for currency rules. No
+  credentials, real client data or AWS resources were used.
+- Verification: account-service `make test` passed, including new
+  repository tests with two currencies; dashboard-service `mvn test` passed
+  (108 tests); frontend lint, 243 tests and build passed; SFTP producer tests
+  passed; Redocly CLI 1.34.5 found both dashboard specs valid, with the same
+  two warnings as before. Not yet run end to end.
+
+## 2026-10-24 — OpenAPI contract tests (ADR-0063)
+
+- Human owner: Neo Jia Wen. The owners of user-service, client-profile-
+  management-service, account-service, the SFTP receiver and the Auditor
+  should review the specs written for their services.
+- Tool: Claude Code (Anthropic).
+- Use: draft ADR-0063 and implement it. Wrote OpenAPI 3.0.3 specs from the
+  code for users, clients, accounts, transactions and corrupted logs, and
+  moved the alerts and activity specs from 3.1 to 3.0.3. Added a contract
+  check to every service's tests: Java services check every MockMvc response
+  (swagger-request-validator) and Go services check controller responses
+  (kin-openapi); route tests fail on any route missing from a contract, and
+  dashboard-service and engagement-service check their canned upstream
+  replies against the provider's contract. Added a CI job that validates the
+  specs and runs `oasdiff breaking` on pull requests, converting a 3.1 base
+  copy to 3.0 first, with deliberate breaking changes listed in
+  `docs/api/accepted-breaking-changes.txt`. Fixed what the checks
+  found where the code was clearly wrong (four Go handlers sent JSON without
+  a JSON content type; the Auditor's plain-text errors reached admins as 500s
+  through user-service, so they are now JSON; account-service's PATCH
+  answered the status in capitals, unlike GET), corrected the existing specs where they were
+  (undocumented error bodies and statuses, the RFC 9457 `instance` field, a
+  payload that is not always an object), made test fixtures realistic, and
+  gave account-service's security tests their own account IDs, which had
+  collided with a repository test's.
+- Human verification required: review of ADR-0063 and of each new spec by
+  its service's owner; a check that the CI job passes on the pull request.
+- Data: repository content only. No credentials, real client data or AWS
+  resources were used.
+- Verification: `mvn verify` passed for every Java module; `make test` passed
+  for account-service, client-profile-management-service, the SFTP receiver
+  and the Auditor; every spec passed openapi-spec-validator 0.9.0; oasdiff
+  1.33.0 found one breaking change against `dev`, the accepted activity
+  `payload` one; breaking a spec on purpose failed the expected tests; OSV-Scanner
+  2.6.0 found no new vulnerability once Rhino was pinned; actionlint and
+  shellcheck passed.
+
+## 2026-10-24 — Business dashboard timing out on first load
+
+- Human owner: Neo Jia Wen. The user-service owner should review the
+  user-service change.
+- Tool: Claude Code (Anthropic).
+- Use: find why the business dashboard's transactions panel timed out on
+  first load although the budgets had been raised to 10 s and 15 s. With the
+  owner running each test in AWS: a first guess (cold start in user-service)
+  and a second (stale connections after a deploy) were ruled out by
+  CloudWatch logs; temporary Service Connect access logs and JDK HttpClient
+  request logging then showed the SFTP receiver answering in under 50 ms
+  while user-service never finished reading the response, on the first call
+  after about 30 s idle, with no deploy needed. Switching user-service to
+  `HttpURLConnection` through an environment variable made the panel load
+  after every idle pause. Made that permanent in user-service's
+  `application.yml` with 2 s connect and 3 s read timeouts. Returned
+  dashboard-service's budgets to 2 s and 3 s at the owner's request; after
+  the transactions panel timed out on the first load after a restart, set
+  them to 5 s and 8 s, as the owner chose. The panel still timed out after
+  an idle pause; temporary Tomcat access logging in user-service and JDK
+  HttpClient logging in dashboard-service showed user-service answering in
+  under 220 ms while dashboard-service's JDK client got the headers and
+  never finished the chunked HTTP/1.1 body. That disproved the first
+  explanation recorded (the JDK client's h2c upgrade), since this call is
+  HTTPS. Switched dashboard-service's client to `HttpURLConnection` too.
+  Amended ADR-0033, and updated both READMEs and the feature plan. All
+  temporary Terraform changes were removed before committing.
+- Human verification required: review by the user-service owner; after
+  deploying user-service and dashboard-service, load the dashboard after a
+  2-minute pause several times, and once just after a restart.
+- Data: CloudWatch logs and ECS events from the team's AWS account, read by
+  the owner and pasted in; synthetic test data. No credentials or real
+  client data were shared.
+- Verification: user-service `mvn test` passed (87 tests) and
+  dashboard-service `mvn test` passed (109 tests). The user-service change
+  is deployed and its stall no longer appears; the dashboard-service change
+  is not yet deployed.

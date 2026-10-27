@@ -56,7 +56,7 @@ Current gaps:
 
 ### Client assignment
 
-The client-profile service stores the creating/owning Cognito subject in `created_by_agent_id`, but exposes no machine-to-machine assignment contract.
+The client-profile service stores the owning agent's Cognito subject in `assigned_agent_id`, which an admin's reassignment changes ([ADR-0060](../adr/ADR-0060-client-reassignment.md)), but exposes no machine-to-machine assignment contract.
 
 ### Auditor
 

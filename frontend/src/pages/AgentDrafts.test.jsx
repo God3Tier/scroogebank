@@ -63,6 +63,20 @@ async function openDraft() {
 }
 
 describe('AgentDrafts', () => {
+  it('pages the emails ten at a time, asking for as many as engagement-service sends', async () => {
+    listDrafts.mockResolvedValue(Array.from({ length: 12 }, (_, i) => ({ ...AI_DRAFT, id: `draft-${i + 1}` })))
+    renderDrafts()
+
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(10)
+    expect(listDrafts).toHaveBeenCalledWith({ status: 'DRAFT', limit: 100 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last page' }))
+    expect(await screen.findByText('Page 2 of 2')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(2)
+    expect(screen.getByText('12 emails')).toBeInTheDocument()
+  })
+
   it('asks for a draft for the chosen client and opens it', async () => {
     listDrafts.mockResolvedValueOnce([])
     createDraft.mockResolvedValue(AI_DRAFT)
@@ -184,13 +198,30 @@ describe('AgentDrafts', () => {
     expect(sendDraft).not.toHaveBeenCalled()
   })
 
-  it('asks for unsaved edits to be saved before sending', async () => {
+  it('saves unsaved edits, then sends the saved version', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    updateDraft.mockResolvedValue({ ...AI_DRAFT, subject: 'Changed subject', version: 1 })
+    sendDraft.mockResolvedValue({ ...AI_DRAFT, subject: 'Changed subject', status: 'SENT', sentAt: '2026-10-21T02:05:00Z', version: 2 })
     await openDraft()
 
     fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Changed subject' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeDisabled()
+    expect(await screen.findByText(/^Sent /)).toBeInTheDocument()
+    expect(updateDraft).toHaveBeenCalledWith('draft-1', { subject: 'Changed subject', body: AI_DRAFT.body, version: 0 })
+    expect(sendDraft).toHaveBeenCalledWith('draft-1', 1)
+  })
+
+  it('sends nothing when saving the edits fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    updateDraft.mockRejectedValue(Object.assign(new Error('Conflict'), { status: 409 }))
+    await openDraft()
+
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Changed subject' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(sendDraft).not.toHaveBeenCalled()
   })
 
   it('explains a failed send', async () => {

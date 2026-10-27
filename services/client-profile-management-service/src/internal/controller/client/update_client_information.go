@@ -76,6 +76,7 @@ func (c clientController) UpdateClientInformation(w http.ResponseWriter, r *http
 			return
 		}
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "Client information updated successfully"}`))
 }

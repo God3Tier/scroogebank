@@ -4,15 +4,11 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"strings"
 	"time"
 	"uuid"
-)
 
-// currency is the only one a deployment holds: it serves one legal entity,
-// whose accounts are in SGD (Appendix 2, ADR-0038). GenerateRandomSet still
-// gives a few rows an unsupported currency on purpose.
-const currency = "SGD"
+	"producer/src/accounts"
+)
 
 var (
 	channels  = []string{"CARD", "ONLINE", "ATM", "TRANSFER"}
@@ -21,24 +17,26 @@ var (
 	status    = []string{"COMPLETED", "PENDING", "FAILED"}
 )
 
-// Generate returns one valid transaction, on one of accountIDs if any are
-// given, or on a random external account reference otherwise.
-func Generate(accountIDs []string) Transaction {
-	return generateTransaction(accountIDs)
+// Generate returns one valid transaction, on one of list if any are given,
+// in that account's currency. Otherwise it is on a random external account
+// reference, in accounts.DefaultCurrency. GenerateRandomSet still gives a
+// few rows an unsupported currency on purpose.
+func Generate(list []accounts.Account) Transaction {
+	return generateTransaction(list)
 }
 
-func generateTransaction(accountIDs []string) Transaction {
-	accountID := fmt.Sprintf("ACC-%06d", rand.Intn(999999))
-	if len(accountIDs) > 0 {
-		accountID = strings.TrimSpace(accountIDs[rand.Intn(len(accountIDs))])
+func generateTransaction(list []accounts.Account) Transaction {
+	account := accounts.Account{ID: fmt.Sprintf("ACC-%06d", rand.Intn(999999)), Currency: accounts.DefaultCurrency}
+	if len(list) > 0 {
+		account = list[rand.Intn(len(list))]
 	}
 	return Transaction{
 		TransactionID:   uuid.New().String(),
-		AccountID:       accountID,
+		AccountID:       account.ID,
 		TransferDate:    generateRandomRecent(),
 		TransactionType: txnTypes[rand.Intn(100)%2],
 		Amount:          generateRandomAmount(),
-		Currency:        currency,
+		Currency:        account.Currency,
 		Status:          generateStatusRandom(),
 		Description:     fmt.Sprintf("%s - %s", channels[rand.Intn(100)%4], merchants[rand.Intn(100)%5]),
 	}

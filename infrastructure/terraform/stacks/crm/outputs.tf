@@ -131,9 +131,10 @@ output "dashboard_inputs" {
 
     # The services dashboard-service calls over Service Connect (ADR-0033).
     upstreams = {
-      user    = { security_group = local.sg["user"], port = local.ports.user, url = "https://${local.sc.user}:${local.ports.user}" }
-      client  = { security_group = local.sg["client"], port = local.ports.client, url = "https://${local.sc.client}:${local.ports.client}" }
-      account = { security_group = local.sg["account"], port = local.ports.account, url = "https://${local.sc.account}:${local.ports.account}" }
+      user        = { security_group = local.sg["user"], port = local.ports.user, url = "https://${local.sc.user}:${local.ports.user}" }
+      client      = { security_group = local.sg["client"], port = local.ports.client, url = "https://${local.sc.client}:${local.ports.client}" }
+      account     = { security_group = local.sg["account"], port = local.ports.account, url = "https://${local.sc.account}:${local.ports.account}" }
+      transaction = { security_group = local.sg["transaction"], port = local.ports.transaction, url = "https://${local.sc.transaction}:${local.ports.transaction}" }
     }
 
     ca_pem                   = local.ca_pem

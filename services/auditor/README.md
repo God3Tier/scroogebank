@@ -2,6 +2,8 @@
 
 Go service for recording and reading audit-chain entries.
 
+The corrupted-log REST API is [`docs/api/corrupted-logs-api.yaml`](../../docs/api/corrupted-logs-api.yaml); `make test` checks its responses and routes against it ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Prerequisites
 
 Install the following on your computer:
@@ -344,7 +346,7 @@ user-service generates its Java client from the same file at build time. Change 
 
 ### `actor_id` convention
 
-Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**, taken from the verified token. The client service stores the same value as a client's `created_by_agent_id`. Work that no user started uses a `system:` prefix, for example `system:root-admin-initializer`. `ListActivities` compares `actor_id` by exact text, so an event carrying any other id, such as user-service's `users.id`, will not appear in that user's activity feed.
+Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**, taken from the verified token. The client service stores the same value as a client's `assigned_agent_id`. Work that no user started uses a `system:` prefix, for example `system:root-admin-initializer`. `ListActivities` compares `actor_id` by exact text, so an event carrying any other id, such as user-service's `users.id`, will not appear in that user's activity feed.
 
 ## Build and run the production image
 

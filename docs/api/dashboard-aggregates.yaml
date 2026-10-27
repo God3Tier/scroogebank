@@ -34,7 +34,7 @@ tags:
   - name: accounts
     description: account-service (Go)
   - name: transactions
-    description: user-service (Java) in front of the SFTP receiver (Go)
+    description: transaction-service, the SFTP receiver's read API (Go)
 
 paths:
   /aggregates/clients/stats:
@@ -56,6 +56,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/clients/action-items:
     get:
@@ -77,6 +78,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/clients/team-comparison:
     get:
@@ -104,6 +106,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/accounts/stats:
     get:
@@ -124,20 +127,14 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: |
-            Accounts opened in the window use more than one currency, so their
-            deposits are not added into one figure (ADR-0038).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/accounts/ids:
     get:
       tags: [accounts]
       summary: The IDs of the accounts the caller owns
       description: |
-        Used by user-service to scope an agent's transaction figures. Returns
+        Used by transaction-service to scope an agent's transaction figures. Returns
         the accounts whose owner is the caller, whatever their role; deleted
         accounts are left out.
       operationId: getOwnedAccountIds
@@ -156,16 +153,17 @@ paths:
                     items: { type: string, format: uuid }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
 
   /aggregates/transactions/stats:
     get:
       tags: [transactions]
-      summary: Transaction figures (user-service)
+      summary: Transaction figures (transaction-service)
       description: |
         For an admin, every transaction in the window. For an agent,
-        user-service asks account-service for the caller's account IDs and
-        passes only those to the receiver. The caller's token never reaches
-        the receiver.
+        transaction-service asks account-service for the caller's account IDs,
+        with the caller's own token, and totals only those (ADR-0064). No
+        parameter widens the scope.
       operationId: getTransactionStats
       security: [{ bearerAuth: [] }]
       parameters:
@@ -180,39 +178,12 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
         '502':
-          description: account-service answered without an account list.
-    post:
-      tags: [transactions]
-      summary: Transaction figures (SFTP receiver, private)
-      description: |
-        Served by the receiver, which has no authentication of its own and
-        must stay private (ADR-0006 decision 5). Only user-service calls it,
-        after deciding the scope. The body must name exactly one of `all` or
-        `accountIds`, so "every transaction" is never a default.
-      operationId: computeTransactionStats
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [from, to]
-              properties:
-                from: { type: string, format: date }
-                to: { type: string, format: date }
-                all: { type: boolean, description: 'Every transaction, including unmatched ones.' }
-                accountIds:
-                  type: array
-                  maxItems: 20000
-                  items: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
+          description: account-service could not say which accounts the caller owns.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TransactionStats' }
-        '400': { $ref: '#/components/responses/BadRequest' }
+              schema: { $ref: '#/components/schemas/Error' }
 
 components:
   securitySchemes:
@@ -254,13 +225,25 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: The figures could not be computed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
     Error:
       type: object
+      description: |
+        `{"error": ...}` from the Go services and the receiver; user-service's
+        own errors add `timestamp`, `status` and `message` (or `path`).
       required: [error]
       properties:
         error: { type: string }
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        message: { type: string }
+        path: { type: string }
 
     Amount:
       type: string
@@ -335,7 +318,7 @@ components:
 
     AccountStats:
       type: object
-      required: [total, byType, byStatus, byCurrency, byBranch, openedInWindow, bookedInitialDeposits, dailyOpened]
+      required: [total, byType, byStatus, byCurrency, byBranch, openedInWindow, bookedInitialDeposits, currencies, dailyOpened]
       properties:
         total: { type: integer, format: int64, description: 'Accounts in scope, whatever their opening date.' }
         byType: { type: object, additionalProperties: { type: integer, format: int64 } }
@@ -344,11 +327,20 @@ components:
         byBranch: { type: object, additionalProperties: { type: integer, format: int64 } }
         openedInWindow: { type: integer, format: int64 }
         bookedInitialDeposits:
-          allOf: [{ $ref: '#/components/schemas/Amount' }]
-          description: Opening deposits of accounts opened in the window. Not a balance.
-        currency: { type: string, description: Their currency; absent when none were opened. }
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Amount' }
+          description: |
+            Opening deposits of accounts opened in the window, summed per
+            currency and never across currencies (ADR-0062). Not a balance.
+            Empty when none were opened.
+          example: { SGD: '350.50', USD: '5.00' }
+        currencies:
+          type: array
+          items: { type: string }
+          description: The currencies of the accounts opened in the window, sorted; empty when none were.
         dailyOpened:
           type: array
+          description: Each day's value is left out when the window's accounts span more than one currency.
           items: { $ref: '#/components/schemas/DailyCount' }
         byAgent:
           type: array
@@ -359,7 +351,10 @@ components:
             properties:
               agentId: { type: string, description: The owner's Cognito sub. }
               accountsOpened: { type: integer, format: int64 }
-              bookedInitialDeposits: { $ref: '#/components/schemas/Amount' }
+              bookedInitialDeposits:
+                type: object
+                additionalProperties: { $ref: '#/components/schemas/Amount' }
+                description: The agent's opening deposits per currency.
 
     TransactionStats:
       type: object

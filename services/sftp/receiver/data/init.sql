@@ -45,3 +45,16 @@ CREATE TABLE audit_outbox (
 );
 
 CREATE INDEX idx_audit_outbox_created_at ON audit_outbox (created_at);
+
+-- transaction-service's audit events for transaction reads, waiting to be sent
+-- to the Auditor's SQS queue (ADR-0064 decision 5). Kept apart from
+-- audit_outbox, the import's events, so each table has one writer and one
+-- sender: transaction-service writes a row after each audited read, and its
+-- relay sends and deletes it under transaction-service's own IAM role.
+CREATE TABLE read_audit_outbox (
+    event_id    TEXT        PRIMARY KEY,
+    body        TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_read_audit_outbox_created_at ON read_audit_outbox (created_at);

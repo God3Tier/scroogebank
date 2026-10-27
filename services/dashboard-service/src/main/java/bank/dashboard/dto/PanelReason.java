@@ -29,12 +29,6 @@ public enum PanelReason {
     UPSTREAM_FORBIDDEN("upstream_forbidden"),
 
     /**
-     * The accounts opened in the window use more than one currency, so
-     * account-service will not add their deposits into one figure (ADR-0038).
-     */
-    MIXED_CURRENCIES("mixed_currencies"),
-
-    /**
      * The team comparison covers only the last 7, 30 or 90 days, ending
      * today, and the requested window is another one (ADR-0038).
      */

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { listClients } from '../api/clients.js'
+import { Pager } from '../components/ListFooter.jsx'
+import { useArrayPages } from '../components/paging.js'
 import {
   createDraft,
   discardDraft,
@@ -32,6 +34,8 @@ const HOLIDAY_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: '
 const wordCount = (text) => (text.trim() ? text.trim().split(/\s+/).length : 0)
 const PURPOSE_LABELS = Object.fromEntries(PURPOSES.map((purpose) => [purpose.value, purpose.label]))
 const PAST_MEETING_DAYS = 92
+// engagement-service's largest draft list (docs/api/engagement-api.yaml).
+const DRAFT_LIMIT = 100
 
 function generateProblem(error) {
   if (error.status === 404) return 'That client is not one of yours.'
@@ -211,8 +215,22 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   async function handleSend() {
     if (!window.confirm(`Send this email to ${clientName}?`)) return
     setState({ busy: true, error: '', message: '' })
+    // Unsaved edits are saved first, so the email sent is the one on screen.
+    let version = draft.version
+    if (changed) {
+      try {
+        const saved = await updateDraft(draft.id, { ...values, version })
+        setDraft(saved)
+        setValues({ subject: saved.subject ?? '', body: saved.body ?? '' })
+        version = saved.version
+        onChanged()
+      } catch (error) {
+        setState({ busy: false, error: saveProblem(error), message: '' })
+        return
+      }
+    }
     try {
-      const sent = await sendDraft(draft.id, draft.version)
+      const sent = await sendDraft(draft.id, version)
       setDraft(sent)
       setState({ busy: false, error: '', message: 'Sent.' })
       onChanged()
@@ -303,8 +321,8 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
           {editable && <button type="button" className="button--danger" onClick={handleDiscard} disabled={state.busy}>Discard</button>}
           {editable && named && <button type="button" onClick={handleSave} disabled={state.busy || !changed}>Save changes</button>}
           {editable && named && (
-            <button type="button" className="button--accent" onClick={handleSend} disabled={state.busy || changed}
-              title={changed ? 'Save your changes before sending' : undefined}>
+            <button type="button" className="button--accent" onClick={handleSend} disabled={state.busy}
+              title={changed ? 'Saves your changes, then sends' : undefined}>
               Send
               <span className="material-symbols-outlined" aria-hidden="true">send</span>
             </button>
@@ -326,6 +344,7 @@ function AgentDrafts({ now: fixedNow }) {
   const [list, setList] = useState({ loading: true, error: '', drafts: [] })
   const [openId, setOpenId] = useState(null)
   const [version, setVersion] = useState(0)
+  const pages = useArrayPages(list.drafts)
 
   useEffect(() => {
     let current = true
@@ -337,7 +356,8 @@ function AgentDrafts({ now: fixedNow }) {
 
   const load = useCallback(async () => {
     try {
-      setList({ loading: false, error: '', drafts: await listDrafts({ status }) })
+      // engagement-service sends the newest first, at most DRAFT_LIMIT, unpaged.
+      setList({ loading: false, error: '', drafts: await listDrafts({ status, limit: DRAFT_LIMIT }) })
     } catch {
       setList({ loading: false, error: 'Follow-up emails are temporarily unavailable.', drafts: [] })
     }
@@ -362,7 +382,7 @@ function AgentDrafts({ now: fixedNow }) {
 
       <div className="drafts-layout">
         <div className="drafts-layout__side">
-          <GenerateForm clients={clients} now={now} onCreated={(draft) => { setStatus('DRAFT'); setOpenId(draft.id); setVersion((v) => v + 1) }} />
+          <GenerateForm clients={clients} now={now} onCreated={(draft) => { setStatus('DRAFT'); pages.go(0); setOpenId(draft.id); setVersion((v) => v + 1) }} />
 
           <section className="card card-flush drafts-list" aria-labelledby="drafts-heading">
             <div className="drafts-list__header">
@@ -370,7 +390,7 @@ function AgentDrafts({ now: fixedNow }) {
               <div className="drafts-tabs" role="tablist">
                 {STATUS_TABS.map((tab) => (
                   <button key={tab.value} type="button" role="tab" aria-selected={status === tab.value}
-                    onClick={() => setStatus(tab.value)}>
+                    onClick={() => { setStatus(tab.value); pages.go(0) }}>
                     {tab.label}
                   </button>
                 ))}
@@ -391,7 +411,7 @@ function AgentDrafts({ now: fixedNow }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {list.drafts.map((draft) => (
+                    {pages.rows.map((draft) => (
                       <tr key={draft.id} className={draft.id === openId ? 'drafts-table__row--open' : undefined}>
                         <td>
                           <span className="drafts-table__client">{nameOf(draft.clientId)}</span>
@@ -413,9 +433,14 @@ function AgentDrafts({ now: fixedNow }) {
               </div>
             )}
             {list.drafts.length > 0 && (
-              <p className="drafts-list__footer">
-                Showing {list.drafts.length} {list.drafts.length === 1 ? 'email' : 'emails'}
-              </p>
+              <>
+                <Pager list={pages} label="Email pages" />
+                <p className="drafts-list__footer">
+                  {list.drafts.length === DRAFT_LIMIT
+                    ? `Showing your newest ${DRAFT_LIMIT} emails`
+                    : `${list.drafts.length} ${list.drafts.length === 1 ? 'email' : 'emails'}`}
+                </p>
+              </>
             )}
           </section>
         </div>

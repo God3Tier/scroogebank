@@ -5,7 +5,7 @@ DELETE FROM clients WHERE client_id::text LIKE '00000000-0000-0000-0000-00000000
 INSERT INTO clients (
     client_id, first_name, last_name, date_of_birth, gender, email, email_hash, phone_number, phone_number_hash,
     address, city, state, country, postal_code, verification_status,
-    created_by_agent_id, created_at, updated_at, deleted_at
+    assigned_agent_id, created_at, updated_at, deleted_at
 )
 SELECT ('00000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid, 'Team', 'Client', DATE '1990-01-01', 'female',
        'team-' || n || '@example.test', 'email-hash-' || n, '+65600' || n, 'phone-hash-' || n, '1 Example Street', 'Singapore', 'Singapore', 'Singapore', '100' || n,

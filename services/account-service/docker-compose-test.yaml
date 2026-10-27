@@ -30,7 +30,10 @@ services:
     volumes:
       - .:/workspace
       - ./sqlboiler.docker.toml:/workspace/sqlboiler.toml:ro
+      # The OpenAPI contracts the tests check responses against (ADR-0063).
+      - ../../docs/api:/openapi:ro
     environment:
+      OPENAPI_DIR: /openapi
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_USER: postgres

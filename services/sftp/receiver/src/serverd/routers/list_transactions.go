@@ -30,8 +30,7 @@ type transactionPage struct {
 }
 
 // listTransactions serves GET /api/transactions?cursor&size&status, every
-// account's transactions for an admin. Like the per-account route it is
-// private and unauthenticated: user-service checks the caller (ADR-0043).
+// account's transactions. RegisterRoutes lets only admins reach it (ADR-0043).
 func listTransactions(transactionRepository repository.Transaction) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query, problem := listQuery(c)

@@ -93,3 +93,14 @@ export async function fetchDocument(clientId, documentId) {
 export function verifyClient(clientId, documentIds) {
   return sendJson(`${clientPath(clientId)}/verify`, { method: 'POST', body: { document_ids: documentIds } })
 }
+
+// Admins only (ADR-0060): moves clients, with their accounts, to the enabled
+// agent toUserId. Give fromUserId to move all of that user's clients, or
+// clientIds to move those clients. Users are user-service IDs. Returns
+// { reassigned, client_ids }.
+export function reassignClients({ toUserId, fromUserId, clientIds }) {
+  const body = { to_user_id: toUserId }
+  if (fromUserId) body.from_user_id = fromUserId
+  if (clientIds) body.client_ids = clientIds
+  return sendJson('/api/clients/reassignments', { method: 'POST', body })
+}
