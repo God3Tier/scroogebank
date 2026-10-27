@@ -922,6 +922,7 @@
   invented, sign-reversed and wrong-context numeric wording. The local Java 24
   suite completed 129 tests with no failures: 106 passed and 23
   Docker-dependent tests were skipped; Java 25 CI with Docker remains required.
+
 ## 2026-10-27 — Client Health SF09 metrics and health
 
 - Human owner: Swayam; reviewer: Garvit; later infrastructure review: Neo.
@@ -937,3 +938,20 @@
   were used.
 - Verification: SimpleMeterRegistry unit tests, Spring security/health tests,
   PostgreSQL rollback/recovery tests and the complete Client Health Maven suite.
+
+## 2026-10-27 — Client Health SF10 API-backed UI
+
+- Human owner: Garvit; shared frontend owner review remains required.
+- Tool: Cursor.
+- Use: replace seeded Client Health state with authenticated Contract-D list,
+  detail, history and action calls; add Agent actions, Admin read-only oversight,
+  filters, cursor pagination, explanation source, resilient API states and
+  frontend tests.
+- Human verification required: review shared navigation/auth changes and verify
+  the screen against a deployed Client Health API before promotion.
+- Data: repository-owned synthetic API fixtures only. No credentials, real
+  client data, AWS calls or external services were used.
+- Verification: frontend API/page/router/navigation tests, ESLint and the Vite
+  production build passed; all 139 frontend tests across 20 files passed and
+  the focused Client Health API/page tests passed independently. Vite retained
+  the existing large-chunk warning.

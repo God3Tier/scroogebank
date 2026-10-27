@@ -56,6 +56,10 @@ function NavBar() {
               <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
               Admin Home
             </NavLink>
+            <NavLink to="/admin/client-health">
+              <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
+              Client Health
+            </NavLink>
             <NavLink to="/insights/admin">
               <span className="material-symbols-outlined" aria-hidden="true">insights</span>
               Admin Dashboard

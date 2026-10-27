@@ -5,8 +5,12 @@ import { authorizationHeader } from '../auth/session.js'
 // receiver behind user-service).
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
-export async function requestJson(path, { body, ...options } = {}) {
-  const headers = { Accept: 'application/json', ...(await authorizationHeader()) }
+export async function requestJson(path, { body, headers: extraHeaders, ...options } = {}) {
+  const headers = {
+    Accept: 'application/json',
+    ...(await authorizationHeader()),
+    ...extraHeaders,
+  }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,

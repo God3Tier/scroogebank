@@ -2,7 +2,7 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF08 are merged and RH-SF09 metrics/health implementation is in progress
+- Status: In progress; SF00-SF08 and offline rule evaluation are merged; RH-SF09 metrics/health and RH-SF10 API-backed Agent/Admin UI integration are implemented on their task branches
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
@@ -501,7 +501,7 @@ Decisions:
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval | 2026-10-26 |
 | RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented locally; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
 | RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented locally; Java 25 Docker CI and review by Garvit pending | 2026-10-27 |
-| RH-SF10 | CRM UI integration | TBD | task list/detail/actions/Admin view | Frontend/Azeez/Hayyun coordination | TBD | Unassigned | N/A |
+| RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented locally against Contract D with deterministic API mocks; frontend CI and owner review pending | 2026-10-27 |
 | RH-SF11 | Cloud deployment | TBD | compute/database/IAM/routes/secrets/alarms | Accepted ADRs/platform owner | TBD | Unassigned | N/A |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
 

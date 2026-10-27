@@ -1,3 +1,6 @@
+server:
+  port: ${SERVER_PORT:8086}
+
 client-health:
   ai:
     enabled: ${CLIENT_HEALTH_AI_ENABLED:false}
