@@ -10,6 +10,9 @@
   dev's transaction provider, Agent Engagement, frontend routing and governance
   records. Resolve the local port collision by keeping engagement-service on
   8086 and moving Client Health's default local port and Vite proxy to 8087.
+  Follow up on CI findings by converting Client Health's remaining OpenAPI 3.1
+  keywords to equivalent 3.0.3 schemas and scoping a duplicate-text UI
+  assertion to the signal-evidence panel.
 - Human verification required: review the merge commit before pushing and
   obtain the owner/security acceptance and end-to-end evidence required by
   proposed ADR-0065.
@@ -17,9 +20,13 @@
   credentials, real client data, AWS calls or external services were used.
 - Verification: no unmerged index entries or conflict markers remain;
   `git diff --cached --check` passes; frontend lint, all 252 tests and the Vite
-  production build pass; Client Health's clean Java 24 override run reports
-  129 tests with no failures (106 passed and 23 Docker-dependent tests skipped).
-  Terraform formatting was not run because Terraform is unavailable locally.
+  production build pass; the focused Client Health UI file passes all five
+  tests; event-alert-service's OpenAPI route/parser test passes; Client Health's
+  clean Java 24 override run reports 129 tests with no failures (106 passed and
+  23 Docker-dependent tests skipped). Terraform formatting was not run because
+  Terraform is unavailable locally; the Python CI validator was also
+  unavailable locally, so OpenAPI 3.0.3-incompatible keywords were checked
+  repository-wide and none remain.
 
 ## 2026-10-26 — Matched transaction activity API
 
