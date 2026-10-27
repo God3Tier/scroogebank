@@ -13,6 +13,7 @@ import (
 	"receiver/src/internal/models"
 	"receiver/src/internal/outbox"
 	"receiver/src/internal/repository"
+	serviceauth "receiver/src/internal/security"
 	"receiver/src/serverd/accounts"
 	"receiver/src/serverd/audit"
 	"receiver/src/serverd/routers"
@@ -71,7 +72,27 @@ func run() error {
 
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
-	routers.RegisterRoutes(router, repository.New(db), repository.NewTransactionStats(db),
+	transactionRepository := repository.New(db)
+	issuer := strings.TrimSpace(os.Getenv("COGNITO_ISSUER_URI"))
+	allowedClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_HEALTH_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })
+	production := strings.EqualFold(strings.TrimSpace(os.Getenv("APP_ENV")), "production")
+	if issuer != "" || len(allowedClientIDs) > 0 {
+		if issuer == "" || len(allowedClientIDs) == 0 {
+			return fmt.Errorf("COGNITO_ISSUER_URI and COGNITO_HEALTH_CLIENT_IDS must be configured together")
+		}
+		serviceTokens, err := serviceauth.NewServiceTokenVerifier(issuer, allowedClientIDs, "crm-transactions/read")
+		if err != nil {
+			return fmt.Errorf("configure transaction read authentication: %w", err)
+		}
+		routers.RegisterClientHealthRoutes(router, transactionRepository, serviceTokens.Middleware())
+	}
+	if production && len(allowedClientIDs) == 0 {
+		return fmt.Errorf("production requires COGNITO_HEALTH_CLIENT_IDS")
+	}
+	if issuer == "" {
+		return fmt.Errorf("COGNITO_ISSUER_URI is required")
+	}
+	routers.RegisterRoutes(router, transactionRepository, repository.NewTransactionStats(db),
 		accounts.NewHTTPDirectory(accountServiceURL, accountLookupTimeout), verifier.Middleware(), saveAudit)
 
 	server := &http.Server{
@@ -79,7 +100,7 @@ func run() error {
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	if envOrDefault("APP_ENV", "production") == "production" {
+	if production {
 		return server.ListenAndServeTLS(os.Getenv("APP_TLS_CERT_FILE"), os.Getenv("APP_TLS_KEY_FILE"))
 	}
 	return server.ListenAndServe()

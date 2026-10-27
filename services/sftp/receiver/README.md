@@ -9,7 +9,8 @@ Run the HTTP server from this module with the `DB_*` environment variables used 
 | Variable | Purpose |
 |---|---|
 | `APP_ENV` | `local` or `production` (default). Production refuses to start without TLS on every hop: `APP_TLS_CERT_FILE` and `APP_TLS_KEY_FILE`, `DB_SSLMODE=verify-full` with `DB_SSLROOTCERT`, and an `https://` `ACCOUNT_SERVICE_BASE_URL`, because the service receives callers' tokens and forwards them |
-| `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID` | The user pool and the CRM web app client. Only that client's access tokens with the `ADMIN` or `AGENT` group are accepted |
+| `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID` | The user pool and the CRM web app client. Only that client's access tokens with the `ADMIN` or `AGENT` group are accepted on user routes |
+| `COGNITO_HEALTH_CLIENT_IDS` | Comma- or space-separated Cognito app client IDs allowed to use the Client Health history route with `crm-transactions/read`; required in production |
 | `ACCOUNT_SERVICE_BASE_URL` | account-service, asked about ownership with the caller's token. Required |
 | `AUDIT_QUEUE_URL`, `AWS_REGION` | The shared audit queue that read events are relayed to. Required in production; locally, as for the poller, an empty `AUDIT_QUEUE_URL` turns read auditing off. `AWS_ENDPOINT_URL` points SQS elsewhere locally |
 
@@ -137,9 +138,11 @@ The outboxes are written with plain SQL, so `sqlboiler.toml` leaves both out of 
 
 ## Endpoint
 
-Every route except `/health` needs a CRM user's access token. The contracts are [`transactions-api.yaml`](../../../docs/api/transactions-api.yaml) and [`dashboard-aggregates.yaml`](../../../docs/api/dashboard-aggregates.yaml).
+The `/api` and `/aggregates` routes need a CRM user's access token. `/internal/v1/transactions` needs an allow-listed service token with `crm-transactions/read`; `/health` is public. The contracts are [`transactions-api.yaml`](../../../docs/api/transactions-api.yaml) and [`dashboard-aggregates.yaml`](../../../docs/api/dashboard-aggregates.yaml).
 
 `GET /api/accounts/{accountId}/transactions`, for an admin or the agent who owns the account. The server first asks account-service's `GET /api/accounts/{id}` with the caller's token, and passes on its 404 for another agent's or a missing account, so agents cannot tell the two apart; if account-service cannot answer, the read is refused with 502. An ID that is not a UUID gets 400. The repository uses SQLBoiler to filter by the transaction's linked `account_id`. Results are ordered newest first. An account with no matching transactions returns `200` and an empty array.
+
+Internal endpoint: `GET /internal/v1/transactions?from&to&cursor&limit` is the separate Client Health Monitor history route (proposed [ADR-0065](../../../docs/adr/ADR-0065-client-health-matched-transaction-history.md)). It is registered only when the Cognito issuer and allowed read-client IDs are configured; production startup fails if either is missing. It requires a Cognito access token minted through client credentials, an allow-listed `client_id`, and the exact `crm-transactions/read` scope. It returns all matched clients in the requested inclusive `from` and exclusive `to` RFC3339 range. `limit` defaults to 100 and is bounded from 1 to 500. The opaque keyset cursor orders by transaction date then ID, descending. Only `Matched` rows with non-null CRM client/account IDs are returned. The controller DTO omits descriptions, source account references, and import status/timestamps. `sourceFingerprint` is nullable; when present it must be 24–64 characters and match `synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}`. The public Terraform output `client_health_transaction_read` provides the service URL, app client ID, scope, security group, and secret ARN; only the Client Health task role should read that secret.
 
 `GET /api/transactions?cursor&size&status`, every account's transactions for the admin list ([ADR-0043](../../../docs/adr/ADR-0043-client-and-transaction-list-endpoints.md)). Agents get 403. It returns `{content, nextCursor}`, newest first by `transaction_date` then `transaction_id`, both descending. `size` is 1 to 100 (default 20); `status` is optionally `Completed`, `Pending` or `Failed`; pass `nextCursor` back as `cursor` for the next page, and it is `null` on the last. Rows not linked to an account are left out, as above. Paging is by keyset, so later pages stay as fast as the first.
 

@@ -54,6 +54,8 @@ record was renamed or deleted during the branch merge.
 
 ## Proposed decisions
 
+- [ADR-0065](ADR-0065-client-health-matched-transaction-history.md) — Proposed private Client Health transaction history route; scoped Cognito client-credentials authentication, all-client `[from,to)` reads, global keyset pagination, matched-only fields, validated source fingerprints, and synthetic signal/control cases.
+
 Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](../architecture/system-overview.md). Numbering starts at 0017 because feature branches already use 0001–0016.
 
 - [ADR-0005](ADR-0005-alert-holdings-and-valuation-boundary.md) - Use service-owned synthetic holdings and reproducible, freshness-aware valuation snapshots for the alert MVP.

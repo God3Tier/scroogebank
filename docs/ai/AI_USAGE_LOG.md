@@ -1,6 +1,6 @@
 # AI usage log
 
-## 2026-10-22 — Matched transaction activity API
+## 2026-10-26 — Matched transaction activity API
 
 - Human owner: Joseph Yau (Feature 3); Garvit, Swayam, and security/platform
   review remain required before the proposed contract is accepted.
@@ -11,8 +11,10 @@
   update the feature plan, proposed ADR, API/schema docs, and run instructions.
 - Data: synthetic transaction fixtures only. No credentials, real client data,
   or production banking data were supplied.
-- Verification: pending full receiver/producer test run and SQLBoiler/Mockery
-  regeneration; contract-owner and end-to-end review are still required.
+- Verification: `gofmt`, `git diff --check`, and SQLBoiler/Mockery generation
+  passed. Terraform formatting could not run because the Terraform CLI is
+  unavailable. Receiver/producer tests, contract-owner review, and end-to-end
+  verification remain pending.
 
 ## 2026-10-14 — Auditor service layering and style
 
@@ -1095,3 +1097,22 @@
   dashboard-service `mvn test` passed (109 tests). The user-service change
   is deployed and its stall no longer appears; the dashboard-service change
   is not yet deployed.
+
+## 2026-10-27 — Client Health transaction history API update
+
+- Human owner: Joseph Yau. Client Health contract, security and transaction
+  owners should review the proposed ADR and API changes.
+- Tool: Codex (OpenAI).
+- Use: remove the required client filter from the transaction history route,
+  query all matched clients through SQLBoiler, add keyset pagination and
+  service-token route coverage, move Client Health schema additions out of
+  `init.sql` and keep them in V2, constrain source fingerprints, add three
+  synthetic signal cases plus healthy controls, update the OpenAPI contract,
+  and rename the proposed history ADR to ADR-0065.
+- Human verification required: review the revised response/query contract,
+  proposed ADR-0065, fingerprint rule, and synthetic cases; run a real
+  Cognito/import/read integration check before deployment.
+- Data: repository content and synthetic fixtures only. No credentials, real
+  client data or AWS resources were used.
+- Verification: SFTP `make test` passed, including SQLBoiler regeneration,
+  producer tests, receiver tests, and OpenAPI response/route checks.

@@ -6,7 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	"receiver/src/internal/contract"
 	"receiver/src/internal/models"
@@ -31,9 +34,11 @@ var (
 )
 
 type transactionRepositoryStub struct {
-	transactions orm.TransactionSlice
-	err          error
-	accountID    string
+	transactions  orm.TransactionSlice
+	healthRows    []models.ClientHealthTransaction
+	healthQueries []models.ClientHealthTransactionQuery
+	err           error
+	accountID     string
 }
 
 func (s *transactionRepositoryStub) SaveTransaction(context.Context, models.Transaction) error {
@@ -79,6 +84,24 @@ func (a *auditStub) save(_ context.Context, event models.AuditEvent) error {
 	return nil
 }
 
+func (s *transactionRepositoryStub) ListClientHealthTransactions(_ context.Context, query models.ClientHealthTransactionQuery) ([]models.ClientHealthTransaction, error) {
+	s.healthQueries = append(s.healthQueries, query)
+	if s.err != nil {
+		return nil, s.err
+	}
+	rows := make([]models.ClientHealthTransaction, 0, len(s.healthRows))
+	for _, row := range s.healthRows {
+		if query.After == nil || row.TransactionDate.Before(query.After.Date) ||
+			(row.TransactionDate.Equal(query.After.Date) && row.TransactionID < query.After.ID) {
+			rows = append(rows, row)
+		}
+	}
+	if len(rows) > query.Limit {
+		rows = rows[:query.Limit]
+	}
+	return rows, nil
+}
+
 // payloads returns each saved event's resource type, ID and status.
 func (a *auditStub) payloads(t *testing.T) []map[string]any {
 	t.Helper()
@@ -111,7 +134,23 @@ func newRouter(transactions repository.Transaction, stats repository.Transaction
 	}
 	router := gin.New()
 	RegisterRoutes(router, transactions, stats, directory, authenticate, audit.save)
+	RegisterClientHealthRoutes(router, transactions, clientHealthTestAuth())
 	return router
+}
+
+func clientHealthTestAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		parts := strings.Fields(c.GetHeader("Authorization"))
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Bearer service token required"})
+			return
+		}
+		if parts[1] != "valid-health-token" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "transaction read scope required"})
+			return
+		}
+		c.Next()
+	}
 }
 
 func getAccountTransactions(t *testing.T, router *gin.Engine, accountID string) *httptest.ResponseRecorder {
@@ -120,6 +159,81 @@ func getAccountTransactions(t *testing.T, router *gin.Engine, accountID string) 
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/accounts/"+accountID+"/transactions", nil))
 	contract.Check(t, "transactions-api.yaml", http.MethodGet, "/api/accounts/{accountId}/transactions", response)
 	return response
+}
+
+func getClientHealthTransactions(t *testing.T, router *gin.Engine, query string, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/internal/v1/transactions?"+query, nil)
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	contract.Check(t, "transactions-api.yaml", http.MethodGet, "/internal/v1/transactions", response)
+	return response
+}
+
+func TestListClientHealthTransactions(t *testing.T) {
+	from := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	rows := []models.ClientHealthTransaction{
+		{TransactionID: "txn-2", ClientID: "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a", AccountID: "e3351530-f5c1-4f64-aedc-3c97d9f76816", TransactionType: "Deposit", Amount: "4200.00", Currency: "SGD", TransactionDate: to.Add(-time.Hour), Status: "Completed", ActivityKind: "Automated"},
+		{TransactionID: "txn-1", ClientID: "3e167e0f-79ab-4c35-bd48-57f7c6d80e1d", AccountID: "2f57d589-a614-4da4-8f0b-bd76a218de47", TransactionType: "Withdrawal", Amount: "12.50", Currency: "USD", TransactionDate: to.Add(-2 * time.Hour), Status: "Completed", ActivityKind: "CustomerInitiated"},
+	}
+	repo := &transactionRepositoryStub{healthRows: rows}
+	router := newRouter(repo, nil, nil, nil, nil)
+	query := "from=" + from.Format(time.RFC3339) + "&to=" + to.Format(time.RFC3339) + "&limit=1"
+
+	first := getClientHealthTransactions(t, router, query, "valid-health-token")
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	var page clientHealthTransactionPage
+	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	assert.Equal(t, "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a", page.Items[0].ClientID)
+	assert.Equal(t, "Automated", page.Items[0].ActivityKind)
+	assert.NotNil(t, page.NextCursor)
+	assert.NotContains(t, first.Body.String(), "description")
+	assert.NotContains(t, first.Body.String(), "importStatus")
+	require.Len(t, repo.healthQueries, 1)
+	assert.Equal(t, from, repo.healthQueries[0].From)
+	assert.Equal(t, to, repo.healthQueries[0].To)
+	assert.Equal(t, 2, repo.healthQueries[0].Limit, "fetch one extra row to determine the next cursor")
+
+	secondQuery := query + "&cursor=" + url.QueryEscape(*page.NextCursor)
+	second := getClientHealthTransactions(t, router, secondQuery, "valid-health-token")
+	require.Equal(t, http.StatusOK, second.Code, second.Body.String())
+	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	assert.Equal(t, "3e167e0f-79ab-4c35-bd48-57f7c6d80e1d", page.Items[0].ClientID)
+	assert.Nil(t, page.NextCursor)
+	require.Len(t, repo.healthQueries, 2)
+	assert.NotNil(t, repo.healthQueries[1].After)
+	assert.Equal(t, "txn-2", repo.healthQueries[1].After.ID)
+}
+
+func TestListClientHealthTransactionsAuthentication(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		token string
+		want  int
+	}{
+		{name: "missing token", want: http.StatusUnauthorized},
+		{name: "invalid scope or client", token: "invalid-health-token", want: http.StatusForbidden},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &transactionRepositoryStub{}
+			response := getClientHealthTransactions(t, newRouter(repo, nil, nil, nil, nil), "from=2026-04-01T00:00:00Z&to=2026-10-01T00:00:00Z", test.token)
+			assert.Equal(t, test.want, response.Code)
+			assert.Empty(t, repo.healthQueries, "unauthenticated requests must not reach the repository")
+		})
+	}
+}
+
+func TestListClientHealthTransactionsRejectsInvalidRange(t *testing.T) {
+	repo := &transactionRepositoryStub{}
+	response := getClientHealthTransactions(t, newRouter(repo, nil, nil, nil, nil), "from=2026-10-01T00:00:00Z&to=2026-04-01T00:00:00Z", "valid-health-token")
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	assert.Empty(t, repo.healthQueries)
 }
 
 func TestGetTransactions(t *testing.T) {

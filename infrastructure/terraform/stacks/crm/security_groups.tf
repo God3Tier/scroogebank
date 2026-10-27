@@ -27,6 +27,7 @@ locals {
     chain_verify = "chain-verify tasks"
     transaction  = "transaction-service tasks"
     alerts       = "event-alert-service tasks"
+    client_health = "Client Health Monitor tasks"
     ingest       = "transaction-ingest Lambda"
     db_console   = "One-off database console tasks (runbook)"
     db_users     = "users-db"
@@ -52,8 +53,10 @@ locals {
     { to = "auditor", from = "user", port = local.ports.auditor_http },
     { to = "auditor", from = "user", port = local.ports.auditor_grpc },
     # transaction-service checks each caller's token (ADR-0064); the
-    # business-dashboard stack adds dashboard-service's rule.
+    # business-dashboard stack adds dashboard-service's rule. Client Health
+    # calls its separately scoped private history route directly.
     { to = "transaction", from = "alb", port = local.ports.transaction },
+    { to = "transaction", from = "client_health", port = local.ports.transaction },
     { to = "alerts", from = "alb", port = local.ports.alerts },
 
     { to = "db_users", from = "user", port = 5432 },
@@ -74,7 +77,7 @@ locals {
 
   # Groups whose members reach AWS APIs, Cognito's keys and the SFTP server
   # through the NAT gateway, and other tasks inside the VPC.
-  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "ingest", "db_console"]
+  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "client_health", "ingest", "db_console"]
 
   sg = { for k, v in aws_security_group.this : k => v.id }
 }

@@ -2,7 +2,7 @@
 
 ## Plan metadata
 
-- Status: Draft; SF00 plan/contracts ready for first PR, later contract artifacts prepared locally but not integrated
+- Status: Draft; transaction history implementation exists locally under proposed ADR-0065 and requires owner/security review before integration or deployment
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
@@ -11,7 +11,7 @@
 - Last repository sync: 2026-09-29 against `origin/dev` at `048cfb0`
 - AI-assisted planning: Yes; Cursor
 
-This plan authorizes planning and contract work only. Runtime, compute, database, integration, Bedrock, and audit decisions remain proposed until accepted ADRs with human owners exist.
+This plan authorizes planning and contract work only. Runtime, compute, database, integration, Bedrock, and audit decisions remain proposed until accepted ADRs with human owners exist. The transaction history code and Terraform currently implement a reviewable proposal; they are not accepted production architecture.
 
 ## Problem statement
 
@@ -223,7 +223,7 @@ Required from the transaction owner:
 - schema compatibility policy; and
 - no unmatched/rejected record presented as analysable.
 
-Current gap: merged SFTP import stores a source account reference but does not populate `client_id`, publish events, expose a read API, or provide historical replay.
+Current state: SFTP import resolves and stores `client_id` and `account_id` for matched rows. The proposed transaction-service read API returns all matched clients for a time window with global keyset pagination. Six-month deterministic producer history includes the three MVP signal cases and a healthy control. `make test` passes, including endpoint/auth/pagination and synthetic-history coverage. The design remains proposed under [ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md); end-to-end verification and owner/security acceptance remain outstanding.
 
 ### Client assignment
 
@@ -472,7 +472,7 @@ Decisions still required:
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
 | RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Plan/contracts ready for PR 1; later PRs locally prepared | 2026-09-29 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | Transaction-owner contract; SF00 | `task/client-health-monitor/transaction-intake` | Planned | N/A |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | Transaction-owner contract; SF00; Joseph's receiver API and synthetic producer work (F3-READ-03) | `task/client-health-monitor/transaction-intake` | Proposed receiver implementation locally; feature integration pending | 2026-10-26 |
 | RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; future migration ownership | `task/client-health-monitor/activity-projection` | Planned | N/A |
 | RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; shared fixtures | `task/client-health-monitor/signal-rules` | Planned | N/A |
 | RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |

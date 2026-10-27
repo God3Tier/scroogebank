@@ -109,7 +109,7 @@ Example:
     "currency": "SGD",
     "transactionDate": "2026-09-28T00:30:00Z",
     "status": "Completed",
-    "sourceFingerprint": "synthetic-employer-001"
+    "sourceFingerprint": "synthetic-employer-a1b2c3d4e5f6"
   }
 }
 ```
@@ -134,7 +134,7 @@ Example:
 - `currency`: required uppercase ISO 4217 code; MVP expects `SGD` unless a currency policy is accepted.
 - `transactionDate`: required source transaction time.
 - `status`: required; `Completed`, `Pending`, or `Failed`.
-- `sourceFingerprint`: optional opaque stable synthetic source reference. It supports recurring-credit grouping without exposing free-text remitter details.
+- `sourceFingerprint`: optional stable synthetic source reference, at most 64 characters, matching `synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}`. It supports recurring-credit grouping without exposing free-text remitter details.
 
 ### Producer guarantees requested
 
@@ -157,16 +157,13 @@ Example:
 - Record invalid/unsupported input without creating signals/tasks.
 - Store only the minimum read projection required by the selected rules.
 
-### Historical replay proposal
+### Matched transaction history API proposal
 
-If events are selected, replay uses the same `transaction.matched.v1` payloads with stable transaction IDs and new or documented stable event IDs.
-
-If an API is selected, proposed endpoint:
+The selected proposal is a private pull API. It uses the same stable transaction IDs as ingestion and permits the consumer to request only the client's required time window.
 
 ```text
 GET /internal/v1/transactions
-    ?clientId={clientId}
-    &from={inclusive-utc}
+    ?from={inclusive-utc}
     &to={exclusive-utc}
     &cursor={opaque-cursor}
     &limit={bounded-limit}
@@ -179,22 +176,25 @@ Proposed response:
   "schemaVersion": "1",
   "items": [
     {
-      "transactionId": "txn-000001",
+      "transactionId": "synthetic-3b71d6a4c829a1051e8d9fc2b1437a60",
       "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
-      "accountId": "acc-000001",
+      "accountId": "e3351530-f5c1-4f64-aedc-3c97d9f76816",
       "type": "Deposit",
       "amount": "4250.00",
       "currency": "SGD",
-      "transactionDate": "2026-09-28T00:30:00Z",
+      "transactionDate": "2026-09-28T05:00:00Z",
       "status": "Completed",
-      "sourceFingerprint": "synthetic-employer-001"
+      "activityKind": "Automated",
+      "sourceFingerprint": "synthetic-employer-a1b2c3d4e5f6"
     }
   ],
   "nextCursor": null
 }
 ```
 
-The transport decision remains open. SF00 freezes field meaning, not delivery mechanism.
+`activityKind` is exactly `CustomerInitiated`, `Automated`, or `Unknown`. `sourceFingerprint` is always present in the response and is either a stable source identifier or `null`. When present, it is 24–64 characters and matches `synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}`. `type` and `status` retain the transaction-service values (`Deposit`/`Withdrawal` and `Completed`/`Pending`/`Failed`).
+
+The transaction owner selected this private pull API for the first implementation. The receiver accepts Cognito client-credentials tokens with the `crm-transactions/read` scope; the Client Health Monitor uses the dedicated read-only app client. The endpoint returns all clients' matched activity in the requested inclusive `from` and exclusive `to` RFC3339 time window, caps each page at 500 rows, and uses a global `(transaction_date, transaction_id)` keyset cursor. Only rows with non-null CRM client and account IDs are returned. Descriptions and import/reconciliation fields are not part of this response. `sourceFingerprint` is either null or a 24–64 character string matching `synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}`. A later human-owned ADR and cross-owner review must accept this proposed contract before production use.
 
 ## Contract B: Client Assignment V1
 

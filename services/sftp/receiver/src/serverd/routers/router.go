@@ -41,6 +41,15 @@ func RegisterRoutes(router *gin.Engine, transactions repository.Transaction, sta
 	aggregates.GET("/transactions/stats", transactionStats(stats, directory))
 }
 
+// RegisterClientHealthRoutes mounts the machine-to-machine history API under
+// the required scope. It is kept separate so the admin list contract stays
+// unchanged.
+func RegisterClientHealthRoutes(router *gin.Engine, transactions repository.Transaction, authenticate gin.HandlerFunc) {
+	internal := router.Group("/internal/v1")
+	internal.Use(authenticate)
+	internal.GET("/transactions", listClientHealthTransactions(transactions))
+}
+
 func getTransactions(transactionRepository repository.Transaction, directory accounts.Directory) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		accountID, err := uuid.Parse(c.Param("accountId"))

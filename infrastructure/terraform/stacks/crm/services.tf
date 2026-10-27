@@ -503,7 +503,8 @@ module "chain_verify" {
 # ------------------------------------------------------ transaction-service
 # The SFTP receiver's read API. It checks each caller's token and asks
 # account-service about ownership with it, so the ALB and dashboard-service
-# call it directly (ADR-0064).
+# call it directly (ADR-0064). Client Health uses a separately scoped private
+# history route and the Client Health task's security group.
 
 module "transaction_service" {
   source = "../../modules/ecs-service"
@@ -522,6 +523,8 @@ module "transaction_service" {
   environment = {
     APP_ENV                  = "production"
     APP_ADDR                 = ":${local.ports.transaction}"
+    COGNITO_ISSUER_URI       = local.cognito_issuer
+    COGNITO_HEALTH_CLIENT_IDS = aws_cognito_user_pool_client.client_health_read.id
     APP_TLS_CERT_FILE        = "/tls/cert.pem"
     APP_TLS_KEY_FILE         = "/tls/key.pem"
     DB_HOST                  = module.db["transactions"].address
@@ -532,7 +535,6 @@ module "transaction_service" {
     ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
     AWS_REGION               = local.region
     AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
-    COGNITO_ISSUER_URI       = local.cognito_issuer
     COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
   }
   secrets = {
@@ -579,6 +581,7 @@ module "transaction_service" {
     aws_ecs_cluster_capacity_providers.this,
     aws_secretsmanager_secret_version.service_tls,
     aws_secretsmanager_secret_version.app_login,
+    aws_secretsmanager_secret_version.client_health_read,
   ]
 }
 
