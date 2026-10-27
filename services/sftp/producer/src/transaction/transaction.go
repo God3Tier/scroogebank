@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"math/rand"
+	"sort"
 	"time"
 
 	"producer/src/accounts"
@@ -22,43 +23,65 @@ type Transaction struct {
 	SourceFingerprint string    `json:"source_fingerprint,omitempty"`
 }
 
-// GenerateHistory returns deterministic matched-transaction fixtures for the
-// six complete calendar months before anchor's current UTC month. IDs and
-// source fingerprints remain stable when the same account IDs are supplied.
+// GenerateHistory returns deterministic matched-transaction cases for the six
+// complete calendar months before anchor's current UTC month. Accounts are
+// sorted by ID; the first four represent a recurring-credit interruption,
+// activity decline, sustained net outflow, and a healthy control, respectively.
 func GenerateHistory(accountsList []accounts.Account, anchor time.Time) []Transaction {
-	if len(accountsList) == 0 {
+	if len(accountsList) < 4 {
 		return nil
 	}
+	accountsList = append([]accounts.Account(nil), accountsList...)
+	sort.Slice(accountsList, func(i, j int) bool { return accountsList[i].ID < accountsList[j].ID })
 	end := time.Date(anchor.UTC().Year(), anchor.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
 	start := end.AddDate(0, -6, 0)
-	rows := make([]Transaction, 0, len(accountsList)*36)
-	for _, account := range accountsList {
+	rows := make([]Transaction, 0, len(accountsList)*64)
+	for accountIndex, account := range accountsList {
+		scenario := accountIndex % 4
 		for month := 0; month < 6; month++ {
+			if scenario == 0 && month >= 4 {
+				continue
+			}
 			at := start.AddDate(0, month, 0).Add(5 * time.Hour)
 			if !at.Before(end) {
 				continue
 			}
 			fingerprint := "synthetic-employer-" + stableID(account.ID, "employer")[10:22]
-			transactionDate := at.Format(time.RFC3339)
 			rows = append(rows, Transaction{
-				TransactionID: stableID(account.ID, "recurring-credit", transactionDate),
+				TransactionID: stableID(account.ID, "recurring-credit", at.Format(time.RFC3339)),
 				AccountID:     account.ID, TransactionType: "Deposit", Amount: 4200,
 				Currency: account.Currency, TransferDate: at, Status: "Completed",
 				Description: "SYNTHETIC RECURRING CREDIT", ActivityKind: "Automated",
 				SourceFingerprint: fingerprint,
 			})
 		}
-		for week := 0; week < 24; week++ {
-			at := start.AddDate(0, 0, 2+week*7).Add(time.Duration((week%10)+8) * time.Hour)
-			if !at.Before(end) {
-				continue
+		for week := 0; week < 26; week++ {
+			count := 2
+			if scenario == 1 {
+				count = 3
+				if week >= 16 {
+					count = 1
+				}
 			}
-			rows = append(rows, Transaction{
-				TransactionID: stableID(account.ID, "customer-activity", at.Format(time.RFC3339)),
-				AccountID:     account.ID, TransactionType: "Withdrawal", Amount: float64(18 + (week*13)%240),
-				Currency: account.Currency, TransferDate: at, Status: "Completed",
-				Description: "SYNTHETIC CUSTOMER TRANSACTION", ActivityKind: "CustomerInitiated",
-			})
+			for activity := 0; activity < count; activity++ {
+				at := start.AddDate(0, 0, 2+week*7).Add(time.Duration(8+activity*3) * time.Hour)
+				if !at.Before(end) {
+					continue
+				}
+				amount := float64(120 + (week+activity)%40)
+				if scenario == 2 {
+					amount = 200
+					if week >= 16 {
+						amount = 1400
+					}
+				}
+				rows = append(rows, Transaction{
+					TransactionID: stableID(account.ID, "customer-activity", at.Format(time.RFC3339)),
+					AccountID:     account.ID, TransactionType: "Withdrawal", Amount: amount,
+					Currency: account.Currency, TransferDate: at, Status: "Completed",
+					Description: "SYNTHETIC CUSTOMER TRANSACTION", ActivityKind: "CustomerInitiated",
+				})
+			}
 		}
 	}
 	return rows

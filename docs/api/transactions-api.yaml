@@ -97,6 +97,48 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/Error' }
 
+  /internal/v1/transactions:
+    get:
+      tags: [transactions]
+      summary: Matched transaction history for Client Health Monitor
+      description: |
+        Returns every matched transaction across clients in the requested
+        time window. `from` is inclusive and `to` is exclusive. Results use
+        keyset pagination ordered by transaction date and transaction ID,
+        both descending. Only the scoped Client Health service token may call
+        this route. Descriptions and import/reconciliation fields are omitted.
+      operationId: listClientHealthTransactions
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Inclusive RFC3339 timestamp.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          description: Exclusive RFC3339 timestamp, later than `from`.
+          schema: { type: string, format: date-time }
+        - name: cursor
+          in: query
+          description: Opaque `nextCursor` returned by the previous page.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: One page of matched activity across clients.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientHealthTransactionPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Error' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -104,6 +146,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: A Cognito access token from the CRM app client, with the ADMIN or AGENT group.
+    serviceBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A Cognito client-credentials access token from the allow-listed Client Health app client with exactly the crm-transactions/read scope.
 
   responses:
     Unauthorized:
@@ -147,3 +194,36 @@ components:
         description: { type: string, nullable: true }
         imported_at: { type: string, format: date-time }
         import_status: { type: string, enum: [Unmatched, Matched, Rejected] }
+
+    ClientHealthTransactionPage:
+      type: object
+      required: [schemaVersion, items, nextCursor]
+      properties:
+        schemaVersion: { type: string, enum: ['1'] }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ClientHealthTransaction' }
+        nextCursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page, or null when the range is exhausted.
+
+    ClientHealthTransaction:
+      type: object
+      required: [transactionId, clientId, accountId, type, amount, currency, transactionDate, status, activityKind, sourceFingerprint]
+      properties:
+        transactionId: { type: string }
+        clientId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        type: { type: string, enum: [Deposit, Withdrawal] }
+        amount: { type: string, pattern: '^\d+(\.\d{1,2})?$', example: '250.00' }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        transactionDate: { type: string, format: date-time }
+        status: { type: string, enum: [Completed, Pending, Failed] }
+        activityKind: { type: string, enum: [CustomerInitiated, Automated, Unknown] }
+        sourceFingerprint:
+          type: string
+          nullable: true
+          minLength: 24
+          maxLength: 64
+          pattern: '^synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}$'

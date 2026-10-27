@@ -4,10 +4,15 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"regexp"
 	"strings"
 
 	"receiver/src/internal/models"
 )
+
+var sourceFingerprintFormat = regexp.MustCompile(`^synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}$`)
+
+const maxSourceFingerprintLength = 64
 
 func envOrDefault(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
@@ -65,6 +70,9 @@ func normalizeTransaction(transaction *models.Transaction) error {
 		}
 	default:
 		return fmt.Errorf("unsupported activity kind %q", transaction.ActivityKind)
+	}
+	if transaction.SourceFingerprint != "" && (len(transaction.SourceFingerprint) > maxSourceFingerprintLength || !sourceFingerprintFormat.MatchString(transaction.SourceFingerprint)) {
+		return fmt.Errorf("source fingerprint must use the synthetic source format and be at most %d characters", maxSourceFingerprintLength)
 	}
 	return nil
 }

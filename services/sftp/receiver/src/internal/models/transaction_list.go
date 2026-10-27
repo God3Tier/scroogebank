@@ -2,13 +2,13 @@ package models
 
 import "time"
 
-// ClientHealthTransactionQuery selects matched activity for one client.
+// ClientHealthTransactionQuery selects one page of matched activity across
+// clients for an inclusive/exclusive time window.
 type ClientHealthTransactionQuery struct {
-	ClientID string
-	From     time.Time // inclusive
-	To       time.Time // exclusive
-	After    *TransactionCursor
-	Limit    int
+	From  time.Time // inclusive
+	To    time.Time // exclusive
+	After *TransactionCursor
+	Limit int
 }
 
 // TransactionListQuery selects one page of the admin transaction list

@@ -6,9 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
-	"uuid"
 
 	"receiver/src/internal/models"
 	"receiver/src/internal/repository"
@@ -79,11 +77,6 @@ func listClientHealthTransactions(transactionRepository repository.Transaction) 
 
 func clientHealthQuery(c *gin.Context) (models.ClientHealthTransactionQuery, string) {
 	query := models.ClientHealthTransactionQuery{}
-	clientID := strings.TrimSpace(c.Query("clientId"))
-	if clientID == "" || !isCanonicalUUID(clientID) {
-		return query, "clientId must be a UUID"
-	}
-	query.ClientID = clientID
 	from, err := time.Parse(time.RFC3339Nano, c.Query("from"))
 	if err != nil {
 		return query, "from must be an RFC3339 timestamp"
@@ -109,11 +102,6 @@ func clientHealthQuery(c *gin.Context) (models.ClientHealthTransactionQuery, str
 		query.After = &cursor
 	}
 	return query, ""
-}
-
-func isCanonicalUUID(value string) bool {
-	parsed, err := uuid.Parse(value)
-	return err == nil && parsed.String() == strings.ToLower(value)
 }
 
 func decodeHealthCursor(value string) (models.TransactionCursor, bool) {

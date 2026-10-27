@@ -54,7 +54,7 @@ record was renamed or deleted during the branch merge.
 
 ## Proposed decisions
 
-- [ADR-0059](ADR-0059-client-health-matched-transaction-history.md) — Add a private, Cognito client-credentials protected transaction history route for Client Health, returning only matched transactions over `[from,to)` with bounded keyset pagination and six months of deterministic synthetic replay.
+- [ADR-0065](ADR-0065-client-health-matched-transaction-history.md) — Proposed private Client Health transaction history route; scoped Cognito client-credentials authentication, all-client `[from,to)` reads, global keyset pagination, matched-only fields, validated source fingerprints, and synthetic signal/control cases.
 
 Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](../architecture/system-overview.md). Numbering starts at 0017 because feature branches already use 0001–0016.
 

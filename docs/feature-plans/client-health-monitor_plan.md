@@ -2,7 +2,7 @@
 
 ## Plan metadata
 
-- Status: Draft; transaction history implementation exists locally under proposed ADR-0059 and requires owner/security review before integration or deployment
+- Status: Draft; transaction history implementation exists locally under proposed ADR-0065 and requires owner/security review before integration or deployment
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
@@ -223,7 +223,7 @@ Required from the transaction owner:
 - schema compatibility policy; and
 - no unmatched/rejected record presented as analysable.
 
-Current state: SFTP import resolves and stores `client_id` and `account_id` for matched rows. The proposed transaction-service read API and six-month deterministic producer history are implemented locally under [ADR-0059](../adr/ADR-0059-client-health-matched-transaction-history.md); SQLBoiler and Mockery have been regenerated. Tests, end-to-end verification, and owner/security acceptance remain outstanding.
+Current state: SFTP import resolves and stores `client_id` and `account_id` for matched rows. The proposed transaction-service read API returns all matched clients for a time window with global keyset pagination. Six-month deterministic producer history includes the three MVP signal cases and a healthy control. `make test` passes, including endpoint/auth/pagination and synthetic-history coverage. The design remains proposed under [ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md); end-to-end verification and owner/security acceptance remain outstanding.
 
 ### Client assignment
 

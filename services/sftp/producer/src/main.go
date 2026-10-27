@@ -67,8 +67,8 @@ func publishHistory(destDir string, source accounts.Source) error {
 	if err != nil {
 		return err
 	}
-	if !source.Synced() || len(accounts) == 0 {
-		return fmt.Errorf("six-month history requires a non-empty synced CRM account list")
+	if !source.Synced() || len(accounts) < 4 {
+		return fmt.Errorf("six-month history requires at least four synced CRM accounts for signal cases and healthy controls")
 	}
 	rows := transaction.GenerateHistory(accounts, time.Now().UTC())
 	if len(rows) == 0 {

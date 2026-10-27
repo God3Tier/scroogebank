@@ -13,9 +13,6 @@ CREATE TABLE transactions (
     imported_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     import_status     TEXT NOT NULL DEFAULT 'Unmatched'
         CHECK (import_status IN ('Unmatched', 'Matched', 'Rejected')),
-    activity_kind     TEXT NOT NULL DEFAULT 'Unknown'
-        CHECK (activity_kind IN ('CustomerInitiated', 'Automated', 'Unknown')),
-    source_fingerprint TEXT NULL,
     -- The CRM account the row belongs to, set at import when account-service
     -- confirms source_account_ref is one of its accounts (ADR-0037). Accounts
     -- live in account-service's database, so there is no foreign key.

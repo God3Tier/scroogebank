@@ -51,6 +51,22 @@ func TestNormalizeTransaction(t *testing.T) {
 			input:   models.Transaction{TransactionID: "test-5", AccountID: "account-5", TransactionType: "CREDIT", Amount: -1, Currency: "SGD", TransferDate: testDate(), Status: "COMPLETED"},
 			wantErr: true,
 		},
+		{
+			name:     "accepts a valid source fingerprint",
+			input:    withSourceFingerprint(validTransaction("CREDIT", "COMPLETED"), "synthetic-employer-a1b2c3d4e5f6"),
+			wantType: "Deposit",
+			wantStat: "Completed",
+		},
+		{
+			name:    "rejects a malformed source fingerprint",
+			input:   withSourceFingerprint(validTransaction("CREDIT", "COMPLETED"), "synthetic-employer-001"),
+			wantErr: true,
+		},
+		{
+			name:    "rejects a source fingerprint longer than the contract",
+			input:   withSourceFingerprint(validTransaction("CREDIT", "COMPLETED"), "synthetic-"+strings.Repeat("a", 60)+"-a1b2c3d4e5f6"),
+			wantErr: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -66,6 +82,11 @@ func TestNormalizeTransaction(t *testing.T) {
 			assert.Equal(t, test.wantStat, transaction.Status)
 		})
 	}
+}
+
+func withSourceFingerprint(transaction models.Transaction, fingerprint string) models.Transaction {
+	transaction.SourceFingerprint = fingerprint
+	return transaction
 }
 
 // noSleep stands in for the wait between connection attempts.
