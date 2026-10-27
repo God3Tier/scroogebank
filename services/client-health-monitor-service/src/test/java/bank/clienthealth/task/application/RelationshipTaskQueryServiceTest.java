@@ -23,6 +23,8 @@ import java.time.Instant;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
 
 class RelationshipTaskQueryServiceTest {
     private final InMemoryRelationshipTaskQueryPort queries = new InMemoryRelationshipTaskQueryPort();
@@ -69,9 +71,11 @@ class RelationshipTaskQueryServiceTest {
 
     @Test
     void hidesTasksFromFormerAgentAfterCurrentAssignmentChanges() {
+        var registry = new SimpleMeterRegistry();
         RelationshipTaskQueryService reassigned = new RelationshipTaskQueryService(
                 queries, clientId -> assignment(clientId,
-                        "client-2".equals(clientId) ? "agent-b" : "agent-a"));
+                        "client-2".equals(clientId) ? "agent-b" : "agent-a"), null,
+                new MicrometerClientHealthMetrics(registry));
 
         assertThatThrownBy(() -> reassigned.detail("task-new", new AgentViewer("agent-a")))
                 .isInstanceOf(RelationshipTaskService.TaskNotFoundException.class);
@@ -84,6 +88,10 @@ class RelationshipTaskQueryServiceTest {
         assertThat(reassigned.list(new AgentViewer("agent-b"),
                 new TaskFilter(Set.of(), Set.of(), 100, null)).items())
                 .extracting(item -> item.taskId()).containsExactly("task-new");
+        assertThat(registry.get("client_health_authorization_denied_total").counter().count())
+                .isEqualTo(1);
+        assertThat(registry.getMeters()).allSatisfy(meter -> meter.getId().getTags().forEach(tag ->
+                assertThat(tag.getValue()).doesNotContain("task-new", "client-2", "agent-a")));
     }
 
     @Test

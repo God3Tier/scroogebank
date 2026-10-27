@@ -27,6 +27,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 
 class RelationshipTaskServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-29T10:00:00Z");
@@ -73,6 +76,28 @@ class RelationshipTaskServiceTest {
                 java.util.Set.of(Action.SIGNAL_DETECTED, Action.TASK_CREATED),
                 repository.auditEvents().stream().map(event -> event.action())
                         .collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    void recordsNewTaskOutcomesTransitionsConflictsAndDenialsOnlyOnce() {
+        var registry = new SimpleMeterRegistry();
+        var measured = service(assignmentPort, (code, note) -> { },
+                new MicrometerClientHealthMetrics(registry));
+        var finding = finding("finding-metric", Severity.MEDIUM, signal("a", Severity.MEDIUM));
+        String taskId = measured.upsertFinding(finding).taskId();
+        measured.upsertFinding(finding);
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> measured.accept(taskId, 1, "former-agent", "denied"));
+        measured.accept(taskId, 1, AGENT, "accepted");
+        assertThrows(RelationshipTask.OptimisticLockException.class,
+                () -> measured.complete(taskId, 1, AGENT, "stale", "VALID_COMPLETE", null));
+
+        assertEquals(1, registry.get("client_health_task_outcomes_total")
+                .tag("outcome", "created").counter().count());
+        assertEquals(1, registry.get("client_health_authorization_denied_total").counter().count());
+        assertEquals(1, registry.get("client_health_task_transition_total")
+                .tag("transition", "accept").counter().count());
+        assertEquals(1, registry.get("client_health_task_conflict_total").counter().count());
     }
 
     @Test
@@ -302,8 +327,13 @@ class RelationshipTaskServiceTest {
     }
 
     private RelationshipTaskService service(ClientAssignmentPort assignments, bank.clienthealth.task.port.DispositionPolicy policy) {
+        return service(assignments, policy, ClientHealthMetrics.noOp());
+    }
+
+    private RelationshipTaskService service(ClientAssignmentPort assignments,
+            bank.clienthealth.task.port.DispositionPolicy policy, ClientHealthMetrics metrics) {
         return new RelationshipTaskService(repository, assignments, policy,
-                Clock.fixed(NOW, ZoneOffset.UTC), () -> "task-" + taskSequence.incrementAndGet());
+                Clock.fixed(NOW, ZoneOffset.UTC), () -> "task-" + taskSequence.incrementAndGet(), metrics);
     }
 
     private static AssignmentSnapshot assignment(String clientId, String agent, boolean active) {

@@ -10,12 +10,15 @@ import org.springframework.context.annotation.Primary;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ClientHealthAiProperties.class)
 public class ExplanationConfiguration {
     @Bean TemplateExplanationProvider templateExplanationProvider() { return new TemplateExplanationProvider(); }
-    @Bean ExplanationMetricsPort explanationMetricsPort() { return ExplanationMetricsPort.noOp(); }
+    @Bean ExplanationMetricsPort explanationMetricsPort(MeterRegistry registry) {
+        return new MicrometerExplanationMetrics(registry);
+    }
     @Bean ExplanationSafetyValidator explanationSafetyValidator(ObjectMapper mapper) {
         return new ExplanationSafetyValidator(mapper);
     }
