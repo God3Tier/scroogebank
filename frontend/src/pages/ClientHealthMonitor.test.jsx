@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useAuth } from 'react-oidc-context'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -85,7 +85,10 @@ describe('Client Health UI integration', () => {
     renderPage()
 
     expect((await screen.findAllByText('client-1')).length).toBeGreaterThan(0)
-    expect(screen.getByText('Transaction Activity Decline')).toBeInTheDocument()
+    const evidenceSection = (await screen.findByRole(
+      'heading', { name: 'Signal evidence' },
+    )).closest('section')
+    expect(within(evidenceSection).getByText('Transaction Activity Decline')).toBeInTheDocument()
     expect(await screen.findByText(/Verified activity changed/)).toBeInTheDocument()
     expect(await screen.findByText('Source: Template Fallback')).toBeInTheDocument()
     expect(await screen.findByText(/Created → Open/)).toBeInTheDocument()
