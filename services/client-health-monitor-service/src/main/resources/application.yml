@@ -6,3 +6,22 @@ client-health:
     max-attempts: ${CLIENT_HEALTH_AI_MAX_ATTEMPTS:2}
     max-input-characters: ${CLIENT_HEALTH_AI_MAX_INPUT_CHARACTERS:6000}
     max-output-tokens: ${CLIENT_HEALTH_AI_MAX_OUTPUT_TOKENS:256}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,db
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
