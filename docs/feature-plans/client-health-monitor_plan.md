@@ -2,14 +2,14 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF06, offline rule evaluation and production SF02/SF04 persistence are merged; RH-SF08 leased JDBC/SQS delivery is implemented on its task branch
+- Status: In progress; SF00-SF08 are merged and RH-SF09 metrics/health implementation is in progress
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/audit-delivery`
+- Current task branch: `task/client-health-monitor/metrics-health`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-26 from `origin/feat/client-health-monitor` at `e21363f`
-- AI-assisted planning: Yes; Cursor
+- Last repository sync: 2026-10-27 from `origin/feat/client-health-monitor` at `278445c`
+- AI-assisted planning: Yes; Cursor and OpenAI Codex
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
 Bedrock-fallback, authorization, outbox and observability direction. ADR-0044
@@ -500,7 +500,7 @@ Decisions:
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API/runtime wiring, current-assignment reads/actions, opaque keyset pagination, bounded notes, Contract-B consumer and PostgreSQL/runtime integration suites implemented; client-profile Contract-B provider and Cognito provisioning remain pending | 2026-10-23 |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval | 2026-10-26 |
 | RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented locally; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
-| RH-SF09 | Metrics and health | TBD | metrics/health/dashboard/alarms | Hooks across SF01-SF08 | TBD | Unassigned | N/A |
+| RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented locally; Java 25 Docker CI and review by Garvit pending | 2026-10-27 |
 | RH-SF10 | CRM UI integration | TBD | task list/detail/actions/Admin view | Frontend/Azeez/Hayyun coordination | TBD | Unassigned | N/A |
 | RH-SF11 | Cloud deployment | TBD | compute/database/IAM/routes/secrets/alarms | Accepted ADRs/platform owner | TBD | Unassigned | N/A |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |

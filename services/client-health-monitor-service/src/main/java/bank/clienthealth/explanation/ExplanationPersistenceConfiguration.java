@@ -11,13 +11,16 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
 
 @Configuration(proxyBeanMethods = false)
 public class ExplanationPersistenceConfiguration {
     @Bean
     ExplanationRepository explanationRepository(JdbcTemplate jdbc,
-            PlatformTransactionManager transactionManager, ObjectMapper mapper) {
-        return new JdbcExplanationRepository(jdbc, new TransactionTemplate(transactionManager), mapper);
+            PlatformTransactionManager transactionManager, ObjectMapper mapper,
+            JdbcAuditOutboxRepository auditOutbox) {
+        return new JdbcExplanationRepository(
+                jdbc, new TransactionTemplate(transactionManager), mapper, auditOutbox);
     }
 
     @Bean @Primary

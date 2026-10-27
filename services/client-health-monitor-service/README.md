@@ -83,12 +83,21 @@ numeric text to prevent valid input values being recombined into unsupported
 claims. A duplicate-finding retry repairs an explanation missing after a prior
 generation/persistence interruption.
 
+RH-SF09 adds anonymous process liveness and database-backed readiness probes,
+plus identifier-free Micrometer metrics across analysis, replay, rules, tasks,
+assignment lookup, explanation generation and audit delivery. Metric tags use
+closed outcome enums only. Client, account, task, transaction, finding and Agent
+identifiers are never labels. CloudWatch export, dashboards and alarms remain
+deferred to RH-SF11.
+
 ## Ownership boundary
 
 - Garvit owns RH-SF00 through RH-SF04: contracts, transaction intake, activity
   projection, signal rules, and analysis/suppression.
 - Swayam owns RH-SF05 through RH-SF07: task domain/persistence, task
   API/authorization, and Bedrock/template explanations.
+- Swayam owns RH-SF09 application health and metrics; Garvit reviews the
+  instrumentation and Neo reviews the later CloudWatch infrastructure.
 
 Garvit's stream produces `ClientHealthFinding`. Swayam's stream implements
 `RelationshipTaskPort`.
@@ -137,6 +146,23 @@ properties through environment variables or an external Spring configuration:
 | `client-health.audit.lease-seconds` | `CLIENT_HEALTH_AUDIT_LEASE_SECONDS` | delivery lease, default 60 seconds |
 | `client-health.audit.relay-delay-ms` | `CLIENT_HEALTH_AUDIT_RELAY_DELAY_MS` | scheduled relay delay, default 2000 ms |
 
+## Health and metrics
+
+The load-balancer probes require no bearer token:
+
+- `GET /actuator/health/liveness` checks only that the process is alive.
+- `GET /actuator/health/readiness` includes Spring readiness state and health-db
+  connectivity. Flyway must complete before the application starts.
+
+Health details are never returned. No other Actuator endpoint is exposed, and
+all business API paths remain authenticated. Bedrock, SQS/Auditor, transaction
+replay and client-assignment outages do not mark the read API unready because
+the feature has template, outbox or fail-closed behavior for those dependencies.
+
+The complete metric and bounded-tag catalogue is maintained in
+`docs/observability/monitoring-alerting.md`. The service currently provides a
+Micrometer registry only; RH-SF11 will connect it to CloudWatch.
+
 With configuration supplied, run from the repository root:
 
 ```sh
@@ -181,3 +207,6 @@ authorization.
 RH-SF08 production follow-up now needs the IAM/Terraform queue permission and
 environment wiring, the Auditor's reviewed `RELATIONSHIP_HEALTH_SERVICE`
 allowlist, and SF07 explanation-generated/fallback event integration.
+
+RH-SF09 production follow-up is the RH-SF11 CloudWatch registry, dashboard,
+alarm thresholds, SNS subscriptions and named operational owner/backup pairs.

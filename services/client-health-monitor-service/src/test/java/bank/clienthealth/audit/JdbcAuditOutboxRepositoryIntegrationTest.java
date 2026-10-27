@@ -23,6 +23,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
 
 @Testcontainers(disabledWithoutDocker = true)
 class JdbcAuditOutboxRepositoryIntegrationTest {
@@ -34,6 +36,8 @@ class JdbcAuditOutboxRepositoryIntegrationTest {
 
     private JdbcTemplate jdbc;
     private JdbcAuditOutboxRepository repository;
+    private SimpleMeterRegistry metricsRegistry;
+    private TransactionTemplate transactions;
 
     @BeforeEach
     void migrateAndClear() {
@@ -43,11 +47,14 @@ class JdbcAuditOutboxRepositoryIntegrationTest {
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("TRUNCATE relationship_health_audit_outbox");
         AtomicInteger leases = new AtomicInteger();
+        transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+        metricsRegistry = new SimpleMeterRegistry();
         repository = new JdbcAuditOutboxRepository(
                 jdbc,
-                new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
+                transactions,
                 JsonMapper.builder().addModule(new JavaTimeModule()).build(),
-                () -> "lease-" + leases.incrementAndGet());
+                () -> "lease-" + leases.incrementAndGet(),
+                new MicrometerClientHealthMetrics(metricsRegistry));
     }
 
     @Test
@@ -57,11 +64,15 @@ class JdbcAuditOutboxRepositoryIntegrationTest {
         repository.enqueue(event);
 
         assertEquals(1, count());
+        assertEquals(1, metricsRegistry.get("client_health_audit_events_total")
+                .tag("outcome", "enqueued").counter().count());
 
         var conflicting = new RelationshipHealthAuditEvent(
                 event.eventId(), Action.ANALYSIS_RUN_FAILED, event.actorId(), event.payload());
         assertThrows(OutboxConflictException.class, () -> repository.enqueue(conflicting));
         assertEquals(1, count());
+        assertEquals(1, repository.backlog(NOW.plusSeconds(30)).pendingCount());
+        assertEquals(Duration.ofSeconds(30), repository.backlog(NOW.plusSeconds(30)).oldestAge());
     }
 
     @Test
@@ -108,9 +119,21 @@ class JdbcAuditOutboxRepositoryIntegrationTest {
                 NOW.plusSeconds(1), 1, Duration.ofSeconds(30)).getFirst();
 
         assertEquals(2, recovered.attemptCount());
+        assertTrue(recovered.recovered());
         assertNotEquals(first.leaseToken(), recovered.leaseToken());
         assertThrows(OutboxConflictException.class, () ->
                 repository.markDelivered(event.eventId(), first.leaseToken()));
+    }
+
+    @Test
+    void rolledBackEnqueueDoesNotIncrementCommittedMetric() {
+        assertThrows(IllegalStateException.class, () -> transactions.executeWithoutResult(status -> {
+            repository.enqueue(event("rollback", Action.ANALYSIS_RUN_STARTED, NOW));
+            throw new IllegalStateException("rollback");
+        }));
+
+        assertEquals(0, count());
+        assertTrue(metricsRegistry.find("client_health_audit_events_total").counters().isEmpty());
     }
 
     private int count() {
