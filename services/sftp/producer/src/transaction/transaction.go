@@ -25,25 +25,25 @@ type Transaction struct {
 // GenerateHistory returns deterministic matched-transaction fixtures for the
 // six complete calendar months before anchor's current UTC month. IDs and
 // source fingerprints remain stable when the same account IDs are supplied.
-func GenerateHistory(accountIDs []string, anchor time.Time) []Transaction {
-	if len(accountIDs) == 0 {
+func GenerateHistory(accountsList []accounts.Account, anchor time.Time) []Transaction {
+	if len(accountsList) == 0 {
 		return nil
 	}
 	end := time.Date(anchor.UTC().Year(), anchor.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
 	start := end.AddDate(0, -6, 0)
-	rows := make([]Transaction, 0, len(accountIDs)*36)
-	for _, accountID := range accountIDs {
+	rows := make([]Transaction, 0, len(accountsList)*36)
+	for _, account := range accountsList {
 		for month := 0; month < 6; month++ {
 			at := start.AddDate(0, month, 0).Add(5 * time.Hour)
 			if !at.Before(end) {
 				continue
 			}
-			fingerprint := "synthetic-employer-" + stableID(accountID, "employer")[10:22]
+			fingerprint := "synthetic-employer-" + stableID(account.ID, "employer")[10:22]
 			transactionDate := at.Format(time.RFC3339)
 			rows = append(rows, Transaction{
-				TransactionID: stableID(accountID, "recurring-credit", transactionDate),
-				AccountID:     accountID, TransactionType: "Deposit", Amount: 4200,
-				Currency: currency, TransferDate: at, Status: "Completed",
+				TransactionID: stableID(account.ID, "recurring-credit", transactionDate),
+				AccountID:     account.ID, TransactionType: "Deposit", Amount: 4200,
+				Currency: account.Currency, TransferDate: at, Status: "Completed",
 				Description: "SYNTHETIC RECURRING CREDIT", ActivityKind: "Automated",
 				SourceFingerprint: fingerprint,
 			})
@@ -54,9 +54,9 @@ func GenerateHistory(accountIDs []string, anchor time.Time) []Transaction {
 				continue
 			}
 			rows = append(rows, Transaction{
-				TransactionID: stableID(accountID, "customer-activity", at.Format(time.RFC3339)),
-				AccountID:     accountID, TransactionType: "Withdrawal", Amount: float64(18 + (week*13)%240),
-				Currency: currency, TransferDate: at, Status: "Completed",
+				TransactionID: stableID(account.ID, "customer-activity", at.Format(time.RFC3339)),
+				AccountID:     account.ID, TransactionType: "Withdrawal", Amount: float64(18 + (week*13)%240),
+				Currency: account.Currency, TransferDate: at, Status: "Completed",
 				Description: "SYNTHETIC CUSTOMER TRANSACTION", ActivityKind: "CustomerInitiated",
 			})
 		}
