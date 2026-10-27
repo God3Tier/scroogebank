@@ -19,8 +19,9 @@ final class TransactionActivityDeclineRule implements RelationshipHealthRule {
     }
 
     @Override
-    public List<DetectedSignal> evaluate(BaselineResult baseline, ClientBaseline client) {
+    public Evaluation evaluate(BaselineResult baseline, ClientBaseline client) {
         List<DetectedSignal> signals = new ArrayList<>();
+        boolean[] sufficient = {false};
         client.accounts().forEach(account -> {
             long baselineCount = account.baseline().customerInitiatedCount();
             if (baselineCount < config.minimumBaselineCount()
@@ -28,6 +29,7 @@ final class TransactionActivityDeclineRule implements RelationshipHealthRule {
                     || account.comparison().unknownCount() > 0) {
                 return;
             }
+            sufficient[0] = true;
             BigDecimal monthlyAverage = BigDecimal.valueOf(baselineCount)
                     .divide(BigDecimal.valueOf(3), 4, RoundingMode.HALF_UP);
             BigDecimal comparisonCount = BigDecimal.valueOf(
@@ -56,6 +58,6 @@ final class TransactionActivityDeclineRule implements RelationshipHealthRule {
                             Math.toIntExact(account.comparison().customerInitiatedCount()),
                             declinePercent.negate())));
         });
-        return List.copyOf(signals);
+        return new Evaluation(signals, sufficient[0]);
     }
 }

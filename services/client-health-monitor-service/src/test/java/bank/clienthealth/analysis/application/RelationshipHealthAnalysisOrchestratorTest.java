@@ -30,6 +30,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 
 class RelationshipHealthAnalysisOrchestratorTest {
     private static final LocalDate ANALYSIS_DATE = LocalDate.of(2026, 10, 1);
@@ -146,9 +149,34 @@ class RelationshipHealthAnalysisOrchestratorTest {
         assertEquals(CUTOFF, runPort.view(RUN_ID).watermark());
     }
 
+    @Test
+    void recordsOneCompletedOrFailedAnalysisOutcomeWithStage() {
+        var registry = new SimpleMeterRegistry();
+        var metrics = new MicrometerClientHealthMetrics(registry);
+        var runPort = new InMemoryAnalysisRunPort();
+        orchestrator(finding -> new TaskUpsertResult("task", Outcome.CREATED, 1), runPort, metrics)
+                .run(ANALYSIS_DATE);
+        assertEquals(1, registry.get("client_health_analysis_runs_total")
+                .tags("outcome", "completed", "failure_stage", "none").counter().count());
+
+        var failedRegistry = new SimpleMeterRegistry();
+        var failedMetrics = new MicrometerClientHealthMetrics(failedRegistry);
+        assertThrows(AnalysisRunException.class, () -> orchestrator(finding -> {
+            throw new IllegalStateException("down");
+        }, new InMemoryAnalysisRunPort(), failedMetrics).run(ANALYSIS_DATE));
+        assertEquals(1, failedRegistry.get("client_health_analysis_runs_total")
+                .tags("outcome", "failed", "failure_stage", "task_handoff").counter().count());
+    }
+
     private static RelationshipHealthAnalysisOrchestrator orchestrator(
             RelationshipTaskPort taskPort,
             InMemoryAnalysisRunPort runPort
+    ) {
+        return orchestrator(taskPort, runPort, ClientHealthMetrics.noOp());
+    }
+
+    private static RelationshipHealthAnalysisOrchestrator orchestrator(
+            RelationshipTaskPort taskPort, InMemoryAnalysisRunPort runPort, ClientHealthMetrics metrics
     ) {
         var projectionRepository = new InMemoryActivityProjectionRepository();
         return new RelationshipHealthAnalysisOrchestrator(
@@ -160,6 +188,6 @@ class RelationshipHealthAnalysisOrchestratorTest {
                 taskPort,
                 runPort,
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                Duration.ofMinutes(60));
+                Duration.ofMinutes(60), metrics);
     }
 }

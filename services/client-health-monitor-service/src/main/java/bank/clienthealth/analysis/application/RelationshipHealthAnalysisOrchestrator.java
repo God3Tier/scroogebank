@@ -16,6 +16,9 @@ import bank.clienthealth.contract.TaskUpsertResult;
 import bank.clienthealth.contract.TaskUpsertResult.Outcome;
 import bank.clienthealth.rules.DetectedSignal;
 import bank.clienthealth.rules.RelationshipHealthRuleEngine;
+import bank.clienthealth.metrics.ClientHealthMetrics;
+import bank.clienthealth.metrics.ClientHealthMetrics.AnalysisOutcome;
+import bank.clienthealth.metrics.ClientHealthMetrics.FailureStage;
 import bank.clienthealth.transaction.application.TransactionReplayService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -46,6 +49,7 @@ public final class RelationshipHealthAnalysisOrchestrator {
     private final AnalysisRunPort runPort;
     private final Clock clock;
     private final Duration leaseDuration;
+    private final ClientHealthMetrics metrics;
 
     public RelationshipHealthAnalysisOrchestrator(
             TransactionReplayService replayService,
@@ -57,6 +61,21 @@ public final class RelationshipHealthAnalysisOrchestrator {
             Clock clock,
             Duration leaseDuration
     ) {
+        this(replayService, projectionService, baselineService, ruleEngine, taskPort,
+                runPort, clock, leaseDuration, ClientHealthMetrics.noOp());
+    }
+
+    public RelationshipHealthAnalysisOrchestrator(
+            TransactionReplayService replayService,
+            ActivityProjectionService projectionService,
+            ActivityBaselineService baselineService,
+            RelationshipHealthRuleEngine ruleEngine,
+            RelationshipTaskPort taskPort,
+            AnalysisRunPort runPort,
+            Clock clock,
+            Duration leaseDuration,
+            ClientHealthMetrics metrics
+    ) {
         this.replayService = Objects.requireNonNull(replayService);
         this.projectionService = Objects.requireNonNull(projectionService);
         this.baselineService = Objects.requireNonNull(baselineService);
@@ -65,6 +84,7 @@ public final class RelationshipHealthAnalysisOrchestrator {
         this.runPort = Objects.requireNonNull(runPort);
         this.clock = Objects.requireNonNull(clock);
         this.leaseDuration = Objects.requireNonNull(leaseDuration);
+        this.metrics = Objects.requireNonNull(metrics);
         if (leaseDuration.isZero() || leaseDuration.isNegative()) {
             throw new IllegalArgumentException("leaseDuration must be positive");
         }
@@ -72,6 +92,29 @@ public final class RelationshipHealthAnalysisOrchestrator {
 
     public RunResult run(LocalDate analysisDate) {
         Objects.requireNonNull(analysisDate, "analysisDate is required");
+        long started = System.nanoTime();
+        Instant cutoff = ActivityBaselineService.analysisCutoff(analysisDate);
+        try {
+            RunResult result = execute(analysisDate);
+            AnalysisOutcome outcome = switch (result.status()) {
+                case COMPLETED -> AnalysisOutcome.COMPLETED;
+                case ALREADY_COMPLETED -> AnalysisOutcome.ALREADY_COMPLETED;
+                case LEASE_HELD -> AnalysisOutcome.LEASE_HELD;
+            };
+            Duration age = result.status() == RunStatus.LEASE_HELD
+                    ? null : Duration.between(cutoff, clock.instant());
+            metrics.analysis(outcome, FailureStage.NONE, elapsed(started), age);
+            return result;
+        } catch (AnalysisRunException failure) {
+            metrics.analysis(AnalysisOutcome.FAILED, stage(failure.category()), elapsed(started), null);
+            throw failure;
+        } catch (RuntimeException failure) {
+            metrics.analysis(AnalysisOutcome.FAILED, FailureStage.UNEXPECTED, elapsed(started), null);
+            throw failure;
+        }
+    }
+
+    private RunResult execute(LocalDate analysisDate) {
         String runId = "analysis-" + analysisDate + "-" + ruleEngine.rulesetVersion();
         Instant cutoff = ActivityBaselineService.analysisCutoff(analysisDate);
         Instant historyStart = ActivityBaselineService.historyStart(analysisDate);
@@ -121,6 +164,19 @@ public final class RelationshipHealthAnalysisOrchestrator {
             fail(lease, FailureCategory.UNEXPECTED, failure);
             throw new AnalysisRunException(FailureCategory.UNEXPECTED, failure);
         }
+    }
+
+    private static Duration elapsed(long started) { return Duration.ofNanos(System.nanoTime() - started); }
+
+    private static FailureStage stage(FailureCategory category) {
+        return switch (category) {
+            case REPLAY -> FailureStage.REPLAY;
+            case PROJECTION -> FailureStage.PROJECTION;
+            case BASELINE -> FailureStage.BASELINE;
+            case RULE_EVALUATION -> FailureStage.RULES;
+            case TASK_HANDOFF -> FailureStage.TASK_HANDOFF;
+            case UNEXPECTED -> FailureStage.UNEXPECTED;
+        };
     }
 
     private static ClientHealthFinding finding(
