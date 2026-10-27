@@ -22,14 +22,21 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
     "spring.autoconfigure.exclude="
             + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
             + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+    "management.endpoint.health.validate-group-membership=false",
     "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://example.test/pool",
     "idp.cognito.app-client-id=crm-app-client"
 })
+@AutoConfigureMockMvc
 class TaskRuntimeConfigurationTest {
     @MockitoBean JdbcTemplate jdbc;
     @MockitoBean PlatformTransactionManager transactionManager;
@@ -47,6 +54,7 @@ class TaskRuntimeConfigurationTest {
     @Autowired JdbcAnalysisRunRepository analysisRuns;
     @Autowired JdbcAuditOutboxRepository auditOutbox;
     @Autowired ApplicationContext context;
+    @Autowired MockMvc mockMvc;
 
     @Test
     void applicationStartsWithEveryProductionTaskApiDependency() {
@@ -63,5 +71,15 @@ class TaskRuntimeConfigurationTest {
         assertThat(analysisRuns).isNotNull();
         assertThat(auditOutbox).isNotNull();
         assertThat(context.getBeansOfType(AuditOutboxRelay.class)).isEmpty();
+    }
+
+    @Test
+    void healthProbesAreAnonymousButMetricsAndBusinessRoutesAreNot() throws Exception {
+        mockMvc.perform(get("/actuator/health/liveness"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
+        mockMvc.perform(get("/actuator/health/readiness"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UP"));
+        mockMvc.perform(get("/actuator/metrics")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/relationship-health/tasks")).andExpect(status().isUnauthorized());
     }
 }

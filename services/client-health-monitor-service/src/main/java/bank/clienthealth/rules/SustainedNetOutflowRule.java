@@ -20,14 +20,22 @@ final class SustainedNetOutflowRule implements RelationshipHealthRule {
     }
 
     @Override
-    public List<DetectedSignal> evaluate(BaselineResult baseline, ClientBaseline client) {
+    public Evaluation evaluate(BaselineResult baseline, ClientBaseline client) {
         List<DetectedSignal> signals = new ArrayList<>();
+        boolean[] sufficient = {false};
         client.accounts().forEach(account -> {
             if (account.periods().size() < 2) {
                 return;
             }
             List<PeriodSummary> recent = account.periods()
                     .subList(account.periods().size() - 2, account.periods().size());
+            BigDecimal denominator = account.baseline().deposits()
+                    .add(account.baseline().withdrawals())
+                    .divide(BigDecimal.valueOf(3), 4, RoundingMode.HALF_UP);
+            if (denominator.signum() == 0) {
+                return;
+            }
+            sufficient[0] = true;
             BigDecimal maximumNet = config.minimumPeriodOutflow().negate();
             if (recent.stream().anyMatch(period ->
                     period.summary().netFlow().compareTo(maximumNet) > 0)) {
@@ -51,12 +59,6 @@ final class SustainedNetOutflowRule implements RelationshipHealthRule {
                     .divide(BigDecimal.valueOf(3), 4, RoundingMode.HALF_UP);
             BigDecimal recentAverage = netFlow.divide(
                     BigDecimal.valueOf(2), 4, RoundingMode.HALF_UP);
-            BigDecimal denominator = account.baseline().deposits()
-                    .add(account.baseline().withdrawals())
-                    .divide(BigDecimal.valueOf(3), 4, RoundingMode.HALF_UP);
-            if (denominator.signum() == 0) {
-                return;
-            }
             BigDecimal changePercent = recentAverage.subtract(baselineAverage)
                     .multiply(BigDecimal.valueOf(100))
                     .divide(denominator, 2, RoundingMode.HALF_UP);
@@ -81,6 +83,6 @@ final class SustainedNetOutflowRule implements RelationshipHealthRule {
                             2, deposits, withdrawals, netFlow,
                             account.comparison().currency(), changePercent)));
         });
-        return List.copyOf(signals);
+        return new Evaluation(signals, sufficient[0]);
     }
 }

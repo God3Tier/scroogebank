@@ -29,8 +29,10 @@ public final class SafeExplanationProvider implements ExplanationProvider {
                     properties.modelId(), 0, 0, 0, 0, null));
             return fallback(request, unsafe.getMessage());
         } catch (BedrockExplanationProvider.ProviderException failed) {
-            metrics.record(new Event(Type.PROVIDER_FAILURE, failed.code(), properties.modelId(),
-                    failed.attempts(), 0, 0, 0, null));
+            if (failed.attempts() == 0) {
+                metrics.record(new Event(Type.VALIDATION_REJECTION, failed.code(),
+                        properties.modelId(), 0, 0, 0, 0, null));
+            }
             return fallback(request, failed.code());
         }
     }

@@ -1,8 +1,10 @@
 package bank.clienthealth.explanation;
 
 import bank.clienthealth.audit.RelationshipHealthAuditEvent;
+import bank.clienthealth.audit.AuditOutboxRepository;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 import bank.clienthealth.contract.ClientHealthFinding.SignalType;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -10,16 +12,24 @@ import java.sql.Timestamp;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 public final class JdbcExplanationRepository implements ExplanationRepository {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transactions;
-    private final ObjectMapper json;
+    private final AuditOutboxRepository auditOutbox;
 
     public JdbcExplanationRepository(JdbcTemplate jdbc, TransactionTemplate transactions, ObjectMapper json) {
-        this.jdbc = jdbc; this.transactions = transactions; this.json = json;
+        this(jdbc, transactions, json, new JdbcAuditOutboxRepository(
+                jdbc, transactions, json, () -> UUID.randomUUID().toString(), ClientHealthMetrics.noOp()));
+    }
+
+    public JdbcExplanationRepository(JdbcTemplate jdbc, TransactionTemplate transactions,
+            ObjectMapper json, AuditOutboxRepository auditOutbox) {
+        this.jdbc = jdbc; this.transactions = transactions;
+        this.auditOutbox = auditOutbox;
     }
 
     @Override
@@ -57,21 +67,10 @@ public final class JdbcExplanationRepository implements ExplanationRepository {
                     value.evidenceCodes().stream().map(Enum::name).toArray(String[]::new),
                     value.source().name(), value.promptTemplateVersion(), value.modelId(),
                     Timestamp.from(value.generatedAt()));
-            if (inserted == 1) enqueue(audit);
+            if (inserted == 1) auditOutbox.enqueue(audit);
             return find(value.taskId(), value.findingId(), value.taskVersion(),
                     value.promptTemplateVersion()).orElseThrow();
         });
-    }
-
-    private void enqueue(RelationshipHealthAuditEvent event) {
-        jdbc.update("""
-                INSERT INTO relationship_health_audit_outbox
-                    (event_id, event_type, action, source_service, actor_id, payload,
-                     created_at, next_attempt_at)
-                VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?)
-                """, event.eventId(), RelationshipHealthAuditEvent.EVENT_TYPE, event.action().name(),
-                RelationshipHealthAuditEvent.SOURCE_SERVICE, event.actorId(), write(event.payload()),
-                Timestamp.from(event.payload().occurredAt()), Timestamp.from(event.payload().occurredAt()));
     }
 
     private Record row(ResultSet rs, int ignored) throws SQLException {
@@ -85,8 +84,4 @@ public final class JdbcExplanationRepository implements ExplanationRepository {
                 rs.getObject("generated_at", OffsetDateTime.class).toInstant());
     }
 
-    private String write(Object value) {
-        try { return json.writeValueAsString(value); }
-        catch (JsonProcessingException impossible) { throw new IllegalStateException("Cannot serialize audit", impossible); }
-    }
 }

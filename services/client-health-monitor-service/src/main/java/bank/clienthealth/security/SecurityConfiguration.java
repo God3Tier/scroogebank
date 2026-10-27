@@ -18,6 +18,8 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.ObjectProvider;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 
 @Configuration
 @EnableMethodSecurity
@@ -41,18 +43,26 @@ public class SecurityConfiguration {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtRoleConverter roleConverter,
-            ObjectMapper objectMapper) throws Exception {
+            ObjectMapper objectMapper,
+            ObjectProvider<ClientHealthMetrics> metricsProvider) throws Exception {
+        ClientHealthMetrics metrics = metricsProvider.getIfAvailable(ClientHealthMetrics::noOp);
         return http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(requests -> requests.anyRequest().authenticated())
+                .authorizeHttpRequests(requests -> requests
+                        .requestMatchers(
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness").permitAll()
+                        .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> writeProblem(
                                 objectMapper, response, 401, "Authentication required",
                                 "A valid bearer token is required"))
-                        .accessDeniedHandler((request, response, exception) -> writeProblem(
-                                objectMapper, response, 403, "Access denied",
-                                "The authenticated role cannot perform this operation")))
+                        .accessDeniedHandler((request, response, exception) -> {
+                            metrics.authorizationDenied();
+                            writeProblem(objectMapper, response, 403, "Access denied",
+                                    "The authenticated role cannot perform this operation");
+                        }))
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(roleConverter)))
                 .build();

@@ -1,6 +1,10 @@
 package bank.clienthealth.task.persistence;
 
 import bank.clienthealth.audit.RelationshipHealthAuditEvent;
+import bank.clienthealth.audit.AuditOutboxRepository;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository.OutboxConflictException;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
 import bank.clienthealth.contract.ClientHealthFinding.EvidenceDetails;
@@ -38,6 +42,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -50,21 +55,31 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
     private final NamedParameterJdbcTemplate namedJdbc;
     private final TransactionTemplate transactions;
     private final ObjectMapper json;
+    private final AuditOutboxRepository auditOutbox;
 
     public JdbcRelationshipTaskRepository(
             JdbcTemplate jdbc, TransactionTemplate transactions, ObjectMapper json
+    ) {
+        this(jdbc, transactions, json, new JdbcAuditOutboxRepository(
+                jdbc, transactions, json, () -> UUID.randomUUID().toString(), ClientHealthMetrics.noOp()));
+    }
+
+    public JdbcRelationshipTaskRepository(
+            JdbcTemplate jdbc, TransactionTemplate transactions, ObjectMapper json,
+            AuditOutboxRepository auditOutbox
     ) {
         this.jdbc = jdbc;
         this.namedJdbc = new NamedParameterJdbcTemplate(jdbc);
         this.transactions = transactions;
         this.json = json;
+        this.auditOutbox = auditOutbox;
     }
 
     @Override
     public <T> T inTransaction(Function<Session, T> work) {
         try {
             return transactions.execute(status -> work.apply(new JdbcSession()));
-        } catch (DataIntegrityViolationException conflict) {
+        } catch (DataIntegrityViolationException | OutboxConflictException conflict) {
             throw new ConflictException("Task persistence constraint conflict");
         }
     }
@@ -258,15 +273,7 @@ public final class JdbcRelationshipTaskRepository implements TaskRepository, Rel
 
         @Override
         public void enqueueAudit(RelationshipHealthAuditEvent event) {
-            jdbc.update("""
-                    INSERT INTO relationship_health_audit_outbox
-                        (event_id, event_type, action, source_service, actor_id, payload,
-                         created_at, next_attempt_at)
-                    VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?)
-                    """, event.eventId(), RelationshipHealthAuditEvent.EVENT_TYPE,
-                    event.action().name(), RelationshipHealthAuditEvent.SOURCE_SERVICE,
-                    event.actorId(), write(event.payload()), Timestamp.from(event.payload().occurredAt()),
-                    Timestamp.from(event.payload().occurredAt()));
+            auditOutbox.enqueue(event);
         }
     }
 
