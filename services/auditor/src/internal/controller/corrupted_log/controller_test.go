@@ -1,6 +1,7 @@
 package corrupted_log
 
 import (
+	"auditor/src/internal/contract"
 	"auditor/src/internal/models"
 	"context"
 	"database/sql"
@@ -79,6 +80,7 @@ func TestGetCorruptedAuditLog(t *testing.T) {
 			response := httptest.NewRecorder()
 
 			New(svc).GetCorruptedAuditLog(response, request)
+			contract.Check(t, "corrupted-logs-api.yaml", http.MethodGet, "/api/corrupted-logs", response)
 
 			assert.Equal(t, test.wantStatus, response.Code)
 			assert.True(t, svc.getCalled)
@@ -125,6 +127,7 @@ func TestInsertCorruptedAuditLog(t *testing.T) {
 			response := httptest.NewRecorder()
 
 			New(svc).InsertCorruptedAuditLog(response, request)
+			contract.Check(t, "corrupted-logs-api.yaml", http.MethodPost, "/api/corrupted-logs", response)
 
 			assert.Equal(t, test.wantStatus, response.Code)
 			assert.Equal(t, test.callSvc, svc.insertCalled)
@@ -178,6 +181,7 @@ func TestDeleteCorruptedAuditLog(t *testing.T) {
 			response := httptest.NewRecorder()
 
 			New(svc).DeleteCorruptedAuditLog(response, request)
+			contract.Check(t, "corrupted-logs-api.yaml", http.MethodDelete, "/api/corrupted-logs/{id}", response)
 
 			assert.Equal(t, test.wantStatus, response.Code)
 			assert.Equal(t, test.callSvc, svc.deleteCalled)
@@ -194,6 +198,7 @@ func TestCorruptedAuditLogResponseIsJSON(t *testing.T) {
 	response := httptest.NewRecorder()
 
 	New(svc).GetCorruptedAuditLog(response, request)
+	contract.Check(t, "corrupted-logs-api.yaml", http.MethodGet, "/api/corrupted-logs", response)
 
 	var logs []corruptedAuditLogResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &logs))

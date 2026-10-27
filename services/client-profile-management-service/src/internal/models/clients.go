@@ -26,7 +26,7 @@ type Client struct {
 	VerifiedByAgentID     string     `json:"verified_by_agent_id,omitempty"`
 	VerifiedAt            *time.Time `json:"verified_at,omitempty"`
 	VerifiedWithDocuments *bool      `json:"verified_with_documents,omitempty"`
-	CreatedByAgentID      string     `json:"created_by_agent_id"`
+	AssignedAgentID       string     `json:"assigned_agent_id"`
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
 }

@@ -47,16 +47,20 @@ func RegisterRoutes(router *gin.Engine, clients clientcontroller.ClientControlle
 	client := api.Group("/clients")
 	client.Use(auditLogger)
 	{
-		client.POST("", adaptHandler(clients.CreateClientProfile, ""))
+		// Admins only read client data; every write is for agents (ADR-0059).
+		client.POST("", security.RequireAgent(), adaptHandler(clients.CreateClientProfile, ""))
 		// Scoped by the caller, so no ownership check (ADR-0043).
 		client.GET("", withCaller(clients.ListClients))
-		client.POST("/:clientId/verify", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.VerifyClientIdentity, "clientId"))
-		client.PUT("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
+		// The one admin write: moving clients, with their accounts, to
+		// another agent (ADR-0060).
+		client.POST("/reassignments", security.RequireAdmin(), adaptHandler(clients.ReassignClients, ""))
+		client.POST("/:clientId/verify", security.RequireAgent(), security.RequireClientOwner(db, "clientId"), adaptHandler(clients.VerifyClientIdentity, "clientId"))
+		client.PUT("/:clientId", security.RequireAgent(), security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UpdateClientInformation, "clientId"))
 		client.GET("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientProfile, "clientId"))
-		client.DELETE("/:clientId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.DeleteClientProfile, "clientId"))
+		client.DELETE("/:clientId", security.RequireAgent(), security.RequireClientOwner(db, "clientId"), adaptHandler(clients.DeleteClientProfile, "clientId"))
 		// Identity documents: the evidence for Verify, never a verification
 		// themselves (ADR-0041).
-		client.POST("/:clientId/documents", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UploadClientDocument, "clientId"))
+		client.POST("/:clientId/documents", security.RequireAgent(), security.RequireClientOwner(db, "clientId"), adaptHandler(clients.UploadClientDocument, "clientId"))
 		client.GET("/:clientId/documents", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.ListClientDocuments, "clientId"))
 		client.GET("/:clientId/documents/:documentId", security.RequireClientOwner(db, "clientId"), adaptHandler(clients.GetClientDocument, "clientId", "documentId"))
 	}

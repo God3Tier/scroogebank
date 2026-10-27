@@ -8,7 +8,7 @@ DELETE FROM clients WHERE client_id::text LIKE '00000000-0000-0000-0000-00000000
 INSERT INTO clients (
     client_id, first_name, last_name, date_of_birth, gender, email, email_hash, phone_number, phone_number_hash,
     address, city, state, country, postal_code, verification_status,
-    created_by_agent_id, created_at, updated_at, deleted_at
+    assigned_agent_id, created_at, updated_at, deleted_at
 ) VALUES
     -- dash-agent-a
     ('00000000-0000-0000-0000-000000000501', 'Ann', 'Tan', '1990-01-01', 'female', 'dash-501@example.test', 'email-hash-501', '+6560000501', 'phone-hash-501',

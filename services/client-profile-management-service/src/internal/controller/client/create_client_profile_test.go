@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"client-profile-management-service/src/internal/contract"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	servicemock "client-profile-management-service/src/internal/service/client"
@@ -40,6 +41,7 @@ func TestCreateClientProfile(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/clients", strings.NewReader(test.body))
 			res := httptest.NewRecorder()
 			New(svc).CreateClientProfile(res, req)
+			contract.Check(t, "clients-api.yaml", http.MethodPost, "/api/clients", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

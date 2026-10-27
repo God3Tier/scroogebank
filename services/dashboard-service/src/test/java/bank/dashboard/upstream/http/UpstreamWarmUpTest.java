@@ -33,8 +33,11 @@ class UpstreamWarmUpTest {
                 .andRespond(withSuccess("{\"status\":\"ok\"}", MediaType.APPLICATION_JSON));
         server.expect(requestTo("https://account-service:8083/health"))
                 .andRespond(withSuccess("{\"status\":\"ok\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://transaction-service:8080/health"))
+                .andRespond(withSuccess("{\"status\":\"ok\"}", MediaType.APPLICATION_JSON));
 
-        warmUp("http://user-service:8081", "https://client-service:8080/", "https://account-service:8083").run(null);
+        warmUp("http://user-service:8081", "https://client-service:8080/", "https://account-service:8083",
+                "https://transaction-service:8080").run(null);
 
         server.verify();
     }
@@ -44,7 +47,7 @@ class UpstreamWarmUpTest {
         server.expect(requestTo("https://client-service:8080/health"))
                 .andRespond(withSuccess("{\"status\":\"ok\"}", MediaType.APPLICATION_JSON));
 
-        warmUp("", "https://client-service:8080", " ").run(null);
+        warmUp("", "https://client-service:8080", " ", "").run(null);
 
         server.verify();
     }
@@ -61,14 +64,16 @@ class UpstreamWarmUpTest {
                 .andRespond(withSuccess("not json", MediaType.TEXT_PLAIN));
 
         assertThatNoException().isThrownBy(() ->
-                warmUp("http://user-service:8081", "https://client-service:8080", "https://account-service:8083").run(null));
+                warmUp("http://user-service:8081", "https://client-service:8080", "https://account-service:8083", "").run(null));
         server.verify();
     }
 
-    private UpstreamWarmUp warmUp(String userService, String clientService, String accountService) {
+    private UpstreamWarmUp warmUp(String userService, String clientService, String accountService,
+                                  String transactionService) {
         return new UpstreamWarmUp(builder.build(), new DashboardProperties(
                 new DashboardProperties.Window(30, 365),
                 new DashboardProperties.Cache(60, 1000),
-                new DashboardProperties.Upstream(2000, 3000, userService, clientService, accountService)));
+                new DashboardProperties.Upstream(2000, 3000, userService, clientService, accountService,
+                        transactionService)));
     }
 }

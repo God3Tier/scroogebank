@@ -31,7 +31,7 @@ class PanelAssemblerTest {
             new DashboardProperties(
                     new DashboardProperties.Window(30, 365),
                     new DashboardProperties.Cache(60, 1000),
-                    new DashboardProperties.Upstream(200, 500, "", "", "")));
+                    new DashboardProperties.Upstream(200, 500, "", "", "", "")));
 
     private final List<ListAppender<ILoggingEvent>> appenders = new ArrayList<>();
 
@@ -95,12 +95,12 @@ class PanelAssemblerTest {
 
     @Test
     void doesNotWarnAboutExpectedUnavailability() {
-        // Not wired up, refused or mixed currencies is the dashboard working
-        // as designed, and would drown the warnings that matter.
+        // Not wired up, refused or an unsupported window is the dashboard
+        // working as designed, and would drown the warnings that matter.
         List<ILoggingEvent> logged = captureLogs();
         Map<String, Supplier<Object>> suppliers = new LinkedHashMap<>();
         for (PanelReason reason : List.of(PanelReason.UPSTREAM_NOT_DEPLOYED, PanelReason.UPSTREAM_FORBIDDEN,
-                PanelReason.MIXED_CURRENCIES, PanelReason.UNSUPPORTED_WINDOW)) {
+                PanelReason.UNSUPPORTED_WINDOW)) {
             suppliers.put(reason.wireValue(), () -> {
                 throw new UpstreamUnavailableException(reason, "expected");
             });

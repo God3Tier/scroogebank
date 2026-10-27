@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"client-profile-management-service/src/internal/auditnote"
+	"client-profile-management-service/src/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -174,6 +175,7 @@ func TestActionForRequest(t *testing.T) {
 		{name: "verify", method: http.MethodPost, route: "/api/clients/:clientId/verify", want: "UPDATE", ok: true},
 		{name: "upload a document", method: http.MethodPost, route: "/api/clients/:clientId/documents", want: "CREATE", ok: true},
 		{name: "view a document", method: http.MethodGet, route: "/api/clients/:clientId/documents/:documentId", want: "GET", ok: true},
+		{name: "reassign clients", method: http.MethodPost, route: "/api/clients/reassignments", want: "UPDATE", ok: true},
 		{name: "unsupported method", method: http.MethodOptions, route: "/api/clients", ok: false},
 	}
 
@@ -249,4 +251,53 @@ func TestAuditLogger_RecordsTheDocumentIDsOfTheCall(t *testing.T) {
 			assert.NotContains(t, string(outbox.saved[0].body), "Alice Tan")
 		})
 	}
+}
+
+// A reassignment is saved once per client moved, each with the agent before
+// and after (ADR-0060).
+func TestAuditLogger_SavesOneEventPerReassignedClient(t *testing.T) {
+	outbox := &fakeOutbox{}
+	moved := []models.Reassignment{
+		{ClientID: "00000000-0000-0000-0000-000000000961", FromAgentID: "agent-from", ToAgentID: "agent-to"},
+		{ClientID: "00000000-0000-0000-0000-000000000962", FromAgentID: "agent-other", ToAgentID: "agent-to"},
+	}
+	router := setupAuditRouter(outbox, "/api/clients/reassignments", http.MethodPost, func(c *gin.Context) {
+		for _, reassignment := range moved {
+			auditnote.AddReassignment(c.Request.Context(), reassignment)
+		}
+		c.Status(http.StatusOK)
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/clients/reassignments",
+		strings.NewReader(`{"to_user_id":"00000000-0000-0000-0000-000000000502","from_user_id":"00000000-0000-0000-0000-000000000501"}`)))
+
+	require.Len(t, outbox.saved, 2)
+	ids := map[string]bool{}
+	for i, saved := range outbox.saved {
+		event, payload := decodeSavedEvent(t, saved)
+		ids[event.EventID] = true
+		assert.Equal(t, "UPDATE", event.Action)
+		assert.Equal(t, "verified-agent-subject", event.ActorID)
+		assert.Equal(t, "assigned_agent_id", payload.AttributeName)
+		assert.Equal(t, moved[i].ClientID, payload.ClientID)
+		assert.Equal(t, moved[i].FromAgentID, payload.BeforeValue)
+		assert.Equal(t, moved[i].ToAgentID, payload.AfterValue)
+		assert.Equal(t, http.StatusOK, payload.StatusCode)
+	}
+	assert.Len(t, ids, 2, "each event has its own ID")
+}
+
+func TestAuditLogger_SavesARefusedReassignmentOnce(t *testing.T) {
+	outbox := &fakeOutbox{}
+	router := setupAuditRouter(outbox, "/api/clients/reassignments", http.MethodPost, func(c *gin.Context) {
+		c.Status(http.StatusServiceUnavailable)
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/clients/reassignments", strings.NewReader(`{}`)))
+
+	require.Len(t, outbox.saved, 1)
+	_, payload := decodeSavedEvent(t, outbox.saved[0])
+	assert.Equal(t, "endpoint_call", payload.AttributeName)
+	assert.Equal(t, http.StatusServiceUnavailable, payload.StatusCode)
+	assert.NotContains(t, string(outbox.saved[0].body), "before_value")
 }

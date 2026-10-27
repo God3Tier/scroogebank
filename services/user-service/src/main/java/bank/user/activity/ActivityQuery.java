@@ -13,6 +13,7 @@ import java.time.Instant;
  */
 public record ActivityQuery(
         String agentId,
+        String clientId,
         Instant from,
         Instant to,
         int size,

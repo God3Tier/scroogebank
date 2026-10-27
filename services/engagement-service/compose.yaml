@@ -1,0 +1,34 @@
+# Local dependencies for engagement-service: its database, and LocalStack for
+# the audit queue. The service itself runs with Maven (see README.md).
+#   docker compose -f services/engagement-service/compose.yaml up -d
+# Local only. The password is a placeholder for a throwaway container, not a
+# secret.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: engagement
+      POSTGRES_USER: engagement
+      POSTGRES_PASSWORD: engagement
+    ports:
+      - "5436:5432"
+    healthcheck:
+      # Over TCP: the image first runs a setup server on the socket only.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "engagement", "-d", "engagement"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - engagement-data:/var/lib/postgresql/data
+
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: sqs
+    ports:
+      - "4567:4566"
+    volumes:
+      - ./localstack:/etc/localstack/init/ready.d:ro
+
+volumes:
+  engagement-data:

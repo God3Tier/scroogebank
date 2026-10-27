@@ -9,10 +9,11 @@ type Window struct {
 }
 
 // DailyValue is one day of accounts opened, with their opening deposits.
+// Value is left out when the window's accounts span more than one currency.
 type DailyValue struct {
-	Date  string `json:"date" boil:"day"`
-	Count int64  `json:"count" boil:"count"`
-	Value string `json:"value" boil:"value"`
+	Date  string  `json:"date"`
+	Count int64   `json:"count"`
+	Value *string `json:"value,omitempty"`
 }
 
 // AccountStats are the account figures the business dashboard shows. Deleted
@@ -25,23 +26,23 @@ type AccountStats struct {
 	ByStatus   map[string]int64 `json:"byStatus"`
 	ByCurrency map[string]int64 `json:"byCurrency"`
 	ByBranch   map[string]int64 `json:"byBranch"`
-	// The rest covers accounts opened in the window. Deposits are summed only
-	// when those accounts share one currency, which Currency names; it is
-	// empty when none were opened.
-	OpenedInWindow        int64        `json:"openedInWindow"`
-	BookedInitialDeposits string       `json:"bookedInitialDeposits"`
-	Currency              string       `json:"currency,omitempty"`
-	DailyOpened           []DailyValue `json:"dailyOpened"`
+	// The rest covers accounts opened in the window. Deposits are summed per
+	// currency, never across currencies (ADR-0062); Currencies lists them,
+	// sorted, and is empty when none were opened.
+	OpenedInWindow        int64             `json:"openedInWindow"`
+	BookedInitialDeposits map[string]string `json:"bookedInitialDeposits"`
+	Currencies            []string          `json:"currencies"`
+	DailyOpened           []DailyValue      `json:"dailyOpened"`
 	// ByAgent is filled only for an admin who asks for it.
 	ByAgent []AgentAccountCounts `json:"byAgent,omitempty"`
 }
 
 // AgentAccountCounts are one agent's accounts opened in the window, keyed by
-// the owner's Cognito sub.
+// the owner's Cognito sub, with their deposits per currency.
 type AgentAccountCounts struct {
-	AgentID               string `json:"agentId" boil:"agent_id"`
-	AccountsOpened        int64  `json:"accountsOpened" boil:"accounts_opened"`
-	BookedInitialDeposits string `json:"bookedInitialDeposits" boil:"booked_initial_deposits"`
+	AgentID               string            `json:"agentId"`
+	AccountsOpened        int64             `json:"accountsOpened"`
+	BookedInitialDeposits map[string]string `json:"bookedInitialDeposits"`
 }
 
 // AccountIDs are the accounts the caller owns.

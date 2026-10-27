@@ -8,6 +8,7 @@ import (
 	"testing"
 	"uuid"
 
+	"account-service/src/internal/contract"
 	clienterrors "account-service/src/internal/errors"
 	"account-service/src/internal/models"
 	servicemock "account-service/src/internal/service/account"
@@ -41,6 +42,7 @@ func TestCreateAccount(t *testing.T) {
 		"maps invalid account":          {body: body, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
 		"maps duplicate account":        {body: body, serviceErr: clienterrors.ErrDuplicateAccount, wantStatus: http.StatusConflict, callSvc: true},
 		"maps missing client":           {body: body, serviceErr: clienterrors.ErrClientNotFound, wantStatus: http.StatusNotFound, callSvc: true},
+		"maps an admin":                 {body: body, serviceErr: clienterrors.ErrForbidden, wantStatus: http.StatusForbidden, callSvc: true},
 		"maps unverified client":        {body: body, serviceErr: clienterrors.ErrClientNotVerified, wantStatus: http.StatusForbidden, callSvc: true},
 		"maps client service outage":    {body: body, serviceErr: clienterrors.ErrClientServiceUnavailable, wantStatus: http.StatusServiceUnavailable, callSvc: true},
 		"maps unexpected service error": {body: body, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
@@ -62,6 +64,7 @@ func TestCreateAccount(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer caller-token")
 			res := httptest.NewRecorder()
 			NewAccountController(svc).CreateAccount(res, req, caller)
+			contract.Check(t, "accounts-api.yaml", http.MethodPost, "/api/accounts", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	accounterrors "account-service/src/internal/errors"
 	"account-service/src/internal/models"
 
 	_ "github.com/lib/pq"
@@ -41,11 +40,11 @@ func TestAccountStatsForAnAgentCountsOnlyTheirAccounts(t *testing.T) {
 	assert.Equal(t, map[string]int64{"B1": 2, "B2": 1}, stats.ByBranch)
 	// 603 opened the day before the window.
 	assert.Equal(t, int64(2), stats.OpenedInWindow)
-	assert.Equal(t, "350.50", stats.BookedInitialDeposits)
-	assert.Equal(t, "SGD", stats.Currency)
+	assert.Equal(t, map[string]string{"SGD": "350.50"}, stats.BookedInitialDeposits)
+	assert.Equal(t, []string{"SGD"}, stats.Currencies)
 	assert.Equal(t, []models.DailyValue{
-		{Date: "2031-09-01", Count: 1, Value: "100.00"},
-		{Date: "2031-09-15", Count: 1, Value: "250.50"},
+		{Date: "2031-09-01", Count: 1, Value: amount("100.00")},
+		{Date: "2031-09-15", Count: 1, Value: amount("250.50")},
 	}, stats.DailyOpened)
 	assert.Nil(t, stats.ByAgent)
 }
@@ -57,19 +56,40 @@ func TestAccountStatsForAnAdminGroupsByAgent(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), stats.OpenedInWindow)
-	assert.Equal(t, "360.50", stats.BookedInitialDeposits)
+	assert.Equal(t, map[string]string{"SGD": "360.50"}, stats.BookedInitialDeposits)
 	assert.Equal(t, []models.AgentAccountCounts{
-		{AgentID: "dash-owner-a", AccountsOpened: 2, BookedInitialDeposits: "350.50"},
-		{AgentID: "dash-owner-b", AccountsOpened: 1, BookedInitialDeposits: "10.00"},
+		{AgentID: "dash-owner-a", AccountsOpened: 2, BookedInitialDeposits: map[string]string{"SGD": "350.50"}},
+		{AgentID: "dash-owner-b", AccountsOpened: 1, BookedInitialDeposits: map[string]string{"SGD": "10.00"}},
 	}, stats.ByAgent)
 }
 
-func TestAccountStatsRefusesToAddCurrencies(t *testing.T) {
+func TestAccountStatsSumsEachCurrencySeparately(t *testing.T) {
 	repo := New(openFixtureDB(t))
 
-	_, err := repo.AccountStats(context.Background(), ownerC, window(time.November, time.November, 30), false)
+	stats, err := repo.AccountStats(context.Background(), ownerC, window(time.November, time.November, 30), false)
 
-	assert.ErrorIs(t, err, accounterrors.ErrMultipleCurrencies)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), stats.Total)
+	assert.Equal(t, map[string]int64{"SGD": 1, "USD": 1}, stats.ByCurrency)
+	assert.Equal(t, int64(2), stats.OpenedInWindow)
+	assert.Equal(t, map[string]string{"SGD": "7.00", "USD": "5.00"}, stats.BookedInitialDeposits)
+	assert.Equal(t, []string{"SGD", "USD"}, stats.Currencies)
+	// A day's value would be a sum of one or the other, so none is given.
+	assert.Equal(t, []models.DailyValue{
+		{Date: "2031-11-15", Count: 1},
+		{Date: "2031-11-20", Count: 1},
+	}, stats.DailyOpened)
+}
+
+func TestAccountStatsGroupsEachAgentsDepositsByCurrency(t *testing.T) {
+	repo := New(openFixtureDB(t))
+
+	stats, err := repo.AccountStats(context.Background(), admin, window(time.November, time.November, 30), true)
+
+	require.NoError(t, err)
+	assert.Equal(t, []models.AgentAccountCounts{
+		{AgentID: "dash-owner-c", AccountsOpened: 2, BookedInitialDeposits: map[string]string{"SGD": "7.00", "USD": "5.00"}},
+	}, stats.ByAgent)
 }
 
 func TestAccountStatsWithNothingOpenedInTheWindow(t *testing.T) {
@@ -80,8 +100,8 @@ func TestAccountStatsWithNothingOpenedInTheWindow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), stats.Total)
 	assert.Equal(t, int64(0), stats.OpenedInWindow)
-	assert.Equal(t, "0.00", stats.BookedInitialDeposits)
-	assert.Empty(t, stats.Currency)
+	assert.Equal(t, map[string]string{}, stats.BookedInitialDeposits)
+	assert.Equal(t, []string{}, stats.Currencies)
 	assert.NotNil(t, stats.DailyOpened)
 	assert.Empty(t, stats.DailyOpened)
 }
@@ -107,6 +127,10 @@ func TestAnAgentWithoutASubjectIsRefused(t *testing.T) {
 
 	assert.ErrorIs(t, statsErr, errNoSubject)
 	assert.ErrorIs(t, idsErr, errNoSubject)
+}
+
+func amount(value string) *string {
+	return &value
 }
 
 func openFixtureDB(t *testing.T) *sql.DB {

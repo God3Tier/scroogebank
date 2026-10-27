@@ -26,8 +26,35 @@ func RequireCRMRole() gin.HandlerFunc {
 	}
 }
 
-// RequireAccountOwner limits agents to accounts they own. Admins can access
-// every account. The owner is stored on the account itself (copied from
+// RequireAgent keeps admins to reading accounts: every route that changes an
+// account is for agents only (ADR-0059).
+func RequireAgent() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := PrincipalFromGin(c)
+		if !ok || principal.Role != "AGENT" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admins have read-only access to client data"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireAdmin is for the one admin write on accounts: moving a reassigned
+// client's accounts to its new agent (ADR-0060).
+func RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := PrincipalFromGin(c)
+		if !ok || principal.Role != "ADMIN" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "ADMIN role required"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireAccountOwner limits agents to accounts they own. Admins can read
+// every account; the routes that change one also need RequireAgent. The owner
+// is stored on the account itself (copied from
 // client-profile-management-service when the account was created), so this
 // needs no call to another service. Missing, deleted and out-of-scope accounts
 // all return 404 so callers cannot enumerate another agent's account IDs.

@@ -7,7 +7,7 @@
 - Feature/branch: `feat/business-dashboard`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: ADR-0064 in part (decisions 4 and 5, and decision 2's exception for the receiver: transaction-service serves `GET /aggregates/transactions/stats` itself, scoped by the caller's token)
 
 ## Context
 

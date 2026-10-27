@@ -1,5 +1,6 @@
-import { SORT_OPTIONS } from './definitions.js'
-import { formatNumber, formatPercent, formatSGD } from './format.js'
+import AmountLines from './AmountLines.jsx'
+import { DEFAULT_CURRENCY, DEPOSITS, SORT_OPTIONS } from './definitions.js'
+import { formatAmounts, formatNumber, formatPercent } from './format.js'
 
 export function SortSelect({ value, onChange }) {
   return (
@@ -11,6 +12,31 @@ export function SortSelect({ value, onChange }) {
         ))}
       </select>
     </label>
+  )
+}
+
+// The currencies deposits can be ranked in: the window's, plus the chosen one
+// and the default, so the choice stays on screen while a new ranking loads.
+function currencyOptions(currencies, currency) {
+  return [...new Set([...(currencies ?? []), currency, DEFAULT_CURRENCY])].sort()
+}
+
+// Deposits are never added across currencies, so a deposits ranking is in one
+// currency at a time (ADR-0062). The choice appears only when there is one.
+export function AgentTableControls({ sort, onSortChange, currency, currencies, onCurrencyChange }) {
+  const options = currencyOptions(currencies, currency)
+  return (
+    <div className="inline-controls">
+      <SortSelect value={sort} onChange={onSortChange} />
+      {sort === DEPOSITS && options.length > 1 && (
+        <label className="inline-select">
+          In
+          <select value={currency} onChange={(event) => onCurrencyChange(event.target.value)}>
+            {options.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+      )}
+    </div>
   )
 }
 
@@ -27,7 +53,7 @@ function statusOf(enabled) {
   return enabled ? { label: 'Active', className: 'badge-completed' } : { label: 'Disabled', className: '' }
 }
 
-function AgentPerformanceTable({ rows, sortedBy }) {
+function AgentPerformanceTable({ rows, sortedBy, sortCurrency }) {
   const sortedClass = (key) => (sortedBy === key ? 'num sorted' : 'num')
 
   return (
@@ -41,7 +67,9 @@ function AgentPerformanceTable({ rows, sortedBy }) {
             <th className="num">Verified / Unverified</th>
             <th className={sortedClass('verificationRate')}>Verification rate</th>
             <th className={sortedClass('accountsOpened')}>Accounts opened</th>
-            <th className={sortedClass('bookedInitialDeposits')}>Booked deposits</th>
+            <th className={sortedClass(DEPOSITS)}>
+              Booked deposits{sortedBy === DEPOSITS && sortCurrency ? ` (${sortCurrency})` : ''}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -65,7 +93,9 @@ function AgentPerformanceTable({ rows, sortedBy }) {
               </td>
               <td className="num">{formatPercent(row.verificationRate)}</td>
               <td className="num">{formatNumber(row.accountsOpened)}</td>
-              <td className="num" title={formatSGD(row.bookedInitialDeposits)}>{formatSGD(row.bookedInitialDeposits, { compact: true })}</td>
+              <td className="num" title={formatAmounts(row.bookedInitialDeposits)}>
+                <AmountLines amounts={row.bookedInitialDeposits} compact />
+              </td>
             </tr>
             )
           })}

@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"producer/src/accounts"
 	"producer/src/transaction"
 )
 
-var accountIDs = []string{"0b7c6f1e-4a0e-4f7c-9a52-6f1c3b2d8e11"}
+var list = []accounts.Account{{ID: "0b7c6f1e-4a0e-4f7c-9a52-6f1c3b2d8e11", Currency: "SGD"}}
 
 // rejected reports whether the import would reject a row, by the rules in
 // the receiver's normalizeTransaction.
@@ -21,7 +22,7 @@ func rejected(row transaction.Transaction) bool {
 
 func build(t *testing.T, kind string, wantFiles int) []File {
 	t.Helper()
-	files, err := Build(kind, accountIDs)
+	files, err := Build(kind, list)
 	if err != nil {
 		t.Fatalf("Build(%q): %v", kind, err)
 	}
@@ -101,7 +102,7 @@ func TestResendSendsThePendingTransactionAgainAsCompleted(t *testing.T) {
 }
 
 func TestBuildRefusesAnUnknownKind(t *testing.T) {
-	if _, err := Build("missing", accountIDs); err == nil {
+	if _, err := Build("missing", list); err == nil {
 		t.Fatal("Build accepted an unknown kind")
 	}
 }

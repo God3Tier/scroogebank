@@ -45,6 +45,16 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 	internal.Use(authenticateService)
 	internal.POST("/accounts/lookup", adaptHandler(accounts.LookupAccounts, ""))
 
+	// Moving a reassigned client's accounts to its new agent: called only by
+	// client-profile-management-service with the admin's own user token, while
+	// it holds the clients locked. Outside /api, so API Gateway never routes
+	// it, and not audited here: client-service audits each client moved
+	// (ADR-0060).
+	ownership := router.Group("/ownership")
+	ownership.Use(authenticate)
+	ownership.Use(security.RequireAdmin())
+	ownership.PUT("/accounts", adaptHandler(accounts.SetOwner, ""))
+
 	api := router.Group("/api")
 	api.Use(authenticate)
 	api.Use(security.RequireCRMRole())
@@ -52,16 +62,17 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 	account := api.Group("/accounts")
 	account.Use(auditLogger)
 	{
+		// Admins only read accounts; every write is for agents (ADR-0059).
 		// Ownership of the client is checked by client-profile-management-
 		// service inside CreateAccount, using the caller's token. The caller
 		// is passed too: agents need a verified client (ADR-0050).
-		account.POST("", withCaller(accounts.CreateAccount))
+		account.POST("", security.RequireAgent(), withCaller(accounts.CreateAccount))
 		account.GET("", listAccounts(accounts))
 		account.GET("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.GetAccount, "accountId"))
-		account.DELETE("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))
+		account.DELETE("/:accountId", security.RequireAgent(), security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))
 		// Only an account's status can change, by the agent who owns it, once
 		// its client is verified (ADR-0050).
-		account.PATCH("/:accountId", security.RequireAccountOwner(db, "accountId"), withCallerAndAccount(accounts.UpdateAccountStatus))
+		account.PATCH("/:accountId", security.RequireAgent(), security.RequireAccountOwner(db, "accountId"), withCallerAndAccount(accounts.UpdateAccountStatus))
 	}
 }
 

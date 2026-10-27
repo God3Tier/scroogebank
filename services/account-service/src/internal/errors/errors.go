@@ -27,8 +27,4 @@ var (
 	ErrInvalidAccountStatus = errors.New("invalid account status")
 	ErrInvalidCurrency      = errors.New("invalid currency")
 	ErrDuplicateAccount     = errors.New("duplicate account")
-
-	// ErrMultipleCurrencies refuses a deposit total that would add amounts in
-	// different currencies (ADR-0038).
-	ErrMultipleCurrencies = errors.New("accounts opened in the window use more than one currency")
 )

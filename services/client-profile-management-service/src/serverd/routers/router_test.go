@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"client-profile-management-service/src/internal/contract"
 	clientcontroller "client-profile-management-service/src/internal/controller/client"
 	"client-profile-management-service/src/internal/models"
 	"client-profile-management-service/src/internal/security"
@@ -130,4 +131,15 @@ func TestAggregatesRefuseCallersWithoutACRMRole(t *testing.T) {
 			assert.Empty(t, aggregates.callers)
 		})
 	}
+}
+
+// Every route is in an OpenAPI contract (ADR-0063), including routes no test
+// calls.
+func TestEveryRouteIsInAContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	noAudit := func(c *gin.Context) { c.Next() }
+	RegisterRoutes(router, clientcontroller.New(nil), &recordingAggregates{}, nil, noAudit, noAudit)
+
+	contract.CheckRoutes(t, router.Routes(), "clients-api.yaml", "dashboard-aggregates.yaml")
 }

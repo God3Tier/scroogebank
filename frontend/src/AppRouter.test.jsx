@@ -11,6 +11,14 @@ vi.mock('./api/clients.js', () => ({
   listDocuments: vi.fn().mockResolvedValue([]),
   listClients: vi.fn().mockResolvedValue({ content: [], page: 0, size: 1, totalElements: 0, totalPages: 0 }),
 }))
+vi.mock('./api/engagement.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listEvents: vi.fn().mockResolvedValue([]),
+  listHolidays: vi.fn().mockResolvedValue([]),
+  getHolidayCoverage: vi.fn().mockResolvedValue({ countryCode: 'SG', coveredThrough: '2027-12-31' }),
+  listDrafts: vi.fn().mockResolvedValue([]),
+  getPreferences: vi.fn().mockResolvedValue({ invitesEnabled: true, remindersEnabled: true }),
+}))
 vi.mock('./api/dashboard.js', async (importOriginal) => ({
   ...(await importOriginal()),
   getDashboard: vi.fn().mockResolvedValue({ panels: {} }),
@@ -99,6 +107,18 @@ describe('routes', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Sign-in failed: invalid_grant')
   })
+
+  it.each([['/agent/calendar', 'Calendar'], ['/agent/drafts', 'Follow-up Emails']])(
+    'opens %s for an agent and keeps admins out', (path, heading) => {
+      useAuth.mockReturnValue(signedInAs(['Agent']))
+      const { unmount } = renderAt(path)
+      expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+      unmount()
+
+      useAuth.mockReturnValue(signedInAs(['Admin']))
+      renderAt(path)
+      expect(screen.getByRole('alert')).toHaveTextContent('not available to your role')
+    })
 
   it('lets an admin open a client page from the admin home page', () => {
     useAuth.mockReturnValue(signedInAs(['Admin']))

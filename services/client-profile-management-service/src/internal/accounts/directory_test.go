@@ -3,6 +3,7 @@ package accounts
 import (
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,6 +59,51 @@ func TestHasAccountsFailsClosedWhenTheAccountServiceIsDown(t *testing.T) {
 	server.Close()
 
 	_, err := NewHTTPDirectory(url, time.Second).HasAccounts(context.Background(), clientID, "Bearer caller-token")
+
+	require.ErrorIs(t, err, clienterrors.ErrAccountServiceUnavailable)
+}
+
+func TestSetOwner(t *testing.T) {
+	tests := map[string]struct {
+		status  int
+		wantErr error
+	}{
+		"confirms the move":                 {status: http.StatusOK},
+		"fails closed on a server error":    {status: http.StatusInternalServerError, wantErr: clienterrors.ErrAccountServiceUnavailable},
+		"fails closed on a refused token":   {status: http.StatusForbidden, wantErr: clienterrors.ErrAccountServiceUnavailable},
+		"fails closed on a refused request": {status: http.StatusBadRequest, wantErr: clienterrors.ErrAccountServiceUnavailable},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodPut, r.Method)
+				assert.Equal(t, "/ownership/accounts", r.URL.Path)
+				assert.Equal(t, "Bearer admin-token", r.Header.Get("Authorization"))
+				body, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				assert.JSONEq(t, `{"client_ids":["`+clientID+`"],"owner_agent_id":"agent-new"}`, string(body))
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(`{"accounts":1}`))
+			}))
+			defer server.Close()
+
+			err := NewHTTPDirectory(server.URL, time.Second).SetOwner(context.Background(), []string{clientID}, "agent-new", "Bearer admin-token")
+
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestSetOwnerFailsClosedWhenTheAccountServiceIsDown(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	url := server.URL
+	server.Close()
+
+	err := NewHTTPDirectory(url, time.Second).SetOwner(context.Background(), []string{clientID}, "agent-new", "Bearer admin-token")
 
 	require.ErrorIs(t, err, clienterrors.ErrAccountServiceUnavailable)
 }

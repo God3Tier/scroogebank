@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"account-service/src/internal/contract"
 	clienterrors "account-service/src/internal/errors"
 	servicemock "account-service/src/internal/service/account"
 
@@ -36,6 +37,7 @@ func TestDeleteAccount(t *testing.T) {
 			req := httptest.NewRequest(http.MethodDelete, "/api/accounts?"+test.query, nil)
 			res := httptest.NewRecorder()
 			NewAccountController(svc).DeleteAccount(res, req)
+			contract.Check(t, "accounts-api.yaml", http.MethodDelete, "/api/accounts/{accountId}", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

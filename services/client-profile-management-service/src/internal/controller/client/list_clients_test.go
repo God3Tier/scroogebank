@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"client-profile-management-service/src/internal/contract"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	servicemock "client-profile-management-service/src/internal/service/client"
@@ -44,6 +45,7 @@ func TestListClients(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/clients"+test.query, nil)
 			res := httptest.NewRecorder()
 			New(svc).ListClients(res, req, caller)
+			contract.Check(t, "clients-api.yaml", http.MethodGet, "/api/clients", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 			if test.wantBody != "" {
 				assert.Contains(t, res.Body.String(), test.wantBody)

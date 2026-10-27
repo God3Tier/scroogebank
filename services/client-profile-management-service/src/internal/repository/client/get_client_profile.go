@@ -42,7 +42,7 @@ func (r clientRepository) profileFrom(ctx context.Context, client *orm.Client) (
 		withDocuments := client.VerifiedWithDocuments.Bool
 		profile.VerifiedWithDocuments = &withDocuments
 	}
-	profile.CreatedByAgentID = client.CreatedByAgentID
+	profile.AssignedAgentID = client.AssignedAgentID
 	profile.CreatedAt = client.CreatedAt
 	profile.UpdatedAt = client.UpdatedAt
 	return profile, nil

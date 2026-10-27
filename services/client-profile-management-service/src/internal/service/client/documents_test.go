@@ -41,7 +41,7 @@ func TestUploadDocumentAcceptsJPEGPNGAndPDF(t *testing.T) {
 					d.UploadedByAgentID == "agent-1" && d.DocumentID != "" && !d.UploadedAt.IsZero()
 			}), test.content).Return(nil).Once()
 
-			document, err := NewClientService(repo, nil).UploadDocument(ctx, "client-123", "agent-1", test.content)
+			document, err := NewClientService(repo, nil, nil).UploadDocument(ctx, "client-123", "agent-1", test.content)
 
 			require.NoError(t, err)
 			assert.Equal(t, test.wantType, document.ContentType)
@@ -66,7 +66,7 @@ func TestUploadDocumentRefusesOtherFiles(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := repomock.NewMockRepository(t)
 
-			_, err := NewClientService(repo, nil).UploadDocument(context.Background(), "client-123", "agent-1", test.content)
+			_, err := NewClientService(repo, nil, nil).UploadDocument(context.Background(), "client-123", "agent-1", test.content)
 
 			assert.ErrorIs(t, err, test.wantErr)
 			repo.AssertNotCalled(t, "CreateDocument", mock.Anything, mock.Anything, mock.Anything)
@@ -80,7 +80,7 @@ func TestUploadDocumentAtExactlyTheLimit(t *testing.T) {
 	repo := repomock.NewMockRepository(t)
 	repo.On("CreateDocument", ctx, mock.Anything, content).Return(nil).Once()
 
-	_, err := NewClientService(repo, nil).UploadDocument(ctx, "client-123", "agent-1", content)
+	_, err := NewClientService(repo, nil, nil).UploadDocument(ctx, "client-123", "agent-1", content)
 
 	assert.NoError(t, err)
 }
@@ -88,7 +88,7 @@ func TestUploadDocumentAtExactlyTheLimit(t *testing.T) {
 func TestGetDocumentTreatsAMalformedIDAsMissing(t *testing.T) {
 	repo := repomock.NewMockRepository(t)
 
-	_, _, err := NewClientService(repo, nil).GetDocument(context.Background(), "client-123", "not-a-document-id")
+	_, _, err := NewClientService(repo, nil, nil).GetDocument(context.Background(), "client-123", "not-a-document-id")
 
 	assert.ErrorIs(t, err, clienterrors.ErrDocumentNotFound)
 }

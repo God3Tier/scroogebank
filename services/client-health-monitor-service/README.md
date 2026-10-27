@@ -119,8 +119,10 @@ tokens and Contract-B assignment responses.
 
 ## Local API configuration
 
-The service has no embedded database and does not ship credentials. Set these
-properties through environment variables or an external Spring configuration:
+The service listens on `http://localhost:8087` by default, leaving port 8086
+for engagement-service. It has no embedded database and does not ship
+credentials. Set these properties through environment variables or an external
+Spring configuration:
 
 | Spring property | Environment form | Purpose |
 |---|---|---|

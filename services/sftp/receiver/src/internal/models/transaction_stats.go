@@ -3,8 +3,9 @@ package models
 import "time"
 
 // TransactionStatsQuery selects the transactions a total covers: every
-// transaction when All is set, otherwise those linked to AccountIDs. The
-// receiver trusts its caller to have chosen the scope (ADR-0039).
+// transaction when All is set, otherwise those linked to AccountIDs.
+// transaction-service sets it from the verified caller, never from request
+// data (ADR-0064).
 type TransactionStatsQuery struct {
 	From       time.Time
 	To         time.Time

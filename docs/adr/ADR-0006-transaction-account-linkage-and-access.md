@@ -7,7 +7,7 @@
 - Feature/branch: Feature 3 / `transaction-integration`
 - Related issue/PR: Not yet assigned
 - Supersedes: N/A
-- Superseded by: ADR-0035 (decision 4 only: the account-ownership check moved from client-profile to account-service); ADR-0037 (decisions 1–2 only: transactions have their own database and are linked to accounts through account-service at import, not by a foreign key and trigger). Decisions 3, 5 and 6 remain in force
+- Superseded by: ADR-0035 (decision 4 only: the account-ownership check moved from client-profile to account-service); ADR-0037 (decisions 1–2 only: transactions have their own database and are linked to accounts through account-service at import, not by a foreign key and trigger); ADR-0064 (decisions 3 and 5: transaction-service checks its own callers and is called directly, not through User-service). Decision 6 remains in force
 
 ## Context
 

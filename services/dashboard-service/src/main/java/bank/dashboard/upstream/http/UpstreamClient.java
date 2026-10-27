@@ -72,9 +72,6 @@ public class UpstreamClient {
         return switch (status.value()) {
             // Refusing the caller is the scoping working, not a fault.
             case 401, 403 -> PanelReason.UPSTREAM_FORBIDDEN;
-            // Only account-service answers 409: its window holds accounts in
-            // more than one currency, so it will not add their deposits (ADR-0038).
-            case 409 -> PanelReason.MIXED_CURRENCIES;
             default -> PanelReason.UPSTREAM_ERROR;
         };
     }

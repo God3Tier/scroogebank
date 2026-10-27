@@ -28,11 +28,12 @@ locals {
   # does not check its targets' certificates, so event-alert-service, which
   # only the ALB calls, has no Service Connect name and takes its own.
   tls_services = {
-    user    = [local.sc.user]
-    client  = [local.sc.client]
-    account = [local.sc.account]
-    auditor = [local.sc.auditor]
-    alerts  = ["event-alert-service"]
+    user        = [local.sc.user]
+    client      = [local.sc.client]
+    account     = [local.sc.account]
+    auditor     = [local.sc.auditor]
+    transaction = [local.sc.transaction]
+    alerts      = ["event-alert-service"]
   }
 }
 

@@ -9,10 +9,13 @@ import NavBar from './NavBar.jsx'
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
 vi.mock('../auth/signOut.js', () => ({ signOut: vi.fn() }))
 
-function renderNavBar(auth) {
+function renderNavBar(auth, path = '/') {
   useAuth.mockReturnValue(auth)
-  return render(<MemoryRouter><NavBar /></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[path]}><NavBar /></MemoryRouter>)
 }
+
+const AGENT_AUTH = { isAuthenticated: true, user: { profile: { 'cognito:groups': ['Agent'], email: 'synthetic.agent@example.test' } } }
+const ADMIN_AUTH = { isAuthenticated: true, user: { profile: { 'cognito:groups': ['Admin'], email: 'synthetic.admin@example.test' } } }
 
 describe('NavBar', () => {
   it('offers only sign-in when signed out', () => {
@@ -28,6 +31,8 @@ describe('NavBar', () => {
 
     expect(screen.getByRole('link', { name: /Agent Home/ })).toHaveAttribute('href', '/agent')
     expect(screen.getByRole('link', { name: /Agent Dashboard/ })).toHaveAttribute('href', '/insights/agent')
+    expect(screen.getByRole('link', { name: /Calendar/ })).toHaveAttribute('href', '/agent/calendar')
+    expect(screen.getByRole('link', { name: /Follow-up Emails/ })).toHaveAttribute('href', '/agent/drafts')
     expect(screen.queryByRole('link', { name: /Admin Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Admin Dashboard/ })).not.toBeInTheDocument()
     expect(screen.getByText('synthetic.agent@example.test')).toBeInTheDocument()
@@ -45,5 +50,36 @@ describe('NavBar', () => {
     expect(screen.getByRole('link', { name: /Admin Dashboard/ })).toHaveAttribute('href', '/insights/admin')
     expect(screen.queryByRole('link', { name: /Agent Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Agent Dashboard/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Calendar/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Follow-up Emails/ })).not.toBeInTheDocument()
+  })
+
+  it("highlights only the agent's current page, not Agent Home as well", () => {
+    renderNavBar(AGENT_AUTH, '/agent/drafts')
+
+    expect(screen.getByRole('link', { name: /Follow-up Emails/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /Agent Home/ })).not.toHaveAttribute('aria-current')
+  })
+
+  it('highlights Agent Home on its own page', () => {
+    renderNavBar(AGENT_AUTH, '/agent')
+
+    expect(screen.getByRole('link', { name: /Agent Home/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it.each(['/agent/alerts', '/agent/client/client-1/transactions'])(
+    'highlights Agent Home on %s, which has no link of its own',
+    (path) => {
+      renderNavBar(AGENT_AUTH, path)
+
+      expect(screen.getByRole('link', { name: /Agent Home/ })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getAllByRole('link').filter((link) => link.getAttribute('aria-current'))).toHaveLength(1)
+    },
+  )
+
+  it('highlights Admin Home on the admin pages under it', () => {
+    renderNavBar(ADMIN_AUTH, '/admin/alerts')
+
+    expect(screen.getByRole('link', { name: /Admin Home/ })).toHaveAttribute('aria-current', 'page')
   })
 })

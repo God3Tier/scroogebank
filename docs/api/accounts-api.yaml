@@ -1,0 +1,411 @@
+openapi: 3.0.3
+
+# account-service's REST API (ADR-0017, ADR-0035). Written from the code when
+# contract tests were added (ADR-0063), so it records what the service does
+# today, including its mix of JSON and plain-text errors: handlers that use
+# http.Error answer text/plain, while the authentication and ownership
+# middleware answer JSON.
+#
+# The dashboard's /aggregates routes are in dashboard-aggregates.yaml, and an
+# account's transactions (served by transaction-service) in transactions-api.yaml.
+
+info:
+  title: Scrooge CRM - Accounts
+  version: v1
+  description: |
+    Bank accounts, each belonging to one client and owned by that client's
+    agent. Agents open, read, change the status of and delete the accounts
+    of their own clients; admins only read (ADR-0059). Deleted accounts are
+    kept but never returned (ADR-0036).
+
+    `/api` routes are reached through API Gateway. `/internal` and
+    `/ownership` routes are for other services only, over Service Connect;
+    API Gateway never routes them.
+
+servers:
+  - url: /
+
+tags:
+  - name: accounts
+  - name: internal
+    description: Service-to-service routes, outside /api.
+
+paths:
+  /api/accounts:
+    post:
+      tags: [accounts]
+      summary: Open an account for one of the caller's clients
+      description: |
+        Agents only. The client is checked with client-profile-management-
+        service using the caller's token; an unverified client's account can
+        only be opened as `PENDING` (ADR-0050). One account per type per
+        client.
+      operationId: createAccount
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountInput' }
+      responses:
+        '201':
+          description: Account opened.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account_id, status]
+                properties:
+                  account_id: { type: string, format: uuid }
+                  status: { type: string, example: Account created successfully }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: |
+            The caller lacks the AGENT role (JSON), or the client is not
+            verified and the status is not `PENDING` (text).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+        '404':
+          description: No such client for the caller.
+          content:
+            text/plain:
+              schema: { type: string }
+        '409':
+          description: The client already has an account of this type.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/TextError' }
+        '503':
+          description: client-profile-management-service did not answer.
+          content:
+            text/plain:
+              schema: { type: string }
+    get:
+      tags: [accounts]
+      summary: A client's accounts
+      description: |
+        The accounts of one client, for its owning agent or an admin. An
+        agent asking about another agent's client gets an empty list.
+        client-profile-management-service calls this before deleting a
+        client.
+      operationId: listAccounts
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The client's accounts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Account' }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/JsonError' }
+
+  /api/accounts/{accountId}:
+    parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [accounts]
+      summary: One account
+      operationId: getAccount
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Account' }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such account, or another agent's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/JsonError' }
+    patch:
+      tags: [accounts]
+      summary: Change an account's status
+      description: |
+        Agents only, on their own accounts, once the client is verified.
+        Any of the four statuses, in any direction; nothing else can change
+        (ADR-0050).
+      operationId: updateAccountStatus
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: '#/components/schemas/AccountStatusInput' }
+      responses:
+        '200':
+          description: The status after the change, in lower case as GET returns it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account_id, status]
+                properties:
+                  account_id: { type: string }
+                  status: { $ref: '#/components/schemas/AccountStatus' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: The caller lacks the AGENT role (JSON), or the client is not verified (text).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+        '404':
+          description: No such account, or another agent's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+        '500':
+          description: Unexpected failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+        '503':
+          description: client-profile-management-service did not answer.
+          content:
+            text/plain:
+              schema: { type: string }
+    delete:
+      tags: [accounts]
+      summary: Delete an account
+      description: Agents only, on their own accounts. The row is kept but never returned again (ADR-0036).
+      operationId: deleteAccount
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such account, or another agent's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+        '500':
+          description: Unexpected failure.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+
+  /internal/accounts/lookup:
+    post:
+      tags: [internal]
+      summary: Look up accounts for the transaction import
+      description: |
+        Called only by the SFTP receiver, with a client-credentials token
+        holding the `crm-accounts/lookup` scope (ADR-0037). Returns the
+        accounts among `ids` that exist, with each one's client and currency
+        (ADR-0061); unknown IDs are left out. Not audited.
+      operationId: lookupAccounts
+      security: [{ serviceAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: The accounts found.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accounts]
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, client_id, currency]
+                      properties:
+                        id: { type: string, format: uuid }
+                        client_id: { type: string, format: uuid }
+                        currency: { type: string }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: The token lacks the lookup scope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/JsonError' }
+
+  /ownership/accounts:
+    put:
+      tags: [internal]
+      summary: Move clients' accounts to another agent
+      description: |
+        Called only by client-profile-management-service, with the admin's
+        own token, while it reassigns those clients (ADR-0060). Not audited
+        here: client-profile-management-service audits each client moved.
+      operationId: setAccountOwner
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_ids, owner_agent_id]
+              properties:
+                client_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                owner_agent_id: { type: string, description: 'The new owner''s Cognito sub.' }
+      responses:
+        '200':
+          description: The number of accounts moved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accounts]
+                properties:
+                  accounts: { type: integer, format: int64 }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/JsonError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A Cognito access token from the CRM app client, with the ADMIN or AGENT group.
+    serviceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A Cognito client-credentials token with the `crm-accounts/lookup` scope.
+
+  responses:
+    Unauthorized:
+      description: No valid access token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The caller's role may not use this route.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    JsonError:
+      description: The request was refused or failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TextError:
+      description: The request was refused or failed.
+      content:
+        text/plain:
+          schema: { type: string }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Message:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+
+    AccountInput:
+      type: object
+      required: [client_id, account_type, status, currency, branch_id]
+      properties:
+        client_id: { type: string, format: uuid }
+        account_type:
+          type: string
+          description: 'CHECKING, SAVINGS, CREDIT, LOAN or INVESTMENT, in any case.'
+        status:
+          type: string
+          description: 'ACTIVE, INACTIVE, PENDING or CLOSED, in any case.'
+        opening_date:
+          type: string
+          format: date-time
+          description: Accepted but ignored; the database sets the opening date.
+        initial_deposit: { type: number, minimum: 0 }
+        currency: { type: string, description: 'A three-letter ISO 4217 code, in any case.' }
+        branch_id: { type: string, minLength: 1 }
+
+    AccountStatusInput:
+      type: string
+      enum: [ACTIVE, INACTIVE, PENDING, CLOSED]
+
+    AccountStatus:
+      type: string
+      enum: [active, inactive, pending, closed]
+
+    Account:
+      type: object
+      required: [id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        owner_agent_id: { type: string, description: 'The owning agent''s Cognito sub.' }
+        account_type:
+          type: string
+          enum: [savings, checking, business, credit, loan, investment]
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        opening_date: { type: string, format: date-time }
+        initial_deposit: { type: string, pattern: '^\d+\.\d{2}$', example: '1000.00' }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        branch_id: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Always null; deleted accounts are never returned.

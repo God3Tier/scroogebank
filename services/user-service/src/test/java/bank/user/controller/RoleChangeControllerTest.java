@@ -15,8 +15,10 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
@@ -50,6 +52,9 @@ class RoleChangeControllerTest {
     @Test
     void adminChangesRole() throws Exception {
         User promoted = new User(id, "Alice", "Tan", "alice@scroogebank.com", Role.ADMIN, "sub-alice");
+        // Set by Hibernate when the row is saved.
+        ReflectionTestUtils.setField(promoted, "createdAt", Instant.parse("2026-09-01T00:00:00Z"));
+        ReflectionTestUtils.setField(promoted, "updatedAt", Instant.parse("2026-09-02T00:00:00Z"));
         when(userService.changeRole(id, Role.ADMIN)).thenReturn(promoted);
 
         mvc.perform(patch("/api/users/{id}/role", id)

@@ -29,6 +29,7 @@ func (c clientController) DeleteClientProfile(w http.ResponseWriter, r *http.Req
 		}
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status": "Client profile deleted successfully"}`))
 }

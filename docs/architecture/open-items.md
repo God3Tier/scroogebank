@@ -55,9 +55,9 @@ For now, transaction-ingest does not check Client IDs against client-service; ow
 
 ## 10. How transaction reads enforce agent ownership
 
-**Resolved** by [ADR-0006](../adr/ADR-0006-transaction-account-linkage-and-access.md) decisions 3 and 5 (Accepted, Joseph Yau) and [ADR-0035](../adr/ADR-0035-account-ownership-across-services.md) decision 6. user-service serves `GET /api/accounts/{accountId}/transactions`. It forwards the caller's token to account-service's `GET /api/accounts/{id}`, which returns 404 unless the caller is an admin or owns the account, and only then reads the transactions from the receiver's private endpoint. Each account stores its owning agent, so the check needs neither clients-db nor a copy of ownership beside the transactions.
+**Resolved** by [ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md) (Accepted, Neo Jia Wen and Joseph Yau), which replaced ADR-0006 decisions 3 and 5. transaction-service serves `GET /api/accounts/{accountId}/transactions` and checks the caller's token. It forwards that token to account-service's `GET /api/accounts/{id}`, which returns 404 unless the caller is an admin or owns the account, and only then reads the transactions. Each account stores its owning agent, so the check needs neither clients-db nor a copy of ownership beside the transactions.
 
-This covers one account at a time. For the business dashboard's transaction totals, [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (Proposed) uses the same pattern: user-service asks account-service for the agent's account IDs, then asks the receiver for totals over those accounts only.
+This covers one account at a time. For the business dashboard's transaction totals, transaction-service uses the same pattern: it asks account-service for the agent's account IDs, then totals those accounts only (ADR-0064).
 
 ## 11. Audit payloads with client personal data
 
@@ -95,7 +95,7 @@ Choose the approved security-master or market-data provider, and how reclassific
 
 ## 16. Health-monitor activity contract
 
-Transaction-service must provide matched activity (client and account IDs, stable IDs, type, amount, time, status, source fingerprint) with six months of replay. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), the SFTP import stores `account_id` and `client_id` on every matched row; unmatched rows have neither. Still missing: a read API the analysis task can call with a service token, and the six months of replay.
+Transaction-service now has a proposed implementation for matched activity history: a scoped-token private read route across all clients, bounded time range/global keyset paging, restricted matched-only fields, validated source fingerprints, and deterministic six-month synthetic signal and healthy-control cases ([proposed ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)). The code, Terraform, generated SQLBoiler models, and automated tests are present locally; end-to-end verification, contract-owner review, and ADR acceptance remain open before the item can be considered resolved. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), imports link matched rows to `account_id` and `client_id`; unmatched rows have neither.
 
 ## 17. Budget with the x-factors
 
@@ -129,9 +129,13 @@ Deleting a client or account is a soft delete ([ADR-0036](../adr/ADR-0036-soft-d
 
 The code lets admins update, delete and verify any client, and upload its documents: `RequireClientOwner` lets every admin through, as [ADR-0005](../adr/ADR-0005-cognito-security-across-features-1-and-2.md) decision 4, [ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md) and the [Feature 2 plan](../feature-plans/feature-2_plan.md) describe. The requirements Q&A says admins only read client data: "Admin have read only access to client info" (UM04); "Admin dont have write access on client related activities. Admin can't create new client account, update profile etc." (UM18); "Only Agent hand all client related activities. Admin has read access of it." (CPM31). The Feature 2 owner must decide whether to make admins read-only in client-service and account-service, and record it in an ADR that amends ADR-0005 and ADR-0041. The account status change added by [ADR-0050](../adr/ADR-0050-accounts-pending-until-client-verified.md) already follows UM18: only agents may make it.
 
+**Resolved (2026-10-23)** by [ADR-0059](../adr/ADR-0059-admins-read-only-on-client-data.md), owner Neo Jia Wen: admins read every client, document and account, and both services refuse admins with 403 on every client and account write; the client page shows admins no write control.
+
 ## 24. Client reassignment
 
-When an agent is disabled, deleted or leaves, an admin assigns their clients to another agent (Q&A UM07, UM15, UM17). Nothing implements this: a client's `created_by_agent_id` never changes, and account-service copies it as each account's `owner_agent_id` ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). The Feature 1 and Feature 2 owners must decide the endpoint, who may call it (the Q&A gives it to admins, which item 23 must allow), how the account copies are updated with it, and how it is audited.
+When an agent is disabled, deleted or leaves, an admin assigns their clients to another agent (Q&A UM07, UM15, UM17). Nothing implements this: a client's `created_by_agent_id` never changes, and account-service copies it as each account's `owner_agent_id` ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)). The Feature 1 and Feature 2 owners must decide the endpoint, who may call it (the Q&A gives it to admins, which item 23 must allow), how the account copies are updated with it, and how it is audited. [ADR-0059](../adr/ADR-0059-admins-read-only-on-client-data.md) makes admins read-only on client data and names reassignment as the one admin write still to come, on a route of its own.
+
+**Resolved (2026-10-23)** by [ADR-0060](../adr/ADR-0060-client-reassignment.md), owner Neo Jia Wen: `POST /api/clients/reassignments` moves all of a user's clients, or chosen clients, to an enabled agent; client-service moves their accounts in account-service while it holds the clients locked, and audits each client with the agent before and after; the old agent's engagement data stays theirs. Still open after it: what client-health-monitor-service does with an open task whose client was moved, and whether changing an agent with clients to an admin, or disabling one, should be blocked until their clients are reassigned.
 
 ## 25. Business dashboard panels not served yet
 

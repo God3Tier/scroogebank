@@ -1,8 +1,8 @@
 -- Gives the service its own login (ADR-0028 decision 3). It reads and changes
 -- rows but cannot change the schema: the master user that runs the migrations
 -- owns every table, and PostgreSQL 17 lets no other role create objects in
--- public. The image copies this file into the clients, accounts, users and
--- alerts directories, and Flyway runs it after every migrate, so a table that
+-- public. The image copies this file into the clients, accounts, users,
+-- alerts and engagement directories, and Flyway runs it after every migrate, so a table that
 -- a later migration adds is granted with no change here. The login and its
 -- password are Flyway placeholders that the service's db-migrate container
 -- fills from Secrets Manager, so the password never appears here, and setting

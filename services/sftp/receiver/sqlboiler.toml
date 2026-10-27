@@ -13,5 +13,6 @@ user = "crm"
 pass = "crm"
 sslmode = "disable"
 schema = "public"
-# The outbox is written with plain SQL (src/internal/repository/save_import.go), not the ORM.
-blacklist = ["audit_outbox"]
+# The outboxes are written with plain SQL (src/internal/repository/save_import.go
+# and src/internal/outbox), not the ORM.
+blacklist = ["audit_outbox", "read_audit_outbox"]

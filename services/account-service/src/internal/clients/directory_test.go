@@ -23,20 +23,20 @@ func TestLookup(t *testing.T) {
 		wantErr error
 	}{
 		"returns the owner of a verified client": {
-			status: http.StatusOK, body: profile(`"created_by_agent_id":"agent-sub-1","verification_status":"VERIFIED"`),
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1","verification_status":"VERIFIED"`),
 			want: Client{OwnerAgentID: "agent-sub-1", Verified: true},
 		},
 		// Clients verified before ADR-0041 hold the status in lower case.
 		"accepts a lower-case verified status": {
-			status: http.StatusOK, body: profile(`"created_by_agent_id":"agent-sub-1","verification_status":"verified"`),
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1","verification_status":"verified"`),
 			want: Client{OwnerAgentID: "agent-sub-1", Verified: true},
 		},
 		"reports an unverified client": {
-			status: http.StatusOK, body: profile(`"created_by_agent_id":"agent-sub-1","verification_status":"UNVERIFIED"`),
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1","verification_status":"UNVERIFIED"`),
 			want: Client{OwnerAgentID: "agent-sub-1"},
 		},
 		"treats a missing status as unverified": {
-			status: http.StatusOK, body: profile(`"created_by_agent_id":"agent-sub-1"`),
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1"`),
 			want: Client{OwnerAgentID: "agent-sub-1"},
 		},
 		"maps a missing or foreign client":   {status: http.StatusNotFound, body: `client not found`, wantErr: accounterrors.ErrClientNotFound},

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * The activity feed (ADR-0021): the spec's "Agents can only see their own
@@ -31,6 +32,7 @@ public class ActivityController {
     @PreAuthorize("hasAnyRole('ADMIN', 'AGENT')")
     public ActivityPage listActivities(
             @RequestParam(required = false) String agentId,
+            @RequestParam(required = false) String clientId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "20") int size,
@@ -44,6 +46,9 @@ public class ActivityController {
         if (from != null && to != null && !from.isBefore(to)) {
             throw new BadRequestException("from: must be before to");
         }
+        if (clientId != null && !isUuid(clientId)) {
+            throw new BadRequestException("clientId: must be a UUID");
+        }
         boolean admin = caller.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
         if (!admin) {
             // An agent sees only their own activities. The auditor applies the
@@ -54,7 +59,15 @@ public class ActivityController {
             }
             agentId = self;
         }
-        return activityService.list(new ActivityQuery(agentId, from, to, size, cursor),
+        return activityService.list(new ActivityQuery(agentId, clientId, from, to, size, cursor),
                 caller.getToken().getTokenValue());
+    }
+
+    private static boolean isUuid(String value) {
+        try {
+            return UUID.fromString(value).toString().equalsIgnoreCase(value);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }
