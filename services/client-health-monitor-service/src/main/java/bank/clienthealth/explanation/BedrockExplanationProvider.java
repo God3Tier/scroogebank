@@ -42,9 +42,16 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
         if (input.length() > properties.maxInputCharacters()) {
             throw new ProviderException("INPUT_TOO_LONG", 0);
         }
+        final ConverseRequest providerRequest;
+        try {
+            providerRequest = converseRequest(input);
+        } catch (RuntimeException invalid) {
+            throw new ProviderException("INPUT_INVALID", 0);
+        }
         for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
+            long started = System.nanoTime();
             try {
-                ConverseResponse response = client.converse(converseRequest(input));
+                ConverseResponse response = client.converse(providerRequest);
                 String output = response.output().message().content().stream()
                         .map(ContentBlock::text).filter(java.util.Objects::nonNull)
                         .collect(java.util.stream.Collectors.joining());
@@ -54,12 +61,22 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
                         ? 0 : response.usage().outputTokens();
                 long latency = response.metrics() == null || response.metrics().latencyMs() == null
                         ? 0 : response.metrics().latencyMs();
+                ExplanationResult result;
+                try {
+                    result = validator.validate(output, request, properties.modelId());
+                } catch (ExplanationSafetyValidator.UnsafeExplanationException unsafe) {
+                    metrics.record(new Event(Type.PROVIDER_FAILURE, "INVALID_OUTPUT", properties.modelId(),
+                            attempt, in, out, latency, estimatedCost(in, out)));
+                    throw unsafe;
+                }
                 metrics.record(new Event(Type.MODEL_CALL, response.stopReasonAsString(), properties.modelId(),
                         attempt, in, out, latency, estimatedCost(in, out)));
-                return validator.validate(output, request, properties.modelId());
+                return result;
             } catch (ExplanationSafetyValidator.UnsafeExplanationException unsafe) {
                 throw unsafe;
             } catch (RuntimeException failure) {
+                metrics.record(new Event(Type.PROVIDER_FAILURE, code(failure), properties.modelId(),
+                        attempt, 0, 0, elapsedMillis(started), null));
                 boolean retryable = retryable(failure);
                 if (!retryable || attempt == properties.maxAttempts()) {
                     throw new ProviderException(code(failure), attempt);
@@ -88,6 +105,10 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
         return properties.inputCostPerMillionTokens().multiply(BigDecimal.valueOf(input))
                 .add(properties.outputCostPerMillionTokens().multiply(BigDecimal.valueOf(output)))
                 .divide(BigDecimal.valueOf(1_000_000), 10, RoundingMode.HALF_UP);
+    }
+
+    private static long elapsedMillis(long started) {
+        return Math.max(0, (System.nanoTime() - started) / 1_000_000);
     }
 
     private static boolean retryable(RuntimeException failure) {

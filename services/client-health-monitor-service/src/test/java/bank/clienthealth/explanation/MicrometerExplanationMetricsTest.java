@@ -10,14 +10,18 @@ import org.junit.jupiter.api.Test;
 
 class MicrometerExplanationMetricsTest {
     @Test
-    void recordsSuccessfulAttemptsTokensLatencyAndCostWithoutModelTag() {
+    void recordsEachAttemptOnceUnderItsActualOutcome() {
         var registry = new SimpleMeterRegistry();
         var metrics = new MicrometerExplanationMetrics(registry);
+        metrics.record(new Event(Type.PROVIDER_FAILURE, "MODEL_THROTTLED", "private-model-id", 1,
+                0, 0, 10, null));
         metrics.record(new Event(Type.MODEL_CALL, "end_turn", "private-model-id", 2,
                 11, 7, 25, new BigDecimal("0.0004")));
 
         assertThat(registry.get("client_health_ai_calls_total")
-                .tags("outcome", "success", "source", "bedrock").counter().count()).isEqualTo(2);
+                .tags("outcome", "success", "source", "bedrock").counter().count()).isEqualTo(1);
+        assertThat(registry.get("client_health_ai_calls_total")
+                .tags("outcome", "throttled", "source", "bedrock").counter().count()).isEqualTo(1);
         assertThat(registry.get("client_health_ai_input_tokens_total").counter().count()).isEqualTo(11);
         assertThat(registry.get("client_health_ai_output_tokens_total").counter().count()).isEqualTo(7);
         assertThat(registry.get("client_health_ai_estimated_cost_usd").counter().count()).isEqualTo(0.0004);

@@ -1,10 +1,11 @@
 package bank.clienthealth.metrics;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /** Low-cardinality operational metrics boundary for Client Health. */
 public interface ClientHealthMetrics {
-    void analysis(AnalysisOutcome outcome, FailureStage stage, Duration duration, Duration watermarkAge);
+    void analysis(AnalysisOutcome outcome, FailureStage stage, Duration duration, Instant watermark);
     void replay(ReplayOutcome outcome, int pages, int transactions, int rejected, Duration duration);
     void ruleEvaluation(Rule rule, RuleOutcome outcome, Severity severity);
     void ruleSignal(Rule rule, Severity severity);
@@ -31,7 +32,7 @@ public interface ClientHealthMetrics {
 
     enum NoOp implements ClientHealthMetrics {
         INSTANCE;
-        public void analysis(AnalysisOutcome o, FailureStage s, Duration d, Duration w) { }
+        public void analysis(AnalysisOutcome o, FailureStage s, Duration d, Instant w) { }
         public void replay(ReplayOutcome o, int p, int t, int r, Duration d) { }
         public void ruleEvaluation(Rule r, RuleOutcome o, Severity s) { }
         public void ruleSignal(Rule r, Severity s) { }

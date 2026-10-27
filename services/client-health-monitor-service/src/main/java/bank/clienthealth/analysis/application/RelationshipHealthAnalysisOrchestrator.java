@@ -101,9 +101,9 @@ public final class RelationshipHealthAnalysisOrchestrator {
                 case ALREADY_COMPLETED -> AnalysisOutcome.ALREADY_COMPLETED;
                 case LEASE_HELD -> AnalysisOutcome.LEASE_HELD;
             };
-            Duration age = result.status() == RunStatus.LEASE_HELD
-                    ? null : Duration.between(cutoff, clock.instant());
-            metrics.analysis(outcome, FailureStage.NONE, elapsed(started), age);
+            Instant successfulWatermark = result.status() == RunStatus.LEASE_HELD
+                    ? null : cutoff;
+            metrics.analysis(outcome, FailureStage.NONE, elapsed(started), successfulWatermark);
             return result;
         } catch (AnalysisRunException failure) {
             metrics.analysis(AnalysisOutcome.FAILED, stage(failure.category()), elapsed(started), null);

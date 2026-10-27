@@ -26,7 +26,7 @@ public final class MicrometerExplanationMetrics implements ExplanationMetricsPor
 
     private void modelCall(Event event) {
         counter("client_health_ai_calls_total", "outcome", "success", "source", "bedrock")
-                .increment(Math.max(1, event.attempt()));
+                .increment();
         Timer.builder("client_health_ai_latency_seconds").tag("outcome", "success")
                 .register(registry).record(Duration.ofMillis(Math.max(0, event.latencyMillis())));
         counter("client_health_ai_input_tokens_total", "source", "bedrock").increment(event.inputTokens());
@@ -40,8 +40,10 @@ public final class MicrometerExplanationMetrics implements ExplanationMetricsPor
     private void providerFailure(Event event) {
         String outcome = providerOutcome(event.reason());
         counter("client_health_ai_calls_total", "outcome", outcome, "source", "bedrock")
-                .increment(Math.max(1, event.attempt()));
+                .increment();
         counter("client_health_ai_provider_failures_total", "outcome", outcome).increment();
+        Timer.builder("client_health_ai_latency_seconds").tag("outcome", outcome)
+                .register(registry).record(Duration.ofMillis(Math.max(0, event.latencyMillis())));
     }
 
     private Counter counter(String name, String... tags) {

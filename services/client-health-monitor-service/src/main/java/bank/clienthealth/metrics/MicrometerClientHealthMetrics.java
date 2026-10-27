@@ -4,7 +4,9 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -12,20 +14,26 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class MicrometerClientHealthMetrics implements ClientHealthMetrics {
     private static final String RULESET = "relationship-health-v1";
     private final MeterRegistry registry;
-    private final AtomicReference<Double> watermarkAge = new AtomicReference<>(0.0);
+    private final Clock clock;
+    private final AtomicReference<Instant> watermark = new AtomicReference<>();
 
     public MicrometerClientHealthMetrics(MeterRegistry registry) {
+        this(registry, Clock.systemUTC());
+    }
+
+    MicrometerClientHealthMetrics(MeterRegistry registry, Clock clock) {
         this.registry = registry;
-        Gauge.builder("client_health_analysis_watermark_age_seconds", watermarkAge, AtomicReference::get)
+        this.clock = clock;
+        Gauge.builder("client_health_analysis_watermark_age_seconds", watermark, this::watermarkAgeSeconds)
                 .register(registry);
     }
 
     @Override
-    public void analysis(AnalysisOutcome outcome, FailureStage stage, Duration duration, Duration age) {
+    public void analysis(AnalysisOutcome outcome, FailureStage stage, Duration duration, Instant successfulWatermark) {
         counter("client_health_analysis_runs_total", "outcome", tag(outcome), "failure_stage", tag(stage)).increment();
         Timer.builder("client_health_analysis_duration_seconds")
                 .tag("outcome", tag(outcome)).register(registry).record(duration);
-        if (age != null) watermarkAge.set(Math.max(0.0, age.toMillis() / 1000.0));
+        if (successfulWatermark != null) watermark.set(successfulWatermark);
     }
 
     @Override
@@ -74,6 +82,12 @@ public final class MicrometerClientHealthMetrics implements ClientHealthMetrics 
 
     private Counter counter(String name, String... tags) {
         return Counter.builder(name).tags(tags).register(registry);
+    }
+
+    private double watermarkAgeSeconds(AtomicReference<Instant> reference) {
+        Instant value = reference.get();
+        if (value == null) return Double.NaN;
+        return Math.max(0.0, Duration.between(value, clock.instant()).toMillis() / 1000.0);
     }
 
     private static String tag(Enum<?> value) {

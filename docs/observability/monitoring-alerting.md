@@ -21,6 +21,12 @@ Custom Client Health metrics are:
 | AI | `client_health_ai_calls_total`, `client_health_ai_fallback_total`, `client_health_ai_validation_rejected_total`, `client_health_ai_provider_failures_total`, `client_health_ai_latency_seconds`, `client_health_ai_input_tokens_total`, `client_health_ai_output_tokens_total`, `client_health_ai_estimated_cost_usd` | `outcome`, `source`, `reason` |
 | Audit | `client_health_audit_events_total`, `client_health_audit_backlog`, `client_health_audit_oldest_age_seconds` | `outcome`, `failure` |
 
+The watermark-age gauge calculates the current age from the last successful
+analysis watermark whenever it is sampled. Failed runs do not reset or freeze
+that age. AI call counters record each actual Bedrock attempt once under its
+own outcome; validation rejected before the provider call records no Bedrock
+attempt.
+
 Spring supplies `http.server.requests`; no custom URI or entity labels are
 added. Metrics must never contain client, account, task, transaction, finding,
 Agent or correlation identifiers, raw URLs, exception messages, prompt/model
