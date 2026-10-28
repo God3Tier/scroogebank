@@ -1196,6 +1196,22 @@
   suite completed 129 tests with no failures: 106 passed and 23
   Docker-dependent tests were skipped; Java 25 CI with Docker remains required.
 
+## 2026-10-27 — Client Health SF09 metrics and health
+
+- Human owner: Swayam; reviewer: Garvit; later infrastructure review: Neo.
+- Tool: OpenAI Codex.
+- Use: add bounded Micrometer instrumentation across Client Health processing,
+  anonymous liveness/database readiness probes, commit-aware audit metrics,
+  backlog gauges and operational documentation.
+- Human verification required: Java 25 Docker CI must execute PostgreSQL
+  readiness and repository tests; RH-SF11 must review CloudWatch export, alarm
+  thresholds, SNS ownership, IAM and cost before deployment.
+- Data: repository-owned synthetic opaque identifiers only. No credentials,
+  real client data, live AWS calls, Bedrock calls, SQS calls or external services
+  were used.
+- Verification: SimpleMeterRegistry unit tests, Spring security/health tests,
+  PostgreSQL rollback/recovery tests and the complete Client Health Maven suite.
+
 ## 2026-10-27 — Client Health SF10 API-backed UI
 
 - Human owner: Garvit; shared frontend owner review remains required.

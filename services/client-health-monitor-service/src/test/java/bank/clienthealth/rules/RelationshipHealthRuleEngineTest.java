@@ -29,6 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
 
 class RelationshipHealthRuleEngineTest {
     private static final Instant HISTORY_START = Instant.parse("2026-04-01T00:00:00Z");
@@ -40,6 +42,9 @@ class RelationshipHealthRuleEngineTest {
 
     @Test
     void detectsThreeSyntheticSignalsAndNoHealthyControlSignal() {
+        var registry = new SimpleMeterRegistry();
+        var instrumentedEngine = new RelationshipHealthRuleEngine(
+                RelationshipHealthRuleset.v1(), new MicrometerClientHealthMetrics(registry));
         var repository = new InMemoryActivityProjectionRepository();
         var replay = new TransactionReplayService(
                 SyntheticTransactionReplaySource.sixMonthScenario(), 10, 10, 100)
@@ -48,7 +53,7 @@ class RelationshipHealthRuleEngineTest {
         BaselineResult baseline = new ActivityBaselineService(repository)
                 .calculate(LocalDate.of(2026, 10, 1));
 
-        var evaluation = engine.evaluate(baseline);
+        var evaluation = instrumentedEngine.evaluate(baseline);
 
         assertEquals("relationship-health-v1", evaluation.rulesetVersion());
         assertEquals(3, evaluation.outcomes().size());
@@ -78,6 +83,11 @@ class RelationshipHealthRuleEngineTest {
         assertEquals(new BigDecimal("2000.00"), outflowEvidence.totalDeposits());
         assertEquals(new BigDecimal("6000.00"), outflowEvidence.totalWithdrawals());
         assertEquals(new BigDecimal("-4000.00"), outflowEvidence.netFlow());
+        assertEquals(3, registry.get("client_health_rule_signals_total").counters().stream()
+                .mapToDouble(counter -> counter.count()).sum());
+        assertTrue(registry.get("client_health_rule_evaluations_total").counters().stream()
+                .flatMap(counter -> counter.getId().getTags().stream())
+                .noneMatch(tag -> tag.getValue().startsWith("client-")));
         assertEquals(evaluation, engine.evaluate(baseline));
     }
 

@@ -14,6 +14,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
+import bank.clienthealth.metrics.ClientHealthMetrics;
+import io.micrometer.core.instrument.MeterRegistry;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -25,11 +27,18 @@ public class AuditDeliveryConfiguration {
     JdbcAuditOutboxRepository auditOutboxRepository(
             JdbcTemplate jdbc,
             PlatformTransactionManager transactionManager,
-            ObjectMapper json
+            ObjectMapper json,
+            ClientHealthMetrics metrics
     ) {
         return new JdbcAuditOutboxRepository(
                 jdbc, new TransactionTemplate(transactionManager), json,
-                () -> UUID.randomUUID().toString());
+                () -> UUID.randomUUID().toString(), metrics);
+    }
+
+    @Bean
+    AuditBacklogMetrics auditBacklogMetrics(
+            JdbcAuditOutboxRepository repository, Clock clock, MeterRegistry registry) {
+        return new AuditBacklogMetrics(repository, clock, registry);
     }
 
     @Bean(destroyMethod = "close")
@@ -67,9 +76,10 @@ public class AuditDeliveryConfiguration {
             havingValue = "true")
     AuditOutboxRelay auditOutboxRelay(
             JdbcAuditOutboxRepository repository,
-            SqsAuditDeliveryGateway gateway
+            SqsAuditDeliveryGateway gateway,
+            ClientHealthMetrics metrics
     ) {
-        return new AuditOutboxRelay(repository, gateway);
+        return new AuditOutboxRelay(repository, gateway, metrics);
     }
 
     @Bean

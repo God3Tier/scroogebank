@@ -11,6 +11,11 @@ import bank.clienthealth.task.port.ClientAssignmentPort;
 import bank.clienthealth.task.port.DispositionPolicy;
 import bank.clienthealth.task.port.TaskRepository;
 import bank.clienthealth.task.port.TaskRepository.ProcessedFinding;
+import bank.clienthealth.metrics.ClientHealthMetrics;
+import bank.clienthealth.metrics.ClientHealthMetrics.TaskOutcome;
+import bank.clienthealth.metrics.ClientHealthMetrics.TaskTransition;
+import bank.clienthealth.task.domain.RelationshipTask.OptimisticLockException;
+import bank.clienthealth.task.domain.RelationshipTask.TaskAccessException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,6 +36,7 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
     private final DispositionPolicy dispositionPolicy;
     private final Clock clock;
     private final Supplier<String> taskIds;
+    private final ClientHealthMetrics metrics;
 
     public RelationshipTaskService(
             TaskRepository repository,
@@ -39,15 +45,33 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             Clock clock,
             Supplier<String> taskIds
     ) {
+        this(repository, assignments, dispositionPolicy, clock, taskIds, ClientHealthMetrics.noOp());
+    }
+
+    public RelationshipTaskService(
+            TaskRepository repository, ClientAssignmentPort assignments,
+            DispositionPolicy dispositionPolicy, Clock clock, Supplier<String> taskIds,
+            ClientHealthMetrics metrics
+    ) {
         this.repository = Objects.requireNonNull(repository);
         this.assignments = Objects.requireNonNull(assignments);
         this.dispositionPolicy = Objects.requireNonNull(dispositionPolicy);
         this.clock = Objects.requireNonNull(clock);
         this.taskIds = Objects.requireNonNull(taskIds);
+        this.metrics = Objects.requireNonNull(metrics);
     }
 
     @Override
     public TaskUpsertResult upsertFinding(ClientHealthFinding finding) {
+        try {
+            return handleFinding(finding);
+        } catch (TaskRepository.ConflictException conflict) {
+            metrics.taskConflict();
+            throw conflict;
+        }
+    }
+
+    private TaskUpsertResult handleFinding(ClientHealthFinding finding) {
         Objects.requireNonNull(finding, "finding is required");
         TaskUpsertResult replay = retry(() -> repository.inTransaction(session -> session
                 .findProcessedFinding(finding.findingId())
@@ -57,9 +81,9 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
 
         AssignmentSnapshot assignment = assignments.resolve(finding.clientId());
         validateAssignment(finding.clientId(), assignment);
-        return retry(() -> repository.inTransaction(session -> {
+        Handled handled = retry(() -> repository.inTransaction(session -> {
             var processed = session.findProcessedFinding(finding.findingId());
-            if (processed.isPresent()) return replay(processed.get(), finding);
+            if (processed.isPresent()) return new Handled(replay(processed.get(), finding), false);
 
             finding.signals().forEach(signal -> session.enqueueAudit(
                     RelationshipHealthAuditEventFactory.signalDetected(finding, signal)));
@@ -117,29 +141,45 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
                         finding, result.outcome()));
             }
             session.saveProcessedFinding(new ProcessedFinding(finding, result, now));
-            return result;
+            return new Handled(result, true);
         }));
+        if (handled.newlyProcessed()) metrics.taskOutcome(taskOutcome(handled.result().outcome()));
+        return handled.result();
     }
 
     public RelationshipTask accept(String taskId, long expectedVersion, String agent, String correlationId) {
-        return update(taskId, expectedVersion,
-                task -> task.accept(expectedVersion, agent, correlationId, clock.instant()));
+        return transition(TaskTransition.ACCEPT, () -> update(taskId, expectedVersion,
+                task -> task.accept(expectedVersion, agent, correlationId, clock.instant())));
     }
 
     public RelationshipTask complete(
             String taskId, long expectedVersion, String agent, String correlationId, String outcomeCode, String note
     ) {
         dispositionPolicy.validate(outcomeCode, note);
-        return update(taskId, expectedVersion,
-                task -> task.complete(expectedVersion, agent, correlationId, clock.instant(), outcomeCode, note));
+        return transition(TaskTransition.COMPLETE, () -> update(taskId, expectedVersion,
+                task -> task.complete(expectedVersion, agent, correlationId, clock.instant(), outcomeCode, note)));
     }
 
     public RelationshipTask dismiss(
             String taskId, long expectedVersion, String agent, String correlationId, String reasonCode, String note
     ) {
         dispositionPolicy.validate(reasonCode, note);
-        return update(taskId, expectedVersion,
-                task -> task.dismiss(expectedVersion, agent, correlationId, clock.instant(), reasonCode, note));
+        return transition(TaskTransition.DISMISS, () -> update(taskId, expectedVersion,
+                task -> task.dismiss(expectedVersion, agent, correlationId, clock.instant(), reasonCode, note)));
+    }
+
+    private RelationshipTask transition(TaskTransition transition, Supplier<RelationshipTask> operation) {
+        try {
+            RelationshipTask task = operation.get();
+            metrics.taskTransition(transition);
+            return task;
+        } catch (TaskAccessException denied) {
+            metrics.authorizationDenied();
+            throw denied;
+        } catch (OptimisticLockException | TaskRepository.ConflictException conflict) {
+            metrics.taskConflict();
+            throw conflict;
+        }
     }
 
     private RelationshipTask update(
@@ -187,6 +227,18 @@ public final class RelationshipTaskService implements RelationshipTaskPort {
             }
         }
     }
+
+    private static TaskOutcome taskOutcome(Outcome outcome) {
+        return switch (outcome) {
+            case CREATED -> TaskOutcome.CREATED;
+            case EVIDENCE_ATTACHED -> TaskOutcome.EVIDENCE_ATTACHED;
+            case DUPLICATE -> TaskOutcome.DUPLICATE;
+            case SUPPRESSED_COOLDOWN -> TaskOutcome.SUPPRESSED_COOLDOWN;
+            case SUPPRESSED_DAILY_CAP -> TaskOutcome.SUPPRESSED_DAILY_CAP;
+        };
+    }
+
+    private record Handled(TaskUpsertResult result, boolean newlyProcessed) { }
 
     public static class IdempotencyConflictException extends RuntimeException {
         public IdempotencyConflictException(String findingId) { super("Finding ID reused: " + findingId); }

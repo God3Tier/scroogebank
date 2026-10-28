@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
 
 class TransactionReplayServiceTest {
     private static final Instant FROM = Instant.parse("2026-04-01T00:00:00Z");
@@ -42,6 +44,29 @@ class TransactionReplayServiceTest {
         assertEquals(List.of(first, second), result.transactions());
         assertEquals(2, result.pagesFetched());
         assertEquals(2, calls.get());
+    }
+
+    @Test
+    void recordsCompletedAndInvalidReplayCountsOnce() {
+        var registry = new SimpleMeterRegistry();
+        var metrics = new MicrometerClientHealthMetrics(registry);
+        var successful = new TransactionReplayService(
+                request -> page(List.of(transaction("txn-1", FROM.plusSeconds(60), Status.COMPLETED)), null),
+                100, 10, 1_000, metrics);
+        successful.replay(FROM, TO);
+        var invalid = new TransactionReplayService(
+                request -> page(List.of(transaction("txn-2", TO, Status.COMPLETED)), null),
+                100, 10, 1_000, metrics);
+        assertThrows(IncompleteReplayException.class, () -> invalid.replay(FROM, TO));
+
+        assertEquals(1, registry.get("client_health_replay_runs_total")
+                .tag("outcome", "completed").counter().count());
+        assertEquals(1, registry.get("client_health_replay_runs_total")
+                .tag("outcome", "invalid_page").counter().count());
+        assertEquals(1, registry.get("client_health_replay_transactions_total")
+                .tag("outcome", "completed").counter().count());
+        assertEquals(1, registry.get("client_health_replay_rejected_total")
+                .tag("outcome", "invalid_page").counter().count());
     }
 
     @Test

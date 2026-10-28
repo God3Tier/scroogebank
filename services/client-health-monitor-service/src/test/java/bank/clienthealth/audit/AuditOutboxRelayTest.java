@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
 
 class AuditOutboxRelayTest {
     private static final Instant NOW = Instant.parse("2026-10-21T10:00:00Z");
@@ -35,7 +37,9 @@ class AuditOutboxRelayTest {
             }
             sent.add(event.eventId());
         };
-        var relay = new AuditOutboxRelay(repository, gateway);
+        var registry = new SimpleMeterRegistry();
+        var relay = new AuditOutboxRelay(
+                repository, gateway, new MicrometerClientHealthMetrics(registry));
 
         var initial = relay.relay(NOW, 10, Duration.ofSeconds(30));
 
@@ -51,6 +55,10 @@ class AuditOutboxRelayTest {
         assertEquals(new AuditOutboxRelay.RelayResult(1, 1, 0), retried);
         assertEquals(List.of(second.eventId(), first.eventId()), sent);
         assertEquals(0, repository.size());
+        assertEquals(2, registry.get("client_health_audit_events_total")
+                .tag("outcome", "delivered").counter().count());
+        assertEquals(1, registry.get("client_health_audit_events_total")
+                .tags("outcome", "released", "failure", "unavailable").counter().count());
     }
 
     @Test

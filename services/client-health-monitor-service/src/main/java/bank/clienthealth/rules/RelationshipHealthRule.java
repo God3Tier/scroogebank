@@ -5,5 +5,9 @@ import bank.clienthealth.activity.application.ActivityBaselineService.ClientBase
 import java.util.List;
 
 interface RelationshipHealthRule {
-    List<DetectedSignal> evaluate(BaselineResult baseline, ClientBaseline client);
+    Evaluation evaluate(BaselineResult baseline, ClientBaseline client);
+
+    record Evaluation(List<DetectedSignal> signals, boolean sufficientInput) {
+        public Evaluation { signals = List.copyOf(signals); }
+    }
 }

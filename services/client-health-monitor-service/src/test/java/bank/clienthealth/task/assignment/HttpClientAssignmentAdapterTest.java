@@ -18,10 +18,13 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
 
 class HttpClientAssignmentAdapterTest {
     private MockRestServiceServer server;
     private HttpClientAssignmentAdapter adapter;
+    private SimpleMeterRegistry registry;
 
     @BeforeEach
     void setUp() {
@@ -31,7 +34,9 @@ class HttpClientAssignmentAdapterTest {
         var tokens = new ClientCredentialsTokenProvider(restClient,
                 Clock.fixed(Instant.parse("2026-10-23T00:00:00Z"), ZoneOffset.UTC),
                 "https://idp.test/oauth2/token", "health-client", "secret", "clients.assignment.read");
-        adapter = new HttpClientAssignmentAdapter(restClient, tokens, "https://clients.test");
+        registry = new SimpleMeterRegistry();
+        adapter = new HttpClientAssignmentAdapter(restClient, tokens, "https://clients.test",
+                new MicrometerClientHealthMetrics(registry));
     }
 
     @Test
@@ -50,6 +55,8 @@ class HttpClientAssignmentAdapterTest {
 
         assertThat(assignment.agentSubject()).isEqualTo("agent-new");
         assertThat(assignment.assignmentVersion()).isEqualTo(7);
+        assertThat(registry.get("client_health_assignment_requests_total")
+                .tag("outcome", "success").counter().count()).isEqualTo(1);
         server.verify();
     }
 
@@ -61,6 +68,8 @@ class HttpClientAssignmentAdapterTest {
 
         assertThatThrownBy(() -> adapter.resolve("missing"))
                 .isInstanceOf(AssignmentRejectedException.class);
+        assertThat(registry.get("client_health_assignment_requests_total")
+                .tag("outcome", "not_found").counter().count()).isEqualTo(1);
         server.verify();
     }
 

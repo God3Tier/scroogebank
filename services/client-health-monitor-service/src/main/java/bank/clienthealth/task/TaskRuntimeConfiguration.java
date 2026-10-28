@@ -22,6 +22,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
+import bank.clienthealth.metrics.ClientHealthMetrics;
+import bank.clienthealth.audit.JdbcAuditOutboxRepository;
 
 @Configuration(proxyBeanMethods = false)
 public class TaskRuntimeConfiguration {
@@ -52,18 +54,21 @@ public class TaskRuntimeConfiguration {
     ClientAssignmentPort clientAssignmentPort(
             RestClient clientAssignmentRestClient,
             ClientCredentialsTokenProvider clientAssignmentTokens,
-            @Value("${client-health.assignment.base-url:}") String baseUrl
+            @Value("${client-health.assignment.base-url:}") String baseUrl,
+            ClientHealthMetrics metrics
     ) {
-        return new HttpClientAssignmentAdapter(clientAssignmentRestClient, clientAssignmentTokens, baseUrl);
+        return new HttpClientAssignmentAdapter(clientAssignmentRestClient, clientAssignmentTokens, baseUrl, metrics);
     }
 
     @Bean DispositionPolicy dispositionPolicy() { return new BoundedDispositionPolicy(); }
 
     @Bean
     JdbcRelationshipTaskRepository relationshipTaskRepository(
-            JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json
+            JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper json,
+            JdbcAuditOutboxRepository auditOutbox
     ) {
-        return new JdbcRelationshipTaskRepository(jdbc, new TransactionTemplate(transactionManager), json);
+        return new JdbcRelationshipTaskRepository(
+                jdbc, new TransactionTemplate(transactionManager), json, auditOutbox);
     }
 
     @Bean
@@ -71,17 +76,19 @@ public class TaskRuntimeConfiguration {
             JdbcRelationshipTaskRepository repository,
             ClientAssignmentPort assignments,
             DispositionPolicy dispositionPolicy,
-            Clock taskClock
+            Clock taskClock,
+            ClientHealthMetrics metrics
     ) {
         return new RelationshipTaskService(repository, assignments, dispositionPolicy,
-                taskClock, () -> UUID.randomUUID().toString());
+                taskClock, () -> UUID.randomUUID().toString(), metrics);
     }
 
     @Bean
     RelationshipTaskQueryService relationshipTaskQueryService(
             JdbcRelationshipTaskRepository repository, ClientAssignmentPort assignments,
-            ExplanationRepository explanations
+            ExplanationRepository explanations,
+            ClientHealthMetrics metrics
     ) {
-        return new RelationshipTaskQueryService(repository, assignments, explanations);
+        return new RelationshipTaskQueryService(repository, assignments, explanations, metrics);
     }
 }

@@ -22,8 +22,9 @@ final class RecurringCreditInterruptionRule implements RelationshipHealthRule {
     }
 
     @Override
-    public List<DetectedSignal> evaluate(BaselineResult baseline, ClientBaseline client) {
+    public Evaluation evaluate(BaselineResult baseline, ClientBaseline client) {
         List<DetectedSignal> signals = new ArrayList<>();
+        boolean[] sufficient = {false};
         client.accounts().forEach(account -> account.recurringCredits().forEach(series -> {
             if (series.occurrences().size() < config.minimumOccurrences()) {
                 return;
@@ -35,6 +36,7 @@ final class RecurringCreditInterruptionRule implements RelationshipHealthRule {
             if (cadenceDays <= 0 || unstableAmounts(occurrences)) {
                 return;
             }
+            sufficient[0] = true;
             int graceDays = Math.max(
                     config.minimumGraceDays(),
                     BigDecimal.valueOf(cadenceDays)
@@ -61,7 +63,7 @@ final class RecurringCreditInterruptionRule implements RelationshipHealthRule {
                     new RecurringCreditInterruptionEvidence(
                             cadenceDays, occurrences.size(), daysSinceLast)));
         }));
-        return List.copyOf(signals);
+        return new Evaluation(signals, sufficient[0]);
     }
 
     private int medianCadenceDays(List<RecurringCredit> occurrences) {

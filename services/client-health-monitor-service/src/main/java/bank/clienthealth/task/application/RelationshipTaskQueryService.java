@@ -15,22 +15,30 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import bank.clienthealth.explanation.ExplanationRepository;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 
 /** Application read service used by the SF06 HTTP adapter. */
 public final class RelationshipTaskQueryService {
     private final RelationshipTaskQueryPort queries;
     private final ClientAssignmentPort assignments;
     private final ExplanationRepository explanations;
+    private final ClientHealthMetrics metrics;
 
     public RelationshipTaskQueryService(RelationshipTaskQueryPort queries, ClientAssignmentPort assignments) {
-        this(queries, assignments, null);
+        this(queries, assignments, null, ClientHealthMetrics.noOp());
     }
 
     public RelationshipTaskQueryService(RelationshipTaskQueryPort queries, ClientAssignmentPort assignments,
             ExplanationRepository explanations) {
+        this(queries, assignments, explanations, ClientHealthMetrics.noOp());
+    }
+
+    public RelationshipTaskQueryService(RelationshipTaskQueryPort queries, ClientAssignmentPort assignments,
+            ExplanationRepository explanations, ClientHealthMetrics metrics) {
         this.queries = Objects.requireNonNull(queries);
         this.assignments = Objects.requireNonNull(assignments);
         this.explanations = explanations;
+        this.metrics = Objects.requireNonNull(metrics);
     }
 
     public Page list(Viewer viewer, TaskFilter filter) {
@@ -80,10 +88,12 @@ public final class RelationshipTaskQueryService {
             try {
                 assignment = assignments.resolve(task.clientId());
             } catch (AssignmentRejectedException rejected) {
+                metrics.authorizationDenied();
                 throw new RelationshipTaskService.TaskNotFoundException(taskId);
             }
             if (!assignment.active() || !assignment.clientId().equals(task.clientId())
                     || !assignment.agentSubject().equals(agent.subject())) {
+                metrics.authorizationDenied();
                 throw new RelationshipTaskService.TaskNotFoundException(taskId);
             }
             return task.withAssignment(assignment);

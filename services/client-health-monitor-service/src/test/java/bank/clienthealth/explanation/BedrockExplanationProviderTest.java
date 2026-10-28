@@ -69,8 +69,51 @@ class BedrockExplanationProviderTest {
 
         assertThat(safe.explain(request).source()).isEqualTo(ExplanationResult.Source.TEMPLATE_FALLBACK);
         verify(client, times(2)).converse(any(ConverseRequest.class));
+        assertThat(events).filteredOn(event -> event.type() == ExplanationMetricsPort.Type.PROVIDER_FAILURE)
+                .hasSize(2).extracting(ExplanationMetricsPort.Event::attempt).containsExactly(1, 2);
         assertThat(events).extracting(ExplanationMetricsPort.Event::type)
-                .contains(ExplanationMetricsPort.Type.PROVIDER_FAILURE, ExplanationMetricsPort.Type.FALLBACK);
+                .contains(ExplanationMetricsPort.Type.FALLBACK);
+    }
+
+    @Test
+    void recordsFailedAndSuccessfulRetryAttemptsSeparately() {
+        BedrockRuntimeClient client = Mockito.mock(BedrockRuntimeClient.class);
+        when(client.converse(any(ConverseRequest.class)))
+                .thenThrow(ThrottlingException.builder().build())
+                .thenReturn(response(VALID));
+        List<ExplanationMetricsPort.Event> events = new ArrayList<>();
+        var provider = provider(client, events);
+
+        assertThat(provider.explain(request).source()).isEqualTo(ExplanationResult.Source.BEDROCK);
+        assertThat(events).extracting(
+                ExplanationMetricsPort.Event::type,
+                ExplanationMetricsPort.Event::attempt)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                ExplanationMetricsPort.Type.PROVIDER_FAILURE, 1),
+                        org.assertj.core.groups.Tuple.tuple(
+                                ExplanationMetricsPort.Type.MODEL_CALL, 2));
+    }
+
+    @Test
+    void rejectsOversizedInputWithoutRecordingABedrockCall() {
+        BedrockRuntimeClient client = Mockito.mock(BedrockRuntimeClient.class);
+        List<ExplanationMetricsPort.Event> events = new ArrayList<>();
+        ObjectMapper mapper = new ObjectMapper();
+        var properties = new ClientHealthAiProperties(
+                true, "model-test", Duration.ofSeconds(5), 2, 10, 256, null, null);
+        var bedrock = new BedrockExplanationProvider(client, properties,
+                new ExplanationSafetyValidator(mapper), events::add, mapper);
+        var safe = new SafeExplanationProvider(properties, bedrock,
+                new TemplateExplanationProvider(), events::add);
+
+        assertThat(safe.explain(request).source()).isEqualTo(ExplanationResult.Source.TEMPLATE_FALLBACK);
+        verify(client, never()).converse(any(ConverseRequest.class));
+        assertThat(events).noneMatch(event -> event.type() == ExplanationMetricsPort.Type.MODEL_CALL
+                || event.type() == ExplanationMetricsPort.Type.PROVIDER_FAILURE);
+        assertThat(events).extracting(ExplanationMetricsPort.Event::type)
+                .containsExactly(ExplanationMetricsPort.Type.VALIDATION_REJECTION,
+                        ExplanationMetricsPort.Type.FALLBACK);
     }
 
     @Test
