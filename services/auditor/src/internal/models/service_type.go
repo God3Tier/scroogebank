@@ -19,11 +19,12 @@ const (
 	// EngagementServiceType is engagement-service: agents' calendar events,
 	// reminder and invite emails, and client follow-up drafts (ADR-0051).
 	EngagementServiceType ServiceType = "ENGAGEMENT"
+	RelationshipHealthServiceType ServiceType = "RELATIONSHIP_HEALTH_SERVICE"
 )
 
 func (s ServiceType) IsValid() bool {
 	switch s {
-	case UserManagementServiceType, CRMServiceType, TransactionServiceType, EventAlertServiceType, AuditService, DashboardServiceType, CognitoTriggersServiceType, EngagementServiceType:
+	case UserManagementServiceType, CRMServiceType, TransactionServiceType, EventAlertServiceType, AuditService, DashboardServiceType, CognitoTriggersServiceType, EngagementServiceType, RelationshipHealthServiceType:
 		return true
 	}
 
@@ -68,6 +69,8 @@ func (s ServiceType) IsValidAction(action string) bool {
 
 	case EngagementServiceType:
 		return strings.EqualFold("ENGAGEMENT", action)
+	case RelationshipHealthServiceType:
+		return strings.EqualFold("RELATIONSHIP_HEALTH", action)
 	}
 
 	return false
