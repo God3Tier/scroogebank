@@ -19,11 +19,14 @@ import bank.clienthealth.contract.ClientHealthFinding.SignalWindow;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +55,7 @@ class RelationshipTaskRuntimeIntegrationTest {
             new PostgreSQLContainer<>("postgres:17-alpine");
     private static final AtomicReference<String> CURRENT_AGENT = new AtomicReference<>("agent-old");
     private static HttpServer assignmentServer;
+    private static ExecutorService assignmentExecutor;
 
     @DynamicPropertySource
     static void runtimeProperties(DynamicPropertyRegistry properties) {
@@ -103,6 +107,7 @@ class RelationshipTaskRuntimeIntegrationTest {
     @AfterAll
     static void stopAssignmentServer() {
         if (assignmentServer != null) assignmentServer.stop(0);
+        if (assignmentExecutor != null) assignmentExecutor.shutdownNow();
     }
 
     @Test
@@ -170,6 +175,8 @@ class RelationshipTaskRuntimeIntegrationTest {
         try {
             assignmentServer = HttpServer.create(
                     new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            assignmentExecutor = Executors.newCachedThreadPool();
+            assignmentServer.setExecutor(assignmentExecutor);
             assignmentServer.createContext("/oauth2/token", exchange -> respond(exchange, """
                     {"access_token":"synthetic-token","expires_in":3600}
                     """));
@@ -192,6 +199,9 @@ class RelationshipTaskRuntimeIntegrationTest {
     }
 
     private static void respond(HttpExchange exchange, String body) throws IOException {
+        try (var requestBody = exchange.getRequestBody()) {
+            requestBody.transferTo(OutputStream.nullOutputStream());
+        }
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, bytes.length);
