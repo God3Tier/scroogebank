@@ -147,8 +147,8 @@ Spring configuration:
 | `client-health.audit.batch-size` | `CLIENT_HEALTH_AUDIT_BATCH_SIZE` | bounded relay batch, default 50 |
 | `client-health.audit.lease-seconds` | `CLIENT_HEALTH_AUDIT_LEASE_SECONDS` | delivery lease, default 60 seconds |
 | `client-health.audit.relay-delay-ms` | `CLIENT_HEALTH_AUDIT_RELAY_DELAY_MS` | scheduled relay delay, default 2000 ms |
-| `client-health.transaction-replay.endpoint` | `CLIENT_HEALTH_TRANSACTION_ENDPOINT` | full internal `GET /internal/v1/transactions` endpoint |
-| `client-health.transaction-replay.token-uri` | `CLIENT_HEALTH_TRANSACTION_TOKEN_URI` | Cognito client-credentials token endpoint |
+| `client-health.transaction-replay.endpoint` | `CLIENT_HEALTH_TRANSACTION_ENDPOINT` | full HTTPS internal `GET /internal/v1/transactions` endpoint |
+| `client-health.transaction-replay.token-uri` | `CLIENT_HEALTH_TRANSACTION_TOKEN_URI` | HTTPS Cognito client-credentials token endpoint |
 | `client-health.transaction-replay.client-id` | `CLIENT_HEALTH_TRANSACTION_CLIENT_ID` | scoped Client Health machine client |
 | `client-health.transaction-replay.client-secret` | `CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET` | secret supplied outside Git |
 | `client-health.transaction-replay.scope` | `CLIENT_HEALTH_TRANSACTION_SCOPE` | must be exactly `crm-transactions/read` |
@@ -229,17 +229,16 @@ Contract documentation and fixtures:
 
 ## Next implementation step
 
-Feature 3 owners must review ADR-0044 and provide the dedicated authenticated,
-date-bounded replay endpoint, stable synthetic source fingerprint, and six
-months of reproducible synthetic history. RH-SF01 then replaces the mock with
-the HTTP/service-token adapter and runs the same contract tests end to end,
-without reading another service's database.
+Transaction-service and the Client Health HTTP/service-token adapter implement
+the dedicated authenticated, date-bounded replay contract, stable synthetic
+source fingerprint and six-month reproducible history. Proposed ADR-0065 still
+requires transaction, Client Health and security/platform acceptance, followed
+by an end-to-end Cognito/import/read check before production enablement.
 
 Garvit's RH-SF01-SF04 stream and production SF02/SF04 persistence adapters are
-implemented. Remaining integration work includes the real Feature 3 replay
-adapter and Java 25 CI. The client-profile Contract-B provider and its scoped
-Cognito registration remain external prerequisites for live current-assignment
-authorization.
+implemented. Java 25 CI remains required. The client-profile Contract-B provider
+and its scoped Cognito registration remain external prerequisites for live
+current-assignment authorization.
 
 RH-SF08 production follow-up now needs the IAM/Terraform queue permission and
 environment wiring, the Auditor's reviewed `RELATIONSHIP_HEALTH_SERVICE`

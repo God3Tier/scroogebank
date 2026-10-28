@@ -21,6 +21,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 /** Strict HTTP consumer for the matched transaction-history contract. */
 public final class HttpTransactionReplaySource implements TransactionReplaySource {
     private static final Pattern AMOUNT = Pattern.compile("(0|[1-9][0-9]*)(\\.[0-9]{1,2})?");
+    private static final Pattern SOURCE_FINGERPRINT =
+            Pattern.compile("synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}");
     private final RestClient client;
     private final TransactionReplayTokenProvider tokens;
     private final TransactionReplayProperties properties;
@@ -73,6 +75,12 @@ public final class HttpTransactionReplaySource implements TransactionReplaySourc
         MatchedTransaction toDomain() {
             if (amount == null || !AMOUNT.matcher(amount).matches()) {
                 throw new IllegalArgumentException("Invalid amount");
+            }
+            if (sourceFingerprint != null
+                    && (sourceFingerprint.length() < 24
+                    || sourceFingerprint.length() > 64
+                    || !SOURCE_FINGERPRINT.matcher(sourceFingerprint).matches())) {
+                throw new IllegalArgumentException("Invalid source fingerprint");
             }
             return new MatchedTransaction(
                     transactionId, clientId, accountId,

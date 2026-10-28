@@ -76,6 +76,17 @@ class HttpTransactionReplaySourceTest {
     }
 
     @Test
+    void rejectsSourceFingerprintOutsideTheProviderContract() {
+        expectToken();
+        expectPage(null, page("txn-1", null).replace(
+                "synthetic-source-a1b2c3d4e5f6", "synthetic-source-1"));
+
+        assertThatThrownBy(() -> replay.replay(FROM, TO))
+                .isInstanceOf(IncompleteReplayException.class);
+        server.verify();
+    }
+
+    @Test
     void failsClosedWhenALaterPageIsUnavailable() {
         expectToken();
         expectPage(null, page("txn-1", "next-page"));
@@ -113,6 +124,18 @@ class HttpTransactionReplaySourceTest {
                 "crm-transactions/read", Duration.ZERO, Duration.ofSeconds(1), 100, 2, 200))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("timeouts");
+        assertThatThrownBy(() -> new TransactionReplayProperties(
+                URI.create("http://transactions.test/internal/v1/transactions"),
+                URI.create("https://idp.test/oauth2/token"), "client", "secret",
+                "crm-transactions/read", Duration.ofSeconds(1), Duration.ofSeconds(1), 100, 2, 200))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("HTTPS");
+        assertThatThrownBy(() -> new TransactionReplayProperties(
+                URI.create("https://transactions.test/internal/v1/transactions"),
+                URI.create("http://idp.test/oauth2/token"), "client", "secret",
+                "crm-transactions/read", Duration.ofSeconds(1), Duration.ofSeconds(1), 100, 2, 200))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("HTTPS");
     }
 
     private void expectToken() {
@@ -150,7 +173,7 @@ class HttpTransactionReplaySourceTest {
                   "transactionId":"%s","clientId":"client-1","accountId":"account-1",
                   "type":"Deposit","amount":"42.00","currency":"SGD",
                   "transactionDate":"2026-05-01T00:00:00Z","status":"Completed",
-                  "activityKind":"Automated","sourceFingerprint":"synthetic-source-1"
+                  "activityKind":"Automated","sourceFingerprint":"synthetic-source-a1b2c3d4e5f6"
                 }],"nextCursor":%s}
                 """.formatted(transactionId, cursor);
     }

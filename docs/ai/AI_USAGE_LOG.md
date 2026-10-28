@@ -1,5 +1,25 @@
 # AI usage log
 
+## 2026-10-28 — Client Health production replay adapter hardening
+
+- Human owner: Garvit; transaction and security/platform acceptance of proposed
+  ADR-0065 remains required.
+- Tool: Cursor.
+- Use: review Swayam's merged transaction replay HTTP/service-token adapter,
+  require HTTPS for the provider and Cognito token endpoints, enforce the
+  provider's bounded synthetic source-fingerprint contract, add malformed-input
+  coverage, and add an ANALYSIS-mode application-context test proving the
+  production replay source, replay service, orchestrator and one-shot runner
+  wire together.
+- Human verification required: run the real Cognito/import/read integration
+  check through the internal ALB and confirm ADR-0065 with the transaction and
+  security/platform owners before production enablement.
+- Data: repository code and synthetic provider responses only. No credentials,
+  real client data, AWS calls or external services were used.
+- Verification: eight focused replay/wiring tests passed. A clean Java 24
+  compiler-override run completed 160 tests with no failures (134 passed and 26
+  Docker-dependent tests skipped). Lint and `git diff --check` passed.
+
 ## 2026-10-28 — Client Health RH-SF11B health data plane
 
 - Human owner: Garvit; platform/Terraform review remains required.

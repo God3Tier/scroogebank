@@ -20,8 +20,8 @@ public record TransactionReplayProperties(
     static final String REQUIRED_SCOPE = "crm-transactions/read";
 
     public TransactionReplayProperties {
-        requireHttpUri(endpoint, "endpoint");
-        requireHttpUri(tokenUri, "token-uri");
+        requireHttpsUri(endpoint, "endpoint");
+        requireHttpsUri(tokenUri, "token-uri");
         if (!"/internal/v1/transactions".equals(endpoint.getPath())) {
             throw new IllegalArgumentException("Transaction replay endpoint path is invalid");
         }
@@ -40,12 +40,11 @@ public record TransactionReplayProperties(
         }
     }
 
-    private static void requireHttpUri(URI uri, String name) {
-        if (uri == null || !("http".equalsIgnoreCase(uri.getScheme())
-                || "https".equalsIgnoreCase(uri.getScheme()))
+    private static void requireHttpsUri(URI uri, String name) {
+        if (uri == null || !"https".equalsIgnoreCase(uri.getScheme())
                 || uri.getHost() == null || uri.getUserInfo() != null
                 || uri.getQuery() != null || uri.getFragment() != null) {
-            throw new IllegalArgumentException("Transaction replay " + name + " must be an HTTP(S) URI");
+            throw new IllegalArgumentException("Transaction replay " + name + " must be an HTTPS URI");
         }
     }
 
