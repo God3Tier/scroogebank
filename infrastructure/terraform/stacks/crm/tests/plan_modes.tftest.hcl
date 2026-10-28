@@ -145,7 +145,7 @@ run "prod" {
     error_message = "Without domain_name: no certificates, the internal ALB on HTTP 80 and the default CloudFront name."
   }
   assert {
-    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,transaction,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
+    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,health,transaction,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service" && join(",", tls_cert_request.service["health"].dns_names) == "client-health-monitor-service"
     error_message = "Every service behind the ALB in this stack, and the auditor, gets a project-CA certificate (INF-08)."
   }
   assert {
@@ -153,7 +153,7 @@ run "prod" {
     error_message = "dashboard-service calls user-service and transaction-service over HTTPS."
   }
   assert {
-    condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])
+    condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service, module.client_health_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])
     error_message = "Every service with a database migrates it before starting (ADR-0028 decision 3)."
   }
   assert {
@@ -162,7 +162,7 @@ run "prod" {
       local.migrations["alerts"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
       local.migrations["health"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
       length(local.migrations["clients"].environment) == 0 &&
-      alltrue([for m in [module.user_service, module.event_alert_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
+      alltrue([for m in [module.user_service, module.event_alert_service, module.client_health_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
     )
     error_message = "db-migrate reads the Java services' V<n>__ file names, and their own Flyway is off in AWS."
   }
@@ -182,13 +182,24 @@ run "prod" {
         account_service     = module.account_service
         transaction_service = module.transaction_service
         event_alert_service = module.event_alert_service
+        client_health_service = module.client_health_service
       } : alltrue([for v in values(m.app_secrets) : startswith(v, "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/${login}:")])
     ])
     error_message = "Each service connects with its own login, never its database's master user (ADR-0028 decision 3)."
   }
   assert {
-    condition     = contains(keys(aws_ecr_repository.this), "db-migrate")
-    error_message = "The db-migrate image has its own repository."
+    condition     = contains(keys(aws_ecr_repository.this), "db-migrate") && contains(keys(aws_ecr_repository.this), "client-health-monitor-service")
+    error_message = "The db-migrate and Client Health images have their own repositories."
+  }
+  assert {
+    condition = (
+      module.client_health_service.app_environment["CLIENT_HEALTH_MODE"] == "API" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "true" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_QUEUE_URL"] == aws_sqs_queue.audit.url &&
+      !contains(keys(module.client_health_service.app_environment), "CLIENT_HEALTH_ASSIGNMENT_BASE_URL")
+    )
+    error_message = "SF11C deploys API mode with audit delivery and AI disabled, while assignment OAuth remains deferred to SF11D."
   }
 }
 

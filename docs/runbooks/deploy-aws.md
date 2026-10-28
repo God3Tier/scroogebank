@@ -171,6 +171,7 @@ build() { docker build --platform linux/amd64 -t "crm/$1:$TAG" -f "$2" "$3"; }
 build user-service        services/user-service/Dockerfile        .
 build dashboard-service   services/dashboard-service/Dockerfile   .
 build event-alert-service services/event-alert-service/Dockerfile .
+build client-health-monitor-service services/client-health-monitor-service/Dockerfile .
 build engagement-service  services/engagement-service/Dockerfile  .
 build auditor             services/auditor/Dockerfile             .
 build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
@@ -179,7 +180,7 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 build db-migrate          infrastructure/db-migrate/Dockerfile    .
 ```
 
-`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's, engagement-service's and Client Health's migrations reach AWS only through it. RH-SF11B packages Client Health at `/flyway/sql/health`; RH-SF11C still has to attach `local.migrations["health"]` to its ECS task before those migrations run in AWS.
+`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's, engagement-service's and Client Health's migrations reach AWS only through it. Client Health reads `/flyway/sql/health` before its API container starts.
 
 ## 3. Create the CRM stack, stopped
 
@@ -327,7 +328,7 @@ repo() { printf '%s' "$REPOS" | python -c "import json,sys; print(json.load(sys.
 aws ecr get-login-password | docker login --username AWS --password-stdin "$(repo auditor | cut -d/ -f1)"
 
 push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
-for s in user-service event-alert-service auditor client-service account-service transaction-service db-migrate; do push "$s"; done
+for s in user-service event-alert-service client-health-monitor-service auditor client-service account-service transaction-service db-migrate; do push "$s"; done
 ```
 
 In the same terminal, dashboard-service's image, once step 4 has applied:
@@ -356,7 +357,12 @@ terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-f
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars     # the same
 ```
 
-The databases need nothing by hand. Each deployed service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate. Until RH-SF11C deploys the Client Health task, `health-db` is created empty and its packaged migrations/login callback are not invoked.
+The databases need nothing by hand. Each deployed service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate; the Client Health API task similarly migrates `health-db` and creates `client_health_service` before starting.
+
+RH-SF11C deploys Client Health as an API skeleton with AI disabled. Its
+liveness/readiness probes and authenticated routes start, but task reads and
+mutations that resolve the current client assignment remain unavailable until
+RH-SF11D provisions the accepted assignment provider and scoped OAuth settings.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 

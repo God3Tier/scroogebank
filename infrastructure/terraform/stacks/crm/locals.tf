@@ -68,6 +68,7 @@ locals {
     "auditor",
     "transaction-service",
     "event-alert-service",
+    "client-health-monitor-service",
     "db-migrate",
   ]
 

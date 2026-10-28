@@ -27,9 +27,9 @@ Terraform creates each RDS instance with an empty database, and each service own
     db-migrate uses Spring Boot's `__` separator, so its history matches what
     the apps already wrote.
   - RH-SF11B packages Client Health's migrations and login callback at
-    `/flyway/sql/health` and defines `local.migrations["health"]`; RH-SF11C must
-    attach that init container to the future Client Health ECS service before
-    the schema is deployed.
+    `/flyway/sql/health` and defines `local.migrations["health"]`; RH-SF11C
+    attaches that init container to the Client Health API service so the schema
+    and least-privilege login are created before the API starts.
 - **Locally, the same image applies the Go services' migrations to each one's own Compose database**, so a local database behaves as a deployed one:
   - client-service, account-service and the auditor run it through `make run` or `make migrate`;
   - the SFTP stack's `db-migrate` service runs it before `receiver-api` starts, and `make db-up` runs it too.

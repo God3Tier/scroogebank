@@ -1,5 +1,26 @@
 # AI usage log
 
+## 2026-10-28 — Client Health RH-SF11C API deployment definition
+
+- Human owner: Garvit; platform/Terraform review remains required.
+- Tool: Cursor.
+- Use: define the PR-ready Client Health API deployment in the shared CRM stack:
+  immutable ECR repository, 0.5-vCPU/1-GiB ECS API service, `health-db`
+  migration/login init container, HTTPS port 8087 certificate, readiness health
+  check, `/api/relationship-health/*` ALB routing, audit-outbox SQS permission,
+  mocked-plan assertions, and synchronized deployment/cost documentation on
+  `task/client-health-monitor/api-deployment`.
+- Human verification required: run Terraform formatting, validation and mocked
+  provider tests; build and inspect the application/db-migrate images; and
+  review the shared ALB, IAM, database and cost changes before merge. Assignment
+  provider/OAuth wiring and the scheduled ANALYSIS task remain RH-SF11D.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` and IDE lint pass. A clean Java 24
+  compiler-override run completed 160 tests with no failures (134 passed and 26
+  Docker-dependent tests skipped). Terraform and Docker remain unavailable
+  locally, so no Terraform plan, image build or live apply is claimed.
+
 ## 2026-10-28 — Client Health production replay adapter hardening
 
 - Human owner: Garvit; transaction and security/platform acceptance of proposed

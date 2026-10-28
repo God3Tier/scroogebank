@@ -1,7 +1,8 @@
 # The ECS services (system-overview "Components"). Settings follow each
 # service's README and configuration on dev; where the code and the target
-# design differ, ADR-0042 records it. The health monitor is not deployable yet,
-# and the alert worker and its Tokyo search belong to EDA-D1-02
+# design differ, ADR-0042 records it. The Client Health API is deployed here;
+# its scheduled analysis task remains RH-SF11D. The alert worker and its Tokyo
+# search belong to EDA-D1-02
 # (docs/feature-plans/infrastructure_plan.md).
 
 locals {
@@ -640,6 +641,73 @@ module "event_alert_service" {
     protocol          = "HTTPS"
     health_check_path = "/actuator/health"
     rules             = [{ priority = 60, paths = ["/api/alerts", "/api/alerts/*"] }]
+  })
+
+  min_tasks          = local.min_tasks
+  max_tasks          = local.max_tasks
+  use_spot           = local.use_fargate_spot
+  log_retention_days = local.log_retention_days
+
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+  ]
+}
+
+# ------------------------------------------------ client-health-monitor-service
+# API mode only. RH-SF11D adds the scheduled ANALYSIS task and assignment OAuth
+# wiring after the provider-side contract is merged.
+
+module "client_health_service" {
+  source = "../../modules/ecs-service"
+
+  name               = "client-health-monitor-service"
+  name_prefix        = local.name
+  cluster_arn        = aws_ecs_cluster.this.arn
+  cluster_name       = aws_ecs_cluster.this.name
+  subnet_ids         = local.app_subnet_ids
+  security_group_ids = [local.sg["client_health"]]
+  image              = local.image["client-health-monitor-service"]
+  cpu                = 512
+  memory             = 1024
+  cpu_architecture   = var.cpu_architecture
+  port               = local.ports.health
+  port_name          = "https"
+
+  environment = {
+    SPRING_DATASOURCE_URL                                    = "jdbc:postgresql://${module.db["health"].address}:5432/${module.db["health"].db_name}?sslmode=require"
+    SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI     = local.cognito_issuer
+    IDP_COGNITO_APP_CLIENT_ID                                = aws_cognito_user_pool_client.web.id
+    CLIENT_HEALTH_MODE                                       = "API"
+    CLIENT_HEALTH_AI_ENABLED                                 = "false"
+    CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED                    = "true"
+    CLIENT_HEALTH_AUDIT_QUEUE_URL                            = aws_sqs_queue.audit.url
+    CLIENT_HEALTH_AUDIT_REGION                               = local.region
+    SPRING_FLYWAY_ENABLED                                    = "false" # db-migrate applies its migrations
+  }
+  secrets = {
+    SPRING_DATASOURCE_USERNAME = "${local.app_login_secret["client_health_service"]}:username::"
+    SPRING_DATASOURCE_PASSWORD = "${local.app_login_secret["client_health_service"]}:password::"
+  }
+  # The master secret is for db-migrate only.
+  secret_arns        = [local.app_login_secret["client_health_service"], local.db_master_secret["health"]]
+  task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["health"].arn
+  }
+  migrations = local.migrations["health"]
+
+  load_balancer = merge(local.alb, {
+    protocol          = "HTTPS"
+    health_check_path = "/actuator/health/readiness"
+    rules = [{
+      priority = 65
+      paths    = ["/api/relationship-health", "/api/relationship-health/*"]
+    }]
   })
 
   min_tasks          = local.min_tasks

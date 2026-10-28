@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF10, RH-SF11A runtime packaging/replay adapter and RH-SF11B health data plane are merged; replay-adapter contract hardening is implemented locally, while SF11B still needs Terraform, Docker and PostgreSQL privilege validation
+- Status: In progress; SF00-SF10, RH-SF11A runtime packaging/replay adapter/hardening and RH-SF11B health data plane are merged; RH-SF11C API deployment is implemented locally, while SF11B/C still need equipped Terraform/Docker validation and no live AWS apply has run
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/replay-adapter-hardening`
+- Current task branch: `task/client-health-monitor/api-deployment`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-28 from `origin/feat/client-health-monitor` at `71c78dd`; latest observed `origin/dev` is `08c832b`
+- Last repository sync: 2026-10-28 from `origin/feat/client-health-monitor` at `112b158`; latest observed `origin/dev` is `08c832b`
 - AI-assisted planning: Yes; Cursor and OpenAI Codex
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -511,8 +511,9 @@ Decisions:
 | RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented and merged; durable CloudWatch publication remains RH-SF11E | 2026-10-27 |
 | RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented and merged against Contract D with deterministic API mocks; deployed API verification and owner review pending | 2026-10-27 |
 | RH-SF11A | Runtime deployability | Swayam | Client Health Java runtime/adapters/tests, `application.yml`, production Dockerfile and service README; excludes Terraform, db-migrate and migration SQL | SF01/SF04; ADR-0034/0044; no overlap with RH-SF11B files | `task/client-health-monitor/runtime-packaging` | Runtime mode, production image and transaction replay HTTP/service-token adapter merged; ADR-0065 acceptance and live E2E remain pending | 2026-10-28 |
-| RH-SF11A-FIX | Replay adapter contract hardening | Garvit | Transaction replay HTTPS/fingerprint validation, ANALYSIS bean-wiring regression test and service/AI docs | RH-SF11A; ADR-0044; proposed ADR-0065 | `task/client-health-monitor/replay-adapter-hardening` | Implemented locally; focused and full Java verification pass, with live Cognito/import/read E2E and ADR-0065 acceptance pending | 2026-10-28 |
+| RH-SF11A-FIX | Replay adapter contract hardening | Garvit | Transaction replay HTTPS/fingerprint validation, ANALYSIS bean-wiring regression test and service/AI docs | RH-SF11A; ADR-0044; proposed ADR-0065 | `task/client-health-monitor/replay-adapter-hardening` | Implemented and merged; focused and full Java verification pass, with live Cognito/import/read E2E and ADR-0065 acceptance pending | 2026-10-28 |
 | RH-SF11B | Health data plane | Garvit | CRM `data.tf`, `security_groups.tf`, health migration settings in `services.tf`, db-migrate packaging, Terraform tests and database/cost/runbook docs; excludes runtime Java and service Dockerfile | V1-V5 migrations; ADR-0023/0028/0034/0042; shared CRM Terraform needs platform review | `task/client-health-monitor/health-data-plane` | Implemented and merged; combined Maven suite passes, while Terraform, db-migrate image and PostgreSQL privilege validation remain pending on equipped CI/reviewer tooling | 2026-10-28 |
+| RH-SF11C | API service deployment | Garvit | Client Health ECR/ECS API service, health-db migration attachment, application login secret, TLS, ALB route, readiness check, audit relay configuration, Terraform tests and deployment docs | RH-SF11A/B; ADR-0018/0019/0020/0028/0034/0042; assignment OAuth wiring deferred to RH-SF11D | `task/client-health-monitor/api-deployment` | Implemented locally; static checks pass, with Terraform mocked-provider validation, image build and live apply pending on equipped tooling | 2026-10-28 |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
 
 ## Independence protocol
