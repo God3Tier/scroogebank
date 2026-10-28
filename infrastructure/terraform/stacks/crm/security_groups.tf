@@ -36,6 +36,7 @@ locals {
     db_trans     = "transactions-db"
     db_audit     = "audit-db"
     db_alerts    = "alerts-db"
+    db_health    = "health-db"
   }
 
   # to <- from on port
@@ -67,12 +68,14 @@ locals {
     { to = "db_audit", from = "auditor", port = 5432 },
     { to = "db_audit", from = "chain_verify", port = 5432 },
     { to = "db_alerts", from = "alerts", port = 5432 },
+    { to = "db_health", from = "client_health", port = 5432 },
     { to = "db_users", from = "db_console", port = 5432 },
     { to = "db_clients", from = "db_console", port = 5432 },
     { to = "db_accounts", from = "db_console", port = 5432 },
     { to = "db_trans", from = "db_console", port = 5432 },
     { to = "db_audit", from = "db_console", port = 5432 },
     { to = "db_alerts", from = "db_console", port = 5432 },
+    { to = "db_health", from = "db_console", port = 5432 },
   ]
 
   # Groups whose members reach AWS APIs, Cognito's keys and the SFTP server

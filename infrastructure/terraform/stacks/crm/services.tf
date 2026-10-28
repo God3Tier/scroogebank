@@ -43,8 +43,9 @@ locals {
   # applies its database's directory in the db-migrate image as the master
   # user, checking RDS's certificate, then creates the logins and sets their
   # passwords, before the service starts. Only db-migrate gets the master
-  # credentials. user-service's and event-alert-service's files are named for
-  # Spring Boot's Flyway, which applies them locally but is off here.
+  # credentials. user-service's, event-alert-service's and Client Health's
+  # files are named for Spring Boot's Flyway, which applies them locally but
+  # is off in AWS.
   migrations = {
     for db in keys(local.databases) : db => {
       image    = local.image["db-migrate"]
@@ -57,7 +58,7 @@ locals {
         },
         local.migration_placeholders[db],
       )
-      environment = contains(["users", "alerts"], db) ? { FLYWAY_SQL_MIGRATION_SEPARATOR = "__" } : {}
+      environment = contains(["users", "alerts", "health"], db) ? { FLYWAY_SQL_MIGRATION_SEPARATOR = "__" } : {}
     }
   }
 }

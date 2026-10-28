@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF08, offline rule evaluation, and RH-SF10 API-backed Agent/Admin UI integration are merged; RH-SF09 metrics/health is implemented on its task branch; the transaction-history provider is merged from `dev` under proposed ADR-0065 and remains blocked on owner/security acceptance and end-to-end verification
+- Status: In progress; SF00-SF10 are merged; RH-SF11A runtime packaging and RH-SF11B health data plane are in progress; the transaction-history provider remains blocked on owner/security acceptance and end-to-end verification
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/metrics-health`
+- Current task branches: `task/client-health-monitor/runtime-packaging` (Swayam) and `task/client-health-monitor/health-data-plane` (Garvit)
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-27 from `origin/feat/client-health-monitor` at `555a69a` and `origin/dev` at `d9f4ed6`
+- Last repository sync: 2026-10-28 from `origin/feat/client-health-monitor` at `fcaa28a`; latest observed `origin/dev` is `2ce4acc`
 - AI-assisted planning: Yes; Cursor and OpenAI Codex
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -508,9 +508,10 @@ Decisions:
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API/runtime wiring, current-assignment reads/actions, opaque keyset pagination, bounded notes, Contract-B consumer and PostgreSQL/runtime integration suites implemented; client-profile Contract-B provider and Cognito provisioning remain pending | 2026-10-23 |
 | RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval | 2026-10-26 |
 | RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented and merged; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
-| RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented locally; Java 25 Docker CI and review by Garvit pending | 2026-10-27 |
+| RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented and merged; durable CloudWatch publication remains RH-SF11E | 2026-10-27 |
 | RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented and merged against Contract D with deterministic API mocks; deployed API verification and owner review pending | 2026-10-27 |
-| RH-SF11 | Cloud deployment | TBD | compute/database/IAM/routes/secrets/alarms | Accepted ADRs/platform owner | TBD | Unassigned | N/A |
+| RH-SF11A | Runtime deployability | Swayam | Client Health Java runtime/adapters/tests, `application.yml`, production Dockerfile and service README; excludes Terraform, db-migrate and migration SQL | SF01/SF04; ADR-0034/0044; no overlap with RH-SF11B files | `task/client-health-monitor/runtime-packaging` | In progress | 2026-10-28 |
+| RH-SF11B | Health data plane | Garvit | CRM `data.tf`, `security_groups.tf`, health migration settings in `services.tf`, db-migrate packaging, Terraform tests and database/cost/runbook docs; excludes runtime Java and service Dockerfile | V1-V5 migrations; ADR-0023/0028/0034/0042; shared CRM Terraform needs platform review | `task/client-health-monitor/health-data-plane` | In progress | 2026-10-28 |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
 
 ## Independence protocol
@@ -521,7 +522,8 @@ Decisions:
 4. Garvit owns SF01-SF04 packages; Swayam owns SF05-SF07 packages.
 5. Frozen contracts, migrations, build files, OpenAPI roots, and shared configuration change only through coordinated updates.
 6. Each subfeature updates its own tests/docs.
-7. SF08-SF12 receive one primary owner each before implementation.
+7. RH-SF11A and RH-SF11B use disjoint runtime and data-plane files; any migration, Terraform or runtime overlap requires Garvit and Swayam to coordinate before editing.
+8. Remaining SF11 cloud tasks and SF12 receive one primary owner each before implementation.
 
 ## Pull request size policy
 
@@ -587,5 +589,5 @@ The feature branch never merges directly into `main`.
 6. Lambda/ECS deployment shape and database connection strategy.
 7. Bedrock model/Region/retention/logging/cost caps.
 8. Auditor event/action/payload contract.
-9. SF08-SF12 primary owners.
+9. Primary owners for the remaining SF11 cloud tasks and SF12.
 

@@ -71,6 +71,11 @@ override_resource {
   override_during = plan
   values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/event_alert_service" }
 }
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["client_health_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_health_service" }
+}
 
 variables {
   environment             = "prod"
@@ -83,8 +88,18 @@ run "prod" {
   command = plan
 
   assert {
-    condition     = length(module.db) == 6 && alltrue([for db in module.db : db.instance_class == "db.t4g.micro"])
-    error_message = "Prod: six micro RDS instances, one per service (ADR-0023)."
+    condition     = length(module.db) == 7 && alltrue([for db in module.db : db.instance_class == "db.t4g.micro"])
+    error_message = "Prod: seven micro RDS instances, one per database-owning service (ADR-0023)."
+  }
+  assert {
+    condition = (
+      module.db["health"].db_name == "health" &&
+      aws_secretsmanager_secret.app_login["client_health_service"].name == "${local.name}/db/health/client_health_service" &&
+      contains(keys(aws_security_group.this), "db_health") &&
+      aws_vpc_security_group_ingress_rule.this["db_health-from-client_health-5432"].from_port == 5432 &&
+      aws_vpc_security_group_ingress_rule.this["db_health-from-db_console-5432"].from_port == 5432
+    )
+    error_message = "Client Health gets its own database, application login secret and narrowly scoped database ingress."
   }
   assert {
     condition     = alltrue([for db in module.db : db.backup_retention_days == 7 && db.multi_az == false && db.max_allocated_storage == 100])
@@ -145,6 +160,7 @@ run "prod" {
     condition = (
       local.migrations["users"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
       local.migrations["alerts"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
+      local.migrations["health"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
       length(local.migrations["clients"].environment) == 0 &&
       alltrue([for m in [module.user_service, module.event_alert_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
     )
@@ -154,7 +170,7 @@ run "prod" {
     condition = (
       join(",", sort(keys(local.migrations["audit"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD,FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD,FLYWAY_USER" &&
       join(",", sort(keys(local.migrations["transactions"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD,FLYWAY_USER" &&
-      alltrue([for db in ["users", "clients", "accounts", "alerts"] : join(",", sort(keys(local.migrations[db].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_APP_LOGIN,FLYWAY_PLACEHOLDERS_APP_PASSWORD,FLYWAY_USER"])
+      alltrue([for db in ["users", "clients", "accounts", "alerts", "health"] : join(",", sort(keys(local.migrations[db].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_APP_LOGIN,FLYWAY_PLACEHOLDERS_APP_PASSWORD,FLYWAY_USER"])
     )
     error_message = "Each database's db-migrate gets the passwords of the logins it creates, and only those."
   }

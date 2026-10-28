@@ -20,6 +20,7 @@ locals {
     transactions = { db_name = "transactions", sg = "db_trans" }
     audit        = { db_name = "audit", sg = "db_audit" }
     alerts       = { db_name = "alerts", sg = "db_alerts" }
+    health       = { db_name = "health", sg = "db_health" }
   }
 }
 
@@ -71,6 +72,7 @@ locals {
     transaction_service = { db = "transactions" }
     transaction_ingest  = { db = "transactions" }
     event_alert_service = { db = "alerts" }
+    client_health_service = { db = "health" }
   }
 }
 

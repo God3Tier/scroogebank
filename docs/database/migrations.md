@@ -1,6 +1,6 @@
 # Database schema migrations (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-28.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -16,12 +16,20 @@ Terraform creates each RDS instance with an empty database, and each service own
   `V<n>__<description>.sql`. Locally and in tests Flyway applies them; Client
   Health migration tests run V1 task persistence followed by V2 evidence
   constraint tightening, V3 relationship-health audit outbox creation, and V4
-  activity/run persistence against PostgreSQL 17.
+  activity/run persistence and V5 versioned explanation persistence against
+  PostgreSQL 17.
 - **In AWS, every one of these services' tasks has a `db-migrate` init container:**
   - it applies the service's migrations before the app starts, and the app starts only if it succeeds;
   - it runs Flyway 11.7.2 from the db-migrate image ([`infrastructure/db-migrate/`](../../infrastructure/db-migrate/Dockerfile)), as that database's master user, against that database only. Flyway locks the database while it migrates, so tasks that start together are safe;
   - no other container receives the master credentials;
-  - user-service's and event-alert-service's own Flyway is off there (`SPRING_FLYWAY_ENABLED=false`), and their db-migrate uses Spring Boot's `__` separator, so their history matches what the apps already wrote.
+  - user-service's, event-alert-service's and the future Client Health ECS
+    service's own Flyway is off there (`SPRING_FLYWAY_ENABLED=false`), and
+    db-migrate uses Spring Boot's `__` separator, so its history matches what
+    the apps already wrote.
+  - RH-SF11B packages Client Health's migrations and login callback at
+    `/flyway/sql/health` and defines `local.migrations["health"]`; RH-SF11C must
+    attach that init container to the future Client Health ECS service before
+    the schema is deployed.
 - **Locally, the same image applies the Go services' migrations to each one's own Compose database**, so a local database behaves as a deployed one:
   - client-service, account-service and the auditor run it through `make run` or `make migrate`;
   - the SFTP stack's `db-migrate` service runs it before `receiver-api` starts, and `make db-up` runs it too.
@@ -36,7 +44,7 @@ No service connects as its database's master user. After every migrate, db-migra
 
 | Database | Login | Can | Callback |
 |---|---|---|---|
-| users, clients, accounts, alerts | `user_service`, `client_service`, `account_service`, `event_alert_service` | read and change rows in every table except `flyway_schema_history` | [`app-login/afterMigrate.sql`](../../infrastructure/db-migrate/app-login/afterMigrate.sql) |
+| users, clients, accounts, alerts, health | `user_service`, `client_service`, `account_service`, `event_alert_service`, `client_health_service` | read and change rows in every table except `flyway_schema_history` | [`app-login/afterMigrate.sql`](../../infrastructure/db-migrate/app-login/afterMigrate.sql) |
 | transactions | `transaction_service` | read `transactions`; read, add and delete rows in its own `read_audit_outbox` ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md) decision 5) | [`transactions/afterMigrate.sql`](../../infrastructure/db-migrate/transactions/afterMigrate.sql) |
 | transactions | `transaction_ingest` (the ingest Lambda) | read and change rows in every table except `flyway_schema_history` and `read_audit_outbox` | the same |
 | audit | `auditor_app`, `chain_verify` | the roles in [ADR-0022](../adr/ADR-0022-audit-tamper-resistance-and-crypto-shredding.md) decision 2 | [`audit/afterMigrate.sql`](../../infrastructure/db-migrate/audit/afterMigrate.sql) |

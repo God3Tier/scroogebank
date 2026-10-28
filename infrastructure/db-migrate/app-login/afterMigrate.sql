@@ -2,11 +2,11 @@
 -- rows but cannot change the schema: the master user that runs the migrations
 -- owns every table, and PostgreSQL 17 lets no other role create objects in
 -- public. The image copies this file into the clients, accounts, users,
--- alerts and engagement directories, and Flyway runs it after every migrate, so a table that
--- a later migration adds is granted with no change here. The login and its
--- password are Flyway placeholders that the service's db-migrate container
--- fills from Secrets Manager, so the password never appears here, and setting
--- it every time keeps it equal to the secret.
+-- alerts, engagement and health directories, and Flyway runs it after every
+-- migrate, so a table that a later migration adds is granted with no change
+-- here. The login and its password are Flyway placeholders that the service's
+-- db-migrate container fills from Secrets Manager, so the password never
+-- appears here, and setting it every time keeps it equal to the secret.
 
 -- Tasks that start together run this at once, and concurrent GRANTs on one
 -- table can fail. Flyway runs this file in one transaction, which holds the

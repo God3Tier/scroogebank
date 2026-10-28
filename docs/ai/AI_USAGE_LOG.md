@@ -1,5 +1,27 @@
 # AI usage log
 
+## 2026-10-28 — Client Health RH-SF11B health data plane
+
+- Human owner: Garvit; platform/Terraform review remains required.
+- Tool: Cursor.
+- Use: split RH-SF11 ownership with Swayam's runtime task, then add Client
+  Health's dedicated `health-db`, `client_health_service` least-privilege login,
+  database security-group rules, V1–V5 db-migrate packaging, mocked-plan
+  assertions, and synchronized migration/schema/cost/runbook documentation on
+  `task/client-health-monitor/health-data-plane`.
+- Human verification required: review the shared CRM Terraform and cost impact;
+  run Terraform formatting, validation and mocked-provider tests; build and
+  inspect the db-migrate image; and prove fresh/rerun migration and DML-without-
+  DDL privileges before merging. RH-SF11C must attach
+  `local.migrations["health"]` to the future Client Health ECS service.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` is clean after documentation whitespace
+  cleanup. A clean Java 24 compiler-override run completed 143 tests with no
+  failures (117 passed and 26 Docker-dependent tests skipped). Terraform,
+  Docker Desktop and `psql` were unavailable locally, so no Terraform plan,
+  image build, PostgreSQL privilege check or live apply is claimed.
+
 ## 2026-10-27 — Client Health and dev merge-conflict resolution
 
 - Human owner: Garvit.

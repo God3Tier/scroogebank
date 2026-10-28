@@ -13,7 +13,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 
 - **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for the scripts (step 5, 9.5 and the database console).
 - **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
-- **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
+- **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the seven the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
 - **Cost.** A deployment bills from step 1 until its teardown. Prod costs about USD 360 a month left running at one task per service, and about USD 65 a month even when stopped ([Pausing a deployment](#pausing-a-deployment)), so tear it down when you are done rather than leaving it stopped (ADR-0042 "Cost Impact").
 
@@ -179,7 +179,7 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 build db-migrate          infrastructure/db-migrate/Dockerfile    .
 ```
 
-`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's and engagement-service's migrations reach AWS only through it.
+`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's, engagement-service's and Client Health's migrations reach AWS only through it. RH-SF11B packages Client Health at `/flyway/sql/health`; RH-SF11C still has to attach `local.migrations["health"]` to its ECS task before those migrations run in AWS.
 
 ## 3. Create the CRM stack, stopped
 
@@ -356,7 +356,7 @@ terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-f
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars     # the same
 ```
 
-The databases need nothing by hand. Each service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate.
+The databases need nothing by hand. Each deployed service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate. Until RH-SF11C deploys the Client Health task, `health-db` is created empty and its packaged migrations/login callback are not invoked.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
