@@ -148,6 +148,28 @@ Spring configuration:
 | `client-health.audit.lease-seconds` | `CLIENT_HEALTH_AUDIT_LEASE_SECONDS` | delivery lease, default 60 seconds |
 | `client-health.audit.relay-delay-ms` | `CLIENT_HEALTH_AUDIT_RELAY_DELAY_MS` | scheduled relay delay, default 2000 ms |
 
+## Runtime modes and container image
+
+The same application image supports two modes. `CLIENT_HEALTH_MODE=API` is the
+default and starts the authenticated API on port 8087. Setting
+`CLIENT_HEALTH_MODE=ANALYSIS` starts a non-web process, runs the analysis for
+the current `Asia/Singapore` calendar date, and then exits. A completed or
+already-completed run exits with code 0; a held lease or genuine failure exits
+non-zero. `CLIENT_HEALTH_ANALYSIS_LEASE_DURATION` controls the positive lease
+duration and defaults to `60m`.
+
+Build the Java 25 production image from the repository root:
+
+```sh
+docker build -f services/client-health-monitor-service/Dockerfile \
+  -t client-health-monitor-service .
+```
+
+The final image runs as the non-root `clienthealth` user and exposes port 8087.
+Database and Cognito values remain external configuration. The analysis mode
+also requires the production transaction-replay adapter planned for the next
+RH-SF11A slice; this packaging slice does not enable a partial-data fallback.
+
 ## Health and metrics
 
 The load-balancer probes require no bearer token:
