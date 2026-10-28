@@ -147,6 +147,16 @@ Spring configuration:
 | `client-health.audit.batch-size` | `CLIENT_HEALTH_AUDIT_BATCH_SIZE` | bounded relay batch, default 50 |
 | `client-health.audit.lease-seconds` | `CLIENT_HEALTH_AUDIT_LEASE_SECONDS` | delivery lease, default 60 seconds |
 | `client-health.audit.relay-delay-ms` | `CLIENT_HEALTH_AUDIT_RELAY_DELAY_MS` | scheduled relay delay, default 2000 ms |
+| `client-health.transaction-replay.endpoint` | `CLIENT_HEALTH_TRANSACTION_ENDPOINT` | full internal `GET /internal/v1/transactions` endpoint |
+| `client-health.transaction-replay.token-uri` | `CLIENT_HEALTH_TRANSACTION_TOKEN_URI` | Cognito client-credentials token endpoint |
+| `client-health.transaction-replay.client-id` | `CLIENT_HEALTH_TRANSACTION_CLIENT_ID` | scoped Client Health machine client |
+| `client-health.transaction-replay.client-secret` | `CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET` | secret supplied outside Git |
+| `client-health.transaction-replay.scope` | `CLIENT_HEALTH_TRANSACTION_SCOPE` | must be exactly `crm-transactions/read` |
+| `client-health.transaction-replay.connect-timeout` | `CLIENT_HEALTH_TRANSACTION_CONNECT_TIMEOUT` | positive connection timeout, default `3s` |
+| `client-health.transaction-replay.read-timeout` | `CLIENT_HEALTH_TRANSACTION_READ_TIMEOUT` | positive response timeout, default `5s` |
+| `client-health.transaction-replay.page-size` | `CLIENT_HEALTH_TRANSACTION_PAGE_SIZE` | provider page size from 1 to 500, default 100 |
+| `client-health.transaction-replay.maximum-pages` | `CLIENT_HEALTH_TRANSACTION_MAXIMUM_PAGES` | complete-replay page bound, default 100 |
+| `client-health.transaction-replay.maximum-rows` | `CLIENT_HEALTH_TRANSACTION_MAXIMUM_ROWS` | complete-replay row bound, default 50000 |
 
 ## Runtime modes and container image
 
@@ -166,9 +176,12 @@ docker build -f services/client-health-monitor-service/Dockerfile \
 ```
 
 The final image runs as the non-root `clienthealth` user and exposes port 8087.
-Database and Cognito values remain external configuration. The analysis mode
-also requires the production transaction-replay adapter planned for the next
-RH-SF11A slice; this packaging slice does not enable a partial-data fallback.
+Database and Cognito values remain external configuration. Analysis mode
+requires every transaction-replay setting above. It obtains and caches a scoped
+Cognito token, follows every opaque cursor within the configured bounds, and
+fails the run without exposing partial data when any page is unavailable or
+invalid. Production enablement remains blocked until proposed ADR-0065 receives
+its required owner and security acceptance.
 
 ## Health and metrics
 
