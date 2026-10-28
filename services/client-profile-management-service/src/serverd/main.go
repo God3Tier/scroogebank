@@ -107,6 +107,12 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure Cognito authentication: %w", err)
 	}
+	assignmentVerifier, err := security.NewServiceCognitoVerifier(issuer,
+		os.Getenv("CLIENT_HEALTH_ASSIGNMENT_CLIENT_ID"),
+		os.Getenv("CLIENT_HEALTH_ASSIGNMENT_SCOPE"))
+	if err != nil {
+		return fmt.Errorf("configure assignment authentication: %w", err)
+	}
 
 	queueURL := os.Getenv("AUDIT_QUEUE_URL")
 	if queueURL == "" {
@@ -123,6 +129,7 @@ func run() error {
 	go auditqueue.NewRelay(db, sqsClient, queueURL).Run(context.Background())
 	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db), protector))
 	routers.RegisterRoutes(router, client.New(clientSvc), aggregates, db, verifier.Middleware(), auditLogger)
+	routers.RegisterAssignmentRoute(router, assignmentVerifier.Middleware(), db)
 
 	server := &http.Server{
 		Addr:              envOrDefault("APP_ADDR", ":8080"),

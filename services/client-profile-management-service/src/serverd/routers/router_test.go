@@ -140,6 +140,7 @@ func TestEveryRouteIsInAContract(t *testing.T) {
 	router := gin.New()
 	noAudit := func(c *gin.Context) { c.Next() }
 	RegisterRoutes(router, clientcontroller.New(nil), &recordingAggregates{}, nil, noAudit, noAudit)
+	RegisterAssignmentRoute(router, noAudit, nil)
 
 	contract.CheckRoutes(t, router.Routes(), "clients-api.yaml", "dashboard-aggregates.yaml")
 }
