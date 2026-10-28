@@ -516,13 +516,14 @@ func TestValidatePayload_RelationshipHealthRedactedContract(t *testing.T) {
 }
 
 func TestValidatePayload_RelationshipHealthRejectsSensitiveOrMalformedPayload(t *testing.T) {
-	tests := map[string]map[string]any{
-		"raw transactions":     {"transactions": []string{"transaction-1"}},
-		"notes":                {"note": "private note"},
-		"descriptions":         {"description": "merchant text"},
-		"raw client identifier": {"client_id": "client-1"},
-		"bad client reference":  {"client_ref": "client-1"},
-		"bad state":             {"after": map[string]any{"status": "UNKNOWN", "task_version": 0}},
+	tests := make(map[string]map[string]any)
+	tests["raw transactions"] = map[string]any{"transactions": []string{"transaction-1"}}
+	tests["notes"] = map[string]any{"note": "private note"}
+	tests["descriptions"] = map[string]any{"description": "merchant text"}
+	tests["raw client identifier"] = map[string]any{"client_id": "client-1"}
+	tests["bad client reference"] = map[string]any{"client_ref": "client-1"}
+	tests["bad state"] = map[string]any{
+		"after": map[string]any{"status": "UNKNOWN", "task_version": 0},
 	}
 	for name, extra := range tests {
 		t.Run(name, func(t *testing.T) {
