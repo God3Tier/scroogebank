@@ -17,10 +17,11 @@
 - Data: repository code, Terraform and synthetic test fixtures only. No
   credentials, real client data, AWS calls or live resources were used.
 - Verification: `git diff --check` is clean after documentation whitespace
-  cleanup. A clean Java 24 compiler-override run completed 143 tests with no
-  failures (117 passed and 26 Docker-dependent tests skipped). Terraform,
-  Docker Desktop and `psql` were unavailable locally, so no Terraform plan,
-  image build, PostgreSQL privilege check or live apply is claimed.
+  cleanup. After synchronizing SF11A, a clean Java 24 compiler-override run
+  completed 152 tests with no failures (126 passed and 26 Docker-dependent
+  tests skipped). Terraform, Docker Desktop and `psql` were unavailable
+  locally, so no Terraform plan, image build, PostgreSQL privilege check or
+  live apply is claimed.
 
 ## 2026-10-27 — Client Health and dev merge-conflict resolution
 
