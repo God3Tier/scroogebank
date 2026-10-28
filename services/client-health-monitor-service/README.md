@@ -157,6 +157,10 @@ Spring configuration:
 | `client-health.transaction-replay.page-size` | `CLIENT_HEALTH_TRANSACTION_PAGE_SIZE` | provider page size from 1 to 500, default 100 |
 | `client-health.transaction-replay.maximum-pages` | `CLIENT_HEALTH_TRANSACTION_MAXIMUM_PAGES` | complete-replay page bound, default 100 |
 | `client-health.transaction-replay.maximum-rows` | `CLIENT_HEALTH_TRANSACTION_MAXIMUM_ROWS` | complete-replay row bound, default 50000 |
+| `client-health.metrics.cloudwatch.enabled` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED` | publish Micrometer metrics to CloudWatch; defaults to `false` |
+| `client-health.metrics.cloudwatch.namespace` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE` | bounded CloudWatch namespace, default `Scrooge/ClientHealth` |
+| `client-health.metrics.cloudwatch.region` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION` | publication region, default `ap-southeast-1` |
+| `client-health.metrics.cloudwatch.step` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP` | publication interval, default `1m` |
 
 ## Runtime modes and container image
 
@@ -197,8 +201,14 @@ replay and client-assignment outages do not mark the read API unready because
 the feature has template, outbox or fail-closed behavior for those dependencies.
 
 The complete metric and bounded-tag catalogue is maintained in
-`docs/observability/monitoring-alerting.md`. The service currently provides a
-Micrometer registry only; RH-SF11 will connect it to CloudWatch.
+`docs/observability/monitoring-alerting.md`. The analysis-watermark age gauge
+queries the latest successful watermark from health-db whenever it is sampled,
+so an API restart does not reset it and database loss returns `NaN` instead of a
+stale value. The CloudWatch Micrometer registry uses the configured Singapore
+region and AWS default credential provider chain and is disabled by default.
+Enabling publication
+still requires Garvit's IAM and infrastructure configuration; no credential is
+stored in this service.
 
 With configuration supplied, run from the repository root:
 

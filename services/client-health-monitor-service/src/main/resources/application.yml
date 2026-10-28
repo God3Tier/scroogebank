@@ -2,6 +2,12 @@ server:
   port: ${SERVER_PORT:8087}
 
 client-health:
+  metrics:
+    cloudwatch:
+      enabled: ${CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED:false}
+      namespace: ${CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE:Scrooge/ClientHealth}
+      region: ${CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION:ap-southeast-1}
+      step: ${CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP:1m}
   runtime:
     mode: ${CLIENT_HEALTH_MODE:API}
     lease-duration: ${CLIENT_HEALTH_ANALYSIS_LEASE_DURATION:60m}

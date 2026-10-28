@@ -1,5 +1,6 @@
 package bank.clienthealth.metrics;
 
+import bank.clienthealth.analysis.port.SuccessfulAnalysisWatermarkQuery;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -8,23 +9,34 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicReference;
 
 /** Micrometer implementation whose tags are derived only from bounded enums. */
 public final class MicrometerClientHealthMetrics implements ClientHealthMetrics {
     private static final String RULESET = "relationship-health-v1";
     private final MeterRegistry registry;
     private final Clock clock;
-    private final AtomicReference<Instant> watermark = new AtomicReference<>();
+    private final SuccessfulAnalysisWatermarkQuery watermarkQuery;
 
     public MicrometerClientHealthMetrics(MeterRegistry registry) {
-        this(registry, Clock.systemUTC());
+        this(registry, Clock.systemUTC(), java.util.Optional::empty);
     }
 
-    MicrometerClientHealthMetrics(MeterRegistry registry, Clock clock) {
+    public MicrometerClientHealthMetrics(
+            MeterRegistry registry,
+            SuccessfulAnalysisWatermarkQuery watermarkQuery
+    ) {
+        this(registry, Clock.systemUTC(), watermarkQuery);
+    }
+
+    MicrometerClientHealthMetrics(
+            MeterRegistry registry,
+            Clock clock,
+            SuccessfulAnalysisWatermarkQuery watermarkQuery
+    ) {
         this.registry = registry;
         this.clock = clock;
-        Gauge.builder("client_health_analysis_watermark_age_seconds", watermark, this::watermarkAgeSeconds)
+        this.watermarkQuery = watermarkQuery;
+        Gauge.builder("client_health_analysis_watermark_age_seconds", this, metrics -> metrics.watermarkAgeSeconds())
                 .register(registry);
     }
 
@@ -33,7 +45,6 @@ public final class MicrometerClientHealthMetrics implements ClientHealthMetrics 
         counter("client_health_analysis_runs_total", "outcome", tag(outcome), "failure_stage", tag(stage)).increment();
         Timer.builder("client_health_analysis_duration_seconds")
                 .tag("outcome", tag(outcome)).register(registry).record(duration);
-        if (successfulWatermark != null) watermark.set(successfulWatermark);
     }
 
     @Override
@@ -84,10 +95,15 @@ public final class MicrometerClientHealthMetrics implements ClientHealthMetrics 
         return Counter.builder(name).tags(tags).register(registry);
     }
 
-    private double watermarkAgeSeconds(AtomicReference<Instant> reference) {
-        Instant value = reference.get();
-        if (value == null) return Double.NaN;
-        return Math.max(0.0, Duration.between(value, clock.instant()).toMillis() / 1000.0);
+    private double watermarkAgeSeconds() {
+        try {
+            return watermarkQuery.latestSuccessfulWatermark()
+                    .map(value -> Math.max(0.0,
+                            Duration.between(value, clock.instant()).toMillis() / 1000.0))
+                    .orElse(Double.NaN);
+        } catch (RuntimeException unavailable) {
+            return Double.NaN;
+        }
     }
 
     private static String tag(Enum<?> value) {
