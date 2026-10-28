@@ -1,5 +1,29 @@
 # AI usage log
 
+## 2026-10-28 — Client Health RH-SF11D2 scheduled analysis deployment
+
+- Human owner: Garvit; platform/Terraform and live security review remain
+  required.
+- Tool: Cursor.
+- Use: define a shared Client Health Cognito machine client with exact
+  transaction-read and assignment-read scopes; wire the merged assignment
+  provider into the API service; add internal HTTPS ALB routes; define the
+  one-shot ANALYSIS ECS task, 08:00 Asia/Singapore EventBridge schedule, bounded
+  retry, least-privilege scheduler run/pass permissions and non-zero-exit SNS
+  failure event; and synchronize mocked-plan assertions and deployment/cost
+  documentation on `task/client-health-monitor/analysis-scheduler`.
+- Human verification required: run Terraform formatting, validation and mocked
+  provider tests; build the images; inspect the saved plan's IAM, secrets,
+  routes and schedule; then perform the real Cognito/provider replay/assignment
+  smoke checks and teardown in a lower environment. Bedrock remains disabled
+  and has no task-role permission.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` and IDE lint pass. A clean Java 24
+  compiler-override run completed 160 tests with no failures (134 passed and 26
+  Docker-dependent tests skipped). Terraform and Docker remain unavailable
+  locally, so no Terraform plan, image build or live apply is claimed.
+
 ## 2026-10-28 — Client Health RH-SF11C API deployment definition
 
 - Human owner: Garvit; platform/Terraform review remains required.

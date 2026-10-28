@@ -135,7 +135,7 @@ Spring configuration:
 | `client-health.assignment.oauth.token-uri` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_TOKEN_URI` | Cognito token endpoint |
 | `client-health.assignment.oauth.client-id` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID` | health-service machine client |
 | `client-health.assignment.oauth.client-secret` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET` | secret supplied outside Git |
-| `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | assignment-read scope |
+| `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | exact assignment-read scope, `crm-clients/assignment.read` in the CRM stack |
 | `client-health.ai.enabled` | `CLIENT_HEALTH_AI_ENABLED` | Bedrock kill switch; defaults to `false` |
 | `client-health.ai.model-id` | `CLIENT_HEALTH_AI_MODEL_ID` | approved model or inference-profile ID; required when enabled |
 | `client-health.ai.timeout` | `CLIENT_HEALTH_AI_TIMEOUT` | per-call timeout; defaults to `5s` |

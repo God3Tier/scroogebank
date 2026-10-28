@@ -359,10 +359,13 @@ terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-fil
 
 The databases need nothing by hand. Each deployed service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate; the Client Health API task similarly migrates `health-db` and creates `client_health_service` before starting.
 
-RH-SF11C deploys Client Health as an API skeleton with AI disabled. Its
-liveness/readiness probes and authenticated routes start, but task reads and
-mutations that resolve the current client assignment remain unavailable until
-RH-SF11D provisions the accepted assignment provider and scoped OAuth settings.
+Client Health deploys with AI disabled. In the project account's custom-domain
+mode, the API and scheduled task use one client-credentials client with the
+exact `crm-transactions/read` and `crm-clients/assignment.read` scopes. The
+analysis task runs at 08:00 Asia/Singapore with one bounded retry. Without the
+custom-domain HTTPS ALB, assignment URLs stay blank and the analysis schedule
+stays disabled, so the stack fails closed rather than sending service tokens
+over HTTP.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
@@ -386,7 +389,7 @@ cd -
    ```sh
    STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)   # crm-<legal_entity>-<environment>
    aws ecs describe-services --cluster "$STACK" \
-     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service engagement-service \
+     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service client-health-monitor-service engagement-service \
      --query 'services[].[serviceName,runningCount,desiredCount]' --output table
    ```
 
@@ -405,7 +408,8 @@ cd -
    4. **Cold start:** the `REPORT` line's `Init Duration` plus `Duration` should be well under Cognito's 5-second limit.
 
    Test with real sign-ins, not `aws lambda invoke` with the sample LOGIN or PASSWORD_RESET events: those would put a made-up user's login into the audit chain, and it cannot be removed. `confirm-sign-up.json` is safe to invoke, since the trigger ignores that event.
-5. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
+5. **Client Health:** confirm `client-health-monitor-service` is healthy, then open Client Health as an Agent and Admin. The Agent sees only currently assigned tasks and the Admin is read-only. In EventBridge Scheduler, `client-health-analysis` is enabled only with the custom domain and `running=true`; after its next 08:00 SGT run, its ECS task exits 0 and the analysis watermark advances. A non-zero exit sends the `client-health-analysis-failed` event to the alarm SNS topic.
+6. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
 
 ## 9. The external SFTP server and the ingest Lambda
 

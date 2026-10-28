@@ -2,13 +2,13 @@
 
 ## Plan metadata
 
-- Status: In progress; SF00-SF10, RH-SF11A runtime packaging/replay adapter/hardening and RH-SF11B health data plane are merged; RH-SF11C API deployment is implemented locally, while SF11B/C still need equipped Terraform/Docker validation and no live AWS apply has run
+- Status: In progress; SF00-SF10 and RH-SF11A-C plus RH-SF11D1 integration readiness are merged; RH-SF11D2 analysis scheduling/IAM is implemented locally, while cloud work still needs equipped Terraform/Docker validation and no live AWS apply has run
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/api-deployment`
+- Current task branch: `task/client-health-monitor/analysis-scheduler`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-10-28 from `origin/feat/client-health-monitor` at `112b158`; latest observed `origin/dev` is `08c832b`
+- Last repository sync: 2026-10-28 from `origin/feat/client-health-monitor` at `44a9f6a`; latest observed `origin/dev` is `08c832b`
 - AI-assisted planning: Yes; Cursor and OpenAI Codex
 
 ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
@@ -513,7 +513,9 @@ Decisions:
 | RH-SF11A | Runtime deployability | Swayam | Client Health Java runtime/adapters/tests, `application.yml`, production Dockerfile and service README; excludes Terraform, db-migrate and migration SQL | SF01/SF04; ADR-0034/0044; no overlap with RH-SF11B files | `task/client-health-monitor/runtime-packaging` | Runtime mode, production image and transaction replay HTTP/service-token adapter merged; ADR-0065 acceptance and live E2E remain pending | 2026-10-28 |
 | RH-SF11A-FIX | Replay adapter contract hardening | Garvit | Transaction replay HTTPS/fingerprint validation, ANALYSIS bean-wiring regression test and service/AI docs | RH-SF11A; ADR-0044; proposed ADR-0065 | `task/client-health-monitor/replay-adapter-hardening` | Implemented and merged; focused and full Java verification pass, with live Cognito/import/read E2E and ADR-0065 acceptance pending | 2026-10-28 |
 | RH-SF11B | Health data plane | Garvit | CRM `data.tf`, `security_groups.tf`, health migration settings in `services.tf`, db-migrate packaging, Terraform tests and database/cost/runbook docs; excludes runtime Java and service Dockerfile | V1-V5 migrations; ADR-0023/0028/0034/0042; shared CRM Terraform needs platform review | `task/client-health-monitor/health-data-plane` | Implemented and merged; combined Maven suite passes, while Terraform, db-migrate image and PostgreSQL privilege validation remain pending on equipped CI/reviewer tooling | 2026-10-28 |
-| RH-SF11C | API service deployment | Garvit | Client Health ECR/ECS API service, health-db migration attachment, application login secret, TLS, ALB route, readiness check, audit relay configuration, Terraform tests and deployment docs | RH-SF11A/B; ADR-0018/0019/0020/0028/0034/0042; assignment OAuth wiring deferred to RH-SF11D | `task/client-health-monitor/api-deployment` | Implemented locally; static checks pass, with Terraform mocked-provider validation, image build and live apply pending on equipped tooling | 2026-10-28 |
+| RH-SF11C | API service deployment | Garvit | Client Health ECR/ECS API service, health-db migration attachment, application login secret, TLS, ALB route, readiness check, audit relay configuration, Terraform tests and deployment docs | RH-SF11A/B; ADR-0018/0019/0020/0028/0034/0042; assignment OAuth wiring deferred to RH-SF11D | `task/client-health-monitor/api-deployment` | Implemented and merged; static checks pass, with Terraform mocked-provider validation, image build and live apply pending on equipped tooling | 2026-10-28 |
+| RH-SF11D1 | Integration readiness providers | Swayam | Scoped client-assignment provider contract and Auditor relationship-health allowlist/validation | RH-SF06/SF08; client-profile and Auditor owner review | `task/client-health-monitor/integration-readiness` | Implemented and merged through PR #160; all CI checks pass | 2026-10-28 |
+| RH-SF11D2 | Scheduled analysis deployment | Garvit | Shared scoped Cognito machine client, API assignment wiring, one-shot ANALYSIS task, EventBridge Scheduler, least-privilege pass/run permissions, failure alert, Terraform tests and deployment docs | RH-SF11A-C/D1; ADR-0025/0034/0044; Bedrock remains disabled | `task/client-health-monitor/analysis-scheduler` | Implemented locally; static checks pass, with Terraform mocked-provider validation, image build, Cognito/provider E2E and live apply pending | 2026-10-28 |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
 
 ## Independence protocol

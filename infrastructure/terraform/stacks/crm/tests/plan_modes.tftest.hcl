@@ -76,6 +76,11 @@ override_resource {
   override_during = plan
   values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_health_service" }
 }
+override_resource {
+  target          = aws_secretsmanager_secret.client_health_read
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read" }
+}
 
 variables {
   environment             = "prod"
@@ -182,7 +187,6 @@ run "prod" {
         account_service     = module.account_service
         transaction_service = module.transaction_service
         event_alert_service = module.event_alert_service
-        client_health_service = module.client_health_service
       } : alltrue([for v in values(m.app_secrets) : startswith(v, "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/${login}:")])
     ])
     error_message = "Each service connects with its own login, never its database's master user (ADR-0028 decision 3)."
@@ -197,9 +201,30 @@ run "prod" {
       module.client_health_service.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
       module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "true" &&
       module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_QUEUE_URL"] == aws_sqs_queue.audit.url &&
-      !contains(keys(module.client_health_service.app_environment), "CLIENT_HEALTH_ASSIGNMENT_BASE_URL")
+      module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE"] == "crm-clients/assignment.read" &&
+      startswith(module.client_health_service.app_secrets["SPRING_DATASOURCE_USERNAME"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_health_service:") &&
+      startswith(module.client_health_service.app_secrets["CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read:")
     )
-    error_message = "SF11C deploys API mode with audit delivery and AI disabled, while assignment OAuth remains deferred to SF11D."
+    error_message = "Client Health API uses its database login, audit delivery and exact assignment scope, failing closed without ALB HTTPS."
+  }
+  assert {
+    condition = (
+      toset(aws_cognito_user_pool_client.client_health_read.allowed_oauth_scopes) == toset(["crm-clients/assignment.read", "crm-transactions/read"]) &&
+      module.client_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_CLIENT_ID"] == aws_cognito_user_pool_client.client_health_read.id &&
+      module.client_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_SCOPE"] == "crm-clients/assignment.read" &&
+      module.client_health_analysis.service_name == null &&
+      join(",", module.client_health_analysis.container_names) == "client-health-analysis" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_MODE"] == "ANALYSIS" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "false" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_TRANSACTION_ENDPOINT"] == "" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "" &&
+      startswith(module.client_health_analysis.app_secrets["CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read:") &&
+      aws_scheduler_schedule.client_health_analysis.state == "DISABLED" &&
+      aws_cloudwatch_event_target.client_health_analysis_failed.arn == aws_sns_topic.alarms.arn
+    )
+    error_message = "The shared machine client has only the two read scopes, and no-domain analysis remains a non-service task that fails closed."
   }
 }
 
@@ -243,6 +268,26 @@ run "custom_domain" {
     condition     = aws_lambda_function.ingest[0].environment[0].variables["ACCOUNT_SERVICE_BASE_URL"] == "https://alb.sg.example.com"
     error_message = "Custom domain: the ingest Lambda calls the ALB by the name on its certificate."
   }
+  assert {
+    condition = (
+      module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "https://alb.sg.example.com" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_TRANSACTION_ENDPOINT"] == "https://alb.sg.example.com/internal/v1/transactions" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "https://alb.sg.example.com" &&
+      output.client_health_transaction_read.transaction_scope == "crm-transactions/read" &&
+      output.client_health_transaction_read.assignment_scope == "crm-clients/assignment.read"
+    )
+    error_message = "Custom domain: Client Health calls both internal providers through the verified HTTPS ALB."
+  }
+  assert {
+    condition = (
+      aws_scheduler_schedule.client_health_analysis.state == "ENABLED" &&
+      aws_scheduler_schedule.client_health_analysis.schedule_expression == "cron(0 8 * * ? *)" &&
+      aws_scheduler_schedule.client_health_analysis.schedule_expression_timezone == "Asia/Singapore" &&
+      aws_scheduler_schedule.client_health_analysis.target[0].retry_policy[0].maximum_retry_attempts == 1 &&
+      aws_scheduler_schedule.client_health_analysis.target[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+    )
+    error_message = "Custom domain: Client Health analysis runs once at 08:00 SGT with one bounded retry."
+  }
 }
 
 run "high_availability_week" {
@@ -274,7 +319,7 @@ run "stopped_between_sessions" {
     error_message = "Stopped: every service scales to 0."
   }
   assert {
-    condition     = aws_scheduler_schedule.chain_verify.state == "DISABLED"
+    condition     = aws_scheduler_schedule.chain_verify.state == "DISABLED" && aws_scheduler_schedule.client_health_analysis.state == "DISABLED"
     error_message = "Stopped: schedules pause."
   }
   assert {

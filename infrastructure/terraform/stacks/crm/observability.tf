@@ -230,6 +230,30 @@ resource "aws_cloudwatch_event_target" "chain_verify_failed" {
   arn  = aws_sns_topic.alarms.arn
 }
 
+# A scheduled Client Health task that exits non-zero did not complete its
+# replay-to-task handoff. Idempotent retries use the same deterministic run ID.
+resource "aws_cloudwatch_event_rule" "client_health_analysis_failed" {
+  name        = "${local.name}-client-health-analysis-failed"
+  description = "Client Health scheduled analysis stopped with a non-zero exit code"
+  event_pattern = jsonencode({
+    source        = ["aws.ecs"]
+    "detail-type" = ["ECS Task State Change"]
+    detail = {
+      clusterArn = [aws_ecs_cluster.this.arn]
+      group      = ["family:${module.client_health_analysis.task_definition_family}"]
+      lastStatus = ["STOPPED"]
+      containers = {
+        exitCode = [{ "anything-but" = 0 }]
+      }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "client_health_analysis_failed" {
+  rule = aws_cloudwatch_event_rule.client_health_analysis_failed.name
+  arn  = aws_sns_topic.alarms.arn
+}
+
 # --------------------------------------------------------------- ingestion
 
 resource "aws_cloudwatch_metric_alarm" "ingest_errors" {
