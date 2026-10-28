@@ -16,28 +16,35 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SyntheticHoldingsSearchUniverseProviderTest {
 
     @Test
-    void appliesInclusiveCommonalityAndPerAccountConcentrationRules() {
+    void appliesThresholdsAcrossOneHundredClients() {
         SyntheticFixtureLoader fixtures = mock(SyntheticFixtureLoader.class);
+        OperationalMetrics metrics = mock(OperationalMetrics.class);
         List<SyntheticHoldingFixture.Position> positions = new java.util.ArrayList<>();
-        for (int client = 1; client <= 10; client++) {
-            positions.add(position("client-" + client, "account-" + client, "BASE", client == 3 ? "51.00" : "90.00"));
+        for (int client = 1; client <= 100; client++) {
+            positions.add(position("client-" + client, "account-" + client, "BASE", "100.00"));
         }
-        positions.add(position("client-1", "account-1", "COMMON-20", "10.00"));
-        positions.add(position("client-2", "account-2", "COMMON-20", "10.00"));
-        positions.add(position("client-3", "account-3", "BELOW-50", "49.00"));
-        positions.add(position("client-4", "account-4", "AT-50", "90.00"));
+        for (int client = 1; client <= 20; client++) {
+            positions.add(position("client-" + client, "account-" + client, "COMMON-20", "1.00"));
+        }
+        for (int client = 1; client <= 19; client++) {
+            positions.add(position("client-" + client, "account-" + client, "BELOW-20", "1.00"));
+        }
+        positions.add(position("client-99", "account-99", "BELOW-50", "99.00"));
+        positions.add(position("client-100", "account-100", "AT-50", "100.00"));
         when(fixtures.loadDefault()).thenReturn(new SyntheticHoldingFixture(1,
                 Instant.parse("2026-09-30T00:00:00Z"), positions, List.of()));
         SyntheticHoldingsSearchUniverseProvider provider =
                 new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(), new ExposureCalculator(),
-                        mock(OperationalMetrics.class));
+                        metrics);
 
         assertThat(provider.eligibleInstrumentIds()).containsExactly("AT-50", "BASE", "COMMON-20");
+        verify(metrics).searchUniverse(3, 2, 2);
     }
 
     private static SyntheticHoldingFixture.Position position(

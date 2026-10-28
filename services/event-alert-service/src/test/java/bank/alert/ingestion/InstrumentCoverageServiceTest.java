@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -47,6 +48,21 @@ class InstrumentCoverageServiceTest {
         assertThat(service.scheduled(List.of("I1"), TO).instrumentIds()).isEmpty();
         assertThat(service.replay(List.of("I1"), TO)).containsExactly("I1");
         verify(repository).findAllById(List.of("I1"));
+    }
+
+    @Test
+    void rotatesOneHundredEligibleInstrumentsAcrossFourSlots() {
+        InstrumentCoverageService service = service(mock(InstrumentSearchCoverageRepository.class));
+        List<String> ids = IntStream.range(0, 100).mapToObj(i -> "I%03d".formatted(i)).toList();
+
+        List<List<String>> batches = IntStream.range(0, 4)
+                .mapToObj(slot -> service.replay(ids, TO.plus(Duration.ofHours(4L * slot))))
+                .toList();
+
+        assertThat(batches).allSatisfy(batch -> assertThat(batch).hasSizeLessThanOrEqualTo(32));
+        assertThat(batches.stream().flatMap(List::stream).toList())
+                .containsExactlyInAnyOrderElementsOf(ids);
+        assertThat(service.replay(ids, TO)).isEqualTo(batches.getFirst());
     }
 
     private static InstrumentCoverageService service(InstrumentSearchCoverageRepository repository) {

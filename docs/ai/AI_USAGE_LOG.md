@@ -554,3 +554,12 @@
 - Files/components affected: event-alert-service ingestion/holdings/config/migration/metrics, alert-worker Terraform, ADR-0016, feature plan, schema/runbook/cost records.
 - Verification: Local Terraform format/validate/test, Java 25 Maven tests with Docker/Testcontainers, and frontend regression checks; no AWS or live Tavily calls.
 - Human verification required: Hayyun domain review and normal PR/CI review before merge.
+
+# 2026-10-29 - Portfolio-aware search universe scale fixture
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Expand the deterministic search-universe tests to 100 synthetic clients and verify that 100 eligible instruments rotate completely through four bounded schedule slots.
+- Files/components affected: event-alert-service holdings and coverage tests; feature-plan evidence.
+- Verification: Focused tests and the clean event-alert-service Maven verification with Docker/Testcontainers; no AWS or live Tavily calls.
+- Human verification required: Review the synthetic distributions and PR results before merge.
