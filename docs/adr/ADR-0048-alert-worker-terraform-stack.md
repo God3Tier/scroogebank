@@ -9,6 +9,12 @@
 - Supersedes: N/A. Follows the layout of [ADR-0047](ADR-0047-business-dashboard-terraform-stack.md) and fills the gap [ADR-0042](ADR-0042-terraform-deployment.md) leaves for EDA-D1-02 (INF-06 in the infrastructure plan)
 - Superseded by: N/A
 
+> **Amended by ADR-0050 (2026-10-23):** decisions 6–8 concerning AgentCore are
+> superseded. The worker now calls Tavily directly, reads its API key from a
+> worker-owned Secrets Manager secret through the ECS execution role, and has no
+> `bedrock-agentcore:InvokeGateway` permission. The schedule, task, alarm,
+> database, Bedrock-classification and teardown decisions remain unchanged.
+
 ## Context
 
 The event-alert service has two modes from one image ([ADR-0007](ADR-0007-alert-service-runtime-boundary.md)): the API, which the CRM stack already deploys, and a run-once worker that searches public news for one window and exits ([ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) decision 1). Nothing starts the worker today. The CRM stack's `services.tf`, `scheduler.tf` and `audit.tf` each say the worker's schedule, Bedrock access and AgentCore access belong to EDA-D1-02, and the CRM stack already exposes an `alerts_worker_inputs` output for it.
@@ -101,3 +107,4 @@ At 0.5 vCPU and 1 GB, a run of about two minutes six times a day is about 6 task
 
 - 2026-10-20: proposed.
 - 2026-10-21: accepted by Hayyun after discussion with Azeez and Neo Jia Wen.
+- 2026-10-23: AgentCore-specific decisions superseded by accepted ADR-0050; worker topology unchanged.

@@ -1,8 +1,8 @@
 # ADR-0050: Event search provider, after the Tokyo Gateway and Bedrock Web Search are both blocked
 
-- Status: Proposed
+- Status: Accepted
 - Decision date/time: 2026-10-22 (Asia/Singapore)
-- Decision owner(s): Azeez (owner of EDA-D1-02; this ADR hands the open decision to him)
+- Decision owner(s): Azeez (owner of EDA-D1-02; selected Tavily on 2026-10-23)
 - Required reviewer: Hayyun
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `feat/event-driven-alerts`
@@ -41,7 +41,7 @@ Two bugs were found and fixed along the way, independent of the SCP/Marketplace 
 
 - Ship a search step that actually runs in this AWS account, without waiting on an Organization-level policy change outside the team's control.
 - Keep the private/public data boundary ADR-0009 and ADR-0031 already established: only public issuer/ticker/sector/event terms and a bounded date range ever leave the service, never CRM identifiers, holdings, or audit data.
-- Prefer a reversible choice: if the SCP is ever relaxed, swapping back to the Tokyo Gateway should cost one class, not a redesign.
+- Keep the provider interface reversible: if the SCP is ever relaxed, a reviewed AgentCore adapter can be reintroduced without redesigning ingestion.
 - Do not block the already-proven classification → scoring → alert → audit chain on this decision; it does not depend on which search provider feeds it.
 
 ## Options Considered
@@ -49,21 +49,21 @@ Two bugs were found and fixed along the way, independent of the SCP/Marketplace 
 - **Escalate to whoever controls the AWS Organization's management account** to exempt this account from the relevant SCP statements. The only option that keeps the architecture exactly as ADR-0009/ADR-0031/ADR-0048 describe it. Available as a parallel, secondary path — pursue it, but do not block on it, since its timeline and outcome are outside the team's control.
 - **Amazon Bedrock's native Web Search (Mantle).** Ruled out: confirmed blocked by the same SCP as the Gateway.
 - **A different AWS region for AgentCore.** Ruled out: the web search connector only exists in Tokyo.
-- **Call a search/news API directly from the worker, bypassing Bedrock entirely (chosen).** No `bedrock-*` action is involved, so the SCP cannot apply. Implemented behind the existing `PublicSearchProvider` interface ([`PublicSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/PublicSearchProvider.java)), the same seam `AgentCoreSearchProvider` already implements, so nothing downstream of ingestion changes.
+- **Call a search/news API directly from the worker, bypassing Bedrock entirely (chosen).** No `bedrock-*` action is involved, so the SCP cannot apply. Implemented behind the existing `PublicSearchProvider` interface ([`PublicSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/PublicSearchProvider.java)), so nothing downstream of ingestion changes.
 - **Leave Tokyo wired up and document the gap, do nothing else.** Rejected as the only action: it is a safe fallback, not a path to a working feature, and the team has over three weeks left to ship this.
 
 ## Decision
 
-1. **Add a new `PublicSearchProvider` implementation** (suggested: `TavilySearchProvider`, provider name TBD by Azeez — Tavily, Bing Search, or a comparable news/web search API all fit the same seam) that calls that provider's HTTPS API directly from the worker process, inside the existing VPC egress path (NAT gateway), with no AgentCore or Bedrock Mantle involved.
-2. **The request stays bounded exactly as ADR-0009 already requires:** public issuer/ticker/sector/event terms, an inclusive UTC date range, a capped result count, and (if the provider supports it) a domain allowlist mirroring `mas.gov.sg`, `sgx.com`, and reviewed issuer investor-relations domains. No CRM identifier, holding, exposure, note, agent, or audit data is ever sent.
-3. **Classification keeps using Bedrock, on Amazon's own Nova family instead of the Marketplace-gated OpenAI model**, until the Marketplace subscription issue is separately resolved (that is a different blocker from the search question and can be escalated or re-tried independently). `BedrockAiModelGateway`'s tool-use rewrite (this session) is required for this and should not be reverted.
-4. **The provider's API key is a new secret** (AWS Secrets Manager, following the same pattern as the alerts-db credential), never an environment variable literal. Terraform for `stacks/alert-worker` drops the `agentcore_gateway_arn` variable and its IAM policy (`InvokeTheSearchGateway`) and adds the new provider's secret ARN to the task's `secret_arns`.
-5. **Escalating the SCP stays open as a parallel, lower-priority track.** If it succeeds, swapping back to `AgentCoreSearchProvider` is a one-line change at the `PublicSearchProvider` wiring point — this decision does not have to be revisited, only re-made, if that happens.
+1. **Use Tavily through `TavilySearchProvider`,** which calls `https://api.tavily.com/search` directly from the worker process inside the existing VPC egress path (NAT gateway), with no AgentCore or Bedrock Mantle involved. The endpoint is pinned rather than operator-configurable so a configuration change cannot redirect the API key to another host.
+2. **The request stays bounded exactly as ADR-0009 already requires:** public issuer/ticker/sector/event terms, an inclusive UTC date range, at most ten results, and Tavily's restrictive `include_domains` mode mirroring `mas.gov.sg`, `sgx.com`, and reviewed issuer investor-relations domains. It uses `topic=news`, basic search with one chunk per source, disables answers/raw content/images/automatic parameters, and enables published-date filtering. The adapter re-checks the exact instant window and approved HTTPS domain locally because Tavily's `start_date` and exclusive `end_date` have day precision. No CRM identifier, holding, exposure, note, agent, or audit data is ever sent.
+3. **Classification uses Bedrock Runtime with `global.amazon.nova-2-lite-v1:0` from the Singapore (`ap-southeast-1`) source Region.** Nova is the production default rather than a temporary substitute for the Marketplace-gated OpenAI model. Global inference may route processing to another supported AWS Region. Tavily owns live-news retrieval, so neither the classifier nor the search path requires a Tokyo endpoint. `BedrockAiModelGateway`'s tool-use implementation is required for this contract and should not be reverted.
+4. **The provider's API key is a new secret** (AWS Secrets Manager, following the same pattern as the alerts-db credential), never a Terraform variable or plain environment value. Terraform creates the secret container but not a secret version; an operator populates it out of band before enabling ingestion. ECS injects it through the task execution role, which is limited to that secret and the database secret. `stacks/alert-worker` drops the AgentCore URL/ARN variables and `InvokeTheSearchGateway` IAM policy.
+5. **Escalating the SCP stays open as a parallel, lower-priority track.** If it succeeds, reintroducing an AgentCore adapter requires a new reviewed change at the `PublicSearchProvider` seam; inactive production code is not retained.
 6. **Azeez owns the provider choice, the new ADR revision (or a follow-up ADR) naming it, the Terraform change, and the benchmark** ADR-0009 already asked for ("a financial-news API requires benchmark evidence"): result quality, latency, and actual cost against real queries before this goes into the budget in [the event-driven-alerts budget doc](../cost/event-driven-alerts-budget.md).
 
 ## Rationale
 
-This keeps every already-proven part of the pipeline untouched — matching, classification, scoring, alert generation, and the audit trail all already work, with a real model call, against a real database. The only change is at the one seam the codebase already isolated for exactly this kind of swap (`PublicSearchProvider`), which is why `AgentCoreSearchProvider` and a new HTTP-based provider can coexist without touching `WorkerRunner`, `SourcePipeline`, or anything downstream of ingestion.
+This keeps every already-proven part of the pipeline untouched — matching, classification, scoring, alert generation, and the audit trail all already work, with a real model call, against a real database. The only change is at the one seam the codebase already isolated for exactly this kind of swap (`PublicSearchProvider`), so the Tavily adapter does not touch `WorkerRunner`, `SourcePipeline`, or anything downstream of ingestion.
 
 ## Consequences
 
@@ -77,12 +77,12 @@ This keeps every already-proven part of the pipeline untouched — matching, cla
 
 - A new third-party vendor and a new secret to manage, cost, and monitor — outside what ADR-0009 originally scoped.
 - Loses whatever curation AgentCore's Tokyo connector would have enforced (the administrator domain allowlist mechanism); the new provider must enforce (or be configured to enforce) the same bound in its own request, not assumed from AgentCore's behavior.
-- The AI classification model (Nova, not the originally pinned Luna) is also a deviation from ADR-0010 until the Marketplace issue is separately resolved; this ADR does not resolve that, it only unblocks testing around it.
+- Global inference does not provide Singapore-only processing. A later residency requirement would require a separately supported in-Region or geographic inference profile and a reviewed ADR.
 
 ## Security & Privacy Impact
 
 - No change to what leaves the service: still public search terms only, per ADR-0009/ADR-0031's existing boundary. The new provider's request payload must be reviewed against that boundary before launch.
-- A new secret (the provider's API key) in Secrets Manager, scoped to the worker task role only.
+- A new secret (the provider's API key) in Secrets Manager, scoped to the worker task execution role only, as ECS secret injection requires.
 - Removes the `bedrock-agentcore:InvokeGateway` IAM statement entirely from the worker's task role (dead permission, since the Gateway is not being created).
 
 ## Cost Impact
@@ -97,16 +97,19 @@ Depends on the provider Azeez chooses and its pricing (typically a per-query or 
 
 ## Validation
 
-- Unit/contract test the new `PublicSearchProvider` implementation the same way `AgentCoreSearchProvider` is tested: bounded request, response size cap, provider-error mapping to `SearchProviderException`.
+- Unit/contract test `TavilySearchProvider`: bounded request, response size cap, local domain/date validation, and provider-error mapping to `SearchProviderException`.
 - Re-run the exact mock-data path this session used (insert a `source_result` row, reset `processed_at`, run the worker once) once with a *real* search result from the new provider, to confirm the same classification → scoring → alert → audit chain holds end to end with real search content, not just a hand-written fixture.
 - Benchmark result quality, latency, and billed cost against real queries before raising `ingestion_enabled` in production, per ADR-0009's original ask.
 
 ## References
 
 - [ADR-0009](ADR-0009-agentcore-search-region-and-fallback.md), [ADR-0010](ADR-0010-alert-ai-provider-and-safety.md), [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md), [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md), [ADR-0048](ADR-0048-alert-worker-terraform-stack.md), [ADR-0049](ADR-0049-alert-source-to-alert-pipeline.md)
-- [`PublicSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/PublicSearchProvider.java), [`AgentCoreSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/AgentCoreSearchProvider.java)
+- [`PublicSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/PublicSearchProvider.java), [`TavilySearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/TavilySearchProvider.java)
 - [Event-driven-alerts deployment status](../feature-plans/event-driven-alerts-deployment-status.md) — this session's full test log and handover notes
 
 ## Revision history
 
 - 2026-10-22: proposed, handed to Azeez for the provider choice and implementation.
+- 2026-10-23: accepted with Tavily as the named provider; request, response, endpoint and secret-management controls recorded.
+- 2026-10-23: removed the inactive AgentCore runtime adapter and configuration; the historical spike remains as decision evidence.
+- 2026-10-23: accepted Nova 2 Lite as the production classifier and Singapore as the Bedrock Runtime source Region; Tavily removes the former Tokyo search dependency.

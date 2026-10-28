@@ -69,9 +69,8 @@ run "ingestion_on_while_running" {
   command = plan
 
   variables {
-    ingestion_enabled     = true
-    ai_enabled            = true
-    agentcore_gateway_arn = "arn:aws:bedrock-agentcore:ap-northeast-1:123456789012:gateway/example"
+    ingestion_enabled = true
+    ai_enabled        = true
   }
 
   assert {
@@ -85,6 +84,10 @@ run "ingestion_on_while_running" {
   assert {
     condition     = aws_scheduler_schedule.alert_worker.target[0].ecs_parameters[0].network_configuration[0].assign_public_ip == false
     error_message = "The worker runs in the private app subnets."
+  }
+  assert {
+    condition     = var.bedrock_region == "ap-southeast-1" && local.bedrock_profile_id == "global.amazon.nova-2-lite-v1:0"
+    error_message = "AI must use Nova 2 Lite global inference from the Singapore source Region."
   }
   assert {
     condition     = can(regex("--cluster crm-sg-prod .*--launch-type FARGATE", output.run_once_command)) && can(regex("securityGroups=\\[sg-0alerts\\]", output.run_once_command))
@@ -143,14 +146,17 @@ run "failed_run_alarm_reports_to_the_crm_topic" {
   }
 }
 
-run "metrics_gateway_and_replay" {
+run "metrics_secret_and_replay" {
   command = plan
 
   variables {
     ingestion_enabled          = true
     cloudwatch_metrics_enabled = true
-    agentcore_gateway_url      = "https://example-gw.gateway.bedrock-agentcore.ap-northeast-1.amazonaws.com"
-    agentcore_gateway_arn      = "arn:aws:bedrock-agentcore:ap-northeast-1:123456789012:gateway/example"
+  }
+
+  assert {
+    condition     = can(regex("alert-worker-tavily", output.tavily_secret_arn)) && aws_secretsmanager_secret.tavily.recovery_window_in_days == 7
+    error_message = "The stack owns a recoverable Tavily secret container whose value is populated out of band."
   }
 
   assert {

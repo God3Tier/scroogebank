@@ -52,7 +52,7 @@ class IngestionCoordinatorTest {
     @BeforeEach
     void setUp() {
         coordinator = coordinator(true);
-        lenient().when(watermarks.findById("agentcore-web-search-1.2.0")).thenReturn(Optional.empty());
+        lenient().when(watermarks.findById("tavily")).thenReturn(Optional.empty());
         lenient().when(searchRuns.findByWindowFromAndWindowTo(any(), any())).thenReturn(Optional.empty());
         lenient().when(searchRuns.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(outboundControls.reserveSearches(any(Integer.class)))
@@ -197,7 +197,7 @@ class IngestionCoordinatorTest {
 
         assertThat(outcome.status()).isEqualTo(IngestionStatus.SUCCEEDED);
         assertThat(outcome.acceptedResults()).isZero();
-        verify(finalizer).succeed(retry, "agentcore-web-search-1.2.0", NOW,
+        verify(finalizer).succeed(retry, "tavily", NOW,
                 Duration.ofMinutes(5), 2, NOW);
     }
 
@@ -241,7 +241,7 @@ class IngestionCoordinatorTest {
 
     private IngestionCoordinator coordinator(boolean enabled) {
         IngestionProperties properties = new IngestionProperties(enabled,
-                "agentcore-web-search-1.2.0", Duration.ofMinutes(5), Duration.ofHours(4),
+                "tavily", Duration.ofMinutes(5), Duration.ofHours(4),
                 4, 10, 3, Duration.ofDays(90), new BigDecimal("0.05"), 2,
                 List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
         return new IngestionCoordinator(properties, provider, new GroupedQueryBuilder(),

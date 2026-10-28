@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 
 class IngestionRunFinalizerTest {
 
-    private static final String PROVIDER = "agentcore-web-search-1.2.0";
+    private static final String PROVIDER = "tavily";
     private static final Instant FROM = Instant.parse("2026-09-28T00:00:00Z");
     private static final Instant TO = Instant.parse("2026-09-28T04:00:00Z");
 

@@ -4,6 +4,14 @@ Written 2026-10-22 by Hayyun (with Claude Code). This is the practical "what to
 do next" companion to [ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md).
 Read the ADR for the reasoning; read this for the concrete steps.
 
+> **Update — 2026-10-23:** Azeez selected Tavily and ADR-0050 is accepted.
+> `TavilySearchProvider`, its bounded contract tests, the worker-owned empty
+> Secrets Manager secret, ECS injection, and the removal of AgentCore IAM are
+> implemented. The remaining gates are Terraform validation/plan, populating the
+> secret out of band, a real-key lower-environment search benchmark, and the
+> real-result source → classification → scoring → alert → audit proof. The
+> provider-selection instructions below are retained as the historical handover.
+
 ## The one-sentence summary
 
 Everything in the pipeline works — matching, real AI classification, scoring,
@@ -79,9 +87,7 @@ To implement the direct-API option:
    comparable news/web API would fit the same seam). Check its terms allow
    the use case and its pricing against ADR-0009's original bound (1,000
    searches/month, 4 grouped queries/run, 10 results/query).
-2. **Implement `PublicSearchProvider`** — this is the exact interface
-   [`AgentCoreSearchProvider`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/AgentCoreSearchProvider.java)
-   already implements, at
+2. **Implement `PublicSearchProvider`** — use the interface at
    [`PublicSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/PublicSearchProvider.java).
    A new class (e.g. `TavilySearchProvider`) implementing the same
    `search(PublicSearchRequest): List<PublicSearchResult>` method, calling
@@ -103,9 +109,8 @@ To implement the direct-API option:
    provider (not a hand-written fixture) to confirm the full chain still
    holds with real content.
 
-If escalation succeeds later, swapping back to `AgentCoreSearchProvider` is a
-one-line change at the `PublicSearchProvider` wiring point — this isn't a
-one-way door.
+If escalation succeeds later, a reviewed AgentCore adapter can be reintroduced
+at the `PublicSearchProvider` seam without changing the downstream pipeline.
 
 ## Code changes already made this session (keep these)
 
@@ -139,13 +144,11 @@ one-way door.
   kills every alert without any error. If you ever get a `NO_ALERTS` outcome
   with no exceptions in the logs, check this first.
 - **Terraform (`stacks/alert-worker/main.tf`)**: `local.bedrock_profile_id`/
-  `bedrock_model_id` are **temporarily** pointed at
-  `global.amazon.nova-2-lite-v1:0` instead of the real pinned
-  `global.openai.gpt-5.6-luna`, with a matching `ALERT_AI_MODEL` env var
-  override, both marked `TEMPORARY (2026-10-22, Hayyun)` in the code.
-  **Revert these once a real decision is made** about the Marketplace issue
-  (escalate it, or accept Nova as the real production model — that's a
-  separate decision from the search provider one, see ADR-0010).
+  `bedrock_model_id` and the application default now permanently pin
+  `global.amazon.nova-2-lite-v1:0`. Bedrock Runtime is called from
+  `ap-southeast-1`; global inference may process the request in another
+  supported Region. Tavily supplies live news, so Tokyo is no longer part of
+  the runtime architecture (ADR-0050).
 - Image tags used today: `8b15e1e-fix2` → `8b15e1e-fix3` (Nova tool-use
   swap) → `8b15e1e-fix4` (fresh fixture timestamps). `prod.tfvars` in both
   `stacks/crm` and `stacks/alert-worker` point at `8b15e1e-fix4`.

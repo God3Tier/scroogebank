@@ -114,7 +114,7 @@ To restore one, uncomment it, and for the DR vault the prod assertion in `stacks
 
 | Part | Waiting for |
 |---|---|
-| Alert worker, its 4-hourly schedule, AgentCore web search in Tokyo and Bedrock access | INF-06 (EDA-D1-02), blocked until the alerts ADRs are accepted |
+| Alert worker, its 4-hourly schedule, Tavily secret/internet egress and Bedrock Runtime access from Singapore | INF-06 (EDA-D1-02), implemented behind disabled-by-default switches; live benchmark and reviewed apply remain |
 | Health monitor, its daily analysis task and health-db | INF-07: the service does not run yet |
 | GitHub deploy role (`enable_github_deploy_role`) and deploy workflows. `.github/workflows/ci.yml` builds and tests every pull request, but nothing pushes images or applies Terraform | INF-09: deferred while deployments are run by hand |
 | SES e-mail for client verification | [Open item 19](../../docs/architecture/open-items.md#19-client-verification-request-feature-2): agents check ID documents by hand for now |

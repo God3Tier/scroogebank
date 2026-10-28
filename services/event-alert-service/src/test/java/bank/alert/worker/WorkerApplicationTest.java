@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Starts the whole service in WORKER mode with ingestion switched on but no
- * search provider configured, as before the AgentCore client exists. The run
+ * Tavily API key configured. The run
  * must fail cleanly: recorded as failed, nothing invented, exit code 1. The
  * API stays off (ADR-0007).
  */

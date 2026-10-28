@@ -19,7 +19,12 @@ and deployment evidence remain pending approved AWS access.
 |---|---:|---|
 | `ALERT_MODE` | `API` | `API` serves `/api/alerts`; `WORKER` runs one ingestion window and exits, with code 1 if it failed |
 | `ALERT_INGESTION_ENABLED` | `false` | Allows provider ingestion reservations |
+| `ALERT_SEARCH_PROVIDER` | `tavily` | Selected public-news adapter; the worker stack pins this value |
+| `ALERT_TAVILY_API_KEY` | empty | Tavily key; injected from the worker-owned Secrets Manager secret, never set in a committed file |
 | `ALERT_AI_ENABLED` | `false` | Allows model invocation and model-token reservations |
+| `ALERT_AI_PROVIDER` | `none` | Set to `bedrock` together with `ALERT_AI_ENABLED=true`; the worker stack sets it automatically |
+| `ALERT_AI_MODEL` | `global.amazon.nova-2-lite-v1:0` | Pinned Nova 2 Lite global inference profile |
+| `ALERT_AI_BEDROCK_REGION` | `ap-southeast-1` | Singapore source Region for Bedrock Runtime; global inference may process elsewhere |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
 | `ALERT_MAX_SEARCHES_PER_RUN` | `4` | Search reservations per worker run |
 | `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.05` | Minimum fraction of distinct snapshot clients before an instrument's public terms are searchable |
@@ -57,9 +62,25 @@ cd -
 
 With both switches at their default `false` this creates the task definition, a `DISABLED` schedule, the failed-run rule and two IAM roles, and nothing runs. The schedule follows the CRM stack's `running`: apply this stack again after a CRM apply changes it.
 
+The first apply also creates an empty Tavily secret. Populate it without putting
+the value in Terraform state, shell history, a `.tfvars` file or source control:
+
+```sh
+TAVILY_SECRET_ARN=$(terraform output -raw tavily_secret_arn)
+read -rsp "Tavily API key: " TAVILY_API_KEY; echo
+aws secretsmanager put-secret-value --secret-id "$TAVILY_SECRET_ARN" --secret-string "$TAVILY_API_KEY" >/dev/null
+unset TAVILY_API_KEY
+```
+
+Keep `ingestion_enabled = false` until that command succeeds and the provider
+benchmark is approved. A task cannot start if its referenced secret has no
+current version.
+
 ### Smoke test the task and the alarm
 
-This needs no AgentCore client. With ingestion on and no client, a run fails cleanly with `PROVIDER_NOT_CONFIGURED` and exits 1, which should raise the alarm.
+Use an intentionally invalid synthetic Tavily key for this drill; never alter a
+real key merely to test failure handling. With ingestion on, the run fails
+cleanly with `PROVIDER_ACCESS_DENIED` and exits 1, which should raise the alarm.
 
 1. Set `ingestion_enabled = true` in `env/prod.tfvars` and apply. The schedule becomes `ENABLED` while the stack is running.
 2. Start one run now. The output holds the full command; run it, and note the task ARN it prints:
@@ -68,17 +89,21 @@ This needs no AgentCore client. With ingestion on and no client, a run fails cle
    eval "$(terraform -chdir=infrastructure/terraform/stacks/alert-worker output -raw run_once_command)"
    ```
 
-3. Read the one summary line in the log group from `terraform output -raw log_group`: `worker run status=FAILED ... error_code=PROVIDER_NOT_CONFIGURED`.
+3. Read the one summary line in the log group from `terraform output -raw log_group`: `worker run status=FAILED ... error_code=PROVIDER_ACCESS_DENIED`.
 4. Check that the alarm e-mail arrived, and that alerts-db has one `FAILED` row in `search_run` (use `scripts/db-run-sql.sh alerts`).
 5. **Set `ingestion_enabled = false` and apply again,** or the schedule keeps failing every four hours. It spends nothing else, since no search runs.
 
-Do not turn `ai_enabled` on until the AI benchmark gates pass and the Bedrock policy has been tried on a real account (ADR-0048 validation).
+Do not turn `ai_enabled` on until the AI benchmark gates pass. Nova 2 Lite has
+already completed one real-account pipeline call; repeat the bounded smoke test
+after deployment because model access and quotas remain account-specific.
 
 ## Smoke test the whole path on AWS
 
-Do this once the CRM stack is running and the worker stack is applied (see [Deploy the worker](#deploy-the-worker)). It needs a Tokyo AgentCore Gateway: create it with the [search spike](../../scripts/event-driven-alerts/search-spike/README.md) (`provision`) and keep its URL and ARN. Each step turns one more switch on, so a failure points at one cause.
+Do this once the CRM stack is running, the worker stack is applied, and the
+Tavily secret has a current version (see [Deploy the worker](#deploy-the-worker)).
+Each step turns one more switch on, so a failure points at one cause.
 
-1. **Search only.** In `env/prod.tfvars` set `ingestion_enabled = true`, `agentcore_gateway_url` and `agentcore_gateway_arn`; apply; start one run (`run_once_command`). The log line should say `status=SUCCEEDED` with `accepted` above zero. If it says `PROVIDER_ACCESS_DENIED`, the task role cannot invoke the gateway; if `PROVIDER_TOOL_NOT_FOUND` or `INVALID_PROVIDER_RESPONSE`, the real gateway's shape differs from the fake the client was tested against: fix `HttpAgentCoreGatewayClient` and add the case to its test.
+1. **Search only.** In `env/prod.tfvars` set `ingestion_enabled = true`; apply; start one run (`run_once_command`). The log line should say `status=SUCCEEDED` with `accepted` above zero. `PROVIDER_ACCESS_DENIED` means the secret value is missing/invalid, `PROVIDER_QUOTA_EXCEEDED` means the Tavily account limit stopped the run, and `INVALID_PROVIDER_RESPONSE` means Tavily returned a response outside the bounded contract. Inspect the provider request ID in the Tavily dashboard rather than logging the response body or API key.
 2. **Add the model.** Set `ai_enabled = true`, apply, and run again. The line `worker pipeline examined=… alerts_created=…` should show sources processed. Look in alerts-db (`scripts/db-run-sql.sh alerts`): `SELECT processing_outcome, count(*) FROM source_result GROUP BY 1;` and `SELECT assigned_agent_subject, count(*) FROM alert GROUP BY 1;`. `deferred=1` means the model call was refused: check the Bedrock permission and the model access in the account.
 3. **Replay.** Use `replay_command` with a window inside the last four hours. The audit event `alert.replay-requested` appears in `audit_outbox`, and `search_run` has a row for that window while `processing_watermark` is unchanged.
 4. **Metrics (optional).** Set `cloudwatch_metrics_enabled = true`, apply, run once, and look for the `CRM/EventAlerts` namespace in CloudWatch. Turn it off again unless you want the charts: each metric and tag combination bills.

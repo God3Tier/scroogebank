@@ -1,6 +1,6 @@
 -- Adds one real, SGX-listed instrument alongside the fully synthetic
 -- SYN-SGX-001 catalogue entry. Searching a real public company lets the
--- Tokyo AgentCore connector actually find real public news during manual
+-- The live search provider can find real public news during a manual
 -- testing; a purely synthetic name ("Synthetic Issuer One") can never match
 -- anything real. DBS Group Holdings was already the example query in the
 -- search spike's own README, so it's used here for consistency.

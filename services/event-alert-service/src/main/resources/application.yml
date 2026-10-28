@@ -44,7 +44,7 @@ alert:
   ingestion:
     # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
     enabled: ${ALERT_INGESTION_ENABLED:false}
-    provider: agentcore-web-search-1.2.0
+    provider: ${ALERT_SEARCH_PROVIDER:tavily}
     overlap: 5m
     initial-lookback: 4h
     max-queries-per-run: 4
@@ -55,11 +55,13 @@ alert:
     # Only public ticker/issuer/sector terms leave the private boundary.
     minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.05}
     minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
-    agentcore:
-      # The Tokyo Gateway URL (ADR-0031). Empty means no client: searches fail
-      # cleanly as PROVIDER_NOT_CONFIGURED. Credentials come from the task role.
-      gateway-url: ${ALERT_AGENTCORE_GATEWAY_URL:}
-      region: ${ALERT_AGENTCORE_REGION:ap-northeast-1}
+    tavily:
+      # Injected from Secrets Manager by the worker task. Empty keeps the
+      # application startable but every search fails closed.
+      api-key: ${ALERT_TAVILY_API_KEY:}
+      endpoint: https://api.tavily.com/search
+      timeout: 30s
+      max-response-bytes: 262144
     approved-domains:
       - mas.gov.sg
       - sgx.com
@@ -73,7 +75,7 @@ alert:
     # Independent fail-closed switch; no model can be invoked by default.
     enabled: ${ALERT_AI_ENABLED:false}
     provider: ${ALERT_AI_PROVIDER:none}
-    model: global.openai.gpt-5.6-luna
+    model: global.amazon.nova-2-lite-v1:0
     prompt-version: alert-public-v1
     max-input-characters: 12000
     max-output-characters: 8000
@@ -82,7 +84,7 @@ alert:
     timeout: 20s
     minimum-confidence: 0.60
     bedrock:
-      region: ${ALERT_AI_BEDROCK_REGION:us-east-1}
+      region: ${ALERT_AI_BEDROCK_REGION:ap-southeast-1}
   operations:
     # Independent outbound controls remain fail-closed until explicitly enabled.
     ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}

@@ -107,6 +107,7 @@ class AlertRepositoryTest {
                 VALUES
                     ('syn-client-001', 'syn-account-001', 'syn-agent-001',
                      'synthetic-holdings-v1')
+                ON CONFLICT (client_ref) DO NOTHING
                 """);
     }
 

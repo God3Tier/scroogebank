@@ -31,7 +31,7 @@ variable "state_bucket" {
 }
 
 variable "ingestion_enabled" {
-  description = "Let the worker search public news (ALERT_INGESTION_ENABLED) and turn its schedule on. Keep false until the AgentCore client exists and the live spike has passed (ADR-0031)."
+  description = "Let the worker search public news through Tavily (ALERT_INGESTION_ENABLED) and turn its schedule on. Keep false until the API key is populated and the live benchmark has passed (ADR-0050)."
   type        = bool
   default     = false
 }
@@ -49,15 +49,9 @@ variable "schedule" {
 }
 
 variable "bedrock_region" {
-  description = "Region that holds the global inference profile the worker calls (ALERT_AI_BEDROCK_REGION). Check that the account's service control policy allows Bedrock there."
+  description = "Singapore source Region for the global Nova 2 Lite inference profile (ALERT_AI_BEDROCK_REGION). Global inference may process the request in another supported AWS Region."
   type        = string
-  default     = "us-east-1"
-}
-
-variable "agentcore_gateway_url" {
-  description = "URL of the Tokyo AgentCore Gateway (the gatewayUrl the spike prints), passed to the worker as ALERT_AGENTCORE_GATEWAY_URL. Null until the gateway exists; with no URL every search fails cleanly as PROVIDER_NOT_CONFIGURED."
-  type        = string
-  default     = null
+  default     = "ap-southeast-1"
 }
 
 variable "cloudwatch_metrics_enabled" {
@@ -70,10 +64,4 @@ variable "cloudwatch_namespace" {
   description = "CloudWatch namespace the worker's metrics go to."
   type        = string
   default     = "CRM/EventAlerts"
-}
-
-variable "agentcore_gateway_arn" {
-  description = "ARN of the Tokyo AgentCore Gateway the worker searches through. Created after the live spike; null until then, and the worker gets no AgentCore permission."
-  type        = string
-  default     = null
 }

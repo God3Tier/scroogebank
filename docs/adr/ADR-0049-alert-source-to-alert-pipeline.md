@@ -9,6 +9,12 @@
 - Supersedes: N/A. Implements [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) decision 4 and answers gaps 1, 2, 5 and 6 in [the alert gaps](../feature-plans/event-driven-alerts_gaps.md)
 - Superseded by: N/A
 
+> **Provider amendment (2026-10-23):** ADR-0050 supersedes decision 6 for the
+> active deployment path. The inactive AgentCore runtime adapter was removed to
+> avoid maintaining a path that the organization SCP blocks;
+> `TavilySearchProvider` is the sole live discovery adapter.
+> Decisions 1–5 and 7–8 are provider-neutral and unchanged.
+
 ## Context
 
 A worker run searched and stored results but never turned them into alerts. Four things were missing: the article text, a way to say which instruments an article is about, severity and relevance values, and a rule for which agent gets which alert. There was also no search client, no way for an operator to replay a past window, and no worker metrics that survive a process that lives for seconds.
@@ -43,7 +49,7 @@ The pieces that already existed are sound and are reused unchanged: the AI class
 3. **Matching.** An exact, case-sensitive ticker token, a named issuer, or a named sector, after lower-casing and removing punctuation. Ticker and issuer together score relevance 1.00, either alone 0.80, sector only 0.40. Inactive instruments never match, and an unnamed instrument is never guessed. The same text and master always give the same matches (`matcher-v1`).
 4. **Severity.** A fixed table: regulatory and credit 0.80, corporate action 0.70, earnings and leadership 0.60, macro 0.50, other 0.30, plus 0.10 for a negative event, capped at 1.00 (`severity-v1`).
 5. **Gating and deferral.** The pipeline does nothing while the model is switched off. If the model is unavailable for now (disabled, over quota or budget, or a provider failure), the source stays pending and the pass stops, so the next run tries again. One source failing is counted and the pass moves on; an erroring source exits the worker with code 1 so the existing failed-run alarm fires. A deferral is not a failure.
-6. **AgentCore client.** `HttpAgentCoreGatewayClient` signs an MCP `tools/list` and `tools/call` over HTTPS with SigV4 (service `bedrock-agentcore`, Tokyo), finds the single web search tool once, and sends only the public query, the approved domains and the date window. It is created only when `alert.ingestion.agentcore.gateway-url` is set, using the task role's credentials. HTTP 429 and 5xx and timeouts are retryable; 401, 403 and other 4xx and MCP errors are not. **It has only run against a fake gateway.** The result field names are those the spike saw plus a snippet taken from the first of `snippet`, `summary`, `description` or `text`.
+6. **Historical AgentCore client (superseded and removed).** The original implementation signed MCP calls for the Tokyo Gateway and was tested only against a fake gateway. ADR-0050 replaced it with Tavily after the organization SCP blocked live invocation; inactive runtime code and environment variables are no longer retained.
 7. **Operator replay.** An operator starts a one-off worker task with `ALERT_WORKER_REPLAY_FROM`, `_TO`, `_OPERATOR` and `_CORRELATION_ID`. All four are required: a half-filled request is refused. The worker writes an `alert.replay-requested` audit event first and refuses if the outbox is full or unavailable, then replays that window through the existing bounded replay, which never moves the scheduler watermark. AWS authenticates who may start the task and CloudTrail records it; the `replay_command` output of the `alert-worker` stack is the command.
 8. **Metrics.** `micrometer-registry-cloudwatch2` exports the service's metrics, plus new `alert.worker.*` counters, to the `CRM/EventAlerts` namespace, **off by default** (`ALERT_CLOUDWATCH_METRICS_ENABLED`). The worker refreshes the shared monthly usage gauges before exit. The `alert-worker` stack grants `cloudwatch:PutMetricData` for that one namespace only when the switch is on.
 
@@ -86,9 +92,9 @@ Each pass is bounded by `max-sources-per-run` and by the existing model-token qu
 
 ## Validation
 
-- Unit tests: matcher (ticker token rules, normalisation, sector-only, determinism, inactive instruments), severity table, pipeline (skip when the model is off, no-match, deferral stops the pass, one error does not stop it), replay validation and the worker runner, and the AgentCore client against a fake gateway (signature scope, tool discovery once, filters, result mapping, retry classes).
+- Unit tests: matcher (ticker token rules, normalisation, sector-only, determinism, inactive instruments), severity table, pipeline (skip when the model is off, no-match, deferral stops the pass, one error does not stop it), replay validation, the worker runner, and the bounded Tavily request/response/error contract.
 - PostgreSQL tests: one source becomes one alert for each of two agents, each visible only to its own agent; a rerun creates no duplicates; a deferred source is processed after recovery; an expired source is ignored; a replay writes its audit event first and leaves the watermark alone.
-- Not yet shown: the real gateway's response shape, and the classifier's behaviour against a real model. Both need the live smoke test in the [event-alert operations runbook](../runbooks/event-driven-alerts-operations.md).
+- Not yet shown: a real Tavily result flowing through the classifier and alert pipeline. It needs the live smoke test in the [event-alert operations runbook](../runbooks/event-driven-alerts-operations.md).
 
 ## References
 
