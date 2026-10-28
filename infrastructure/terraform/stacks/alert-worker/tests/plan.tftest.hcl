@@ -155,7 +155,7 @@ run "metrics_secret_and_replay" {
   }
 
   assert {
-    condition     = can(regex("alert-worker-tavily", output.tavily_secret_arn)) && aws_secretsmanager_secret.tavily.recovery_window_in_days == 7
+    condition     = aws_secretsmanager_secret.tavily.name_prefix == "crm-sg-prod-alert-worker-tavily-" && aws_secretsmanager_secret.tavily.recovery_window_in_days == 7
     error_message = "The stack owns a recoverable Tavily secret container whose value is populated out of band."
   }
 

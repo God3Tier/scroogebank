@@ -123,7 +123,7 @@ module "event_alert_worker" {
   secrets = {
     EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"
     EVENT_ALERT_DB_PASSWORD = "${local.crm.alerts_db_secret_arn}:password::"
-    ALERT_TAVILY_API_KEY     = aws_secretsmanager_secret.tavily.arn
+    ALERT_TAVILY_API_KEY    = aws_secretsmanager_secret.tavily.arn
   }
   secret_arns = [local.crm.alerts_db_secret_arn, aws_secretsmanager_secret.tavily.arn]
 
