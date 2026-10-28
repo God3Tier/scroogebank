@@ -13,6 +13,7 @@ import (
 )
 
 type assignmentLookup func(context.Context, string) (string, time.Time, error)
+
 var assignmentClientID = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // RegisterAssignmentRoute exposes Contract B only to the dedicated machine

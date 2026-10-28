@@ -18,7 +18,7 @@ const (
 
 	// EngagementServiceType is engagement-service: agents' calendar events,
 	// reminder and invite emails, and client follow-up drafts (ADR-0051).
-	EngagementServiceType ServiceType = "ENGAGEMENT"
+	EngagementServiceType         ServiceType = "ENGAGEMENT"
 	RelationshipHealthServiceType ServiceType = "RELATIONSHIP_HEALTH_SERVICE"
 )
 

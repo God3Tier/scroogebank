@@ -489,7 +489,9 @@ func relationshipHealthEvent(action, entityType string, payload map[string]any) 
 		"occurred_at": "2026-10-28T03:00:00Z", "correlation_id": "correlation-1",
 		"client_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
-	for key, value := range payload { base[key] = value }
+	for key, value := range payload {
+		base[key] = value
+	}
 	encoded, _ := json.Marshal(base)
 	return ValidEvent{EventID: strings.Repeat("b", 64), EventType: "RELATIONSHIP_HEALTH", Action: action,
 		SourceService: string(models.RelationshipHealthServiceType), ActorID: "SYSTEM", Payload: encoded}
@@ -506,24 +508,28 @@ func TestValidatePayload_RelationshipHealthRedactedContract(t *testing.T) {
 			event := relationshipHealthEvent(action, entityType, map[string]any{
 				"after": map[string]any{"status": "OPEN", "severity": "HIGH", "task_version": 1},
 			})
-			if err := validatePayload(event); err != nil { t.Fatalf("valid event rejected: %v", err) }
+			if err := validatePayload(event); err != nil {
+				t.Fatalf("valid event rejected: %v", err)
+			}
 		})
 	}
 }
 
 func TestValidatePayload_RelationshipHealthRejectsSensitiveOrMalformedPayload(t *testing.T) {
 	tests := map[string]map[string]any{
-		"raw transactions": {"transactions": []string{"transaction-1"}},
-		"notes": {"note": "private note"},
-		"descriptions": {"description": "merchant text"},
+		"raw transactions":     {"transactions": []string{"transaction-1"}},
+		"notes":                {"note": "private note"},
+		"descriptions":         {"description": "merchant text"},
 		"raw client identifier": {"client_id": "client-1"},
-		"bad client reference": {"client_ref": "client-1"},
-		"bad state": {"after": map[string]any{"status": "UNKNOWN", "task_version": 0}},
+		"bad client reference":  {"client_ref": "client-1"},
+		"bad state":             {"after": map[string]any{"status": "UNKNOWN", "task_version": 0}},
 	}
 	for name, extra := range tests {
 		t.Run(name, func(t *testing.T) {
 			event := relationshipHealthEvent("TASK_CREATED", "RELATIONSHIP_TASK", extra)
-			if err := validatePayload(event); err == nil { t.Fatal("unsafe payload accepted") }
+			if err := validatePayload(event); err == nil {
+				t.Fatal("unsafe payload accepted")
+			}
 		})
 	}
 }
