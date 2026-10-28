@@ -66,6 +66,12 @@ public class IngestionCoordinator {
         return execute(windowFrom, scheduledWindowTo, catalogue, true);
     }
 
+    public IngestionOutcome run(Instant windowFrom, Instant windowTo,
+            List<InstrumentSearchTerms> catalogue) {
+        if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
+        return execute(windowFrom, windowTo, catalogue, true);
+    }
+
     /** Reprocesses one historical bounded window without moving the scheduler watermark. */
     public IngestionOutcome replay(Instant windowFrom, Instant windowTo,
             List<InstrumentSearchTerms> catalogue) {

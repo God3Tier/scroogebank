@@ -102,14 +102,16 @@ module "event_alert_worker" {
   cpu_architecture   = local.crm.cpu_architecture
 
   environment = merge({
-    ALERT_MODE              = "WORKER"
-    EVENT_ALERT_DB_URL      = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
-    AWS_REGION              = var.aws_region
-    ALERT_INGESTION_ENABLED = tostring(var.ingestion_enabled)
-    ALERT_SEARCH_PROVIDER   = "tavily"
-    ALERT_AI_ENABLED        = tostring(var.ai_enabled)
-    ALERT_AI_PROVIDER       = var.ai_enabled ? "bedrock" : "none"
-    ALERT_AI_BEDROCK_REGION = var.bedrock_region
+    ALERT_MODE                          = "WORKER"
+    EVENT_ALERT_DB_URL                  = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
+    AWS_REGION                          = var.aws_region
+    ALERT_INGESTION_ENABLED             = tostring(var.ingestion_enabled)
+    ALERT_SEARCH_PROVIDER               = "tavily"
+    ALERT_MINIMUM_SEARCH_CLIENT_SHARE   = tostring(var.minimum_search_client_share)
+    ALERT_MINIMUM_ACCOUNT_CONCENTRATION = tostring(var.minimum_account_concentration)
+    ALERT_AI_ENABLED                    = tostring(var.ai_enabled)
+    ALERT_AI_PROVIDER                   = var.ai_enabled ? "bedrock" : "none"
+    ALERT_AI_BEDROCK_REGION             = var.bedrock_region
     # The API process publishes the audit outbox, including rows a worker run
     # leaves behind, so the worker needs no queue access.
     ALERT_AUDIT_PUBLISHER_ENABLED    = "false"

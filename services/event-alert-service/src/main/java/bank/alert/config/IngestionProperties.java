@@ -19,6 +19,7 @@ public record IngestionProperties(
         Duration retention,
         BigDecimal minimumSearchClientShare,
         int minimumSearchClientCount,
+        BigDecimal minimumAccountConcentration,
         List<String> approvedDomains,
         List<String> eventTerms) {
 
@@ -32,8 +33,10 @@ public record IngestionProperties(
         maxAttempts = maxAttempts <= 0 ? 3 : Math.min(maxAttempts, 3);
         retention = retention == null ? Duration.ofDays(90) : retention;
         minimumSearchClientShare = minimumSearchClientShare == null
-                ? new BigDecimal("0.05") : minimumSearchClientShare;
+                ? new BigDecimal("0.20") : minimumSearchClientShare;
         minimumSearchClientCount = minimumSearchClientCount <= 0 ? 2 : minimumSearchClientCount;
+        minimumAccountConcentration = minimumAccountConcentration == null
+                ? new BigDecimal("0.50") : minimumAccountConcentration;
         approvedDomains = approvedDomains == null || approvedDomains.isEmpty()
                 ? List.of("mas.gov.sg", "sgx.com")
                 : approvedDomains.stream().map(String::toLowerCase).distinct().toList();
@@ -50,6 +53,11 @@ public record IngestionProperties(
                 || minimumSearchClientShare.compareTo(BigDecimal.ONE) > 0) {
             throw new IllegalArgumentException(
                     "alert.ingestion.minimum-search-client-share must be between zero and one");
+        }
+        if (minimumAccountConcentration.signum() <= 0
+                || minimumAccountConcentration.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException(
+                    "alert.ingestion.minimum-account-concentration must be between zero and one");
         }
         if (eventTerms.isEmpty()) throw new IllegalArgumentException("alert.ingestion.event-terms cannot be empty");
     }

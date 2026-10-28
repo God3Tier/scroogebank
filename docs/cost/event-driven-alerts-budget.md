@@ -29,6 +29,9 @@ replaced AgentCore with Tavily; no dollar amount is approved until the owner
 records the account plan and a billed lower-environment benchmark. It is a
 planning assumption, not a billing claim.
 
+The portfolio-aware universe does not raise this ceiling: rotation still permits
+at most four grouped searches with eight instruments each per scheduled run.
+
 ## Enforced application controls
 
 - Ingestion and model access default to disabled.

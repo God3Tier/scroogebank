@@ -53,8 +53,9 @@ alert:
     retention: 90d
     # Select public search terms in Singapore from sufficiently common holdings.
     # Only public ticker/issuer/sector terms leave the private boundary.
-    minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.05}
+    minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.20}
     minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
+    minimum-account-concentration: ${ALERT_MINIMUM_ACCOUNT_CONCENTRATION:0.50}
     tavily:
       # Injected from Secrets Manager by the worker task. Empty keeps the
       # application startable but every search fails closed.

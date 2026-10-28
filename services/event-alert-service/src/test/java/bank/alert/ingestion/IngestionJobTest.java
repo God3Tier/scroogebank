@@ -25,8 +25,9 @@ class IngestionJobTest {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
         SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
         IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
         IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.API), properties(),
-                searchUniverse, instruments, coordinator);
+                searchUniverse, instruments, coordinator, coverage);
 
         assertThatThrownBy(() -> job.runScheduledWindow(Instant.parse("2026-09-28T04:00:00Z")))
                 .isInstanceOf(IllegalStateException.class)
@@ -40,8 +41,9 @@ class IngestionJobTest {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
         SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
         IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
         IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
-                searchUniverse, instruments, coordinator);
+                searchUniverse, instruments, coordinator, coverage);
         Instant from = Instant.parse("2026-09-28T02:00:00Z");
         Instant to = Instant.parse("2026-09-28T04:00:00Z");
         Instrument instrument = mock(Instrument.class);
@@ -57,6 +59,8 @@ class IngestionJobTest {
                 .thenReturn(List.of("SYN-SGX-001", "INACTIVE", "UNKNOWN"));
         when(instruments.findAllById(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(List.of(inactive, instrument));
+        when(coverage.replay(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(to)))
+                .thenReturn(List.of("SYN-SGX-001"));
 
         job.replayWindow(from, to);
 
@@ -67,7 +71,8 @@ class IngestionJobTest {
 
     private static IngestionProperties properties() {
         return new IngestionProperties(false, "tavily", Duration.ofMinutes(5),
-                Duration.ofHours(4), 4, 10, 3, Duration.ofDays(90), new BigDecimal("0.05"), 2,
+                Duration.ofHours(4), 4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2,
+                new BigDecimal("0.50"),
                 List.of("sgx.com"), List.of("earnings"));
     }
 }

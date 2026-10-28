@@ -1,11 +1,11 @@
 # ADR-0016: Holdings-derived public search universe
 
 - Status: Proposed
-- Decision date/time: 2026-09-30 (Asia/Singapore)
+- Decision date/time: 2026-10-28 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewer: Hayyun
 - AI-assisted draft: Yes — Codex
-- Related branch: `task/event-driven-alerts/integration`
+- Related branch: `task/event-driven-alerts/search-universe-thresholds`
 - Supersedes: None
 
 ## Context
@@ -27,15 +27,22 @@ The Singapore worker derives the search universe locally before calling Tokyo:
 
 1. Read the approved holdings snapshot through `SearchUniverseProvider`.
 2. Ignore zero-quantity and zero-value positions.
-3. Count distinct active clients per stable instrument ID.
-4. Select an instrument only when it is held by at least two clients and at least
-   5% of clients represented in the snapshot. Both controls are configurable,
-   default to `2` and `0.05`, and may only be changed through an audited operator
-   process once that contract exists.
+3. Count distinct clients with positive positions per stable instrument ID.
+4. Select an instrument when either it is held by at least two clients and at
+   least 20% of clients with a positive snapshot position, or it represents at
+   least 50% of one account's positive SGD portfolio value. Client and account
+   scopes are never combined. The controls are configurable and inclusive.
+   Missing, expired, invalid, or incompatible valuations fail closed only for
+   concentration; the commonality rule remains independent of valuation state.
 5. Join eligible IDs to the Singapore-side instrument catalogue and discard
    unknown or inactive identifiers.
-6. Build at most four grouped searches from public ticker, issuer, sector, alias,
-   and event terms.
+6. Sort eligible active instruments deterministically and select at most 32 for
+   the current four-hour UTC schedule slot. Build at most four grouped searches
+   from public ticker, issuer, sector, alias, and event terms.
+7. Persist each instrument's `last_successful_to`. New instruments use the
+   four-hour initial lookback; returning instruments resume from their previous
+   successful time minus overlap. Only a successful scheduled run advances
+   coverage. Failures, blocked runs and replays do not.
 
 Tokyo receives only the resulting public terms, approved domains, date window,
 and result limit. It never receives client counts, client share, client/account or
@@ -62,9 +69,9 @@ scoring still happen after results return to Singapore.
 
 ## Validation
 
-- Unit tests cover client-count/share selection, zero-value exclusion, public
-  sector query terms, inactive/unknown instrument removal, and the empty-universe
-  no-search path.
+- Unit tests cover the exact 20% and 50% boundaries, per-account isolation,
+  invalid valuation failure, zero-value exclusion, rotation and recovery,
+  inactive/unknown instrument removal, and the empty-universe no-search path.
 - Payload tests continue to reject client, account, holding, exposure, and agent
   fields.
 - The AgentCore spike must inspect actual outbound requests before enablement.

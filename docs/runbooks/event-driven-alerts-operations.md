@@ -27,8 +27,9 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_AI_BEDROCK_REGION` | `ap-southeast-1` | Singapore source Region for Bedrock Runtime; global inference may process elsewhere |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
 | `ALERT_MAX_SEARCHES_PER_RUN` | `4` | Search reservations per worker run |
-| `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.05` | Minimum fraction of distinct snapshot clients before an instrument's public terms are searchable |
+| `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.20` | Inclusive fraction of distinct positive-position clients for the common-holding rule |
 | `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
+| `ALERT_MINIMUM_ACCOUNT_CONCENTRATION` | `0.50` | Inclusive per-account share of positive SGD portfolio value for the concentration rule |
 | `ALERT_MONTHLY_MODEL_TOKEN_QUOTA` | `200000` | Model-token reservations per UTC month |
 | `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `2000` | Tokens per model reservation |
 | `ALERT_MONTHLY_BUDGET_USD` | `25.00` | Estimated-cost stop threshold |
@@ -121,6 +122,9 @@ Inspect application health and these low-cardinality Micrometer series:
 - `alert.outbound.monthly.searches`
 - `alert.outbound.monthly.model.tokens`
 - `alert.outbound.monthly.estimated.cost.usd`
+- `alert.search.universe.eligible`, `alert.search.selection.common`, and `alert.search.selection.concentration`
+- `alert.search.batch.selected` and `alert.search.batch.deferred`
+- `alert.search.coverage.oldest.age.seconds`
 
 Correlate application evidence with the provider bill before treating estimated
 cost as authoritative.
@@ -150,6 +154,11 @@ cost as authoritative.
 
 Bounded historical ingestion replay is implemented behind the internal worker
 boundary. It does not move the scheduler watermark. Before a production replay:
+
+Scheduled runs sort eligible instruments, select at most 32 from the current
+four-hour UTC slot, and resume from `instrument_search_coverage` with the normal
+deduplication overlap. Replays use the same deterministic slot selection but
+never advance coverage. A failed or blocked run also leaves coverage unchanged.
 
 1. Select an explicit bounded run/event range and verify database idempotency.
 2. Keep outbound capabilities off while checking the candidate set.

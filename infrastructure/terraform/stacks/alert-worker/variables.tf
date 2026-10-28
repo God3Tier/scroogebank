@@ -48,6 +48,26 @@ variable "schedule" {
   default     = "rate(4 hours)"
 }
 
+variable "minimum_search_client_share" {
+  description = "Inclusive distinct-client share required by the common-holding search rule."
+  type        = number
+  default     = 0.20
+  validation {
+    condition     = var.minimum_search_client_share > 0 && var.minimum_search_client_share <= 1
+    error_message = "minimum_search_client_share must be greater than zero and at most one."
+  }
+}
+
+variable "minimum_account_concentration" {
+  description = "Inclusive per-account SGD portfolio concentration required by the concentration search rule."
+  type        = number
+  default     = 0.50
+  validation {
+    condition     = var.minimum_account_concentration > 0 && var.minimum_account_concentration <= 1
+    error_message = "minimum_account_concentration must be greater than zero and at most one."
+  }
+}
+
 variable "bedrock_region" {
   description = "Singapore source Region for the global Nova 2 Lite inference profile (ALERT_AI_BEDROCK_REGION). Global inference may process the request in another supported AWS Region."
   type        = string

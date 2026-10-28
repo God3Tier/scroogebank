@@ -93,6 +93,7 @@ run "ingestion_on_while_running" {
     condition     = can(regex("--cluster crm-sg-prod .*--launch-type FARGATE", output.run_once_command)) && can(regex("securityGroups=\\[sg-0alerts\\]", output.run_once_command))
     error_message = "The by-hand run command targets the CRM cluster and the alerts security group."
   }
+
 }
 
 run "crm_stack_stopped" {

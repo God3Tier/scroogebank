@@ -545,3 +545,12 @@
   Testcontainers suite (189/189) earlier in the session before this configuration
   change. `git diff --check` passes, no runtime Luna/us-east-1 fallback remains,
   and Terraform validation remains unavailable because the CLI is not installed.
+
+# 2026-10-28 - Portfolio-aware search universe
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Implement the holdings commonality/concentration rules, deterministic bounded rotation, per-instrument coverage, Terraform configuration, tests, and documentation from `plan.md`.
+- Files/components affected: event-alert-service ingestion/holdings/config/migration/metrics, alert-worker Terraform, ADR-0016, feature plan, schema/runbook/cost records.
+- Verification: Local Terraform format/validate/test, Java 25 Maven tests with Docker/Testcontainers, and frontend regression checks; no AWS or live Tavily calls.
+- Human verification required: Hayyun domain review and normal PR/CI review before merge.
