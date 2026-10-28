@@ -2,6 +2,9 @@ server:
   port: ${SERVER_PORT:8087}
 
 client-health:
+  runtime:
+    mode: ${CLIENT_HEALTH_MODE:API}
+    lease-duration: ${CLIENT_HEALTH_ANALYSIS_LEASE_DURATION:60m}
   ai:
     enabled: ${CLIENT_HEALTH_AI_ENABLED:false}
     model-id: ${CLIENT_HEALTH_AI_MODEL_ID:}

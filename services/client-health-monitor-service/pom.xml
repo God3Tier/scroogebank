@@ -107,6 +107,7 @@
     </dependencyManagement>
 
     <build>
+        <finalName>client-health-monitor-service</finalName>
         <testResources>
             <testResource>
                 <directory>../../docs/api/schemas</directory>
