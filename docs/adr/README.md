@@ -46,6 +46,8 @@ record was renamed or deleted during the branch merge.
 
 ## Proposed decisions
 
+- [ADR-0066](ADR-0066-crm-linked-current-alert-holdings.md) - Proposed database-backed current alert holdings linked to CRM accounts and current agent assignment, with complete-account exposure, immutable scoring snapshots and no fixture fallback.
+
 Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](../architecture/system-overview.md). Numbering starts at 0017 because feature branches already use 0001–0016.
 
 - [ADR-0005](ADR-0005-alert-holdings-and-valuation-boundary.md) - Use service-owned synthetic holdings and reproducible, freshness-aware valuation snapshots for the alert MVP.

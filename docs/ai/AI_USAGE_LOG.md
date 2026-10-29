@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-10-29 - Verify and plan CRM-linked current alert holdings
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Fetch all remote refs, verify whether any branch already maintains securities positions linked to CRM clients/accounts/current agents, and plan the missing integration.
+- Data: Repository source and Git refs only; 44 actual remote branches plus the symbolic default HEAD alias. No real client data, secret file, deployed database, AWS, model or Tavily call.
+- Files/components affected: Current-holdings feature subplan, proposed ADR-0066/index, glossary, parent-plan task record and pinned branch-audit evidence.
+- Verification: Static inspection of provider implementations, source loader, account schemas/lookup, current-dev reassignment/authorization decisions, snapshot/exposure flow and dashboard portfolio references. Documentation checks recorded with the planning commit; no new runtime behaviour or application test result is claimed.
+- Human verification required: Hayyun must review holdings/contracts/exposure and Neo Jia Wen the CRM ownership/private-scope changes before shared code changes. ADR-0066 remains proposed and all implementation tasks remain planned.
+
 ## 2026-10-20 — INF-08 HTTPS from the internal ALB to the Java services
 
 - Human owner: Neo Jia Wen.

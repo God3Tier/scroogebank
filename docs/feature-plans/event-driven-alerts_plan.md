@@ -715,6 +715,14 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 
 ### 19.3 Execution Sequence for Two Developers
 
+Current-holdings integration is separately planned in
+[event-driven-alerts-current-holdings_plan.md](event-driven-alerts-current-holdings_plan.md).
+The all-remote audit confirms no maintained CRM-linked securities source.
+
+| ID | Owner | Deliverable and expected files | Branch | Dependencies | Status | Last sync |
+|---|---|---|---|---|---|---|
+| EDA-CH-00 | Azeez; Hayyun domain review; Neo Jia Wen CRM review | Verify holdings source across remote branches; draft current-holdings plan, ADR-0066, vocabulary and evidence | `task/event-driven-alerts/current-holdings-plan` | Existing holdings contracts; reviewed retrieval work and current-dev ownership APIs must land before implementation | Planning complete; proposed design awaiting owner review; no implementation | 2026-10-29 |
+
 ```text
 Both: EDA-00 and contract/interface agreement
 
