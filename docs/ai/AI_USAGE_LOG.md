@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-10-30 - Add Terraform takeover instructions to the current-holdings plan
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Expand CH-05 for another developer with the reason for infrastructure changes, all-remote fetch/task-branch instructions, runtime configuration/security/routing requirements, tests and completion criteria.
+- Files/components affected: Existing current-holdings plan and this usage record only.
+- Verification: Documentation links/whitespace, documentation-only staged scope, remote target protection and fast-forward ancestry; no runtime suite rerun because no application or Terraform code changed.
+- Integration: User requested pushing the plan to feat/event-driven-alerts using the previously selected direct workflow; the warning that PR review and PR-only CI are skipped was repeated. Recheck and verify the remote SHA around a non-forced push.
+- Limits: CH-05 and the application tasks remain planned for the receiving developer. No AWS, model, Tavily, deployment or secret-file access; unrelated root plan.md and bootstrap changes are preserved.
+
 ## 2026-10-30 - Clarify the agent-event workflow and prepare feature integration
 
 - Team member: Azeez.

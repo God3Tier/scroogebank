@@ -287,11 +287,136 @@ before implementation. No teammate has been contacted by this planning task.
 | CH-03: DB providers, full-account exposure, snapshot detail and current-owner routing | Azeez with required Hayyun review | holdings/ingestion/processing/repository/API authorization and integration tests | Same alert task; CH-02 and retrieval fixes | Planned |
 | CH-04: existing account-page holdings editor | Hayyun | existing frontend client/account and alert views, API adapter and tests | Alert task after API contract; coordinate frontend owner | Planned |
 | CH-04b: one agent-event briefing with affected-client drill-down and event actions | Hayyun; Azeez reviews shared briefing/retrieval boundary | agent-event read/decision API, mapping to client evidence, grouped alert frontend, contracts/audit and tests | After grouped contract agreement and current retrieval integration; no implementation in this planning branch | Planned |
-| CH-05: runtime wiring and validation | Azeez; Neo Jia Wen infrastructure review | CRM/alert-worker Terraform, service configuration, runbooks, cost/evaluation evidence | Alert task; CH-01..04 | Planned |
+| CH-05: Terraform wiring, validation and developer handoff | Receiving infrastructure developer (record named owner before editing); Azeez application coordination; Neo Jia Wen infrastructure review | CRM/alert-worker Terraform, service configuration, runbooks, cost/evaluation evidence; detailed handoff below | `task/event-driven-alerts/current-holdings-infra` from updated feature; CH-01..04/04b configuration contracts | Planned; handed off, no implementation |
 
 All tasks last synchronized on 2026-10-29. Execute sequentially unless owners
 explicitly coordinate separate work; do not delegate or edit teammates' areas
 merely because this table proposes work.
+
+### 9.1 CH-05: Terraform handoff for the receiving developer (2026-10-30)
+
+This is an addition to the existing plan, not a replacement. A separate developer
+will take over implementation. Record that developer's name against the tasks
+they accept before editing, and coordinate with the listed service/domain owners.
+Azeez remains the feature owner and application-interface contact; no teammate
+approval or implementation is implied by this handoff.
+
+#### What is changing and why Terraform must change
+
+The application will read maintained database holdings linked to current CRM
+accounts and agent assignments. Its primary agent experience remains one event
+briefing with an affected-client list and Inform / Monitor / Dismiss choices.
+Terraform must supply the private connectivity, authentication, configuration
+and routing for that workflow. Local code working against Docker does not prove
+that ECS API/worker tasks have these dependencies when deployed.
+
+The present alert API and worker do not have directory credentials/endpoints,
+the alert-service load-balancer rule covers only `/api/alerts`, and the run-once
+worker does not have an ECS-service Service Connect proxy. Merely configuring
+Service Connect alias hostnames on that task does not establish connectivity.
+
+#### Start here: branches, ownership and application contracts
+
+1. Read `AGENTS.md`, `project_plan.md`, this plan and the applicable ADRs.
+   Inspect status, current branch and recent commits; preserve unrelated edits.
+2. Run `git fetch --all --prune`. Inspect relevant remote feature/task branches
+   for existing CRM ownership, directory, identity and infrastructure work.
+   Fetching all branches does not mean merging them all.
+3. Create `task/event-driven-alerts/current-holdings-infra` from the latest
+   `origin/feat/event-driven-alerts`. If that name already exists, inspect its
+   owner/history before reusing it. Record the named task owner in this plan.
+4. Coordinate any prerequisite current-dev synchronization through the owning
+   feature's normal workflow. Do not copy old account DTOs, authentication
+   middleware or schemas over newer CRM reassignment/authorization changes.
+5. Freeze the application configuration names, scopes, directory routes and
+   provider-mode behaviour with Azeez and the service owners before wiring them.
+   Test both producer and consumer configuration; do not guess environment names.
+   Implement and verify the agreed Terraform changes on the task branch.
+
+#### Required Terraform review and updates
+
+- API and worker must use the same explicit holdings mode and directory
+  configuration. Database mode must not silently fall back to fixture data;
+  missing required configuration must fail explicitly. Ingestion/model switches
+  remain off by default.
+- Add a dedicated allowlisted Cognito client-credentials identity with only the
+  account/client directory read scopes. Configure the directory services to
+  recognise the exact client and route-specific scopes. Preserve the transaction
+  importer's existing credentials, scope and lookup contract.
+- Inject the credential through Secrets Manager/ECS secrets. Grant access only
+  to the execution roles requiring it; do not add broad Cognito or secret-read
+  privileges to application task roles. No secret values in ordinary environment
+  maps, outputs, examples, commits or logs. Document and protect any
+  Cognito-generated credential material held in Terraform state.
+- Establish private HTTPS access to the directory routes for both API and
+  run-once worker. Use the existing private ALB path for this batch-task
+  integration, with the necessary security-group rules, listener routing, DNS and
+  certificate trust. Reuse the Java trust-store/TLS-init mechanism where needed;
+  the worker is a TLS client, not a new HTTPS server. Database mode must not
+  downgrade to HTTP if the deployment lacks a usable HTTPS endpoint.
+- Add authenticated `/api/alert-portfolios` and descendant paths to the existing
+  alert-service target. Keep grouped event routes under `/api/alerts`.
+  The private directory routes remain outside the public API Gateway surface.
+  Document the deployment prerequisites for any required internal HTTPS route.
+- Extend the CRM stack's `alerts_worker_inputs` additively with required endpoint,
+  credential-reference and trust/configuration data. Preserve existing keys and
+  update the alert-worker consumer and mocked remote-state fixtures together.
+- Reuse the existing alert database, API, batch worker, scheduler and alarms.
+  No new database instance, always-on service or message broker is required.
+  Forward schema migrations remain application-owned and precede database-mode
+  activation. Check applicable API/worker startup and health behaviour.
+- Expected work is in `stacks/crm`, `stacks/alert-worker`, and only where needed
+  `modules/ecs-service` under `infrastructure/terraform`. Update environment
+  examples, operational configuration, deployment order, rollback and cost notes.
+  Do not expand shared modules or unrelated stacks without a demonstrated need.
+
+#### Tests and definition of completion
+
+Run formatting checks, backend-disabled initialization, validation and mocked
+Terraform tests for every changed stack/module. For each affected directory:
+
+```sh
+terraform fmt -check -recursive
+terraform init -backend=false -input=false
+terraform validate
+terraform test
+```
+
+Terraform tests must mock AWS providers and override CRM remote-state reads.
+Do not run a live AWS plan/apply or access deployed state for these local checks.
+Keep existing tests passing and add assertions proving:
+
+- API and worker receive matching holdings mode and directory configuration.
+- Dedicated credentials have only approved directory read scopes; existing
+  transaction-import permissions/configuration remain compatible.
+- Secret references and IAM resource permissions are narrowly scoped and no
+  secret value appears in plain task environment variables or normal outputs.
+- Private directory routes are not exposed by API Gateway; authorised private
+  callers have the required network/listener path.
+- The run-once worker receives functional HTTPS endpoint/trust configuration,
+  without depending on an absent Service Connect proxy.
+- Public holdings routes reach the alert API, and existing alert routes work.
+- Added output keys preserve the existing CRM/worker interface.
+- Staging/production, running/stopped and fixture/database configurations work;
+  absent required database-mode settings are explicitly rejected.
+- Scheduler stop/start behaviour, failed-run alarms, quota settings and default-off
+  ingestion/model controls retain their existing guarantees.
+
+The application developer must also exercise these configuration contracts with
+local services and stubbed token/JWKS/directory endpoints: permitted identity,
+wrong scope/client, expired token, upstream timeout and no fixture fallback.
+Changing environment names requires matching application and configuration tests.
+
+CH-05 is complete only when the changes are implemented, all affected existing
+and new tests pass, configuration matches the application contract, and the
+runbooks describe deployment order and rollback. Include security/cost notes and
+exact commands/results in a reviewed PR to `feat/event-driven-alerts`; do not
+infer permission for a future direct integration from the earlier documentation
+push. Report remaining deployment checks explicitly.
+
+Local mocked verification is not proof of AWS deployment. AWS apply, secrets
+population, live connectivity and enabling news/model calls require separate
+authorization. This handoff itself makes no infrastructure or application change.
 
 ## 10. Acceptance and test matrix
 
