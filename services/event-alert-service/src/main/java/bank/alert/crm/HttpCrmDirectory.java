@@ -70,6 +70,25 @@ public class HttpCrmDirectory implements CrmDirectory {
         }
     }
 
+    @Override
+    public boolean agentCanAccess(UUID accountId, String bearerToken) {
+        if (bearerToken == null || bearerToken.isBlank()) return false;
+        String url = properties.userAccountUrl() + accountId;
+        try {
+            http.get().uri(url).headers(headers -> headers.setBearerAuth(bearerToken))
+                    .retrieve().toBodilessEntity();
+            return true;
+        } catch (org.springframework.web.client.HttpClientErrorException refused) {
+            int status = refused.getStatusCode().value();
+            if (status == 401 || status == 403 || status == 404) return false;
+            onFailure.run();
+            throw new DirectoryUnavailableException("CRM account check returned an unexpected response", refused);
+        } catch (RestClientException exception) {
+            onFailure.run();
+            throw new DirectoryUnavailableException("CRM account check is unavailable", exception);
+        }
+    }
+
     private JsonNode lookup(String url, List<UUID> ids) {
         try {
             JsonNode body = http.post().uri(url)

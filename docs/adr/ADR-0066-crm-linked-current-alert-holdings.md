@@ -128,6 +128,9 @@ and Docker/Java/Go/UI/contract/Terraform checks.
   transaction import's `crm-accounts/lookup`, so neither token opens the other's route.
 - **One holdings switch.** In Terraform, `alert_holdings_mode` is read by both the API and the worker. Database
   mode needs the custom domain so the directory is reached over HTTPS.
+- **Writes use the agent's own token as well.** Besides the directory's owner check, a holdings write sends the
+  agent's access token to account-service's `GET /api/accounts/{id}` (the CRM's own scoped check). Both must agree,
+  otherwise the account is "not found"; an unreachable CRM is 503. This reuses the existing internal ALB rule.
 - **Routing audit and metrics.** `alert.routing-changed` is written transactionally when the ownership refresh
   sees a client's agent change (fails closed if the outbox is full). Aggregate gauges and a directory-failure
   counter carry no identifiers (operations runbook). Alert detail returns the account that produced the score

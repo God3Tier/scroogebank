@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,7 +47,10 @@ public class PortfolioController {
             @RequestHeader(value = "X-Correlation-Id", required = false) UUID correlationId,
             @Valid @RequestBody PortfolioReplaceRequest request,
             Authentication authentication) {
-        return service.replace(accountId, authentication.getName(), idempotencyKey,
+        if (!(authentication instanceof JwtAuthenticationToken jwt)) {
+            throw PortfolioApiException.forbidden("a user access token is required");
+        }
+        return service.replace(accountId, authentication.getName(), jwt.getToken().getTokenValue(), idempotencyKey,
                 correlationId == null ? UUID.randomUUID() : correlationId, request);
     }
 }

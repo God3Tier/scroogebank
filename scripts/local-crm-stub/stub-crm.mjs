@@ -11,6 +11,7 @@
 //          POST /token                         client-credentials token. The app client is the HTTP Basic
 //                                              user and the scope the form's `scope` field
 //          POST /accounts                      the account directory contract (`{ids}` -> `{items}`)
+//          GET  /api/accounts/{id}             the CRM's own check of the caller's token (owner or admin, else 404)
 // Controls POST /_mint {sub, groups, issuer}   a user access token
 //          POST /_set  {accounts}              replace the stub's accounts (reassign by changing owner_agent_id)
 //          POST /_down {down: true|false}      make the stub's directory answer 503
@@ -53,6 +54,16 @@ function send(response, status, body) {
 async function handle(request, response) {
   const path = new URL(request.url, 'http://stub').pathname
   if (path === '/.well-known/jwks.json' || path.endsWith('/.well-known/jwks.json')) return send(response, 200, { keys: [jwk] })
+  if (request.method === 'GET' && path.startsWith('/api/accounts/')) {
+    // The CRM's own scoped check: the caller's token must be the owning agent's (or an admin's).
+    if (state.down) return send(response, 503, { error: 'down' })
+    let claims = {}
+    try { claims = JSON.parse(Buffer.from((request.headers.authorization || '').split('.')[1] || '', 'base64url').toString()) } catch { /* no usable token */ }
+    if (!claims.sub) return send(response, 401, { error: 'unauthorized' })
+    const account = state.accounts.find((item) => item.id === path.slice('/api/accounts/'.length))
+    const allowed = account && (account.owner_agent_id === claims.sub || (claims['cognito:groups'] || []).includes('admin'))
+    return allowed ? send(response, 200, account) : send(response, 404, { error: 'not found' })
+  }
   const raw = request.method === 'POST' ? await readBody(request) : ''
   if (path === '/token') {
     const basic = (request.headers.authorization || '').replace(/^Basic /i, '')

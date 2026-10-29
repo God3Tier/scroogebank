@@ -5,7 +5,7 @@
 //
 //   mvn -pl services/event-alert-service -DskipTests package
 //   node scripts/local-crm-stub/e2e-real-account.mjs        # needs Docker; ports 9099, 18080, 18083, 55432 free
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -70,11 +70,29 @@ function openssl(...args) {
   throw new Error('openssl is required to make the throw-away test certificate')
 }
 
+// The alert API must accept the same user tokens the Go services do, because it forwards the agent's own
+// token to account-service. So it trusts the https cognito-idp issuer too: a throw-away truststore, and a
+// hosts-file override that points that name at this machine, where the stand-in publishes port 443.
+function keytoolExe() {
+  const settings = spawnSync('java', ['-XshowSettings:properties', '-version'], { encoding: 'utf8' })
+  const home = /java\.home = (.+)/.exec(`${settings.stderr}${settings.stdout}`)?.[1]?.trim()
+  return home ? path.join(home, 'bin', process.platform === 'win32' ? 'keytool.exe' : 'keytool') : 'keytool'
+}
+function javaTlsOptions() {
+  const hosts = path.join(tls, 'hosts.txt')
+  fs.writeFileSync(hosts, `127.0.0.1 ${HOST}
+`)
+  const store = path.join(tls, 'trust.jks')
+  if (!fs.existsSync(store)) execFileSync(keytoolExe(), ['-importcert', '-alias', 'stub', '-file', path.join(tls, 'c.pem'), '-keystore', store, '-storepass', 'changeit', '-noprompt'], { stdio: 'ignore' })
+  const slash = (p) => p.replaceAll('\\', '/')
+  return `-Djdk.net.hosts.file=${slash(hosts)} -Djavax.net.ssl.trustStore=${slash(store)} -Djavax.net.ssl.trustStorePassword=changeit`
+}
+
 function startJar(mode) {
   const env = {
     ...process.env, ALERT_MODE: mode, SERVER_PORT: '18080',
     EVENT_ALERT_DB_URL: 'jdbc:postgresql://localhost:55432/event_alert', EVENT_ALERT_DB_USERNAME: 'event_alert', EVENT_ALERT_DB_PASSWORD: 'e2e',
-    COGNITO_ISSUER_URI: STUB, COGNITO_APP_CLIENT_ID: 'local-app-client', ALERT_HOLDINGS_MODE: 'database',
+    COGNITO_ISSUER_URI: ISSUER, JAVA_TOOL_OPTIONS: mode === 'API' ? javaTlsOptions() : '', COGNITO_APP_CLIENT_ID: 'local-app-client', ALERT_HOLDINGS_MODE: 'database',
     ALERT_CRM_ACCOUNT_DIRECTORY_URL: `${ACCOUNT_SVC}/internal/alerts/accounts/lookup`,
     ALERT_CRM_TOKEN_ENDPOINT: `${STUB}/token`, ALERT_CRM_CLIENT_ID: 'alert-directory',
     ALERT_CRM_CLIENT_SECRET: 'not-a-real-secret', ALERT_CRM_SCOPE: 'crm-accounts/alert-directory',
@@ -111,7 +129,7 @@ try {
   check('PostgreSQL for account-service starts', await waitFor(async () => acctSql('select 1') === '1', 40))
   execFileSync('docker', ['exec', '-i', 'e2e-account-pg', 'psql', '-U', 'postgres', '-d', 'accounts'], { input: fs.readFileSync(path.join(root, 'services/account-service/data/V1_init.sql')), stdio: ['pipe', 'ignore', 'ignore'] })
 
-  docker('run', '-d', '--name', 'e2e-stub', '--network', NET, '--network-alias', HOST, '-p', '9099:9099',
+  docker('run', '-d', '--name', 'e2e-stub', '--network', NET, '--network-alias', HOST, '-p', '9099:9099', '-p', '443:443',
     '-v', `${path.join(root, 'scripts/local-crm-stub')}:/stub:ro`, '-v', `${tls}:/tls:ro`,
     '-e', `MACHINE_ISSUER=${ISSUER}`, '-e', 'STUB_HOST=0.0.0.0', '-e', 'TLS_KEY=/tls/k.pem', '-e', 'TLS_CERT=/tls/c.pem', '-e', 'HTTPS_PORT=443',
     'node:24-alpine', 'node', '/stub/stub-crm.mjs', '9099')
@@ -152,7 +170,7 @@ try {
 
   // --- the alert service against it
   // The alert API trusts the plain-HTTP issuer; the Go services trust the https cognito-idp one.
-  const [agentA, agentB, admin] = [await mint('agent-a', ['agent'], STUB), await mint('agent-b', ['agent'], STUB), await mint('admin-1', ['admin'], STUB)]
+  const [agentA, agentB, admin] = [await mint('agent-a', ['agent'], ISSUER), await mint('agent-b', ['agent'], ISSUER), await mint('admin-1', ['admin'], ISSUER)]
   api = startJar('API')
   check('the alert service starts in database mode against the real account-service', await waitFor(healthy(api)), api.log().slice(-500))
   const url = `${API}/api/alert-portfolios/${INVEST}`

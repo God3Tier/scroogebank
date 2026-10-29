@@ -33,6 +33,8 @@ class HttpCrmDirectoryTest {
     private final List<Integer> batchSizes = new CopyOnWriteArrayList<>();
     private volatile int tokenCalls;
     private volatile int accountStatus = 200;
+    private final List<String> userAuthorizations = new CopyOnWriteArrayList<>();
+    private volatile int userAccountStatus = 200;
     private volatile int tokenTtl = 3600;
     private volatile String accountBody;
 
@@ -52,6 +54,10 @@ class HttpCrmDirectoryTest {
             String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             batchSizes.add(request.split(",", -1).length);
             respond(exchange, accountStatus, accountBody);
+        });
+        server.createContext("/api/accounts/", exchange -> {
+            userAuthorizations.add(exchange.getRequestHeaders().getFirst("Authorization") + " " + exchange.getRequestURI().getPath());
+            respond(exchange, userAccountStatus, "{}");
         });
         server.start();
     }
@@ -122,6 +128,24 @@ class HttpCrmDirectoryTest {
         accountBody = "{\"unexpected\":true}";
         assertThatThrownBy(() -> directory(Clock.systemUTC()).accounts(List.of(ACCOUNT)))
                 .isInstanceOf(DirectoryUnavailableException.class);
+    }
+
+    @Test
+    void asksTheCrmWithTheAgentsOwnTokenNotTheMachineOne() {
+        HttpCrmDirectory directory = directory(Clock.systemUTC());
+
+        assertThat(directory.agentCanAccess(ACCOUNT, "the-agents-token")).isTrue();
+        assertThat(userAuthorizations).containsExactly("Bearer the-agents-token /api/accounts/" + ACCOUNT);
+        assertThat(tokenCalls).isZero(); // the machine credential is not involved
+
+        for (int refused : new int[] {401, 403, 404}) {
+            userAccountStatus = refused;
+            assertThat(directory.agentCanAccess(ACCOUNT, "the-agents-token")).isFalse();
+        }
+        userAccountStatus = 500;
+        assertThatThrownBy(() -> directory.agentCanAccess(ACCOUNT, "the-agents-token"))
+                .isInstanceOf(DirectoryUnavailableException.class);
+        assertThat(directory.agentCanAccess(ACCOUNT, " ")).isFalse();
     }
 
     @Test

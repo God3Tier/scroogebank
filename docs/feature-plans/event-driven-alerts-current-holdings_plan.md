@@ -530,7 +530,9 @@ Run and passing on this branch:
 
 Deviations from this plan, on purpose:
 1. One CRM route instead of two (section 5).
-2. Holdings writes verify ownership with the directory's service credential, not the forwarded user token.
+2. Holdings writes check ownership twice and both must agree: the directory's answer (service credential) and the
+   CRM's own check of the agent's forwarded token (`GET /api/accounts/{id}` on account-service, through the same
+   internal ALB rule that already forwards `/api/accounts/*`). Added 2026-10-30; no Terraform change.
 3. Work was done on a task branch off `feat/event-driven-alerts` with `dev` merged in, not by PR to the feature.
 4. In the CRM stack, `alert_holdings_mode` is the one switch for the API and the worker. Database mode requires
    `domain_name` (plan fails without it) so the directory is never reached over HTTP. The worker uses the JVM's
@@ -542,10 +544,19 @@ Deviations from this plan, on purpose:
 2. **Run against real AWS and a real Cognito pool.** Nothing here was applied. Applying the CRM stack with
    `alert_holdings_mode = "database"`, populating nothing by hand (the secret is created by Terraform), and
    checking an agent can record and read holdings needs separate authorization (section 11).
-3. **The real client-service reassignment path** was not run end to end. `/ownership/accounts` (the call it
-   makes) was exercised directly; client-service and its documents/encryption dependencies were not started.
-4. **Alert generation in a running process**: needs a search provider and a model, which stay off by default.
-   Generation, grouping, scoring and actions are covered by the PostgreSQL integration tests only.
+3. **Real client-service reassignment: done (2026-10-30)** with `scripts/local-crm-stub/e2e-reassignment.mjs`:
+   the real client-service image, its own PostgreSQL, the real account-service and the alert service; only
+   Cognito and user-service are stand-ins (15 checks). An admin reassigns through
+   `POST /api/clients/reassignments`; the client, both accounts and the alert service's access all move, and a
+   refused reassignment moves nothing. LocalStack (KMS/S3) was not needed, because reassignment touches no
+   encrypted data.
+4. **Alert generation in a running process: partly done.** `scripts/local-crm-stub/e2e-live-generation.mjs`
+   records a DBS holding through the API, then runs the worker against the **real Tavily API** (key from the
+   `TAVILY_API_KEY` environment variable, never stored or logged): the portfolio drove the search universe, a
+   real search ran and succeeded, and 10 real results were all rejected by the service's relevance filter
+   (accepted 0). **No alert was created**, because the pipeline skips source processing when the model is off
+   (`skipped=MODEL_DISABLED`), and enabling the model needs Bedrock on AWS. Generation, grouping, scoring and
+   actions remain covered by the PostgreSQL integration tests only. Not run: model-on alert creation.
 5. **Section 8, now done (2026-10-30):** the `alert.routing-changed` audit event, written in the same transaction
    as the ownership refresh that sees the change (fails closed when the outbox is full; test in
    `CurrentHoldingsIntegrationTest`); the aggregate gauges and directory-failure counter (maintained portfolios,

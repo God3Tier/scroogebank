@@ -20,6 +20,10 @@ public class PortfolioApiException extends RuntimeException {
         return new PortfolioApiException(HttpStatus.NOT_FOUND, "account or portfolio not found");
     }
 
+    public static PortfolioApiException forbidden(String message) {
+        return new PortfolioApiException(HttpStatus.FORBIDDEN, message);
+    }
+
     public static PortfolioApiException conflict(String message) {
         return new PortfolioApiException(HttpStatus.CONFLICT, message);
     }

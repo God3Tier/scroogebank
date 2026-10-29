@@ -22,6 +22,19 @@ public record CrmDirectoryProperties(
         if (timeout == null) timeout = Duration.ofSeconds(5);
     }
 
+    /**
+     * account-service's user-facing account route, on the same host as the directory route (the
+     * internal ALB already forwards /api/accounts/* to it). Holdings writes send the agent's own
+     * token here so the CRM applies its own ownership check.
+     */
+    public String userAccountUrl() {
+        String marker = "/internal/alerts/accounts/lookup";
+        int at = accountDirectoryUrl.indexOf(marker);
+        String root = at >= 0 ? accountDirectoryUrl.substring(0, at)
+                : accountDirectoryUrl.substring(0, accountDirectoryUrl.lastIndexOf('/'));
+        return root + "/api/accounts/";
+    }
+
     public void requireComplete() {
         require(accountDirectoryUrl, "ALERT_CRM_ACCOUNT_DIRECTORY_URL");
         require(tokenEndpoint, "ALERT_CRM_TOKEN_ENDPOINT");

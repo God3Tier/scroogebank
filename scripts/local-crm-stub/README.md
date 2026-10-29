@@ -31,3 +31,31 @@ node scripts/local-crm-stub/e2e-real-account.mjs
 It checks the real route's security (no token, the import's token, the wrong scope, a user token), the owner the
 route returns, the alert service's behaviour on top of it, a reassignment through the real `/ownership/accounts`
 route, closed and deleted accounts, an outage, restart persistence and a one-shot worker run.
+
+The alert API forwards the agent's own token to account-service on holdings writes, so these scripts give the
+JVM a throw-away truststore and a hosts-file override for the `cognito-idp` name, and the stand-in publishes port 443
+(it must be free). Tokens for the alert API are minted under that https issuer.
+
+## Through the real client-service
+
+`e2e-reassignment.mjs` adds the **real client-service** (own PostgreSQL) beside the real account-service. Only
+Cognito and user-service (`stub-user-service.mjs`) are stand-ins. An admin reassigns a client through
+`POST /api/clients/reassignments`; the script checks the client, both accounts and the alert service's access
+all move, and that an unknown receiver moves nothing. Needs the client-service ORM generated once
+(`sqlboiler` step of its `make test`, git-ignored).
+
+```sh
+node scripts/local-crm-stub/e2e-reassignment.mjs      # also needs port 18084 free
+```
+
+## Live search (uses real search credits)
+
+`e2e-live-generation.mjs` records a real, searchable instrument (DBS, `SGX-D05`) through the API, then runs the
+worker once against the real Tavily API with the model off. The key comes only from the environment:
+
+```sh
+TAVILY_API_KEY=... node scripts/local-crm-stub/e2e-live-generation.mjs     # a few search credits per run
+```
+
+It proves the maintained portfolio drives a real search. It cannot create an alert: with the model off the
+pipeline skips source processing, and the model needs AWS.

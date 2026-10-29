@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -58,16 +60,16 @@ class PortfolioControllerTest {
 
     @Test
     void theAgentComesFromTheTokenAndNeverFromTheRequest() throws Exception {
-        when(service.replace(eq(ACCOUNT), eq("agent-a"), eq("idem-key-0001"), any(), any())).thenReturn(response());
+        when(service.replace(eq(ACCOUNT), eq("agent-a"), any(), eq("idem-key-0001"), any(), any())).thenReturn(response());
 
         mockMvc.perform(put("/api/alert-portfolios/{id}", ACCOUNT)
-                        .with(user("agent-a").roles("AGENT"))
+                        .with(jwt().jwt(token -> token.subject("agent-a").tokenValue("agent-a-token")).authorities(new SimpleGrantedAuthority("ROLE_AGENT")))
                         .header("Idempotency-Key", "idem-key-0001")
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.revision").value(1));
 
-        verify(service).replace(eq(ACCOUNT), eq("agent-a"), eq("idem-key-0001"), any(), any());
+        verify(service).replace(eq(ACCOUNT), eq("agent-a"), eq("agent-a-token"), eq("idem-key-0001"), any(), any());
     }
 
     @Test
@@ -81,33 +83,33 @@ class PortfolioControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/alert-portfolios/{id}", ACCOUNT)).andExpect(status().isUnauthorized());
-        verify(service, never()).replace(any(), any(), any(), any(), any());
+        verify(service, never()).replace(any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void rejectsMalformedRequestsBeforeTheyReachTheService() throws Exception {
-        mockMvc.perform(put("/api/alert-portfolios/{id}", ACCOUNT).with(user("agent-a").roles("AGENT"))
+        mockMvc.perform(put("/api/alert-portfolios/{id}", ACCOUNT).with(jwt().jwt(token -> token.subject("agent-a").tokenValue("agent-a-token")).authorities(new SimpleGrantedAuthority("ROLE_AGENT")))
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isBadRequest()); // no idempotency key
-        mockMvc.perform(put("/api/alert-portfolios/{id}", ACCOUNT).with(user("agent-a").roles("AGENT"))
+        mockMvc.perform(put("/api/alert-portfolios/{id}", ACCOUNT).with(jwt().jwt(token -> token.subject("agent-a").tokenValue("agent-a-token")).authorities(new SimpleGrantedAuthority("ROLE_AGENT")))
                         .header("Idempotency-Key", "idem-key-0001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(BODY.replace("\"SGD\"", "\"sgd\"")))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(put("/api/alert-portfolios/not-a-uuid").with(user("agent-a").roles("AGENT"))
+        mockMvc.perform(put("/api/alert-portfolios/not-a-uuid").with(jwt().jwt(token -> token.subject("agent-a").tokenValue("agent-a-token")).authorities(new SimpleGrantedAuthority("ROLE_AGENT")))
                         .header("Idempotency-Key", "idem-key-0001")
                         .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isBadRequest());
-        verify(service, never()).replace(any(), any(), any(), any(), any());
+        verify(service, never()).replace(any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void mapsDomainRefusalsAndAnUnreachableCrm() throws Exception {
-        when(service.replace(any(), any(), any(), any(), any()))
+        when(service.replace(any(), any(), any(), any(), any(), any()))
                 .thenThrow(new PortfolioApiException(HttpStatus.CONFLICT, "expected portfolio revision is stale"))
                 .thenThrow(new PortfolioApiException(HttpStatus.UNPROCESSABLE_ENTITY, "unsupported instrument in portfolio"))
                 .thenThrow(new DirectoryUnavailableException("down"));
-        var request = put("/api/alert-portfolios/{id}", ACCOUNT).with(user("agent-a").roles("AGENT"))
+        var request = put("/api/alert-portfolios/{id}", ACCOUNT).with(jwt().jwt(token -> token.subject("agent-a").tokenValue("agent-a-token")).authorities(new SimpleGrantedAuthority("ROLE_AGENT")))
                 .header("Idempotency-Key", "idem-key-0001")
                 .contentType(MediaType.APPLICATION_JSON).content(BODY);
 

@@ -75,9 +75,15 @@ public class PortfolioService {
     }
 
     @Transactional
-    public PortfolioResponse replace(UUID accountId, String actorSubject, String idempotencyKey,
+    public PortfolioResponse replace(UUID accountId, String actorSubject, String bearerToken, String idempotencyKey,
             UUID correlationId, PortfolioReplaceRequest request) {
         AccountContext account = visibleAccount(accountId, actorSubject, false);
+        // Two independent answers must agree: the directory's owner (service credential) and the
+        // CRM's own check of this agent's token. A disagreement is "not found", like any other
+        // account the agent does not own.
+        if (!directory.agentCanAccess(accountId, bearerToken)) {
+            throw PortfolioApiException.notFound();
+        }
         if (!account.activeInvestment()) {
             throw PortfolioApiException.conflict("holdings can only be recorded on an active investment account");
         }

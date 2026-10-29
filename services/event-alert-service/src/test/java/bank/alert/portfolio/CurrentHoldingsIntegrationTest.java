@@ -103,6 +103,14 @@ class CurrentHoldingsIntegrationTest {
         /** The agent who owns each client now; accounts are served with their client's owner. */
         final Map<UUID, String> owners = new HashMap<>();
         boolean down;
+        /** Tokens the CRM's own scoped check refuses, whatever the directory says about ownership. */
+        final java.util.Set<String> refusedTokens = new java.util.HashSet<>();
+
+        @Override
+        public boolean agentCanAccess(UUID accountId, String bearerToken) {
+            if (down) throw new DirectoryUnavailableException("down");
+            return !refusedTokens.contains(bearerToken);
+        }
 
         @Override
         public Map<UUID, AccountContext> accounts(Collection<UUID> ids) {
@@ -169,7 +177,7 @@ class CurrentHoldingsIntegrationTest {
     }
 
     private PortfolioResponse put(UUID account, String key, long expected, PortfolioReplaceRequest.Position... p) {
-        return portfolios.replace(account, "agent-a", key, UUID.randomUUID(),
+        return portfolios.replace(account, "agent-a", "user-token", key, UUID.randomUUID(),
                 new PortfolioReplaceRequest(expected, "manual-entry", List.of(p)));
     }
 
@@ -207,6 +215,25 @@ class CurrentHoldingsIntegrationTest {
     }
 
     @Test
+    void aWriteNeedsTheCrmToAgreeWithTheAgentsOwnToken() {
+        put(ACCOUNT_1, "key-15000001", 0, position("SYN-SGX-001", "10", "1.0"));
+        crm.refusedTokens.add("user-token");
+
+        // the directory still says agent-a owns the account, but the CRM refuses this token
+        assertThat(statusOf(() -> portfolios.replace(ACCOUNT_1, "agent-a", "user-token", "key-15000002",
+                UUID.randomUUID(), new PortfolioReplaceRequest(1, "entry", List.of(position("SYN-SGX-001", "20", "1.0"))))))
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(jdbc.queryForObject("SELECT revision FROM current_portfolio WHERE account_id = ?", Long.class,
+                ACCOUNT_1)).isOne();
+
+        crm.refusedTokens.clear();
+        crm.down = true; // an unreachable CRM is unavailable, not "allowed"
+        assertThatThrownBy(() -> portfolios.replace(ACCOUNT_1, "agent-a", "user-token", "key-15000003",
+                UUID.randomUUID(), new PortfolioReplaceRequest(1, "entry", List.of(position("SYN-SGX-001", "20", "1.0")))))
+                .isInstanceOf(DirectoryUnavailableException.class);
+    }
+
+    @Test
     void refusesInvalidAndUnauthorisedWrites() {
         assertThat(statusOf(() -> put(ACCOUNT_1, "key-10000001", 0, position("NOPE", "1", "1"))))
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
@@ -215,14 +242,14 @@ class CurrentHoldingsIntegrationTest {
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         assertThat(statusOf(() -> put(ACCOUNT_1, "key-10000003", 0, position("SYN-SGX-001", "-1", "1"))))
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
-        assertThat(statusOf(() -> portfolios.replace(ACCOUNT_1, "agent-a", "key-10000004", UUID.randomUUID(),
+        assertThat(statusOf(() -> portfolios.replace(ACCOUNT_1, "agent-a", "user-token", "key-10000004", UUID.randomUUID(),
                 new PortfolioReplaceRequest(0, "manual-entry", List.of(new PortfolioReplaceRequest.Position(
                         "SYN-SGX-001", BigDecimal.ONE, BigDecimal.ONE, "SGD", BigDecimal.ONE, NOW.plusSeconds(60)))))))
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         assertThat(statusOf(() -> put(ACCOUNT_SAVINGS, "key-10000005", 0, position("SYN-SGX-001", "1", "1"))))
                 .isEqualTo(HttpStatus.CONFLICT);
         // another agent cannot see or write the account: indistinguishable from a missing one
-        assertThat(statusOf(() -> portfolios.replace(ACCOUNT_1, "agent-b", "key-10000006", UUID.randomUUID(),
+        assertThat(statusOf(() -> portfolios.replace(ACCOUNT_1, "agent-b", "user-token", "key-10000006", UUID.randomUUID(),
                 new PortfolioReplaceRequest(0, "x", List.of()))))
                 .isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(statusOf(() -> put(UUID.randomUUID(), "key-10000007", 0))).isEqualTo(HttpStatus.NOT_FOUND);
