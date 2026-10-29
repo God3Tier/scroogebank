@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"client-profile-management-service/src/internal/contract"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	servicemock "client-profile-management-service/src/internal/service/client"
 
@@ -34,6 +35,7 @@ func TestDeleteClientProfile(t *testing.T) {
 			req.Header.Set("Authorization", authorization)
 			res := httptest.NewRecorder()
 			New(svc).DeleteClientProfile(res, req)
+			contract.Check(t, "clients-api.yaml", http.MethodDelete, "/api/clients/{clientId}", res)
 			assert.Equal(t, test.wantStatus, res.Code)
 		})
 	}

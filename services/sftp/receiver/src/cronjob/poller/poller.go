@@ -23,9 +23,9 @@ type transactionStore interface {
 }
 
 // accountDirectory reports which account references are CRM accounts, with
-// each one's client ID (ADR-0037).
+// each one's client ID and currency (ADR-0037).
 type accountDirectory interface {
-	Lookup(ctx context.Context, accountIDs []string) (map[string]string, error)
+	Lookup(ctx context.Context, accountIDs []string) (map[string]models.Account, error)
 }
 
 type remoteFile interface {

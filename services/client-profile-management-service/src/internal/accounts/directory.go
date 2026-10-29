@@ -7,6 +7,7 @@
 package accounts
 
 import (
+	"bytes"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"context"
 	"encoding/json"
@@ -31,6 +32,11 @@ type Directory interface {
 	// and an agent sees the accounts of their own clients, which are all of that
 	// client's.
 	HasAccounts(ctx context.Context, clientID, authorization string) (bool, error)
+	// SetOwner gives every account of the clients to ownerAgentID, while
+	// those clients are reassigned (ADR-0060). It forwards the admin's
+	// Authorization header; account-service answers admins only. Anything but
+	// a confirmation is ErrAccountServiceUnavailable, so nothing is reassigned.
+	SetOwner(ctx context.Context, clientIDs []string, ownerAgentID, authorization string) error
 }
 
 type httpDirectory struct {
@@ -74,4 +80,29 @@ func (d httpDirectory) HasAccounts(ctx context.Context, clientID, authorization 
 		return false, fmt.Errorf("%w: account list was null", clienterrors.ErrAccountServiceUnavailable)
 	}
 	return len(accounts) > 0, nil
+}
+
+func (d httpDirectory) SetOwner(ctx context.Context, clientIDs []string, ownerAgentID, authorization string) error {
+	body, err := json.Marshal(map[string]any{"client_ids": clientIDs, "owner_agent_id": ownerAgentID})
+	if err != nil {
+		return fmt.Errorf("%w: encode request: %v", clienterrors.ErrAccountServiceUnavailable, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, d.baseURL+"/ownership/accounts", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("%w: build request: %v", clienterrors.ErrAccountServiceUnavailable, err)
+	}
+	req.Header.Set("Authorization", authorization)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := d.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", clienterrors.ErrAccountServiceUnavailable, err)
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, maxAccountsResponseBytes))
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("%w: account service returned %d", clienterrors.ErrAccountServiceUnavailable, res.StatusCode)
+	}
+	return nil
 }

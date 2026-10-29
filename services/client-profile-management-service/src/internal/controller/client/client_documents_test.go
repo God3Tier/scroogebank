@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"client-profile-management-service/src/internal/contract"
 	"client-profile-management-service/src/internal/documents"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
@@ -62,6 +63,7 @@ func TestUploadClientDocument(t *testing.T) {
 			res := httptest.NewRecorder()
 
 			New(svc).UploadClientDocument(res, uploadRequest(t, "file", syntheticPNG))
+			contract.Check(t, "clients-api.yaml", http.MethodPost, "/api/clients/{clientId}/documents", res)
 
 			assert.Equal(t, test.wantStatus, res.Code)
 			if test.wantStatus == http.StatusCreated {
@@ -103,6 +105,7 @@ func TestUploadClientDocumentRefusesMalformedUploads(t *testing.T) {
 			res := httptest.NewRecorder()
 
 			New(svc).UploadClientDocument(res, test.request(t))
+			contract.Check(t, "clients-api.yaml", http.MethodPost, "/api/clients/{clientId}/documents", res)
 
 			assert.Equal(t, test.wantStatus, res.Code)
 			svc.AssertNotCalled(t, "UploadDocument", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
@@ -121,6 +124,7 @@ func TestUploadClientDocumentPassesALargeFileWithinTheBodyLimitToTheService(t *t
 	res := httptest.NewRecorder()
 
 	New(svc).UploadClientDocument(res, uploadRequest(t, "file", content))
+	contract.Check(t, "clients-api.yaml", http.MethodPost, "/api/clients/{clientId}/documents", res)
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, res.Code)
 }
@@ -131,6 +135,7 @@ func TestListClientDocuments(t *testing.T) {
 	res := httptest.NewRecorder()
 
 	New(svc).ListClientDocuments(res, httptest.NewRequest(http.MethodGet, "/api/clients/documents?id=client-123", nil))
+	contract.Check(t, "clients-api.yaml", http.MethodGet, "/api/clients/{clientId}/documents", res)
 
 	assert.Equal(t, http.StatusOK, res.Code)
 	assert.JSONEq(t, `[]`, res.Body.String(), "an empty list, not null")
@@ -154,6 +159,7 @@ func TestGetClientDocument(t *testing.T) {
 			res := httptest.NewRecorder()
 
 			New(svc).GetClientDocument(res, httptest.NewRequest(http.MethodGet, "/api/clients/documents?id=client-123&documentId="+testDocumentID, nil))
+			contract.Check(t, "clients-api.yaml", http.MethodGet, "/api/clients/{clientId}/documents/{documentId}", res)
 
 			assert.Equal(t, test.wantStatus, res.Code)
 			if test.wantStatus == http.StatusOK {

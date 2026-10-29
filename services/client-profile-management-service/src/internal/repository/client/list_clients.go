@@ -18,7 +18,7 @@ import (
 func (r clientRepository) ListClients(ctx context.Context, ownerID string, page, size int) ([]models.Client, int64, error) {
 	var scope []qm.QueryMod
 	if ownerID != "" {
-		scope = append(scope, qm.Where(orm.ClientColumns.CreatedByAgentID+" = ?", ownerID))
+		scope = append(scope, qm.Where(orm.ClientColumns.AssignedAgentID+" = ?", ownerID))
 	}
 
 	total, err := orm.Clients(scope...).Count(ctx, r.db)

@@ -8,6 +8,8 @@ import (
 
 	"receiver/src/internal/models"
 	"receiver/src/internal/repository"
+	"receiver/src/serverd/accounts"
+	"receiver/src/serverd/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,34 +18,36 @@ const (
 	// maxWindowDays is one day more than the dashboard allows, so the
 	// dashboard's own limit is always the one a user meets.
 	maxWindowDays = 366
-	// maxStatsAccounts bounds one agent's account list.
-	maxStatsAccounts = 20000
-	maxStatsBody     = 2 << 20
 )
 
-// transactionStatsRequest names the transactions to total: every one with
-// "all": true, or those of "accountIds". It must say which, so a request that
-// forgets the account list is refused instead of reading as "everything".
-type transactionStatsRequest struct {
-	From       string    `json:"from"`
-	To         string    `json:"to"`
-	AccountIDs *[]string `json:"accountIds"`
-	All        bool      `json:"all"`
-}
-
-// transactionStats serves POST /aggregates/transactions/stats.
-func transactionStats(stats repository.TransactionStats) gin.HandlerFunc {
+// transactionStats serves GET /aggregates/transactions/stats?from&to. The
+// scope comes from the verified caller: every transaction for an admin, and
+// for an agent only the accounts account-service says they own (ADR-0064
+// decision 2).
+func transactionStats(stats repository.TransactionStats, directory accounts.Directory) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxStatsBody)
-		var request transactionStatsRequest
-		if err := c.ShouldBindJSON(&request); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "body must be JSON with from, to and either all or accountIds"})
-			return
-		}
-		query, problem := request.query()
+		query, problem := window(c.Query("from"), c.Query("to"))
 		if problem != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": problem})
 			return
+		}
+		principal, ok := security.PrincipalFromGin(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		if principal.Role == "ADMIN" {
+			query.All = true
+		} else {
+			owned, err := directory.OwnedAccountIDs(c.Request.Context(), security.AccessToken(c))
+			if !accessAllowed(c, err) {
+				return
+			}
+			if query.AccountIDs, err = normalise(owned); err != nil {
+				log.Printf("account-service returned an account ID that is no UUID: %v", err)
+				c.JSON(http.StatusBadGateway, gin.H{"error": "could not check the caller's accounts"})
+				return
+			}
 		}
 		result, err := stats.TransactionStats(c.Request.Context(), query)
 		if err != nil {
@@ -55,31 +59,30 @@ func transactionStats(stats repository.TransactionStats) gin.HandlerFunc {
 	}
 }
 
-func (r transactionStatsRequest) query() (models.TransactionStatsQuery, string) {
-	from, fromErr := time.Parse(time.DateOnly, r.From)
-	to, toErr := time.Parse(time.DateOnly, r.To)
+// window checks the dates: both given, forwards, and at most 366 days
+// counting both ends.
+func window(fromValue, toValue string) (models.TransactionStatsQuery, string) {
+	from, fromErr := time.Parse(time.DateOnly, fromValue)
+	to, toErr := time.Parse(time.DateOnly, toValue)
 	if fromErr != nil || toErr != nil {
 		return models.TransactionStatsQuery{}, "from and to must be dates (YYYY-MM-DD)"
 	}
 	if to.Before(from) || to.Sub(from) >= maxWindowDays*24*time.Hour {
 		return models.TransactionStatsQuery{}, "the window must run forwards and span at most 366 days"
 	}
-	if r.All == (r.AccountIDs != nil) {
-		return models.TransactionStatsQuery{}, "give exactly one of all: true or accountIds"
-	}
-	query := models.TransactionStatsQuery{From: from, To: to, All: r.All}
-	if r.AccountIDs != nil {
-		if len(*r.AccountIDs) > maxStatsAccounts {
-			return models.TransactionStatsQuery{}, "too many accountIds"
+	return models.TransactionStatsQuery{From: from, To: to}, ""
+}
+
+// normalise returns the IDs in the lower-case form stored on transactions.
+// An empty list stays empty, not nil: an agent with no accounts gets zeros.
+func normalise(ids []string) ([]string, error) {
+	normalised := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parsed, err := uuid.Parse(id)
+		if err != nil {
+			return nil, err
 		}
-		query.AccountIDs = make([]string, 0, len(*r.AccountIDs))
-		for _, id := range *r.AccountIDs {
-			parsed, err := uuid.Parse(id)
-			if err != nil {
-				return models.TransactionStatsQuery{}, "accountIds must be UUIDs"
-			}
-			query.AccountIDs = append(query.AccountIDs, parsed.String())
-		}
+		normalised = append(normalised, parsed.String())
 	}
-	return query, ""
+	return normalised, nil
 }

@@ -38,6 +38,40 @@ mock_provider "aws" {
 mock_provider "random" {}
 mock_provider "tls" {}
 
+# Known ARNs for the services' login secrets, which a plan leaves unknown, so
+# the runs can check which secret each service reads. override_during needs
+# Terraform 1.11 or later.
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["user_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/user_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["client_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["account_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/account_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["transaction_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/transaction_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["transaction_ingest"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/transaction_ingest" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["event_alert_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/event_alert_service" }
+}
+
 variables {
   environment             = "prod"
   root_admin_email        = "root.admin@example.test"
@@ -96,12 +130,49 @@ run "prod" {
     error_message = "Without domain_name: no certificates, the internal ALB on HTTP 80 and the default CloudFront name."
   }
   assert {
-    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
+    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,transaction,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
     error_message = "Every service behind the ALB in this stack, and the auditor, gets a project-CA certificate (INF-08)."
   }
   assert {
-    condition     = output.dashboard_inputs.upstreams.user.url == "https://user-service:8081"
-    error_message = "dashboard-service calls user-service over HTTPS."
+    condition     = output.dashboard_inputs.upstreams.user.url == "https://user-service:8081" && output.dashboard_inputs.upstreams.transaction.url == "https://transaction-service:8080"
+    error_message = "dashboard-service calls user-service and transaction-service over HTTPS."
+  }
+  assert {
+    condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])
+    error_message = "Every service with a database migrates it before starting (ADR-0028 decision 3)."
+  }
+  assert {
+    condition = (
+      local.migrations["users"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
+      local.migrations["alerts"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
+      length(local.migrations["clients"].environment) == 0 &&
+      alltrue([for m in [module.user_service, module.event_alert_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
+    )
+    error_message = "db-migrate reads the Java services' V<n>__ file names, and their own Flyway is off in AWS."
+  }
+  assert {
+    condition = (
+      join(",", sort(keys(local.migrations["audit"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD,FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD,FLYWAY_USER" &&
+      join(",", sort(keys(local.migrations["transactions"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD,FLYWAY_USER" &&
+      alltrue([for db in ["users", "clients", "accounts", "alerts"] : join(",", sort(keys(local.migrations[db].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_APP_LOGIN,FLYWAY_PLACEHOLDERS_APP_PASSWORD,FLYWAY_USER"])
+    )
+    error_message = "Each database's db-migrate gets the passwords of the logins it creates, and only those."
+  }
+  assert {
+    condition = alltrue([
+      for login, m in {
+        user_service        = module.user_service
+        client_service      = module.client_service
+        account_service     = module.account_service
+        transaction_service = module.transaction_service
+        event_alert_service = module.event_alert_service
+      } : alltrue([for v in values(m.app_secrets) : startswith(v, "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/${login}:")])
+    ])
+    error_message = "Each service connects with its own login, never its database's master user (ADR-0028 decision 3)."
+  }
+  assert {
+    condition     = contains(keys(aws_ecr_repository.this), "db-migrate")
+    error_message = "The db-migrate image has its own repository."
   }
 }
 
@@ -247,6 +318,10 @@ run "lambdas_enabled" {
   assert {
     condition     = aws_lambda_function.ingest[0].environment[0].variables["DB_SSLROOTCERT"] == "/var/task/rds-ca.pem"
     error_message = "Ingest verifies transactions-db against the RDS CA in its zip."
+  }
+  assert {
+    condition     = aws_lambda_function.ingest[0].environment[0].variables["DB_SECRET_ARN"] == "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/transaction_ingest"
+    error_message = "Ingest connects with its own login, not transactions-db's master user (ADR-0028 decision 3)."
   }
 }
 

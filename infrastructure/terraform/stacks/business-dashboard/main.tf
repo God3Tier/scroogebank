@@ -172,13 +172,14 @@ module "dashboard_service" {
   port_name        = "https"
 
   environment = {
-    OIDC_ISSUER_URI          = local.crm.cognito_issuer
-    COGNITO_APP_CLIENT_ID    = local.crm.cognito_web_client_id
-    AUDIT_QUEUE_URL          = local.crm.audit_queue_url
-    AWS_REGION               = var.aws_region
-    USER_SERVICE_BASE_URL    = local.crm.upstreams.user.url
-    CLIENT_SERVICE_BASE_URL  = local.crm.upstreams.client.url
-    ACCOUNT_SERVICE_BASE_URL = local.crm.upstreams.account.url
+    OIDC_ISSUER_URI              = local.crm.cognito_issuer
+    COGNITO_APP_CLIENT_ID        = local.crm.cognito_web_client_id
+    AUDIT_QUEUE_URL              = local.crm.audit_queue_url
+    AWS_REGION                   = var.aws_region
+    USER_SERVICE_BASE_URL        = local.crm.upstreams.user.url
+    CLIENT_SERVICE_BASE_URL      = local.crm.upstreams.client.url
+    ACCOUNT_SERVICE_BASE_URL     = local.crm.upstreams.account.url
+    TRANSACTION_SERVICE_BASE_URL = local.crm.upstreams.transaction.url
   }
   task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
   tls = {

@@ -2,8 +2,9 @@
 // names, because audit events hold no client personal data (ADR-0021 decision
 // 3, ADR-0030). What an entry says depends on the service that recorded it:
 // client-service and account-service (source CRM) record the route they
-// served, user-service the kind of record and the user's role, and the
-// Cognito triggers a user's own password reset.
+// served, user-service the kind of record and the user's role, the Cognito
+// triggers a user's own password reset, and engagement-service an agent's
+// meetings and sent follow-up emails, by ID only.
 //
 // describeActivity returns:
 //   text      what was done, in lower case, to follow the actor's name
@@ -20,9 +21,22 @@ const CRM_ROUTES = {
   'DELETE /api/clients/:clientId': { text: 'deleted a client profile', icon: 'person_remove', tone: 'remove', record: 'Client' },
   'POST /api/clients/:clientId/verify': { text: 'verified a client', icon: 'verified_user', tone: 'verify', record: 'Client', opens: true, evidence: true },
   'POST /api/clients/:clientId/documents': { text: 'uploaded an identity document', icon: 'upload_file', tone: 'change', record: 'Client', opens: true },
+  // One entry per client moved; the agents are Cognito subs, so not shown (ADR-0060).
+  'POST /api/clients/reassignments': { text: 'reassigned a client to another agent', icon: 'swap_horiz', tone: 'change', record: 'Client', opens: true },
   'POST /api/accounts': { text: 'opened an account', icon: 'account_balance', tone: 'create', record: 'Client', opens: true },
-  // account-service records the account's ID in client_id on this route.
-  'DELETE /api/accounts/:accountId': { text: 'closed an account', icon: 'do_not_disturb_on', tone: 'remove', record: 'Account' },
+  // account-service records the account's ID in client_id on its account
+  // routes. Deleting is not closing: Closed is a status (ADR-0036, ADR-0050).
+  'DELETE /api/accounts/:accountId': { text: 'deleted an account', icon: 'do_not_disturb_on', tone: 'remove', record: 'Account' },
+  'PATCH /api/accounts/:accountId': { text: "changed an account's status", icon: 'sync_alt', tone: 'change', record: 'Account', change: true },
+}
+
+const STATUS_NAMES = { ACTIVE: 'Active', INACTIVE: 'Inactive', PENDING: 'Pending', CLOSED: 'Closed' }
+
+// "from Pending to Active", from the values before and after a change.
+function changeNote(details) {
+  const name = (value) => STATUS_NAMES[String(value).toUpperCase()] || value
+  if (!details.before_value || !details.after_value) return null
+  return `from ${name(details.before_value)} to ${name(details.after_value)}`
 }
 
 const GENERIC = {
@@ -41,7 +55,29 @@ export function describeActivity({ sourceService, action, payload }) {
   if (sourceService === 'COGNITO_TRIGGERS' && verb === 'PASSWORD_RESET') {
     return activity({ text: 'reset their own password', icon: 'lock_reset', tone: 'change' })
   }
+  if (sourceService === 'ENGAGEMENT') return describeEngagement(verb, details)
   return fallback(verb)
+}
+
+const ENGAGEMENT_ACTIONS = {
+  EVENT_CREATE: { text: 'scheduled a meeting', icon: 'event_available', tone: 'create' },
+  EVENT_UPDATE: { text: 'changed a meeting', icon: 'edit_calendar', tone: 'change' },
+  EVENT_CANCEL: { text: 'cancelled a meeting', icon: 'event_busy', tone: 'remove' },
+  EMAIL_SEND: { text: 'sent a follow-up email', icon: 'outgoing_mail', tone: 'create' },
+}
+
+// engagement-service's payload is { event_id, event_version, occurred_at,
+// data }, and data holds IDs only (ADR-0051).
+function describeEngagement(verb, details) {
+  const known = ENGAGEMENT_ACTIONS[verb]
+  if (!known) return fallback(verb)
+  const data = details.data && typeof details.data === 'object' ? details.data : {}
+  const clientId = data.clientId || null
+  return activity({
+    ...known,
+    record: clientId ? { label: 'Client', id: clientId } : null,
+    clientId,
+  })
 }
 
 function describeCrm(verb, details) {
@@ -54,7 +90,7 @@ function describeCrm(verb, details) {
   return activity({
     ...route,
     record: id ? { label: route.record, id } : null,
-    note: documents ? `with ${documents} ${documents === 1 ? 'document' : 'documents'}` : null,
+    note: route.change ? changeNote(details) : documents ? `with ${documents} ${documents === 1 ? 'document' : 'documents'}` : null,
     badge: route.evidence && details.without_document ? 'Without a document' : null,
     clientId: route.opens ? id : null,
   })

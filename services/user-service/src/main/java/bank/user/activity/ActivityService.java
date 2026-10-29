@@ -106,6 +106,9 @@ public class ActivityService {
         if (query.agentId() != null) {
             request.setActorId(query.agentId());
         }
+        if (query.clientId() != null) {
+            request.setClientId(query.clientId());
+        }
         if (query.from() != null) {
             request.setFrom(toTimestamp(query.from()));
         }

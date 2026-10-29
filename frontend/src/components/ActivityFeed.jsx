@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useId, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { listActivities } from '../api/activities.js'
+import { Pager, ViewAll } from './ListFooter.jsx'
 import { actorLabel, describeActivity, isUserActor, sentenceCase, shortId } from './activityText.js'
+import { PAGE_SIZE, cursorSource, usePagedList } from './paging.js'
 
 // The dashboards' activity panel (ADR-0021, spec Appendix 3): "Agents can only
 // see their own client activities. Admins can see the activities of all
 // agents." user-service decides whose activities come back from the access
 // token; admin only changes what the panel offers. Only changes are listed,
-// never views or sign-ins.
-const PAGE_SIZE = 10
+// never views or sign-ins. On a dashboard the newest ten show; paged, the
+// whole feed does, ten at a time.
 const DAY_MS = 24 * 60 * 60 * 1000
 const PERIODS = [
   { days: '', label: 'Any time' },
@@ -78,44 +80,47 @@ function ActivityRow({ entry, showActor, onShowOnly }) {
   )
 }
 
-function ActivityFeed({ admin = false }) {
+// A period fixed now, so every page of the feed covers the same window.
+function periodOf(days) {
+  return { days, from: days ? new Date(Date.now() - Number(days) * DAY_MS) : null }
+}
+
+// The filters a View all link carries, so the whole feed opens filtered the
+// same way as the panel it came from.
+function filterQuery(period, only) {
+  const params = new URLSearchParams()
+  if (period.days) params.set('days', period.days)
+  if (only) {
+    params.set('user', only.id)
+    params.set('name', only.name)
+  }
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
+
+function ActivityFeed({ admin = false, paged = false }) {
   const headingId = useId()
-  const [period, setPeriod] = useState({ days: '', from: null })
+  const [params] = useSearchParams()
+  // The whole feed starts with the filters its link carried.
+  const [period, setPeriod] = useState(() => {
+    const days = paged ? params.get('days') : null
+    return periodOf(PERIODS.some((option) => option.days && option.days === days) ? days : '')
+  })
   // Admin only: one user's activities, picked from an entry.
-  const [only, setOnly] = useState(null)
-  const [entries, setEntries] = useState([])
-  const [nextCursor, setNextCursor] = useState(null)
-  const [state, setState] = useState({ loading: true, error: null })
-  // A reply to a request that a newer one replaced is dropped, so a slow
-  // answer for an old filter never overwrites the current one.
-  const latestRequest = useRef(0)
-
-  const load = useCallback(async (cursor = null) => {
-    const request = ++latestRequest.current
-    if (!cursor) setEntries([])
-    setState({ loading: true, error: null })
-    try {
-      const page = await listActivities({ agentId: only?.id, from: period.from, size: PAGE_SIZE, cursor })
-      if (request !== latestRequest.current) return
-      setEntries((current) => cursor ? [...current, ...page.content] : page.content)
-      setNextCursor(page.nextCursor)
-      setState({ loading: false, error: null })
-    } catch (error) {
-      if (request !== latestRequest.current) return
-      setState({ loading: false, error })
-    }
-  }, [only, period])
-
-  useEffect(() => {
-    // The feed is server-owned; fetching it is this panel's external synchronization.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-  }, [load])
+  const [only, setOnly] = useState(() => (
+    paged && admin && params.get('user') ? { id: params.get('user'), name: params.get('name') || 'this user' } : null
+  ))
+  // A new filter is a new source, so a slow answer for an old filter never
+  // overwrites the current one.
+  const source = useMemo(() => cursorSource(
+    ({ cursor, size }) => listActivities({ agentId: only?.id, from: period.from, size, cursor }),
+    paged ? {} : { chunkSize: PAGE_SIZE },
+  ), [only, period, paged])
+  const list = usePagedList(source)
+  const entries = list.rows
 
   function choosePeriod(event) {
-    const days = event.target.value
-    // Fixed when chosen, so every page of the feed covers the same window.
-    setPeriod({ days, from: days ? new Date(Date.now() - Number(days) * DAY_MS) : null })
+    setPeriod(periodOf(event.target.value))
   }
 
   return (
@@ -153,32 +158,31 @@ function ActivityFeed({ admin = false }) {
         </ol>
       )}
 
-      {state.loading && (
+      {list.loading && (
         <p className="activity-feed__status" role="status">
           <span className="material-symbols-outlined" aria-hidden="true">progress_activity</span>
           Loading activities…
         </p>
       )}
 
-      {state.error && (
+      {list.error && (
         <div className="activity-feed__problem" role="alert">
           <span className="material-symbols-outlined" aria-hidden="true">warning</span>
-          <p>{loadProblem(state.error)}</p>
-          <button type="button" onClick={() => load(entries.length ? nextCursor : null)}>Try again</button>
+          <p>{loadProblem(list.error)}</p>
+          <button type="button" onClick={list.reload}>Try again</button>
         </div>
       )}
 
-      {!state.loading && !state.error && entries.length === 0 && (
+      {!list.loading && !list.error && entries.length === 0 && (
         <p className="activity-feed__empty">
           <span className="material-symbols-outlined" aria-hidden="true">history</span>
           {emptyText(admin, period, only)}
         </p>
       )}
 
-      {!state.loading && !state.error && nextCursor && (
-        <div className="activity-feed__more">
-          <button type="button" onClick={() => load(nextCursor)}>Load more</button>
-        </div>
+      {entries.length > 0 && paged && <Pager list={list} label="Activity pages" />}
+      {!paged && list.hasNext && (
+        <ViewAll to={`${admin ? '/admin/activities' : '/agent/activities'}${filterQuery(period, only)}`} label="View all activities" />
       )}
     </section>
   )

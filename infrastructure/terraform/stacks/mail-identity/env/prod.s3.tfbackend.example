@@ -1,0 +1,9 @@
+# Copy to prod.s3.tfbackend and use with:
+#   terraform init -backend-config=env/prod.s3.tfbackend
+# bucket is the bootstrap stack's state_bucket output.
+
+bucket       = "crm-tfstate-123456789012"
+key          = "mail-identity/sg/prod.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true

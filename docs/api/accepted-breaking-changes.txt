@@ -1,0 +1,19 @@
+# Breaking changes to the OpenAPI contracts in docs/api, accepted on purpose
+# (ADR-0063). .github/scripts/check-openapi-breaking.sh passes this file to
+# oasdiff breaking --err-ignore.
+#
+# Each entry is the method and path, then oasdiff's message word for word, on
+# one line, under a comment that says why it is accepted. An entry is needed
+# until the change has reached main, since each promotion compares with its
+# own target branch; remove it after that.
+
+# The activity payload was described as always an object, but user-service has
+# always passed a payload that is not JSON on as a string. The spec now says
+# so; the frontend already treats a payload that is not an object as empty.
+GET /api/activities the `content/items/payload` response's property `type` changed from `object` to `any` for status `200`
+
+# The SFTP receiver's private, unauthenticated stats route had one caller,
+# user-service, which no longer reads transactions. transaction-service now
+# serves GET /aggregates/transactions/stats itself, scoped by the caller's token
+# (ADR-0064).
+POST /aggregates/transactions/stats api removed without deprecation

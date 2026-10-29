@@ -2,6 +2,8 @@
 
 Go service for recording and reading audit-chain entries.
 
+The corrupted-log REST API is [`docs/api/corrupted-logs-api.yaml`](../../docs/api/corrupted-logs-api.yaml); `make test` checks its responses and routes against it ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Prerequisites
 
 Install the following on your computer:
@@ -30,7 +32,7 @@ cd services/auditor
 docker compose up -d postgres localstack
 ```
 
-`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, loads the schema if it is missing, generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
+`make run` does all of this in one step, with LocalStack's queue URLs as defaults: it starts both containers, applies `data/schema.sql` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), generates the gRPC code and runs the server. Pass the Cognito settings: `make run COGNITO_ISSUER_URI=... COGNITO_APP_CLIENT_ID=...`.
 
 To run it by hand instead, start the server from the `services/auditor` directory. Since
 LocalStack doesn't check AWS credentials, any non-empty values work:
@@ -78,6 +80,16 @@ Only other CRM services call the auditor, and each forwards the token of the use
 | HTTP `/health` | Anyone |
 | HTTP `/api/corrupted-logs` | An `ADMIN`'s token in `Authorization: Bearer`; otherwise `401` (no or an invalid token) or `403` (not an admin). user-service forwards it. |
 | gRPC `AuditService` | An `ADMIN`'s or `AGENT`'s token in the `authorization` metadata; otherwise `UNAUTHENTICATED` or `PERMISSION_DENIED`. An agent can list only their own activities. |
+
+`ListActivities` accepts an optional `client_id` alongside the inclusive `from`
+and exclusive `to` timestamps. It filters the successful change events whose
+audited JSON payload has that exact `client_id`, newest first, with the same
+sequence-based page token. CRM clients forward the user's access token; the
+auditor derives an agent's actor filter from the verified token, regardless of
+the requested filters. The client-profile-management service's middleware
+records the client ID from the authorized route and marks `POST .../verify` as
+an `UPDATE`; a verification event can be recognized by its client ID, endpoint,
+and optional `document_ids` or `without_document` fields in the payload.
 
 Only user tokens are accepted so far. ADR-0021 also lets a background job with no user call with a Cognito client-credentials token carrying an `audit/read` scope; that is not built yet, because no such caller exists. Such a token has no CRM group, so it is refused with `PERMISSION_DENIED`.
 
@@ -145,6 +157,21 @@ user's attributes. Each action must come from its own trigger source:
 |---|---|
 | `LOGIN` | `PostAuthentication_Authentication` |
 | `PASSWORD_RESET` (a user's own forgotten-password reset) | `PostConfirmation_ConfirmForgotPassword` |
+
+engagement-service (`services/engagement-service`, [ADR-0051](../../docs/adr/ADR-0051-engagement-service-and-mail-dispatcher.md))
+sends `source_service=ENGAGEMENT` with `event_type=ENGAGEMENT`. The actor is
+the agent's Cognito `sub`, or `system` for the emails its dispatcher sends.
+The payload is the same envelope event-alert-service uses: `event_id`,
+`event_version` (1 or more), `occurred_at` and a `data` object, which holds
+IDs, statuses and changed field names, never event titles, email bodies or
+addresses. The actions are:
+
+| Area | `action` |
+|---|---|
+| Calendar events | `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL` |
+| Emails the dispatcher sends | `INVITE_SENT`, `INVITE_FAILED`, `REMINDER_SENT`, `REMINDER_FAILED`, `REMINDER_MISSED` |
+| Client follow-up drafts | `DRAFT_GENERATE`, `DRAFT_DISCARD`, `EMAIL_SEND`, `EMAIL_SEND_FAILED` |
+| Notification preferences | `PREFERENCES_UPDATE` |
 
 The auditor long-polls the queue (up to 20s), so it should pick the message
 up, store it, and delete it shortly after.
@@ -233,10 +260,10 @@ Locally, `make run` and `make chain-verify` connect as `postgres`. The tests log
 - the role is enough for its job;
 - `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log` are refused.
 
-**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. `make run` loads the schema only into an empty database, so recreate yours: run `make db-reset`, then `make run`.
+**Existing local databases.** The hash format and the schema changed, so a database created before them no longer works. Recreate yours: run `make db-reset`, then `make run`. Flyway also refuses a database loaded before it, with the same fix.
 
 **Infrastructure requirements**, for when the infrastructure is built (ADR-0022, [ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)):
-- **Database logins:** the schema-migration task owns the tables. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify`. Neither service connects as the owner or the master user.
+- **Database logins:** the auditor's db-migrate container owns the tables, as the master user. It creates one login for the auditor holding `auditor_service`, and one for chain-verify holding `auditor_chain_verify` ([`afterMigrate.sql`](../../infrastructure/db-migrate/audit/afterMigrate.sql)). Neither service connects as the owner or the master user. `make migrate` creates the same logins locally, with local-only passwords.
 - **chain-verify's task:**
   - the ECS task definition runs the auditor image with the entry point `/chain-verify`;
   - it has its own task role and database secret;
@@ -313,13 +340,13 @@ make proto
 
 | RPC | Purpose |
 |---|---|
-| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
+| `ListActivities` | The activity feed's entries, newest first, filtered by `actor_id` (a Cognito `sub`) and a `from`/`to` time range. Only changes are listed: creating, updating, deleting or disabling a record, changing a role and resetting a password, from `USER_MANAGEMENT` and `CRM`, plus a user's own password reset from `COGNITO_TRIGGERS` and an agent's calendar changes and sent client emails from `ENGAGEMENT` (`models.ActivityActions`), and not failed attempts (`status_code` 400 or above). Reads, sign-ins, sign-outs, dashboard views, engagement reminders, invites and drafts, and events from ingestion or chain-verify stay in the audit log. An admin may ask for any actor or none; an agent always gets only their own entries, and asking for another actor is `PERMISSION_DENIED`. `page_size` must be 1 to 100. Pass the response's `next_page_token` as `page_token` to get the next page; an empty token means there are no more pages. |
 
 user-service generates its Java client from the same file at build time. Change the contract additively only: add fields and RPCs with new numbers, never renumber, reuse or remove one. CI runs `buf lint` and `buf breaking` against the pull request's base branch.
 
 ### `actor_id` convention
 
-Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**, taken from the verified token. The client service stores the same value as a client's `created_by_agent_id`. Work that no user started uses a `system:` prefix, for example `system:root-admin-initializer`. `ListActivities` compares `actor_id` by exact text, so an event carrying any other id, such as user-service's `users.id`, will not appear in that user's activity feed.
+Every producer sets an event's `actor_id` to the acting user's **Cognito `sub`**, taken from the verified token. The client service stores the same value as a client's `assigned_agent_id`. Work that no user started uses a `system:` prefix, for example `system:root-admin-initializer`. `ListActivities` compares `actor_id` by exact text, so an event carrying any other id, such as user-service's `users.id`, will not appear in that user's activity feed.
 
 ## Build and run the production image
 

@@ -60,6 +60,7 @@ locals {
 
   # ------------------------------------------------------------------ images
   # dashboard-service's repository is in the business-dashboard stack.
+  # db-migrate is Flyway with the Go services' migrations (services.tf).
   ecr_repositories = [
     "user-service",
     "client-service",
@@ -67,6 +68,7 @@ locals {
     "auditor",
     "transaction-service",
     "event-alert-service",
+    "db-migrate",
   ]
 
   image = {

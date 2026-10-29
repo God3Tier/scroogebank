@@ -44,7 +44,7 @@ func TestVerifyClientIdentity(t *testing.T) {
 			if test.repoIDs != nil {
 				repo.On("VerifyClientIdentity", ctx, test.clientID, test.agentID, test.repoIDs).Return(test.repoErr).Once()
 			}
-			err := NewClientService(repo, nil).VerifyClientIdentity(ctx, test.clientID, test.agentID, test.documentIDs)
+			err := NewClientService(repo, nil, nil).VerifyClientIdentity(ctx, test.clientID, test.agentID, test.documentIDs)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return

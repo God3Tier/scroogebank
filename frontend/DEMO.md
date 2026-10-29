@@ -25,8 +25,8 @@ Use a browser window at least 1280 px wide, so the dashboards show their full tw
 
 | Role | Email | Password | Lands on |
 |---|---|---|---|
-| Admin | `alice.admin@example.com` | `admin123` | `/admin` (Admin Dashboard) |
-| Agent | `sarah.agent@example.com` | `agent123` | `/agent` (Agent Dashboard) |
+| Admin | `alice.admin@example.com` | `admin123` | `/admin` (Admin Home) |
+| Agent | `sarah.agent@example.com` | `agent123` | `/agent` (Agent Home) |
 
 Only these two seed accounts have passwords. Login is a front-end check against `src/data/admins.js` and `src/data/agents.js`. There is no session, so every page is also reachable from the sidebar without logging in.
 
@@ -40,23 +40,25 @@ Figures depend on today's date, because each window ends today. The script there
 
 ### Part A: Admin view (about 4 minutes)
 
-1. **Log in as admin.** Go to **Login** and sign in as Alice. You land on the existing **Admin Dashboard**. Point out that this page manages staff and lists transactions, but answers no management questions.
-2. **Open Admin Insights** in the sidebar (`/insights/admin`).
+1. **Log in as admin.** Go to **Login** and sign in as Alice. You land on the existing **Admin Home**. Point out that this page manages staff and lists transactions, but answers no management questions.
+2. **Open Admin Dashboard** in the sidebar (`/insights/admin`).
 3. **Header.**
    - The **Bank-wide** badge shows the scope. The dashboard service derives it from the caller's token, never from a request parameter.
    - The line under the window selector shows the date range and "Figures as of …, cached up to 60 s". Responses are cached for up to 60 seconds, so figures are not real-time.
 4. **KPI tiles.**
    - Hover over **Booked initial deposits**. The tooltip explains that it is the sum of opening deposits, not a balance.
+   - If accounts in more than one currency were opened in the window, the tile lists one amount per currency, each on its own line. Amounts are never added up or converted across currencies. To show this, open a USD account for a client first.
    - Hover over **Verified share** to show another definition.
 5. **Window selector.** Click **7 days**, then **90 days**, then back to **30 days**. The tiles, the chart, the table and the date range all change.
 6. **Daily activity.** Clients created (left axis) and transactions (right axis). Each line has its own dash pattern, so the chart reads without colour.
-7. **Transaction health.** Failure rate, pending backlog (pending for more than 24 hours) and value, plus the split by status and by type. The value has no currency label because transactions carry no currency column.
+7. **Transaction health.** Failure rate, pending backlog (pending for more than 24 hours) and value, plus the split by status and by type. The value is shown in its currency. When the window's transactions span more than one currency, it shows "—" and lists the currencies instead of adding them up.
 8. **Ingestion freshness.** Shows how long ago the transaction import last synced. Today this signal is visible nowhere else in the UI.
 9. **Portfolio composition.**
    - Accounts by type, status and branch; clients by verification status.
    - Account keys are lowercase and client keys uppercase. The dashboard mirrors what each database stores rather than re-casing it.
 10. **Agent performance.**
     - Change **Sort by** to **Booked initial deposits**, then to **Verification rate**. The highlighted column follows the sort.
+    - With deposits in more than one currency, sorting by **Booked initial deposits** shows an **In** menu. Pick **USD** to rank by USD deposits. The column header names the currency, and an agent with none in it counts as zero.
     - The table is always sorted by one explicit metric. It computes no composite score or rating.
     - Rachel Wong shows as **Disabled**.
 11. **Action items.**
@@ -67,8 +69,8 @@ Figures depend on today's date, because each window ends today. The script there
 
 ### Part B: Agent view (about 3 minutes)
 
-1. **Log in as the agent.** Go to **Login** and sign in as Sarah. You land on the existing **Agent Dashboard**.
-2. **Open Agent Insights** in the sidebar (`/insights/agent`).
+1. **Log in as the agent.** Go to **Login** and sign in as Sarah. You land on the existing **Agent Home**.
+2. **Open Agent Dashboard** in the sidebar (`/insights/agent`).
 3. **Header.** The badge now says **My clients only**. Every figure covers only Sarah's clients, and there is no agent parameter she could change to see another agent's figures.
 4. **KPI tiles.** The same metrics as the admin view, scoped to her book.
 5. **My action queue.**
@@ -93,7 +95,7 @@ Most definitions come from `docs/feature-plans/business-dashboard_plan.md` §8.3
 
 ### Which metrics each side shows
 
-| Panel | Admin Insights (bank-wide) | Agent Insights (own clients only) |
+| Panel | Admin Dashboard (bank-wide) | Agent Dashboard (own clients only) |
 |---|---|---|
 | KPI tiles | Total clients, Clients added, Verified share, Total accounts (with accounts opened), Booked initial deposits, Active agents | My clients, Added in window, Verified share, My accounts (with accounts opened), Booked initial deposits |
 | Activity over time | Daily activity: clients created per day and transactions per day | Transactions per day, inside My client transactions |
@@ -116,11 +118,11 @@ The agent performance table sorts by one of four metrics: clients onboarded, ver
 | Verified / unverified / rejected | Clients created in the window, split by verification status. `PENDING` counts as unverified. | — |
 | Total accounts / My accounts | All accounts in scope. | — |
 | Accounts opened | Accounts whose opening date is in the window. | — |
-| Booked initial deposits | Sum of opening deposits for accounts opened in the window. | Opening deposit only, not a current balance. Single currency (SGD). |
+| Booked initial deposits | Sum of opening deposits for accounts opened in the window. | Opening deposit only, not a current balance. Shown per currency; never added across currencies. |
 | Accounts per client | Accounts divided by clients over the same scope. | At most 6: a client can hold one account of each type. |
 | Active agents | Agents whose user account is enabled. The tile caption shows the full roster. | Admin only. |
 | Transaction count | Transactions dated in the window. | — |
-| Transaction value | Sum of transaction amounts in the window. | Unlabelled: transactions carry no currency column. |
+| Transaction value | Sum of transaction amounts in the window. | Shown in its currency; not added up when transactions span more than one. |
 | Transaction failure rate | Failed transactions divided by all transactions dated in the window. | Status is as supplied by the external source. |
 | Pending backlog | Pending transactions dated more than 24 hours ago. | — |
 | Counts by status / by type | Transactions in the window by status (`COMPLETED`, `PENDING`, `FAILED`) and by type (`DEPOSIT`, `WITHDRAWAL`). | — |

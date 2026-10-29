@@ -18,6 +18,27 @@ services:
       timeout: 5s
       retries: 10
 
+  # Applies data/ with Flyway, from the image each task's db-migrate container
+  # runs in AWS (docs/database/migrations.md), and creates the service's own
+  # login. make run and make migrate run it. The password is for this local
+  # database only: make run connects as postgres.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/accounts
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: postgres
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/accounts
+      FLYWAY_PLACEHOLDERS_APP_LOGIN: account_service
+      FLYWAY_PLACEHOLDERS_APP_PASSWORD: account_service
+
   # The auditor's messaging moved from Kafka to SQS (ADR-0004). Local SQS
   # is provided by the localstack service in compose.yaml, not here.
 

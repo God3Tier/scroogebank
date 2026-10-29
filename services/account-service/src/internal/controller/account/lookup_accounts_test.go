@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"account-service/src/internal/contract"
 	accounterrors "account-service/src/internal/errors"
 	orm "account-service/src/internal/repository/orm"
 	servicemock "account-service/src/internal/service/account"
@@ -23,18 +24,19 @@ func TestLookupAccounts(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/internal/accounts/lookup", strings.NewReader(body))
 		res := httptest.NewRecorder()
 		NewAccountController(svc).LookupAccounts(res, req)
+		contract.Check(t, "accounts-api.yaml", http.MethodPost, "/internal/accounts/lookup", res)
 		return res
 	}
 
-	t.Run("returns each found account with its client", func(t *testing.T) {
+	t.Run("returns each found account with its client and currency", func(t *testing.T) {
 		svc := servicemock.NewMockAccountService(t)
 		svc.On("LookupAccounts", mock.Anything, []string{accountID}).
-			Return(orm.AccountSlice{{ID: accountID, ClientID: clientID}}, nil).Once()
+			Return(orm.AccountSlice{{ID: accountID, ClientID: clientID, Currency: "USD"}}, nil).Once()
 
 		res := lookup(svc, `{"ids":["`+accountID+`"]}`)
 
 		assert.Equal(t, http.StatusOK, res.Code)
-		assert.JSONEq(t, fmt.Sprintf(`{"accounts":[{"id":%q,"client_id":%q}]}`, accountID, clientID), res.Body.String())
+		assert.JSONEq(t, fmt.Sprintf(`{"accounts":[{"id":%q,"client_id":%q,"currency":"USD"}]}`, accountID, clientID), res.Body.String())
 	})
 
 	t.Run("nothing found is an empty list", func(t *testing.T) {

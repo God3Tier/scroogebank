@@ -13,8 +13,15 @@ export function createAccount(account) {
   return requestJson('/api/accounts', { method: 'POST', body: account })
 }
 
-// One account's transactions, newest first, through user-service, which
-// checks the caller may read the account first.
+// Changes an account's status: ACTIVE, INACTIVE, PENDING or CLOSED, in any
+// direction. Only the agent who owns the account may, and only once its client
+// is verified (ADR-0050). Returns { account_id, status }.
+export function updateAccountStatus(accountId, status) {
+  return requestJson(`/api/accounts/${encodeURIComponent(accountId)}`, { method: 'PATCH', body: { status } })
+}
+
+// One account's transactions, newest first, from transaction-service, which
+// checks the caller may read the account first (ADR-0064).
 export function listAccountTransactions(accountId) {
   return requestJson(`/api/accounts/${encodeURIComponent(accountId)}/transactions`)
 }

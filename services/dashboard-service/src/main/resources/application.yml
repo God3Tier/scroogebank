@@ -56,19 +56,21 @@ dashboard:
     max-entries: 1000
   # Budgets for the upstream fan-out. No retries: a read-only dashboard should
   # surface a failure immediately rather than amplify load on a struggling
-  # upstream (see nfr-notes.md, "Resiliency scope"). Raised from 2 s and 3 s:
-  # on Fargate, panels exceeded 2 s while their upstreams answered in
-  # milliseconds, mostly after a restart (ADR-0033).
+  # upstream (see nfr-notes.md, "Resiliency scope"). Down to 5 s and 8 s from
+  # 10 s and 15 s, which were raised for calls that stalled in the JDK
+  # HttpClient; that is fixed (see RestClientConfig). The overall budget must
+  # stay under API Gateway's 29 s integration timeout (ADR-0033).
   upstream:
     per-call-timeout-ms: 5000
     overall-budget-ms: 8000
     # Blank by default on purpose, unlike the settings above: an unset
     # upstream is a supported state that degrades its panels, not a startup
-    # failure. user-service serves the agent roster and the transaction
-    # figures (ADR-0039).
+    # failure. user-service serves the agent roster, and transaction-service
+    # the transaction figures (ADR-0064).
     user-service-base-url: ${USER_SERVICE_BASE_URL:}
     client-service-base-url: ${CLIENT_SERVICE_BASE_URL:}
     account-service-base-url: ${ACCOUNT_SERVICE_BASE_URL:}
+    transaction-service-base-url: ${TRANSACTION_SERVICE_BASE_URL:}
 
 logging:
   level:

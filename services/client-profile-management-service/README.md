@@ -2,6 +2,8 @@
 
 Owns client profiles. Accounts moved to [`account-service`](../account-service/README.md), which has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)).
 
+API contract: [`docs/api/clients-api.yaml`](../../docs/api/clients-api.yaml), and the `/aggregates` routes in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks the controllers' responses and the router's routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Start locally
 
 The local service still verifies Cognito access tokens and records a CRM audit event for the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
@@ -10,21 +12,23 @@ The local service still verifies Cognito access tokens and records a CRM audit e
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)) and the identity documents bucket (see [Identity documents and verification](#identity-documents-and-verification)), initializes or migrates the schema, and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
+The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)) and the identity documents bucket (see [Identity documents and verification](#identity-documents-and-verification)), applies `data/` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
 
 Deleting a client asks account-service first, at `ACCOUNT_SERVICE_BASE_URL` (default `http://localhost:8083`). Run account-service alongside this service, or client deletion returns 503.
 
+Reassigning clients also asks user-service, at `USER_SERVICE_BASE_URL` (default `http://localhost:8081`). Without both, reassignment returns 503.
+
 Each service has its own database, including locally: this one on port 5432, account-service's on 5436 and the SFTP stack's transactions database on 5437 ([ADR-0037](../../docs/adr/ADR-0037-transactions-database-and-account-linking.md)). For the SFTP transaction integration, run `make run` here and in `../account-service`, then start the receiver with `make -C ../sftp up`.
 
-To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`. A volume created before client data encryption holds plaintext clients and has no blind-index columns, so client endpoints fail until you run `make db-reset`. A volume created before identity documents has no `client_documents` table or `verified_*` columns, so every client endpoint fails until you run `make db-reset`. The same applies after the LocalStack container is recreated (`make run` recreates it when its settings change, as they did when S3 was added): its keys and documents are gone, so clients created before cannot be read.
+To stop PostgreSQL and other Compose dependencies while keeping the data volume, run `make down`. To delete the local database data, run `make db-reset`. A database volume loaded before Flyway has no schema history, so `make run` stops until you run `make db-reset`. A database volume created before the account split still has an `accounts` table here; it is unused, and `make db-reset` removes it. A volume created before soft delete has no `clients.deleted_at` column, so every request fails until you run `make db-reset`. A volume created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged) until you run `make db-reset`. A volume created before client data encryption holds plaintext clients and has no blind-index columns, so client endpoints fail until you run `make db-reset`. A volume created before identity documents has no `client_documents` table or `verified_*` columns, so every client endpoint fails until you run `make db-reset`. The same applies after the LocalStack container is recreated (`make run` recreates it when its settings change, as they did when S3 was added): its keys and documents are gone, so clients created before cannot be read.
 
 ## Cognito authorization
 
 Feature 1 provisions users in the shared Cognito user pool and assigns the `ADMIN` or `AGENT` group. This service validates the token's RS256 signature against the pool's JWKS, plus its issuer, app-client ID, expiration, and `token_use=access` claim. It rejects ID tokens and tokens without a supported group.
 
-The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles, and upload and view only their own clients' identity documents. Admins can access every client. The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
+The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles, and upload and view only their own clients' identity documents. Admins can read every client, its documents and each document, but change nothing: `POST /api/clients`, `PUT` and `DELETE /api/clients/{id}`, `POST /api/clients/{id}/verify` and `POST /api/clients/{id}/documents` return 403 `admins have read-only access to client data` to admins, before the ownership check ([ADR-0059](../../docs/adr/ADR-0059-admins-read-only-on-client-data.md)). The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
 
-account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `created_by_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
+account-service depends on this rule. Before creating an account it calls `GET /api/clients/{id}` with the caller's own token: a 200 gives it the client's `assigned_agent_id` to store as the account's owner, and a 404 means the client is missing or not the caller's.
 
 ## Listing clients
 
@@ -35,6 +39,42 @@ account-service depends on this rule. Before creating an account it calls `GET /
 `GET /aggregates/clients/stats?from&to[&groupBy=agent]` and `GET /aggregates/clients/action-items[?staleDays]` serve the business dashboard's client figures and work queue. They take the caller's access token, forwarded by the dashboard, and scope by it: agents see their own clients, and per-agent rows are for admins only (403 otherwise). They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted clients are never counted; statuses are grouped upper-cased because clients verified before [ADR-0041](../../docs/adr/ADR-0041-client-identity-documents-and-manual-verification.md) hold `verified` and newer ones `VERIFIED` ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
 
 `GET /aggregates/clients/team-comparison?days=7|30|90` compares the caller's clients onboarded over the last 7, 30 or 90 days (ending today in Singapore) with the team median. The median is computed here so no other agent's figure leaves the service. The group is every agent with a client, not deleted, created in the last 12 months, and the median is withheld when fewer than 5 agents are in it. Other windows are refused, so medians over chosen windows cannot be compared to narrow down one agent's figure (ADR-0038).
+
+## Field validation
+
+Creating or updating a client checks every field against the project brief's Appendix 2 validations and returns 400 with the first problem:
+
+| Field | Rule |
+|---|---|
+| First and last name | 2 to 50 characters, letters and spaces only |
+| Date of birth | An age between 18 and 100 on today's Singapore date |
+| Email | One `@` and a dot in the domain, no spaces, up to 255 characters |
+| Phone number | An optional `+` and 10 to 15 digits, after removing spaces, hyphens, dots and brackets (`+65 9123-4567` is fine; a bare 8-digit Singapore number is not) |
+| Address | 5 to 100 characters |
+| City, state, country | 2 to 50 characters |
+| Postal code | 6 digits when the country is Singapore (`SG`, `SGP`, `Singapore` or `Republic of Singapore`, punctuation ignored); otherwise 4 to 10 letters, digits, spaces or hyphens |
+
+Gender is only required: the brief lists Male, Female, Non-binary and Prefer not to say, while the frontend offers male, female and other, so restricting it needs the Feature 2 owner's decision first. The frontend runs the same checks before sending (`frontend/src/components/clientValidation.js`) and fills in Singapore as the new client's city, state and country.
+
+## Reassigning clients
+
+When an agent leaves or is disabled, an admin moves their clients to another agent ([ADR-0060](../../docs/adr/ADR-0060-client-reassignment.md), requirements Q&A UM07, UM15 and UM17). It is the one admin write on client data; every other write is for agents ([ADR-0059](../../docs/adr/ADR-0059-admins-read-only-on-client-data.md)).
+
+`POST /api/clients/reassignments`, admins only (403 for agents), with `to_user_id` and exactly one of `from_user_id` or `client_ids`. Users are user-service IDs, not Cognito subs:
+
+```json
+{"to_user_id": "<user-service id>", "from_user_id": "<user-service id>"}
+{"to_user_id": "<user-service id>", "client_ids": ["<client uuid>", "..."]}
+```
+
+- `from_user_id` moves every client of that user that is not deleted; `client_ids` moves those clients (1 to 100 distinct IDs), whoever holds them. Clients the receiver already has are left out.
+- The receiver must be an **enabled AGENT**, and not the user the clients come from (400). Both users are looked up with `GET {USER_SERVICE_BASE_URL}/api/users/{id}`, forwarding the admin's token; an unknown user is 404. A missing or deleted client in `client_ids` is 404. More than 1,000 clients from one user is 409. Nothing moves in any of these cases.
+- The clients are locked, their accounts moved with `PUT {ACCOUNT_SERVICE_BASE_URL}/ownership/accounts` (the admin's token again), and only then are the clients' `assigned_agent_id` changed and committed. If user-service or account-service does not answer 200 within 2 seconds, the answer is 503 and nothing moves. If the commit fails after account-service answered, repeat the request: it sets the same owner again.
+- The answer is `{"reassigned": n, "client_ids": [...]}`.
+- **Audit:** one event per client moved, action `UPDATE`, with `attribute_name: "assigned_agent_id"` and the agent before and after in `before_value` and `after_value`. A refused request is recorded once, with its status code.
+- The old agent's meetings, reminders and follow-up drafts in engagement-service stay theirs; their drafts for a moved client can no longer be sent.
+
+`assigned_agent_id` is the agent the client belongs to: the creating agent until a reassignment. It was called `created_by_agent_id`; who created a client is now only in the audit log's `CREATE` event.
 
 ## Deleting a client
 

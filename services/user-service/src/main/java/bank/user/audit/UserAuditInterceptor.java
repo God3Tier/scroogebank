@@ -64,8 +64,6 @@ public class UserAuditInterceptor implements HandlerInterceptor {
         if ("/api/corrupted-logs".equals(uri) && "GET".equals(method)) return new Operation("READ", "CORRUPTED_AUDIT_LOG");
         if ("/api/corrupted-logs".equals(uri) && "POST".equals(method)) return new Operation("CREATE", "CORRUPTED_AUDIT_LOG");
         if (uri.matches("/api/corrupted-logs/[^/]+") && "DELETE".equals(method)) return new Operation("DELETE", "CORRUPTED_AUDIT_LOG");
-        if (uri.matches("/api/accounts/[^/]+/transactions") && "GET".equals(method)) return new Operation("READ", "ACCOUNT");
-        if ("/api/transactions".equals(uri) && "GET".equals(method)) return new Operation("READ", "TRANSACTION");
         return null;
     }
 
@@ -77,7 +75,6 @@ public class UserAuditInterceptor implements HandlerInterceptor {
         Object attributes = request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
         if (attributes instanceof Map<?, ?> variables) {
             Object id = variables.get("id");
-            if (id == null) id = variables.get("accountId");
             return id == null ? null : id.toString();
         }
         return null;

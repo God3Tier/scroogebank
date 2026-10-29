@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	ownedAccountID   = "00000000-0000-0000-0000-000000000251"
-	deletedAccountID = "00000000-0000-0000-0000-000000000252"
+	ownedAccountID   = "00000000-0000-0000-0000-000000000281"
+	deletedAccountID = "00000000-0000-0000-0000-000000000282"
 	ownerSubject     = "agent-sub-owner"
 )
 
@@ -41,8 +41,8 @@ func openAuthorizationTestDB(t *testing.T) *sql.DB {
 		DELETE FROM accounts WHERE id IN ('` + ownedAccountID + `', '` + deletedAccountID + `');
 		INSERT INTO accounts (id, client_id, owner_agent_id, account_type, status, opening_date, initial_deposit, currency, branch_id, deleted_at)
 		VALUES
-			('` + ownedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'savings', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', NULL),
-			('` + deletedAccountID + `', '00000000-0000-0000-0000-000000000250', '` + ownerSubject + `', 'checking', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', CURRENT_TIMESTAMP);`)
+			('` + ownedAccountID + `', '00000000-0000-0000-0000-000000000280', '` + ownerSubject + `', 'savings', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', NULL),
+			('` + deletedAccountID + `', '00000000-0000-0000-0000-000000000280', '` + ownerSubject + `', 'checking', 'active', CURRENT_DATE, 0, 'SGD', 'SG-001', CURRENT_TIMESTAMP);`)
 	if err != nil {
 		t.Fatalf("load account fixture: %v", err)
 	}
@@ -88,6 +88,73 @@ func TestRequireAccountOwner(t *testing.T) {
 			res := httptest.NewRecorder()
 
 			router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/api/accounts/"+test.accountID, nil))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+		})
+	}
+}
+
+// RequireAgent reads only the verified role, so it needs no database.
+func TestRequireAgent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := map[string]struct {
+		principal  *Principal
+		wantStatus int
+	}{
+		"an agent reaches the handler":       {principal: &Principal{Subject: "agent-sub", Role: "AGENT"}, wantStatus: http.StatusOK},
+		"an admin is refused":                {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, wantStatus: http.StatusForbidden},
+		"a caller without a role is refused": {principal: &Principal{Subject: "other-sub"}, wantStatus: http.StatusForbidden},
+		"an unauthenticated request too":     {wantStatus: http.StatusForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				if test.principal != nil {
+					c.Set("principal", *test.principal)
+				}
+				c.Next()
+			})
+			router.POST("/write", RequireAgent(), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPost, "/write", nil))
+
+			assert.Equal(t, test.wantStatus, res.Code)
+		})
+	}
+}
+
+func TestRequireAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := map[string]struct {
+		principal  *Principal
+		wantStatus int
+	}{
+		"an admin reaches the handler":       {principal: &Principal{Subject: "admin-sub", Role: "ADMIN"}, wantStatus: http.StatusOK},
+		"an agent is refused":                {principal: &Principal{Subject: "agent-sub", Role: "AGENT"}, wantStatus: http.StatusForbidden},
+		"a caller without a role is refused": {principal: &Principal{Subject: "other-sub"}, wantStatus: http.StatusForbidden},
+		"an unauthenticated request too":     {wantStatus: http.StatusForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				if test.principal != nil {
+					c.Set("principal", *test.principal)
+				}
+				c.Next()
+			})
+			router.PUT("/ownership/accounts", RequireAdmin(), func(c *gin.Context) {
+				c.Status(http.StatusOK)
+			})
+			res := httptest.NewRecorder()
+
+			router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/ownership/accounts", nil))
 
 			assert.Equal(t, test.wantStatus, res.Code)
 		})

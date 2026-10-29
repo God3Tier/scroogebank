@@ -21,7 +21,7 @@ class WindowParserTest {
             new DashboardProperties(
                     new DashboardProperties.Window(30, 365),
                     new DashboardProperties.Cache(60, 1000),
-                    new DashboardProperties.Upstream(2000, 3000, "", "", "")),
+                    new DashboardProperties.Upstream(2000, 3000, "", "", "", "")),
             FIXED);
 
     @Test
@@ -43,7 +43,7 @@ class WindowParserTest {
         WindowParser singapore = new WindowParser(new DashboardProperties(
                 new DashboardProperties.Window(30, 365),
                 new DashboardProperties.Cache(60, 1000),
-                new DashboardProperties.Upstream(2000, 3000, "", "", "")), lateEvening);
+                new DashboardProperties.Upstream(2000, 3000, "", "", "", "")), lateEvening);
 
         assertThat(singapore.parse(null, null).to()).isEqualTo(LocalDate.of(2026, 9, 20));
     }

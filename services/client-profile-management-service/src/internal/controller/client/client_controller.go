@@ -17,6 +17,8 @@ type ClientController interface {
 	UploadClientDocument(w http.ResponseWriter, r *http.Request)
 	ListClientDocuments(w http.ResponseWriter, r *http.Request)
 	GetClientDocument(w http.ResponseWriter, r *http.Request)
+	// ReassignClients is the one admin write on client data (ADR-0060).
+	ReassignClients(w http.ResponseWriter, r *http.Request)
 }
 
 type clientController struct {

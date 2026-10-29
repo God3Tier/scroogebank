@@ -31,7 +31,7 @@ APP_ENV ?= local
 APP_TLS_CERT_FILE ?=
 APP_TLS_KEY_FILE ?=
 
-.PHONY: db-up db-down db-logs db-reset load-schema psql check-security-config run down tools-image sqlboiler mockery test all
+.PHONY: db-up db-down db-logs db-reset migrate psql check-security-config run down tools-image sqlboiler mockery test all
 
 ## Start Postgres and wait until it's ready
 db-up:
@@ -56,9 +56,11 @@ db-reset:
 db-logs:
 	$(COMPOSE) logs -f postgres
 
-## Load your .sql script into the running database
-load-schema:
-	PGPASSWORD=$(DB_PASS) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f $(SCHEMA_FILE)
+## Apply data/ to the local database with Flyway, as each task's db-migrate
+## container does in AWS (docs/database/migrations.md). Flyway records each
+## file's checksum, so editing an applied migration fails here, as it would there.
+migrate: db-up
+	@$(COMPOSE) run --rm --build db-migrate || { echo "If Flyway found a non-empty schema with no schema history table, the database was loaded before Flyway: run make db-reset, then make run."; exit 1; }
 
 ## Verify the required Cognito, Auditor and client-service settings before starting
 check-security-config:
@@ -72,12 +74,8 @@ check-security-config:
 		test -n "$(APP_TLS_CERT_FILE)" -a -n "$(APP_TLS_KEY_FILE)" || (echo "Production requires APP_TLS_CERT_FILE and APP_TLS_KEY_FILE"; exit 1); \
 	fi
 
-## Start PostgreSQL, apply the schema, and run the Cognito-protected Gin API on APP_ADDR (default :8083)
-run: check-security-config db-up
-	@if ! $(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -tAc "SELECT to_regclass('public.accounts') IS NOT NULL" | grep -qx t; then \
-		echo "Loading account schema..."; \
-		$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) < $(SCHEMA_FILE); \
-	fi
+## Start PostgreSQL, apply the migrations, and run the Cognito-protected Gin API on APP_ADDR (default :8083)
+run: check-security-config migrate
 	DB_HOST=$(DB_HOST) DB_PORT=$(DB_PORT) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASS) DB_NAME=$(DB_NAME) DB_SSLMODE=$(DB_SSLMODE) DB_SSLROOTCERT="$(DB_SSLROOTCERT)" APP_ENV=$(APP_ENV) APP_ADDR=$(APP_ADDR) APP_TLS_CERT_FILE="$(APP_TLS_CERT_FILE)" APP_TLS_KEY_FILE="$(APP_TLS_KEY_FILE)" COGNITO_ISSUER_URI="$(COGNITO_ISSUER_URI)" COGNITO_APP_CLIENT_ID="$(COGNITO_APP_CLIENT_ID)" COGNITO_API_AUDIENCE="$(COGNITO_API_AUDIENCE)" COGNITO_SERVICE_CLIENT_IDS="$(COGNITO_SERVICE_CLIENT_IDS)" AWS_REGION="$(AWS_REGION)" AWS_ENDPOINT_URL="$(AWS_ENDPOINT_URL)" AUDIT_QUEUE_URL="$(AUDIT_QUEUE_URL)" CLIENT_SERVICE_BASE_URL="$(CLIENT_SERVICE_BASE_URL)" go run ./src/serverd
 
 ## Open a psql shell into the running database

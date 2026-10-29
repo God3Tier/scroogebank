@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: CRM Audit Activity API
+  version: 1.0.0
+  description: >-
+    User-service exposes the protected activity feed and forwards the caller's
+    Cognito access token to auditor over internal gRPC. For an agent, auditor
+    enforces the actor from the verified token; clientId is an additional
+    filter over the client ID recorded by the authorized CRM route.
+servers:
+  - url: /
+paths:
+  /api/activities:
+    get:
+      operationId: listActivities
+      summary: List successful CRM changes in an optional time window
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agentId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Admin-only actor filter. Agents can only query their own events.
+        - name: clientId
+          in: query
+          required: false
+          schema: { type: string }
+          description: Exact client_id in the audited event payload.
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Inclusive lower timestamp bound.
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Exclusive upper timestamp bound.
+        - name: size
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque sequence-based page cursor.
+      responses:
+        '200':
+          description: Newest matching changes first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPage'
+        '400':
+          description: Invalid time window, page size or client ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: Missing or invalid Cognito access token. }
+        '403':
+          description: Caller is not an agent or admin, or is an agent asking for another agent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Auditor is unavailable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      required: [status, error]
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        error: { type: string }
+        message: { type: string }
+        path: { type: string }
+    ActivityPage:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/Activity' }
+        nextCursor:
+          type: string
+          nullable: true
+    Activity:
+      type: object
+      required: [id, sourceService, action, actorId, timestamp, payload]
+      properties:
+        id: { type: string }
+        sourceService: { type: string }
+        action: { type: string }
+        actorId: { type: string }
+        actorName: { type: string, nullable: true }
+        timestamp: { type: string, format: date-time }
+        payload:
+          description: The event's own detail, whose shape depends on sourceService and action; a string when it is not JSON.

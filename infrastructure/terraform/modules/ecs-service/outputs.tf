@@ -8,6 +8,21 @@ output "task_definition_family" {
   value       = aws_ecs_task_definition.this.family
 }
 
+output "container_names" {
+  description = "The task's containers, in the order they start."
+  value       = [for c in concat(local.init_container, local.migrate_container, [local.app_container]) : c.name]
+}
+
+output "app_environment" {
+  description = "The app container's environment as the caller set it, without the TLS settings this module adds."
+  value       = var.environment
+}
+
+output "app_secrets" {
+  description = "The app container's secrets (name => valueFrom), without the db-migrate container's."
+  value       = var.secrets
+}
+
 output "task_role_arn" {
   description = "The application's role."
   value       = aws_iam_role.task.arn

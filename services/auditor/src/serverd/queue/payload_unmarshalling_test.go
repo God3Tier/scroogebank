@@ -247,6 +247,78 @@ func dashboardView() ValidDashboardViewPayload {
 	}
 }
 
+// transaction-service's records of transaction reads (ADR-0064).
+func TestValidatePayload_TransactionReads(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		payload ValidUserAuditPayload
+	}{
+		{"an account's transactions", userOperation("ACCOUNT", id, "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"another agent's account, refused, needs no resource id", userOperation("ACCOUNT", "", "/api/accounts/{accountId}/transactions", "GET", 404)},
+		{"the transaction list has no resource id", userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+		{"an agent refused the transaction list", userOperation("TRANSACTION", "", "/api/transactions", "GET", 403)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", "READ", string(models.TransactionServiceType), tt.payload)
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected the read to pass, got error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePayload_TransactionReadsRejectInvalidEvents(t *testing.T) {
+	const id = "123e4567-e89b-12d3-a456-426614174000"
+	tests := []struct {
+		name    string
+		action  string
+		actorID string
+		payload any
+	}{
+		{"transactions are only read", "DELETE", "agent-sub",
+			userOperation("TRANSACTION", id, "/api/transactions", "DELETE", 200)},
+		{"an ingestion action is not a read", "FILE_PROCESSING_COMPLETED", "agent-sub",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+		{"a resource transaction-service does not serve", "READ", "agent-sub",
+			userOperation("USER", id, "/api/users/{id}", "GET", 200)},
+		{"a successful account read needs its account", "READ", "agent-sub",
+			userOperation("ACCOUNT", "", "/api/accounts/{accountId}/transactions", "GET", 200)},
+		{"a read needs an actor", "READ", "",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 200)},
+		{"a read needs an endpoint", "READ", "agent-sub",
+			userOperation("TRANSACTION", "", "", "GET", 200)},
+		{"a read needs a real status", "READ", "agent-sub",
+			userOperation("TRANSACTION", "", "/api/transactions", "GET", 0)},
+		{"a read needs a time", "READ", "agent-sub",
+			ValidUserAuditPayload{ResourceType: "TRANSACTION", Endpoint: "/api/transactions", HTTPMethod: "GET", StatusCode: 200}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := buildEvent(t, "CRUD", tt.action, string(models.TransactionServiceType), tt.payload)
+			event.ActorID = tt.actorID
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected an error, got nil")
+			}
+		})
+	}
+}
+
+// A read is CRUD, so it cannot arrive as an ingestion event.
+func TestValidatePayload_TransactionReadIsNotAnIngestionEvent(t *testing.T) {
+	event := buildEvent(t, "TRANSACTION_INGESTION", "READ", string(models.TransactionServiceType),
+		userOperation("TRANSACTION", "", "/api/transactions", "GET", 200))
+
+	if err := validatePayload(event); err == nil {
+		t.Error("expected an error, got nil")
+	}
+}
+
 func TestValidatePayload_ValidDashboardView(t *testing.T) {
 	for _, action := range []string{"VIEW_OVERVIEW", "VIEW_PORTFOLIO", "VIEW_TRANSACTIONS", "VIEW_ACTION_ITEMS"} {
 		t.Run(action, func(t *testing.T) {
@@ -493,6 +565,98 @@ func TestValidatePayload_RejectsIncompleteEventAlertMetadata(t *testing.T) {
 
 	if err := validatePayload(event); err == nil {
 		t.Error("expected missing event ID and occurrence time to be rejected")
+	}
+}
+
+// engagementEventCreate is a message as engagement-service's outbox relay
+// sends it: the event-alert envelope with IDs only in data.
+const engagementEventCreate = `{"event_id":"80000000-0000-4000-8000-000000000001","event_type":"ENGAGEMENT",` +
+	`"action":"EVENT_CREATE","source_service":"ENGAGEMENT","actor_id":"4a1b2c3d-0000-4000-8000-000000000001",` +
+	`"payload":{"event_id":"80000000-0000-4000-8000-000000000001","event_version":1,` +
+	`"occurred_at":"2026-10-21T02:00:00Z","data":{"calendarEventId":"80000000-0000-4000-8000-000000000002"}}}`
+
+func engagementPayload() map[string]any {
+	return map[string]any{
+		"event_id":      "80000000-0000-4000-8000-000000000001",
+		"event_version": 1,
+		"occurred_at":   "2026-10-21T02:00:00Z",
+		"data":          map[string]string{"calendarEventId": "80000000-0000-4000-8000-000000000002"},
+	}
+}
+
+func TestValidatePayload_EngagementMessage(t *testing.T) {
+	var event ValidEvent
+	if err := json.Unmarshal([]byte(engagementEventCreate), &event); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected engagement-service's message to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_ValidEngagementActions(t *testing.T) {
+	actions := []string{
+		"EVENT_CREATE", "EVENT_UPDATE", "EVENT_CANCEL",
+		"INVITE_SENT", "INVITE_FAILED",
+		"REMINDER_SENT", "REMINDER_FAILED", "REMINDER_MISSED",
+		"DRAFT_GENERATE", "DRAFT_DISCARD", "EMAIL_SEND", "EMAIL_SEND_FAILED",
+		"PREFERENCES_UPDATE",
+	}
+	for _, action := range actions {
+		t.Run(action, func(t *testing.T) {
+			event := buildEvent(t, "ENGAGEMENT", action, string(models.EngagementServiceType), engagementPayload())
+
+			if err := validatePayload(event); err != nil {
+				t.Errorf("expected engagement %s to pass, got error: %v", action, err)
+			}
+		})
+	}
+
+	// The dispatcher's own events name "system" as the actor.
+	event := buildEvent(t, "ENGAGEMENT", "REMINDER_SENT", string(models.EngagementServiceType), engagementPayload())
+	event.ActorID = "system"
+	if err := validatePayload(event); err != nil {
+		t.Errorf("expected a dispatcher event to pass, got error: %v", err)
+	}
+}
+
+func TestValidatePayload_EngagementRejectsInvalidEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		action    string
+		actor     string
+		change    func(map[string]any)
+	}{
+		{name: "wrong event type", eventType: "CRUD", action: "EVENT_CREATE", actor: "a1"},
+		{name: "unknown action", eventType: "ENGAGEMENT", action: "EMAIL_EXPORT", actor: "a1"},
+		{name: "missing actor", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: " "},
+		{name: "missing event ID", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { delete(p, "event_id") }},
+		{name: "version below 1", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { p["event_version"] = 0 }},
+		{name: "missing occurrence time", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { delete(p, "occurred_at") }},
+		{name: "missing data", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { delete(p, "data") }},
+		{name: "data not an object", eventType: "ENGAGEMENT", action: "EVENT_CREATE", actor: "a1",
+			change: func(p map[string]any) { p["data"] = "calendar event" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := engagementPayload()
+			if tt.change != nil {
+				tt.change(payload)
+			}
+			event := buildEvent(t, tt.eventType, tt.action, string(models.EngagementServiceType), payload)
+			event.ActorID = tt.actor
+
+			if err := validatePayload(event); err == nil {
+				t.Errorf("expected %s to be rejected, got nil", tt.name)
+			}
+		})
 	}
 }
 

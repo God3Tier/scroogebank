@@ -131,7 +131,8 @@ The only new risk is a dashboard left running after the CRM is stopped. One task
   - the TLS certificate's name and its secret's recovery window, with and without deletion protection;
   - that the plan fails when the audit queue does not allow the role.
 - `terraform test` in `stacks/crm` still passes its six runs.
-- The first real apply: dashboard-service passes its ALB health check over HTTPS, `/api/dashboard/*` returns panels for an agent and an admin, and its audit events reach the audit queue with no `AccessDenied` in its logs.
+- **The first real apply is done (2026-10-20, confirmed by the decision owner):** the stack is applied, and dashboard-service runs and passes its ALB health check over HTTPS.
+- **Still to check:** `/api/dashboard/*` returns panels for an agent and an admin, and its audit events reach the audit queue with no `AccessDenied` in its logs.
 
 ## References
 
@@ -142,3 +143,4 @@ The only new risk is a dashboard left running after the CRM is stopped. One task
 
 - 2026-10-20 10:49 +08:00: proposed.
 - 2026-10-20: amended while Proposed, as decided by the decision owner (INF-08): the stack holds a self-signed TLS certificate and its secret, so the internal ALB reaches dashboard-service over HTTPS. Decision 1, Security & Privacy Impact, Cost Impact and Validation changed to match.
+- 2026-10-20: Validation records the first apply's results, which the decision owner confirmed. The decision is unchanged.

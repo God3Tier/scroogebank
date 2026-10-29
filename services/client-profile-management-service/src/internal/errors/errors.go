@@ -25,4 +25,10 @@ var (
 	// reported when asked whether a client can be deleted.
 	ErrClientHasAccounts         = errors.New("client still has accounts")
 	ErrAccountServiceUnavailable = errors.New("account service unavailable")
+
+	// Reassigning clients to another agent (ADR-0060).
+	ErrUserNotFound           = errors.New("user not found")
+	ErrUserServiceUnavailable = errors.New("user service unavailable")
+	ErrInvalidReceiver        = errors.New("clients can only be reassigned to another enabled agent")
+	ErrTooManyClients         = errors.New("too many clients to reassign at once")
 )

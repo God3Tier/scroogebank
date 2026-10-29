@@ -2,15 +2,17 @@
 
 ## Status and ownership
 
-- Status: Proposed for SF00 review; not an accepted production contract
+- Status: SF00 internal finding contract and RH-SF01 consumer implemented; pull/replay direction accepted by ADR-0044; provider implementation merged under proposed ADR-0065 and pending cross-owner acceptance and end-to-end verification
 - Feature: Client Health Monitor
 - Contract owner: Garvit
 - Required reviewer: Swayam
 - Required external reviewers: transaction owner, client-profile owner, Auditor owner, security/platform owner
 - Feature plan: [`../feature-plans/client-health-monitor_plan.md`](../feature-plans/client-health-monitor_plan.md)
-- Last updated: 2026-09-29
+- Last updated: 2026-10-27
 
-These contracts freeze boundaries for independent development. They do not select an AWS transport, authorize changes in another service, or replace required ADRs.
+These contracts freeze boundaries for independent development. Contract A uses
+the pull transport accepted by ADR-0044; provider deployment still requires the
+reviews in proposed ADR-0065. The contracts do not replace required ADRs.
 
 ## Contract principles
 
@@ -40,23 +42,29 @@ The merged SFTP receiver currently stores:
 - currency;
 - transaction timestamp;
 - Completed/Pending/Failed status;
+- explicit CustomerInitiated/Automated/Unknown activity kind;
+- nullable stable synthetic source fingerprint;
 - free-text description;
 - nullable client ID; and
 - Unmatched/Matched/Rejected import status.
 
 Current gaps:
 
-- save logic does not populate client ID;
-- no account-to-client matching contract;
-- no event publisher;
-- no read API;
-- no historical replay/export;
-- no stable source/counterparty fingerprint; and
-- no authoritative balance snapshots.
+- cross-owner acceptance of proposed ADR-0065 and its exact service scope;
+- a real Cognito/import/read end-to-end check; and
+- the Client Health production HTTP/token adapter.
+
+Matched imports now populate `account_id` and `client_id` through
+account-service under ADR-0037. Transaction-service also exposes a private
+cursor-paged admin list under ADR-0043. The merged provider implementation adds
+the separate matched-only, date-bounded internal replay endpoint and
+deterministic six-month producer history proposed by ADR-0065. It remains
+disabled for production use until that proposal and its security boundary are
+accepted.
 
 ### Client assignment
 
-The client-profile service stores the creating/owning Cognito subject in `created_by_agent_id`, but exposes no machine-to-machine assignment contract.
+The client-profile service stores the owning agent's Cognito subject in `assigned_agent_id`, which an admin's reassignment changes ([ADR-0060](../adr/ADR-0060-client-reassignment.md)), but exposes no machine-to-machine assignment contract.
 
 ### Auditor
 
@@ -77,54 +85,11 @@ The current allowlist does not recognise this feature's proposed service type or
 
 ### Purpose
 
-Provide transaction facts only after durable import and successful account/client matching.
+Provide transaction facts only after durable import and successful
+account/client matching. ADR-0044 selects a bounded paginated internal pull API
+for initial replay and daily analysis. It does not select an event stream.
 
-The logical schema is transport-neutral. A future ADR will decide whether it is delivered as:
-
-- an at-least-once event; or
-- a paginated internal read/replay API.
-
-### Proposed event
-
-Event name:
-
-```text
-transaction.matched.v1
-```
-
-Example:
-
-```json
-{
-  "schemaVersion": "1",
-  "eventId": "6b50a97e-8a88-4e64-a3df-a686745223cc",
-  "occurredAt": "2026-09-29T04:00:00Z",
-  "importBatchId": "batch-20260929-001",
-  "transaction": {
-    "transactionId": "txn-000001",
-    "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
-    "accountId": "acc-000001",
-    "type": "Deposit",
-    "amount": "4250.00",
-    "currency": "SGD",
-    "transactionDate": "2026-09-28T00:30:00Z",
-    "status": "Completed",
-    "sourceFingerprint": "synthetic-employer-001"
-  }
-}
-```
-
-### Field rules
-
-#### Envelope
-
-- `schemaVersion`: required; exactly `"1"` for this contract.
-- `eventId`: required stable unique identifier for delivery de-duplication.
-- `occurredAt`: required time when the matched event was created.
-- `importBatchId`: required stable identifier for the source import batch.
-- `transaction`: required matched transaction payload.
-
-#### Transaction
+### Transaction field rules
 
 - `transactionId`: required; stable across retries/replays.
 - `clientId`: required; transaction must not be emitted before this is resolved.
@@ -134,39 +99,43 @@ Example:
 - `currency`: required uppercase ISO 4217 code; MVP expects `SGD` unless a currency policy is accepted.
 - `transactionDate`: required source transaction time.
 - `status`: required; `Completed`, `Pending`, or `Failed`.
-- `sourceFingerprint`: optional opaque stable synthetic source reference. It supports recurring-credit grouping without exposing free-text remitter details.
+- `activityKind`: required under ADR-0051; `CustomerInitiated`, `Automated`, or
+  `Unknown`. Unknown is excluded from activity counts rather than guessed.
+- `sourceFingerprint`: required nullable field. When present, it is a stable
+  24–64 character synthetic source reference matching
+  `synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}`. It supports recurring-credit
+  grouping without exposing free-text remitter details.
 
-### Producer guarantees requested
+### Provider guarantees requested
 
-- Publish only after the transaction and matching result are durable.
-- Never publish `Unmatched` or `Rejected` records through this contract.
-- Delivery may be at least once.
-- Preserve `eventId` and `transactionId` across retries.
-- Document whether ordering is guaranteed; health-service logic must not require it.
-- Publish updates/corrections as explicit versioned events rather than silently changing old messages.
+- Return only after the transaction and matching result are durable.
+- Never return `Unmatched` or `Rejected` records through this contract.
+- Preserve `transactionId` across repeated pages and replays.
+- Use stable keyset ordering with opaque cursors.
+- Apply the source rule that only Pending may advance to Completed or Failed.
 - Provide six months of synthetic replay data.
 - Notify consumers before incompatible changes.
 
 ### Consumer guarantees
 
-- De-duplicate by `eventId`.
-- Enforce unique transaction/version handling.
+- De-duplicate by `transactionId`.
+- Enforce immutable fields and allow only Pending-to-terminal status changes
+  across repeated runs.
 - Reject unsupported schema versions.
 - Validate all fields before persistence.
 - Never treat Pending as completed activity/net flow.
 - Record invalid/unsupported input without creating signals/tasks.
 - Store only the minimum read projection required by the selected rules.
 
-### Historical replay proposal
+### Matched transaction history endpoint
 
-If events are selected, replay uses the same `transaction.matched.v1` payloads with stable transaction IDs and new or documented stable event IDs.
-
-If an API is selected, proposed endpoint:
+ADR-0044 accepts the Client Health consumer contract. The Feature 3 provider
+implementation is merged under proposed ADR-0065; cross-owner acceptance,
+security review, and end-to-end verification remain pending.
 
 ```text
 GET /internal/v1/transactions
-    ?clientId={clientId}
-    &from={inclusive-utc}
+    ?from={inclusive-utc}
     &to={exclusive-utc}
     &cursor={opaque-cursor}
     &limit={bounded-limit}
@@ -179,22 +148,91 @@ Proposed response:
   "schemaVersion": "1",
   "items": [
     {
-      "transactionId": "txn-000001",
+      "transactionId": "synthetic-3b71d6a4c829a1051e8d9fc2b1437a60",
       "clientId": "fb2c22ef-69fc-47de-b67f-5c1d0cfc795a",
-      "accountId": "acc-000001",
+      "accountId": "e3351530-f5c1-4f64-aedc-3c97d9f76816",
       "type": "Deposit",
       "amount": "4250.00",
       "currency": "SGD",
-      "transactionDate": "2026-09-28T00:30:00Z",
+      "transactionDate": "2026-09-28T05:00:00Z",
       "status": "Completed",
-      "sourceFingerprint": "synthetic-employer-001"
+      "activityKind": "Automated",
+      "sourceFingerprint": "synthetic-employer-a1b2c3d4e5f6"
     }
   ],
   "nextCursor": null
 }
 ```
 
-The transport decision remains open. SF00 freezes field meaning, not delivery mechanism.
+The endpoint requires a scoped Cognito client-credentials token, inclusive
+`from`, exclusive `to`, bounded `limit`, and an opaque provider cursor. The
+consumer exposes no completed intake result unless every page validates and the
+provider returns the final cursor. The merged provider currently requires the
+exact `crm-transactions/read` scope, returns matched activity across all clients,
+caps pages at 500 rows, and uses a global descending
+`(transaction_date, transaction_id)` keyset cursor. Only rows with non-null CRM
+client and account IDs are returned; descriptions and import/reconciliation
+fields are excluded. Proposed ADR-0065 must be accepted before production use.
+
+Machine-readable consumer artifacts:
+
+- `docs/api/schemas/transaction-replay-page-v1.schema.json`
+- valid and unsafe provider fixtures under
+  `tests/fixtures/client-health-monitor/transaction-replay-page-v1.*.json`
+- Java records and validation under
+  `bank.clienthealth.transaction.contract`
+
+Until the production HTTP/token adapter and provider acceptance are complete,
+local analysis uses `SyntheticTransactionReplaySource`. It follows the same
+paging contract and provides six deterministic months covering interrupted
+recurring credit, declining activity, sustained net outflow, healthy controls,
+and non-completed rows. It is a replaceable adapter, not a second contract.
+
+### RH-SF02 projection and baseline boundary
+
+- A complete replay is applied atomically by transaction ID.
+- Immutable-field changes fail closed; only Pending may advance to Completed or
+  Failed.
+- Applied replay windows are recorded so analysis cannot mistake absent
+  coverage for zero activity.
+- At 08:00 Asia/Singapore, SF02 exposes a 90-day baseline and non-overlapping
+  30-day comparison per account plus an exact client roll-up.
+- Six months remain available for recurring-credit series grouped by
+  `sourceFingerprint`.
+- Activity counts include only completed `CustomerInitiated` rows. Automated
+  and Unknown rows are excluded and Unknown counts remain visible.
+- Pending/Failed rows contribute to no aggregate. Mixed-currency windows fail
+  closed; the MVP baseline currency is SGD.
+- SF02 exposes exact summaries and sufficiency metadata; SF03 alone decides
+  signal thresholds and severity.
+
+### RH-SF03 deterministic rule boundary
+
+- Ruleset `relationship-health-v1` is frozen in ADR-0052.
+- Six rolling 30-day account summaries support sustained-period evaluation.
+- Each rule returns zero or more typed account-level outcomes containing
+  client/account IDs, signal type, rule version, severity, exact windows, and
+  the matching `ClientHealthFinding` evidence record.
+- Rules return no confidence percentage and perform no task creation,
+  fingerprinting, cooldown, cap, audit, AI, or persistence behavior.
+- RH-SF04 alone assigns signal IDs/fingerprints, combines all outcomes for one
+  client/run, applies suppression, and invokes `RelationshipTaskPort`.
+
+### RH-SF04 analysis and task-handoff boundary
+
+- Daily run IDs are deterministic from analysis date and ruleset version.
+- A renewable 60-minute lease prevents overlapping owners; an expired lease is
+  recoverable.
+- Finding/signal/correlation IDs are deterministic. Evidence fingerprints omit
+  the run ID so overlapping runs de-duplicate the same rule/account/window.
+- One immutable finding contains every detected signal for one client/run.
+- `RelationshipTaskPort` returns `CREATED`, `EVIDENCE_ATTACHED`, `DUPLICATE`,
+  `SUPPRESSED_COOLDOWN`, or `SUPPRESSED_DAILY_CAP`.
+- SF05 resolves assignment and makes cooldown/cap admission atomic with task,
+  history and outbox persistence under ADR-0053.
+- SF04 advances its watermark only after every finding has an explicit outcome.
+  Failure leaves the watermark unchanged; deterministic retries safely replay
+  already-handled findings.
 
 ## Contract B: Client Assignment V1
 
@@ -590,15 +628,19 @@ Validation:
 
 ### Current transport
 
-Proposed queue target:
+Queue target accepted in ADR-0020:
 
 ```text
 audit-insert
 ```
 
-The transport exists, but this feature's service type/action/payload require Auditor-owner approval and implementation.
+The Client Health envelope/factory, V3 outbox, leased JDBC relay and
+property-gated SQS producer are implemented in RH-SF08. Task, suppression,
+signal-detected and analysis-run events are wired. The feature's
+service/action/payload still require Auditor-owner approval before shared
+Auditor validation changes.
 
-### Proposed envelope
+### Envelope
 
 ```json
 {
@@ -622,7 +664,7 @@ The transport exists, but this feature's service type/action/payload require Aud
 }
 ```
 
-Proposed actions:
+Defined actions:
 
 ```text
 ANALYSIS_RUN_STARTED
@@ -644,6 +686,12 @@ Requirements:
 
 - `event_id` is stable across retries.
 - Business change and outbox event commit atomically.
+- `client_ref` is a one-way lowercase SHA-256 reference; raw client IDs, notes,
+  descriptions, evidence amounts and transaction data are excluded.
+- Before/after states contain only task status, severity and version.
+- Delivery leases a bounded batch, continues after one failure, deletes only
+  after gateway acceptance, and releases failures with bounded redacted retry
+  categories/backoff.
 - Producer sends through IAM-authorized SQS access.
 - Rejected events remain diagnosable through the Auditor DLQ.
 - Payload contains no raw transactions or unnecessary PII.

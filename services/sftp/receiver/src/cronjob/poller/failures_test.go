@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"receiver/src/internal/models"
 )
 
 // episodePoller audits into events and reads its time from a clock that moves
@@ -141,7 +143,7 @@ func TestPollAuditsEachKindOfFailureOnAFile(t *testing.T) {
 	require.Error(t, p.Poll(ctx))
 	// account-service is back, but the import cannot be saved.
 	directory.err = nil
-	directory.accounts = map[string]string{knownAccount: knownClient}
+	directory.accounts = map[string]models.Account{knownAccount: sgdAccount}
 	store.err = errors.New("database unavailable")
 	require.Error(t, p.Poll(ctx))
 

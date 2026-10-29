@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"client-profile-management-service/src/internal/models"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,4 +35,16 @@ func TestNotesRecordAVerificationWithoutADocument(t *testing.T) {
 	MarkWithoutDocument(ctx)
 
 	assert.True(t, notes.WithoutDocument())
+}
+
+func TestNotesRecordEachClientReassigned(t *testing.T) {
+	ctx, notes := WithNotes(context.Background())
+	first := models.Reassignment{ClientID: "00000000-0000-0000-0000-000000000961", FromAgentID: "agent-from", ToAgentID: "agent-to"}
+	second := models.Reassignment{ClientID: "00000000-0000-0000-0000-000000000962", FromAgentID: "agent-other", ToAgentID: "agent-to"}
+
+	AddReassignment(ctx, first)
+	AddReassignment(ctx, second)
+	AddReassignment(context.Background(), first)
+
+	assert.Equal(t, []models.Reassignment{first, second}, notes.Reassignments())
 }

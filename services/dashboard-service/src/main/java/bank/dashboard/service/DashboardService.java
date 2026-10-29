@@ -126,8 +126,8 @@ public class DashboardService {
      * this is reached; client-service and account-service are asked for
      * agent-grouped figures, which they also refuse to an agent caller.
      */
-    public ServedResponse agentPerformance(DashboardWindow window, AgentSortMetric sort) {
-        return cached("agents", window, sort.wireValue(), () -> {
+    public ServedResponse agentPerformance(DashboardWindow window, AgentSortMetric sort, String currency) {
+        return cached("agents", window, sort.wireValue() + ":" + currency, () -> {
             // The table needs three upstreams. They are fetched in parallel
             // like any other panels and joined here: one after another, they
             // shared a single call's budget, which three cold calls after a
@@ -137,7 +137,7 @@ public class DashboardService {
             inputs.put(AGENTS_CLIENTS, () -> clientStats.stats(window, true));
             inputs.put(AGENTS_ACCOUNTS, () -> accountStats.stats(window, true));
             Map<String, Panel> panels = new LinkedHashMap<>();
-            panels.put("agents", agentsTable(assembler.assemble(inputs), sort));
+            panels.put("agents", agentsTable(assembler.assemble(inputs), sort, currency));
             return response(window, panels);
         });
     }
@@ -176,7 +176,7 @@ public class DashboardService {
      * the reason, as for {@link #accountsPerClient}.
      */
     @SuppressWarnings("unchecked")
-    private static Panel agentsTable(Map<String, Panel> inputs, AgentSortMetric sort) {
+    private static Panel agentsTable(Map<String, Panel> inputs, AgentSortMetric sort, String currency) {
         for (Panel input : inputs.values()) {
             if (input.isUnavailable()) {
                 return Panel.unavailable(input.reason());
@@ -187,7 +187,8 @@ public class DashboardService {
                     (List<AgentSummary>) inputs.get(AGENTS_ROSTER).data(),
                     (ClientStats) inputs.get(AGENTS_CLIENTS).data(),
                     (AccountStats) inputs.get(AGENTS_ACCOUNTS).data(),
-                    sort));
+                    sort,
+                    currency));
         } catch (RuntimeException ex) {
             // An answer the join cannot use, such as one missing its rows,
             // costs the panel as it did when the join ran inside the call.

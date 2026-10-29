@@ -21,7 +21,7 @@ const (
 func seedOwnedClient(t *testing.T, db *sql.DB, repo clientRepository, id, email, phone, agentID string, minutesAgo int) {
 	t.Helper()
 	seedClient(t, db, repo, id, email, phone)
-	_, err := db.Exec(`UPDATE clients SET created_by_agent_id = $1, created_at = now() - make_interval(mins => $2) WHERE client_id = $3`,
+	_, err := db.Exec(`UPDATE clients SET assigned_agent_id = $1, created_at = now() - make_interval(mins => $2) WHERE client_id = $3`,
 		agentID, minutesAgo, id)
 	require.NoError(t, err)
 }
@@ -46,7 +46,7 @@ func TestListClients(t *testing.T) {
 	)
 	db, repo, _ := newTestRepository(t)
 	// Clear rows an earlier run left with these agents.
-	_, err := db.Exec(`DELETE FROM clients WHERE created_by_agent_id IN ($1, $2)`, listAgentA, listAgentB)
+	_, err := db.Exec(`DELETE FROM clients WHERE assigned_agent_id IN ($1, $2)`, listAgentA, listAgentB)
 	require.NoError(t, err)
 	seedOwnedClient(t, db, repo, first, "list-301@example.test", "+6560000301", listAgentA, 3)
 	seedOwnedClient(t, db, repo, second, "list-302@example.test", "+6560000302", listAgentA, 2)
@@ -85,7 +85,7 @@ func TestListClients(t *testing.T) {
 		require.Len(t, clients, 1)
 		assert.Equal(t, "Alice", clients[0].FirstName)
 		assert.Equal(t, "list-303@example.test", clients[0].Email)
-		assert.Equal(t, listAgentB, clients[0].CreatedByAgentID)
+		assert.Equal(t, listAgentB, clients[0].AssignedAgentID)
 	})
 
 	// Last: it re-creates agent B's client with a key only this protector holds.

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"time"
 
-	accounterrors "account-service/src/internal/errors"
 	"account-service/src/internal/models"
 
 	"github.com/aarondl/sqlboiler/v4/queries"
@@ -47,24 +46,26 @@ func (r repository) AccountStats(ctx context.Context, caller models.Caller, wind
 	from, to := window.From.Format(time.DateOnly), window.To.Format(time.DateOnly)
 
 	// A sum across currencies is a number that looks right and is not, so
-	// the figures are refused instead (ADR-0038).
+	// deposits are summed per currency and never across them (ADR-0062).
 	var currencies []struct {
-		Currency string `boil:"currency"`
+		Currency       string `boil:"currency"`
+		Count          int64  `boil:"count"`
+		InitialDeposit string `boil:"value"`
 	}
-	if err := queries.Raw(`SELECT currency FROM accounts WHERE `+inScope+` AND `+inWindow+` GROUP BY 1 ORDER BY 1`,
+	if err := queries.Raw(`SELECT currency, count(*) AS count, `+depositSum+` AS value
+		FROM accounts WHERE `+inScope+` AND `+inWindow+` GROUP BY 1 ORDER BY 1`,
 		owner, from, to).Bind(ctx, r.db, &currencies); err != nil {
 		return models.AccountStats{}, err
-	}
-	if len(currencies) > 1 {
-		return models.AccountStats{}, accounterrors.ErrMultipleCurrencies
 	}
 
 	stats := models.AccountStats{
 		ByType: map[string]int64{}, ByStatus: map[string]int64{}, ByCurrency: map[string]int64{}, ByBranch: map[string]int64{},
-		BookedInitialDeposits: "0.00", DailyOpened: []models.DailyValue{},
+		BookedInitialDeposits: map[string]string{}, Currencies: []string{}, DailyOpened: []models.DailyValue{},
 	}
-	if len(currencies) == 1 {
-		stats.Currency = currencies[0].Currency
+	for _, currency := range currencies {
+		stats.Currencies = append(stats.Currencies, currency.Currency)
+		stats.OpenedInWindow += currency.Count
+		stats.BookedInitialDeposits[currency.Currency] = currency.InitialDeposit
 	}
 
 	var groups []struct {
@@ -86,22 +87,48 @@ func (r repository) AccountStats(ctx context.Context, caller models.Caller, wind
 		stats.ByBranch[group.Branch] += group.Count
 	}
 
+	var days []struct {
+		Date  string `boil:"day"`
+		Count int64  `boil:"count"`
+		Value string `boil:"value"`
+	}
 	if err := queries.Raw(`SELECT to_char(opening_date, 'YYYY-MM-DD') AS day, count(*) AS count, `+depositSum+` AS value
 		FROM accounts WHERE `+inScope+` AND `+inWindow+` GROUP BY 1 ORDER BY 1`,
-		owner, from, to).Bind(ctx, r.db, &stats.DailyOpened); err != nil {
+		owner, from, to).Bind(ctx, r.db, &days); err != nil {
 		return models.AccountStats{}, err
 	}
-	if err := r.db.QueryRowContext(ctx, `SELECT count(*), `+depositSum+` FROM accounts WHERE `+inScope+` AND `+inWindow,
-		owner, from, to).Scan(&stats.OpenedInWindow, &stats.BookedInitialDeposits); err != nil {
-		return models.AccountStats{}, err
+	for _, day := range days {
+		daily := models.DailyValue{Date: day.Date, Count: day.Count}
+		// A day's value is one sum, so it is given only when the whole
+		// window is in one currency, as the receiver does for transactions.
+		if len(stats.Currencies) == 1 {
+			value := day.Value
+			daily.Value = &value
+		}
+		stats.DailyOpened = append(stats.DailyOpened, daily)
 	}
 
 	if byAgent {
-		stats.ByAgent = []models.AgentAccountCounts{}
-		if err := queries.Raw(`SELECT owner_agent_id AS agent_id, count(*) AS accounts_opened, `+depositSum+` AS booked_initial_deposits
-			FROM accounts WHERE `+inScope+` AND `+inWindow+` GROUP BY 1 ORDER BY 1`,
-			owner, from, to).Bind(ctx, r.db, &stats.ByAgent); err != nil {
+		var agentRows []struct {
+			AgentID        string `boil:"agent_id"`
+			Currency       string `boil:"currency"`
+			AccountsOpened int64  `boil:"accounts_opened"`
+			InitialDeposit string `boil:"booked_initial_deposits"`
+		}
+		if err := queries.Raw(`SELECT owner_agent_id AS agent_id, currency, count(*) AS accounts_opened, `+depositSum+` AS booked_initial_deposits
+			FROM accounts WHERE `+inScope+` AND `+inWindow+` GROUP BY 1, 2 ORDER BY 1, 2`,
+			owner, from, to).Bind(ctx, r.db, &agentRows); err != nil {
 			return models.AccountStats{}, err
+		}
+		// Rows come ordered by agent, so each agent's currencies are adjacent.
+		stats.ByAgent = []models.AgentAccountCounts{}
+		for _, row := range agentRows {
+			if n := len(stats.ByAgent); n == 0 || stats.ByAgent[n-1].AgentID != row.AgentID {
+				stats.ByAgent = append(stats.ByAgent, models.AgentAccountCounts{AgentID: row.AgentID, BookedInitialDeposits: map[string]string{}})
+			}
+			agent := &stats.ByAgent[len(stats.ByAgent)-1]
+			agent.AccountsOpened += row.AccountsOpened
+			agent.BookedInitialDeposits[row.Currency] = row.InitialDeposit
 		}
 	}
 	return stats, nil

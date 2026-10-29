@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
+import static bank.dashboard.contract.OpenApiContract.upstream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -43,13 +44,15 @@ class HttpUserRosterAdapterTest {
     @Test
     void readsEveryPageOfTheRoster() {
         server.expect(requestTo(page(0)))
-                .andRespond(withSuccess(userPage(0, 2, """
-                        {"id":"1","idpSub":"sub-ada","firstName":"Ada","lastName":"Lim","email":"ada@x.com","role":"AGENT","enabled":true}
-                        """), MediaType.APPLICATION_JSON));
+                .andRespond(upstream("users-api.yaml", withSuccess(userPage(0, 2, """
+                        {"id":"00000000-0000-4000-8000-000000000001","idpSub":"sub-ada","firstName":"Ada","lastName":"Lim","email":"ada@x.com",
+                         "role":"AGENT","enabled":true,"createdAt":"2026-09-01T00:00:00Z","updatedAt":"2026-09-01T00:00:00Z"}
+                        """), MediaType.APPLICATION_JSON)));
         server.expect(requestTo(page(1)))
-                .andRespond(withSuccess(userPage(1, 2, """
-                        {"id":"2","idpSub":"sub-ben","firstName":"Ben","lastName":"Chua","email":"ben@x.com","role":"AGENT","enabled":false}
-                        """), MediaType.APPLICATION_JSON));
+                .andRespond(upstream("users-api.yaml", withSuccess(userPage(1, 2, """
+                        {"id":"00000000-0000-4000-8000-000000000002","idpSub":"sub-ben","firstName":"Ben","lastName":"Chua","email":"ben@x.com",
+                         "role":"AGENT","enabled":false,"createdAt":"2026-09-01T00:00:00Z","updatedAt":"2026-09-01T00:00:00Z"}
+                        """), MediaType.APPLICATION_JSON)));
 
         List<AgentSummary> agents = adapter.agents();
 
@@ -66,7 +69,7 @@ class HttpUserRosterAdapterTest {
         // read directly, and leaves user-service deciding who sees the roster.
         server.expect(requestTo(page(0)))
                 .andExpect(header("Authorization", "Bearer the-callers-token"))
-                .andRespond(withSuccess(userPage(0, 1, ""), MediaType.APPLICATION_JSON));
+                .andRespond(upstream("users-api.yaml", withSuccess(userPage(0, 1, ""), MediaType.APPLICATION_JSON)));
 
         adapter.agents();
 
@@ -77,7 +80,7 @@ class HttpUserRosterAdapterTest {
     void treatsAnEmptyRosterAsAnEmptyList() {
         // user-service reports zero pages for an empty result.
         server.expect(requestTo(page(0)))
-                .andRespond(withSuccess(userPage(0, 0, ""), MediaType.APPLICATION_JSON));
+                .andRespond(upstream("users-api.yaml", withSuccess(userPage(0, 0, ""), MediaType.APPLICATION_JSON)));
 
         assertThat(adapter.agents()).isEmpty();
     }
@@ -111,7 +114,7 @@ class HttpUserRosterAdapterTest {
         MockRestServiceServer endless = MockRestServiceServer.bindTo(builder).build();
         for (int page = 0; page < HttpUserRosterAdapter.MAX_PAGES; page++) {
             endless.expect(requestTo(page(page)))
-                    .andRespond(withSuccess(userPage(page, 1000, ""), MediaType.APPLICATION_JSON));
+                    .andRespond(upstream("users-api.yaml", withSuccess(userPage(page, 1000, ""), MediaType.APPLICATION_JSON)));
         }
 
         assertThatThrownBy(() -> adapter(builder, BASE_URL).agents())
@@ -135,7 +138,7 @@ class HttpUserRosterAdapterTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer trailingSlashServer = MockRestServiceServer.bindTo(builder).build();
         trailingSlashServer.expect(requestTo(page(0)))
-                .andRespond(withSuccess(userPage(0, 1, ""), MediaType.APPLICATION_JSON));
+                .andRespond(upstream("users-api.yaml", withSuccess(userPage(0, 1, ""), MediaType.APPLICATION_JSON)));
 
         adapter(builder, BASE_URL + "/").agents();
 
@@ -159,6 +162,6 @@ class HttpUserRosterAdapterTest {
         return new DashboardProperties(
                 new DashboardProperties.Window(30, 365),
                 new DashboardProperties.Cache(60, 1000),
-                new DashboardProperties.Upstream(2000, 3000, userServiceUrl, "", ""));
+                new DashboardProperties.Upstream(2000, 3000, userServiceUrl, "", "", ""));
     }
 }

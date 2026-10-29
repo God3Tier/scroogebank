@@ -7,7 +7,7 @@
 - Feature/branch: `task/governance/adr-0041-client-documents` (accepted); implementation on `task/base-features/client-documents`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0059](ADR-0059-admins-read-only-on-client-data.md) (decision 1 in part: admins still list and view every client's documents, but only agents upload and verify; the other decisions remain in force)
 
 ## Context
 

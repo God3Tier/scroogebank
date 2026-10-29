@@ -22,12 +22,19 @@ import (
 
 func main() {
 	faultKind := flag.String("fault", "", "publish one fault file of this kind and exit: "+strings.Join(fault.Kinds, ", "))
+	history := flag.Bool("history", false, "publish deterministic six-month synthetic history and exit")
 	flag.Parse()
 	destDir := getenv("OUTPUT_DIR", "/output")
 	source := accounts.FromEnv()
 	if *faultKind != "" {
 		if err := publishFault(*faultKind, destDir, source); err != nil {
 			log.Fatalf("publish %s fault: %v", *faultKind, err)
+		}
+		return
+	}
+	if *history {
+		if err := publishHistory(destDir, source); err != nil {
+			log.Fatalf("publish synthetic history: %v", err)
 		}
 		return
 	}
@@ -55,20 +62,44 @@ func main() {
 	}
 }
 
+func publishHistory(destDir string, source accounts.Source) error {
+	accounts, err := source.Accounts()
+	if err != nil {
+		return err
+	}
+	if !source.Synced() || len(accounts) < 4 {
+		return fmt.Errorf("six-month history requires at least four synced CRM accounts for signal cases and healthy controls")
+	}
+	rows := transaction.GenerateHistory(accounts, time.Now().UTC())
+	if len(rows) == 0 {
+		return fmt.Errorf("six-month history generated no transactions")
+	}
+	content, err := json.Marshal(rows)
+	if err != nil {
+		return fmt.Errorf("encode synthetic history: %w", err)
+	}
+	name, err := stageFile(content, ".json", time.Now().UTC(), destDir)
+	if err != nil {
+		return err
+	}
+	log.Printf("published %d deterministic synthetic transactions in %s", len(rows), name)
+	return nil
+}
+
 // run publishes one file. With a synced account list, its transactions use
-// only the accounts the CRM has, and with none it publishes nothing
-// (ADR-0045).
+// only the accounts the CRM has, each in its account's currency, and with
+// none it publishes nothing (ADR-0045).
 func run(destDir string, source accounts.Source) {
-	accountIDs, err := source.IDs()
+	list, err := source.Accounts()
 	if err != nil {
 		log.Printf("nothing published: %v\n", err)
 		return
 	}
-	if source.Synced() && len(accountIDs) == 0 {
+	if source.Synced() && len(list) == 0 {
 		log.Printf("nothing published: %s lists no CRM accounts\n", source.File)
 		return
 	}
-	transactions := transaction.GenerateRandomSet(accountIDs...)
+	transactions := transaction.GenerateRandomSet(list...)
 	if err := stageContent(transactions, destDir); err != nil {
 		log.Printf("stage failed: %v\n", err)
 		return
@@ -102,11 +133,11 @@ func stageContent(transactions []transaction.Transaction, destDir string) error 
 // read. A fault is asked for on purpose, so it is published even when the
 // synced list is empty, with random external account references.
 func publishFault(kind, destDir string, source accounts.Source) error {
-	accountIDs, err := source.IDs()
+	list, err := source.Accounts()
 	if err != nil {
 		return err
 	}
-	files, err := fault.Build(kind, accountIDs)
+	files, err := fault.Build(kind, list)
 	if err != nil {
 		return err
 	}
