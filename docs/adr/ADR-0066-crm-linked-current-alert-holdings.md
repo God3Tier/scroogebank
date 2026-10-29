@@ -1,6 +1,6 @@
 # ADR-0066: CRM-linked current holdings for agent alerts
 
-- Status: Proposed; design draft only, not approved or implemented
+- Status: Approved by Azeez (relayed by Hayyun, 2026-10-30); implemented except the CRM directory routes (CH-01) and Terraform (CH-05)
 - Decision date/time: 2026-10-29 22:45 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewers: Hayyun (holdings/domain/API); Neo Jia Wen (CRM ownership/security)

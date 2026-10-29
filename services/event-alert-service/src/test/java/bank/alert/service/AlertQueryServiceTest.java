@@ -30,7 +30,7 @@ class AlertQueryServiceTest {
 
     private final AlertListRepository repository = mock(AlertListRepository.class);
     private final AlertDecisionRepository decisionRepository = mock(AlertDecisionRepository.class);
-    private final AlertQueryService service = new AlertQueryService(repository, decisionRepository);
+    private final AlertQueryService service = new AlertQueryService(repository, org.mockito.Mockito.mock(bank.alert.crm.CurrentOwnership.class), decisionRepository);
 
     @Test
     void returnsStableOpaqueCursorFromLastVisibleRow() {

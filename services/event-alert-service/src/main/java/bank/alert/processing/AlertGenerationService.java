@@ -98,11 +98,42 @@ public class AlertGenerationService {
         Map<PortfolioKey, List<HoldingSnapshot>> portfolios = positions.stream()
                 .collect(Collectors.groupingBy(PortfolioKey::from, LinkedHashMap::new, Collectors.toList()));
         UUID existingPublicEventId = findPublicEventId(source.getId(), classification.modelVersion());
+        // One candidate per held affected instrument, scored against that account's whole portfolio.
+        // A client holding the same instrument in several accounts yields only its best account.
+        Map<AlertKey, Candidate> evaluated = new LinkedHashMap<>();
+        int belowThreshold = 0;
+        int unevaluable = 0;
+        for (List<HoldingSnapshot> portfolio : portfolios.values()) {
+            for (String instrumentId : affectedIds.stream().sorted().toList()) {
+                HoldingSnapshot affected = portfolio.stream()
+                        .filter(position -> position.getInstrumentId().equals(instrumentId))
+                        .findFirst().orElse(null);
+                if (affected == null) continue;
+                ExposureResult exposure = exposureCalculator.calculate(portfolio, Set.of(instrumentId));
+                if (!exposure.evaluable()) {
+                    unevaluable++;
+                    continue;
+                }
+                MaterialityScore score = scorer.score(new MaterialityInputs(
+                        request.eventSeverity(),
+                        exposure.portfolioPercentage().divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP),
+                        request.retrievalRelevance(),
+                        classification.confidence(),
+                        exposure.freshness()));
+                if (!score.alertEligible()) {
+                    belowThreshold++;
+                    continue;
+                }
+                Candidate candidate = new Candidate(portfolio, affected, score);
+                evaluated.merge(new AlertKey(affected.getClientRef(), instrumentId), candidate,
+                        Candidate::better);
+            }
+        }
         long newPortfolioAlerts = existingPublicEventId == null
-                ? portfolios.size()
-                : portfolios.values().stream()
-                        .filter(portfolio -> !hasExistingAlert(
-                                portfolio, affectedIds, existingPublicEventId))
+                ? evaluated.size()
+                : evaluated.keySet().stream()
+                        .filter(key -> alerts.findByClientRefAndPublicEventIdAndInstrumentId(
+                                key.clientRef(), existingPublicEventId, key.instrumentId()).isEmpty())
                         .count();
         ensureAuditCapacity((existingPublicEventId != null && auditOutbox.existsById(auditEventId(
                         "alert.classification-recorded", existingPublicEventId)) ? 0 : 1)
@@ -113,34 +144,15 @@ public class AlertGenerationService {
 
         int created = 0;
         int duplicates = 0;
-        int belowThreshold = 0;
-        int unevaluable = 0;
         int suppressed = 0;
         List<UUID> alertIds = new ArrayList<>();
         Instant dayStart = request.asOf().atZone(ZoneOffset.UTC).truncatedTo(ChronoUnit.DAYS).toInstant();
         long dailyCount = alerts.countByAssignedAgentSubjectAndCreatedAtGreaterThanEqual(
                 request.assignedAgentSubject(), dayStart);
 
-        for (List<HoldingSnapshot> portfolio : portfolios.values()) {
-            ExposureResult exposure = exposureCalculator.calculate(portfolio, affectedIds);
-            if (!exposure.evaluable()) {
-                unevaluable++;
-                continue;
-            }
-            MaterialityScore score = scorer.score(new MaterialityInputs(
-                    request.eventSeverity(),
-                    exposure.portfolioPercentage().divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP),
-                    request.retrievalRelevance(),
-                    classification.confidence(),
-                    exposure.freshness()));
-            if (!score.alertEligible()) {
-                belowThreshold++;
-                continue;
-            }
-
-            HoldingSnapshot affected = portfolio.stream()
-                    .filter(position -> affectedIds.contains(position.getInstrumentId()))
-                    .findFirst().orElseThrow();
+        for (Candidate candidate : evaluated.values()) {
+            HoldingSnapshot affected = candidate.affected();
+            MaterialityScore score = candidate.score();
             if (alerts.findByClientRefAndPublicEventIdAndInstrumentId(
                     affected.getClientRef(), publicEventId, affected.getInstrumentId()).isPresent()) {
                 duplicates++;
@@ -151,7 +163,8 @@ public class AlertGenerationService {
                 continue;
             }
 
-            holdingSnapshots.saveAll(portfolio);
+            persistSnapshotGroup(candidate.portfolio());
+            holdingSnapshots.saveAll(candidate.portfolio());
             Alert alert = alerts.saveAndFlush(new Alert(
                     UUID.randomUUID(), affected.getClientRef(), affected.getAssignedAgentSubject(),
                     publicEventId, affected.getInstrumentId(), affected.getId(), score.score(),
@@ -164,6 +177,21 @@ public class AlertGenerationService {
         }
         return new AlertGenerationOutcome(publicEventId, created, duplicates, belowThreshold,
                 unevaluable, suppressed, alertIds);
+    }
+
+    /** Records the group of positions scored together, so later portfolio edits never change this alert's evidence. */
+    private void persistSnapshotGroup(List<HoldingSnapshot> portfolio) {
+        HoldingSnapshot first = portfolio.getFirst();
+        if (first.getPortfolioSnapshotId() == null) return;
+        BigDecimal total = portfolio.stream().map(HoldingSnapshot::getValueSgd)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        jdbc.update("""
+                INSERT INTO portfolio_snapshot (id, account_ref, client_ref, portfolio_revision,
+                    assigned_agent_subject, total_sgd, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING
+                """, first.getPortfolioSnapshotId(), first.getAccountRef(), first.getClientRef(),
+                first.getPortfolioRevision(), first.getAssignedAgentSubject(), total,
+                Timestamp.from(clock.instant()));
     }
 
     private UUID persistPublicEvent(SourceResult source, EventClassification classification) {
@@ -264,14 +292,6 @@ public class AlertGenerationService {
         }
     }
 
-    private boolean hasExistingAlert(List<HoldingSnapshot> portfolio, Set<String> affectedIds,
-            UUID publicEventId) {
-        return portfolio.stream()
-                .filter(position -> affectedIds.contains(position.getInstrumentId()))
-                .anyMatch(position -> alerts.findByClientRefAndPublicEventIdAndInstrumentId(
-                        position.getClientRef(), publicEventId, position.getInstrumentId()).isPresent());
-    }
-
     private static UUID auditEventId(String eventType, UUID resourceId) {
         return UUID.nameUUIDFromBytes(
                 (eventType + "|" + resourceId).getBytes(StandardCharsets.UTF_8));
@@ -289,6 +309,18 @@ public class AlertGenerationService {
             return mapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new AuditUnavailableException("cannot serialize alert audit payload", exception);
+        }
+    }
+
+    private record AlertKey(String clientRef, String instrumentId) {
+    }
+
+    private record Candidate(List<HoldingSnapshot> portfolio, HoldingSnapshot affected, MaterialityScore score) {
+        /** Higher score wins; a tie goes to the lower account ID so the choice is repeatable. */
+        Candidate better(Candidate other) {
+            int byScore = score.score().compareTo(other.score().score());
+            if (byScore != 0) return byScore > 0 ? this : other;
+            return affected.getAccountRef().compareTo(other.affected().getAccountRef()) <= 0 ? this : other;
         }
     }
 

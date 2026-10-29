@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { listAccountTransactions, listAccounts } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
+import HoldingsEditor from '../components/HoldingsEditor.jsx'
 
 function loadProblem(error) {
     // client-service answers 404 for another agent's client too.
@@ -24,11 +25,21 @@ async function loadClientTransactions(clientId) {
 }
 
 function AccountTransactions({ account }) {
+    const [editingHoldings, setEditingHoldings] = useState(false)
+    const investment = String(account.account_type).toUpperCase() === 'INVESTMENT'
     return (
         <section className="card card-flush">
             <h2>
                 {account.account_type} account <span className="mono" title={account.id}>{account.id.slice(0, 8)}</span>
             </h2>
+            {investment && (
+                <div className="holdings-panel">
+                    <button type="button" aria-expanded={editingHoldings} onClick={() => setEditingHoldings(!editingHoldings)}>
+                        {editingHoldings ? 'Hide holdings' : 'Record holdings'}
+                    </button>
+                    {editingHoldings && <HoldingsEditor accountId={account.id} />}
+                </div>
+            )}
             {account.transactions.length === 0 ? (
                 <p className="empty-state">No transactions found.</p>
             ) : (

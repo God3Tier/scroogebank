@@ -229,3 +229,24 @@ Each run holds a PostgreSQL session advisory lock for its whole duration. A
 second run, scheduled, manual or a replay, ends as `ALREADY_RUNNING` before it
 reserves quota or searches. The lock belongs to one database connection, so a
 crashed process releases it when its connection closes.
+
+## Holdings mode (ADR-0066)
+
+`ALERT_HOLDINGS_MODE` is `fixture` (default; bundled synthetic JSON) or `database`
+(maintained CRM-linked portfolios). The API and the worker must use the same value.
+Database mode needs `ALERT_CRM_ACCOUNT_DIRECTORY_URL`, `ALERT_CRM_CLIENT_DIRECTORY_URL`,
+`ALERT_CRM_TOKEN_ENDPOINT`, `ALERT_CRM_CLIENT_ID`, `ALERT_CRM_CLIENT_SECRET` and
+`ALERT_CRM_SCOPE`; a missing value or a non-HTTPS URL stops start-up, and there is
+no fallback to fixture data. Enable it only after V10 is applied, the CRM
+directory routes exist and account-linked dummy portfolios are recorded.
+
+If the CRM cannot be reached, protected API calls answer 503 and the worker
+leaves the source pending (never `NO_HOLDERS`). Visibility follows the client's
+current agent, refreshed on every list, detail, decision and event action (at most
+1,000 referenced clients; above that the call fails rather than truncating). There
+is a short window between that check and the commit in which a reassignment is
+not seen; it is not an atomic cross-service revocation.
+
+Rollback: set `ALERT_HOLDINGS_MODE=fixture` and stop portfolio edits. All recorded
+portfolios, snapshots and audit events remain. Do not restore a former agent's
+access by hand; correct the assignment in the CRM.

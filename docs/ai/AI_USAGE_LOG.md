@@ -657,3 +657,12 @@
 The review also found that provider retries bypassed monthly search accounting.
 Each retry now reserves quota before the external call; regression tests cover
 retry exhaustion and refusal to retry after the last available reservation.
+
+# 2026-10-30 - Current holdings implementation
+
+- Team member: Hayyun
+- AI tool: Claude Code
+- Task/purpose: Implement the approved CRM-linked current-holdings plan (CH-02, CH-03, CH-04, CH-04b) on `feat/event-driven-alerts`.
+- Files/components affected: V10 migration, portfolio API, CRM directory client, database holdings and search-universe providers, full-portfolio per-instrument scoring, current-owner routing, agent-event briefing/action API, holdings editor and event briefing frontend, tests, contract/schema/runbook docs.
+- Verification: event-alert-service 224 tests pass against PostgreSQL in Docker; frontend 125 tests, lint and build pass. No AWS, Tavily or model calls; synthetic data only.
+- Human verification required: Azeez and Hayyun to review; the CRM owner to implement and review the directory routes (CH-01); the infrastructure developer for CH-05.

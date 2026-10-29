@@ -24,6 +24,20 @@ idp:
 
 alert:
   mode: ${ALERT_MODE:API}
+  holdings:
+    # fixture: bundled synthetic JSON (isolated demos and tests).
+    # database: maintained CRM-linked portfolios; API and worker must use the same mode.
+    mode: ${ALERT_HOLDINGS_MODE:fixture}
+  crm:
+    # Only read in database mode: private alert-directory routes plus a dedicated
+    # client-credentials identity holding just the directory read scopes.
+    account-directory-url: ${ALERT_CRM_ACCOUNT_DIRECTORY_URL:}
+    client-directory-url: ${ALERT_CRM_CLIENT_DIRECTORY_URL:}
+    token-endpoint: ${ALERT_CRM_TOKEN_ENDPOINT:}
+    client-id: ${ALERT_CRM_CLIENT_ID:}
+    client-secret: ${ALERT_CRM_CLIENT_SECRET:}
+    scope: ${ALERT_CRM_SCOPE:}
+    timeout: ${ALERT_CRM_TIMEOUT:5s}
   audit:
     max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
     publisher:

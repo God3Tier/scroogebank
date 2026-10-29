@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Testcontainers
-@Import({AlertMutationService.class, AlertStateMachine.class, AlertMutationServiceTest.TestConfiguration.class})
+@Import({AlertMutationService.class, AlertStateMachine.class, bank.alert.crm.CurrentOwnership.class, AlertMutationServiceTest.TestConfiguration.class})
 @TestPropertySource(properties = "alert.audit.max-pending=100")
 class AlertMutationServiceTest {
 

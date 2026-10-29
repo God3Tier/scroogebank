@@ -1,6 +1,7 @@
 package bank.alert.repository;
 
 import bank.alert.api.BriefingResponse;
+import bank.alert.crm.CurrentOwnership;
 import bank.alert.api.EvidenceResponse;
 import bank.alert.api.ExplanationFactorResponse;
 import bank.alert.api.AlertSummaryResponse;
@@ -26,6 +27,7 @@ public class AlertListRepository {
               FROM alert a
               JOIN public_event pe ON pe.id = a.public_event_id
               JOIN source_result sr ON sr.id = pe.source_result_id
+              LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
              WHERE 1 = 1
             """;
 
@@ -46,7 +48,7 @@ public class AlertListRepository {
         StringBuilder sql = new StringBuilder(SELECT);
         List<Object> arguments = new ArrayList<>();
         if (!admin) {
-            sql.append(" AND a.assigned_agent_subject = ?");
+            sql.append(" AND " + CurrentOwnership.OWNER_EXPRESSION + " = ?");
             arguments.add(actorSubject);
         }
         if (status != null) {
@@ -87,13 +89,18 @@ public class AlertListRepository {
                        ROUND(hs.value_sgd * 100 / NULLIF((
                            SELECT SUM(h2.value_sgd)
                              FROM holding_snapshot h2
-                            WHERE h2.client_ref = a.client_ref
-                              AND h2.source_version = hs.source_version
-                              AND h2.valued_at = hs.valued_at
+                            WHERE (hs.portfolio_snapshot_id IS NOT NULL
+                                   AND h2.portfolio_snapshot_id = hs.portfolio_snapshot_id)
+                               OR (hs.portfolio_snapshot_id IS NULL
+                                   AND h2.portfolio_snapshot_id IS NULL
+                                   AND h2.client_ref = a.client_ref
+                                   AND h2.source_version = hs.source_version
+                                   AND h2.valued_at = hs.valued_at)
                        ), 0), 4) AS portfolio_percentage,
                        sr.canonical_url, sr.source_domain, sr.published_at, sr.retrieved_at,
                        b.summary, b.ai_generated, b.model_version, b.prompt_version, b.uncertainty
                   FROM alert a
+                  LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
                   JOIN holding_snapshot hs ON hs.id = a.holding_snapshot_id
                   JOIN public_event pe ON pe.id = a.public_event_id
                   JOIN source_result sr ON sr.id = pe.source_result_id
@@ -103,7 +110,7 @@ public class AlertListRepository {
         List<Object> arguments = new ArrayList<>();
         arguments.add(alertId);
         if (!admin) {
-            sql.append(" AND a.assigned_agent_subject = ?");
+            sql.append(" AND " + CurrentOwnership.OWNER_EXPRESSION + " = ?");
             arguments.add(actorSubject);
         }
 

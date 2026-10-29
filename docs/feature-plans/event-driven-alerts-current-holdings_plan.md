@@ -1,6 +1,7 @@
 # CRM-linked current holdings for event-driven alerts
 
-Status: Proposed implementation plan; no application change is authorized by this document alone.
+Status: Approved by Azeez (relayed by Hayyun, 2026-10-30). CH-02, CH-03, CH-04 and CH-04b are implemented on
+`feat/event-driven-alerts`; CH-01 (CRM directory routes) and CH-05 (Terraform) are not. See section 12.
 Owner: Azeez. Domain/API/migration reviewer: Hayyun.
 CRM ownership/security reviewer: Neo Jia Wen (coordination required before shared-service edits).
 Last verified: 2026-10-30, Asia/Singapore.
@@ -486,3 +487,52 @@ Do not mark complete until CH-00 approvals, code/contract review, all local test
 migration/recovery evidence, updated runbooks/schema/budget/AI log and required
 CI pass. Cloud deployment and production retrieval enablement remain separate
 authorized steps.
+
+## 12. Implementation record (2026-10-30)
+
+Implemented directly on `feat/event-driven-alerts` at Hayyun's request after Azeez's
+approval, instead of the `task/*` branch and PR path in section 3. Nothing was pushed.
+
+| Task | State | Evidence |
+|---|---|---|
+| CH-01 CRM directory routes | **Not done.** Needs the owning CRM team and the `dev` CRM sync first: this branch has no `/internal` service-auth in client-service and no reassignment (`assigned_agent_id`) | Contract documented in `docs/api/event-driven-alerts-contracts.md`; consumer tested against a stub HTTP server (`HttpCrmDirectoryTest`) |
+| CH-02 schema, API, audit | Done | `V10__current_holdings.sql`; `PortfolioService`, `PortfolioController`; `CurrentHoldingsIntegrationTest`, `PortfolioControllerTest` |
+| CH-03 database providers, full-account exposure, snapshot detail, current-owner routing | Done | `DatabaseHoldingsProvider`, `CurrentHoldingsReader`, `DatabaseSearchUniverseProvider`, `CurrentOwnership`, `AlertGenerationService`; `DatabaseHoldingsModeApplicationTest` |
+| CH-04 holdings editor | Done (investment accounts, on the client's accounts page) | `HoldingsEditor.jsx` and tests |
+| CH-04b event briefing, drill-down, actions | Done | `AgentEventController`, `AgentEventActionService`, `EventBriefings.jsx` and tests |
+| CH-05 Terraform | **Not done** (assigned to the infrastructure developer, section 9.1) | None |
+
+Known gaps against the plan: the alert detail does not yet name the selected account
+when a client holds an instrument in two accounts; writes check ownership through
+the directory with the service credential rather than forwarding the user token;
+there is no live run against real CRM services, because CH-01 does not exist.
+
+### 12.1 Verification so far, and where to pick up (2026-10-30)
+
+Done and passing:
+- `event-alert-service`: 226 tests against PostgreSQL in Docker (`mvn -pl services/event-alert-service test`).
+- Frontend: 125 tests, lint and build (`npm ci && npx vitest run && npx eslint src && npx vite build`).
+- Real-process check, 19 steps: `node scripts/local-crm-stub/e2e.mjs` (see the README there). It runs the
+  packaged jar in database mode with PostgreSQL in Docker and a **stub** CRM, and covers record, replay,
+  refusals, restart persistence, reassignment, CRM outage and a one-shot worker run.
+- OpenAPI: `docs/api/event-driven-alerts-holdings.openapi.yaml`, kept in step with the controllers by
+  `OpenApiContractTest`.
+
+**Not done, and why. Do these next, in this order:**
+1. **CH-01 CRM directory routes** (`POST /internal/alerts/accounts/lookup`, `/internal/alerts/clients/lookup`;
+   contract in `docs/api/event-driven-alerts-contracts.md`). Not written: this branch's client-service has no
+   `/internal` service auth and no agent reassignment (both are on `dev`), and section 3 forbids copying old
+   CRM code over newer. Sync `dev` first (ADR-0059/0060/0063), then add the routes with the CRM owner.
+2. **Real-CRM end-to-end** (acceptance items 1, 6 and the real-service half of 13): create a client and an
+   active investment account through the real CRM, record a portfolio, reassign the client, check the alerts
+   move. Blocked on 1; the stub is not a substitute.
+3. **Go tests** for the CRM routes. Not run: the Go install on Hayyun's machine is broken
+   (`go: cannot find GOROOT`). Each Go service's `make test` runs in Docker and works; use that.
+4. **CH-05 Terraform** (section 9.1) for the named infrastructure developer. No Terraform was changed, so
+   there was nothing to validate.
+5. **Alert generation in a real process**: needs a search provider and a model, which stay off by default.
+   Generation, grouping and actions are covered by the PostgreSQL integration tests only. Not exercised:
+   the 30-client case (item 3), migration from a database with existing alerts (item 11, only from empty),
+   and the captured search/model payload privacy check (item 12).
+6. Small gaps: detail does not name the selected account when a client holds an instrument in two accounts;
+   holdings writes verify ownership through the directory service credential, not the forwarded user token.

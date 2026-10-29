@@ -1,0 +1,21 @@
+import { requestJson } from './request.js'
+
+// One card per public event for the signed-in agent, with the affected clients
+// on drill-down. Inform / Monitor / Dismiss apply to an explicit client set.
+
+export function listEvents({ onlyOpen = false, limit = 25 } = {}) {
+  return requestJson(`/api/alerts/events?onlyOpen=${onlyOpen}&limit=${limit}`)
+}
+
+export function getEvent(eventId) {
+  return requestJson(`/api/alerts/events/${encodeURIComponent(eventId)}`)
+}
+
+// members: [{ alertId, expectedVersion }]. Recording "inform" never contacts a client.
+export function recordEventAction(eventId, { decision, note, members }, idempotencyKey = crypto.randomUUID()) {
+  return requestJson(`/api/alerts/events/${encodeURIComponent(eventId)}/actions`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey, 'X-Correlation-Id': crypto.randomUUID() },
+    body: { decision, note: note || null, members },
+  })
+}

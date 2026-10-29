@@ -1,6 +1,7 @@
 package bank.alert.service;
 
 import bank.alert.api.AlertDetailResponse;
+import bank.alert.crm.CurrentOwnership;
 import bank.alert.api.AlertPageResponse;
 import bank.alert.api.AlertSummaryResponse;
 import bank.alert.api.DecisionResponse;
@@ -24,16 +25,19 @@ import java.util.UUID;
 public class AlertQueryService {
 
     private final AlertListRepository repository;
+    private final CurrentOwnership currentOwnership;
     private final AlertDecisionRepository decisionRepository;
 
     public AlertQueryService(
             AlertListRepository repository,
+            CurrentOwnership currentOwnership,
             AlertDecisionRepository decisionRepository) {
         this.repository = repository;
+        this.currentOwnership = currentOwnership;
         this.decisionRepository = decisionRepository;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AlertPageResponse listAlerts(
             String actorSubject,
             boolean admin,
@@ -41,6 +45,7 @@ public class AlertQueryService {
             BigDecimal minimumScore,
             String encodedCursor,
             int limit) {
+        if (!admin) currentOwnership.refresh();
         Cursor cursor = decodeCursor(encodedCursor);
         List<AlertSummaryResponse> rows = new ArrayList<>(repository.findVisible(
                 actorSubject, admin, status, minimumScore,
@@ -57,8 +62,9 @@ public class AlertQueryService {
         return new AlertPageResponse(rows, nextCursor);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AlertDetailResponse getAlert(UUID alertId, String actorSubject, boolean admin) {
+        if (!admin) currentOwnership.refresh();
         AlertListRepository.DetailRow row = repository
                 .findVisibleDetail(alertId, actorSubject, admin)
                 .orElseThrow(AlertNotFoundException::new);
