@@ -93,6 +93,15 @@ advice, contact clients, execute trades, or change portfolios.
 
 ## 4. Proposed User Outcome
 
+**Feature-owner clarification (2026-10-30):** the primary agent view is one
+event briefing with a shared summary and an affected-client count/list, followed
+by the agent's Inform clients / Monitor / Dismiss choice. Client holdings and
+exposure support relevance and drill-down; they are not a requirement to generate
+one personalised investment review or primary card per client. Inform records
+intent, never an automatic communication. The grouped read/decision workflow is
+future work in the [current-holdings subplan](event-driven-alerts-current-holdings_plan.md);
+existing per-client evidence remains the implementation baseline until then.
+
 An authenticated agent can see a prioritized alert for a client they own, inspect
 the source and scoring factors, and choose one of:
 
@@ -717,12 +726,28 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 
 ### 19.3 Execution Sequence for Two Developers
 
+**2026-10-30 integration update:** existing universe/retrieval changes and the
+agent-event clarification are combined for the user-authorized direct integration
+into `feat/event-driven-alerts`. The combined tree passed 456 Maven tests and
+six mocked Terraform tests; [integration evidence](../testing/event-alert-integration-2026-10-30.md)
+records the scope and PR/CI safeguards skipped. Earlier task rows retain their
+historical evidence; database holdings and grouped agent-event UX are still
+planned, and production/provider and human-review gates remain open.
+
 EDA-D1-09 follow-up review includes the downstream deterministic matcher and
 coverage service: approved issuer aliases must survive matching (`matcher-v2`),
 and a batch mixing new and returning instruments must preserve each member's
 lookback. Regression tests cover both; a PostgreSQL integration check verifies
 alias-only source fan-out to two holding users. The unseen-issuer live calls
 were exploratory queries, not an exact Java-path recall benchmark.
+
+Current-holdings integration is separately planned in
+[event-driven-alerts-current-holdings_plan.md](event-driven-alerts-current-holdings_plan.md).
+The all-remote audit confirms no maintained CRM-linked securities source.
+
+| ID | Owner | Deliverable and expected files | Branch | Dependencies | Status | Last sync |
+|---|---|---|---|---|---|---|
+| EDA-CH-00 | Azeez; Hayyun domain review; Neo Jia Wen CRM review | Verify holdings source across remote branches; draft current-holdings plan, ADR-0066, vocabulary and evidence | `task/event-driven-alerts/current-holdings-plan` | Existing holdings contracts; reviewed retrieval work and current-dev ownership APIs must land before implementation | Planning complete; proposed design awaiting owner review; no implementation | 2026-10-29 |
 
 ```text
 Both: EDA-00 and contract/interface agreement

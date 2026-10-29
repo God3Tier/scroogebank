@@ -1,5 +1,26 @@
 # AI usage log
 
+## 2026-10-30 - Clarify the agent-event workflow and prepare feature integration
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Record the feature owner's clarification that agents receive a shared event briefing with an affected-client list and choose what to do; prepare integration of existing retrieval work and planning documents into feat/event-driven-alerts before new implementation.
+- Files/components affected: Parent/current-holdings plans, proposed ADR-0066 and glossary; integration evidence follows the actual Git/CI result.
+- Verification: Check documentation consistency/links and combined branch ancestry, resolve documentation overlaps while preserving retrieval evidence, and run the relevant existing service/Terraform checks before integration. The event-grouping feature remains planned; no personalised-review or automatic-contact implementation is claimed.
+- Data/calls: Repository and GitHub workflow information only; no private project records or secrets in prompts and no AWS, model or paid news calls.
+
+- Integration method: The user explicitly selected direct merge and push to the unprotected `feat/event-driven-alerts` branch after the PR-review/PR-only-CI warning. The combined tree passed `mvn -B clean verify` (456 tests, zero failures/errors/skips), six mocked alert-worker Terraform tests, formatting/validation and documentation checks. Full evidence is in `docs/testing/event-alert-integration-2026-10-30.md`. No formal reviewer approval or implementation of the new grouped/holdings plan is claimed.
+
+## 2026-10-29 - Verify and plan CRM-linked current alert holdings
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Fetch all remote refs, verify whether any branch already maintains securities positions linked to CRM clients/accounts/current agents, and plan the missing integration.
+- Data: Repository source and Git refs only; 44 actual remote branches plus the symbolic default HEAD alias. No real client data, secret file, deployed database, AWS, model or Tavily call.
+- Files/components affected: Current-holdings feature subplan, proposed ADR-0066/index, glossary, parent-plan task record and pinned branch-audit evidence.
+- Verification: Static inspection of provider implementations, source loader, account schemas/lookup, current-dev reassignment/authorization decisions, snapshot/exposure flow and dashboard portfolio references. Documentation checks recorded with the planning commit; no new runtime behaviour or application test result is claimed.
+- Human verification required: Hayyun must review holdings/contracts/exposure and Neo Jia Wen the CRM ownership/private-scope changes before shared code changes. ADR-0066 remains proposed and all implementation tasks remain planned.
+
 ## 2026-10-20 — INF-08 HTTPS from the internal ALB to the Java services
 
 - Human owner: Neo Jia Wen.
