@@ -138,6 +138,13 @@ class SourcePipelineIntegrationTest {
     }
 
     @Test
+    void globalSyntheticCatalogueAndPortfoliosAreSeededByFlyway() {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM synthetic_portfolio", Long.class)).isEqualTo(20);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM instrument WHERE id <> 'SYN-SGX-001'", Long.class)).isEqualTo(16);
+    }
+
+    @Test
     void turnsAMatchedSourceIntoOneAlertPerAgentAndLeavesAnUnmatchedOneAlone() {
         SourceResult matched = store("SYN1 posts synthetic earnings",
                 "Synthetic Issuer One reported earnings after a public filing.", "a");

@@ -563,3 +563,13 @@
 - Files/components affected: event-alert-service holdings and coverage tests; feature-plan evidence.
 - Verification: Focused tests and the clean event-alert-service Maven verification with Docker/Testcontainers; no AWS or live Tavily calls.
 - Human verification required: Review the synthetic distributions and PR results before merge.
+
+# 2026-10-29 - Global portfolio fixture and Tavily benchmark
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Build a persistent synthetic multi-market portfolio fixture and run a bounded real-key Tavily benchmark through the actual worker.
+- Files/components affected: Flyway seed, deterministic holdings generator/fixture, search-universe tests, schema/runbook/cost/benchmark records.
+- Data and calls: Synthetic opaque clients only; six Tavily basic-search calls. No AWS or model calls, and no secret was logged or committed.
+- Verification: Focused fixture/universe tests pass. Three worker passes verified domain/date/persistence/deduplication controls; usefulness failed at 1/12 eligible-instrument coverage and zero actionable expanded-pass events, so ingestion remains disabled.
+- Human verification required: Review the fixture distribution, provider dashboard credit evidence, and the proposed query/provider redesign before enablement.

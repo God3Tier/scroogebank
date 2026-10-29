@@ -71,3 +71,8 @@ real holdings are introduced.
 `V7__instrument_search_coverage.sql` adds only the per-instrument coverage table.
 It starts empty, so every eligible instrument initially uses the normal four-hour
 lookback. Failed, quota-blocked and replay runs leave it unchanged.
+
+`V8__seed_global_synthetic_portfolios.sql` adds 15 real public instrument rows to
+the existing DBS reference, then upserts 20 opaque synthetic clients/accounts
+assigned round-robin to four synthetic agents. The matching deterministic
+holdings fixture contains no real PII and spans SGX, NASDAQ, NYSE, LSE, and HKEX.

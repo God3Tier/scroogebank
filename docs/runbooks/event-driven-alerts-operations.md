@@ -73,8 +73,10 @@ aws secretsmanager put-secret-value --secret-id "$TAVILY_SECRET_ARN" --secret-st
 unset TAVILY_API_KEY
 ```
 
-Keep `ingestion_enabled = false` until that command succeeds and the provider
-benchmark is approved. A task cannot start if its referenced secret has no
+Keep `ingestion_enabled = false` until that command succeeds and a provider
+benchmark passes. The 2026-10-29 local global-portfolio benchmark failed its
+usefulness gate, so it is not approval to enable the schedule. A task cannot
+start if its referenced secret has no
 current version.
 
 ### Smoke test the task and the alarm
@@ -110,7 +112,12 @@ Each step turns one more switch on, so a failure points at one cause.
 4. **Metrics (optional).** Set `cloudwatch_metrics_enabled = true`, apply, run once, and look for the `CRM/EventAlerts` namespace in CloudWatch. Turn it off again unless you want the charts: each metric and tag combination bills.
 5. **Switch back off.** Set `ingestion_enabled`, `ai_enabled` and `cloudwatch_metrics_enabled` to `false` and apply, so the schedule stops spending between sessions.
 
-The synthetic holdings (`syn-agent-001`, `syn-agent-002`, instrument `SYN-SGX-001`) are named `SYN1` and "Synthetic Issuer One", so real news will not match them. To see an alert from real search results, add a real instrument to the `instrument` table whose ticker or issuer name appears in the news, and holdings for it to the synthetic fixture.
+The fixture contains 20 opaque clients, four synthetic agents, and public
+instrument references across SGX, NASDAQ, NYSE, LSE, and HKEX. It also retains
+`SYN-SGX-001` for deterministic downstream tests. A live search can therefore
+exercise real issuer matching without adding client data. Review the
+[2026-10-29 benchmark](../testing/tavily-global-portfolio-benchmark-2026-10-29.md)
+before changing the enable switch.
 
 ## Inspect health and consumption
 

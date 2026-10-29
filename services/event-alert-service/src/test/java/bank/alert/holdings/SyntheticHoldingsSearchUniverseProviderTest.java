@@ -6,6 +6,7 @@ import bank.alert.fixture.SyntheticFixtureLoader;
 import bank.alert.fixture.SyntheticHoldingFixture;
 import bank.alert.scoring.ExposureCalculator;
 import bank.alert.operations.OperationalMetrics;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -20,6 +21,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SyntheticHoldingsSearchUniverseProviderTest {
+
+    @Test
+    void selectsExpectedGlobalFixtureUniverse() {
+        OperationalMetrics metrics = mock(OperationalMetrics.class);
+        SyntheticHoldingsSearchUniverseProvider provider = new SyntheticHoldingsSearchUniverseProvider(
+                new SyntheticFixtureLoader(new ObjectMapper().findAndRegisterModules()), properties(),
+                new ExposureCalculator(), metrics);
+
+        assertThat(provider.eligibleInstrumentIds()).containsExactly(
+                "HKEX-0700", "LSE-HSBA", "LSE-SHEL", "NASDAQ-AAPL", "NASDAQ-MSFT",
+                "NASDAQ-NVDA", "NYSE-JPM", "NYSE-V", "SGX-C6L", "SGX-D05", "SGX-O39", "SGX-Z74");
+        verify(metrics).searchUniverse(12, 10, 2);
+    }
 
     @Test
     void appliesThresholdsAcrossOneHundredClients() {

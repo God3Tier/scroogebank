@@ -32,6 +32,12 @@ planning assumption, not a billing claim.
 The portfolio-aware universe does not raise this ceiling: rotation still permits
 at most four grouped searches with eight instruments each per scheduled run.
 
+On 2026-10-29 the local benchmark made six Tavily basic-search calls (three
+two-query worker passes) and no AWS or model calls. Under the documented basic
+contract this is six search credits; the adapter does not request a usage object,
+so account-dashboard billing evidence is still required. The benchmark failed
+the usefulness gate and does not authorize live ingestion.
+
 ## Enforced application controls
 
 - Ingestion and model access default to disabled.

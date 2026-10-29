@@ -12,7 +12,7 @@
 
 The initial ingestion implementation searched every active instrument in a
 configured catalogue. The feature owner wants discovery to follow what clients
-actually hold, without sending client or portfolio data to Tokyo. Holdings use a
+actually hold, without sending client or portfolio data to Tavily. Holdings use a
 stable instrument identifier, while the service-owned public instrument catalogue
 maps that identifier to ticker, issuer, sector, currency, and active state.
 
@@ -23,7 +23,7 @@ minimum-population controls, bounded output, and a fail-closed unknown-ID path.
 
 ## Decision
 
-The Singapore worker derives the search universe locally before calling Tokyo:
+The Singapore worker derives the search universe locally before calling Tavily:
 
 1. Read the approved holdings snapshot through `SearchUniverseProvider`.
 2. Ignore zero-quantity and zero-value positions.
@@ -44,7 +44,7 @@ The Singapore worker derives the search universe locally before calling Tokyo:
    successful time minus overlap. Only a successful scheduled run advances
    coverage. Failures, blocked runs and replays do not.
 
-Tokyo receives only the resulting public terms, approved domains, date window,
+Tavily receives only the resulting public terms, approved domains, date window,
 and result limit. It never receives client counts, client share, client/account or
 agent identifiers, holdings, quantities, values, exposure, or the selection
 rationale. If no instrument passes the controls, the run performs no search.
@@ -54,9 +54,10 @@ For the MVP, `instrument.sector` is the supported category. A future industry or
 classification taxonomy must record its provider, version, update cadence, and
 licensing before it replaces or extends this field.
 
-The synthetic MVP seeds only its synthetic instrument reference row through
-Flyway. A real holdings provider and instrument master remain separate future
-integration decisions.
+The synthetic MVP seeds a small multi-market catalogue and 20 opaque portfolios
+through Flyway. Its deterministic fixture spans SGX, NASDAQ, NYSE, LSE, and HKEX
+without real client data. A real holdings provider and governed instrument master
+remain separate future integration decisions.
 
 ## Consequences
 
@@ -74,5 +75,7 @@ scoring still happen after results return to Singapore.
   inactive/unknown instrument removal, and the empty-universe no-search path.
 - Payload tests continue to reject client, account, holding, exposure, and agent
   fields.
-- The AgentCore spike must inspect actual outbound requests before enablement.
+- A six-call local Tavily benchmark on 2026-10-29 verified the bounded transport
+  but failed the usefulness gate (one of 12 eligible instruments represented and
+  no actionable taxonomy event in the expanded pass). Ingestion remains off.
 - Hayyun must review the holdings/domain behavior before this ADR is accepted.

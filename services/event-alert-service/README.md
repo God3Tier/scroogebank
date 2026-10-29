@@ -26,11 +26,14 @@ below. `IngestionJob` can run only in `WORKER` mode. Tavily is the sole live-new
 adapter; without its key the worker fails closed and makes no outbound search.
 
 The holdings-derived search universe is calculated only in Singapore. The
-synthetic holdings fixture supplies stable instrument IDs; the `instrument`
-catalogue maps them deterministically to public ticker, issuer, and sector terms.
-By default an instrument must be represented by at least two distinct clients and
-5% of clients in the snapshot. Tavily receives none of those counts or private
-holding facts. Unknown/inactive IDs and an empty eligible universe fail closed.
+global synthetic fixture supplies 20 opaque clients across 16 real public
+instruments on SGX, NASDAQ, NYSE, LSE, and HKEX, plus the legacy synthetic
+instrument used by downstream pipeline tests. The `instrument` catalogue maps
+stable IDs deterministically to public ticker, issuer, and sector terms. By
+default an instrument is eligible when it is held by at least two clients and
+20% of clients in the snapshot, or reaches 50% of one account's positive SGD
+value. Tavily receives none of those counts or private holding facts.
+Unknown/inactive IDs and an empty eligible universe fail closed.
 
 The AI boundary is independently disabled by default with
 `ALERT_AI_ENABLED=false` and `ALERT_AI_PROVIDER=none`. The adapters accept public evidence only,
@@ -141,12 +144,11 @@ cannot. A replay never moves the scheduler watermark.
 worker exits (namespace `ALERT_CLOUDWATCH_NAMESPACE`, default `CRM/EventAlerts`).
 It is off by default because every distinct metric and tag combination is billed.
 
-Not done yet (details, owners and suggested fixes in
-[`docs/feature-plans/event-driven-alerts_gaps.md`](../../docs/feature-plans/event-driven-alerts_gaps.md)):
-
-- Tavily has contract tests but still needs a real-key lower-environment
-  benchmark. The complete pipeline also needs a real-result smoke test. The
-  operations runbook defines both gates.
+The 2026-10-29 local real-key benchmark proved that the worker/Tavily transport,
+date checks, domain checks, persistence, and deduplication work. It did not meet
+the usefulness gate: the expanded global pass covered only one of 12 eligible
+instruments and produced no taxonomy-actionable result. Keep ingestion disabled;
+see the [benchmark report](../../docs/testing/tavily-global-portfolio-benchmark-2026-10-29.md).
 
 Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
 every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database
