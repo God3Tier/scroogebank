@@ -1,7 +1,6 @@
 package bank.alert.holdings;
 
 import bank.alert.crm.AccountContext;
-import bank.alert.crm.ClientContext;
 import bank.alert.crm.CrmDirectory;
 import bank.alert.domain.HoldingSnapshot;
 import bank.alert.domain.ValuationFreshness;
@@ -23,8 +22,8 @@ import java.util.UUID;
 
 /**
  * Reads the maintained current portfolios and keeps only those the CRM still confirms:
- * the account exists and is an active investment account of the recorded client, and
- * that client has a current agent. Whole accounts are always returned, so a single
+ * the account exists, is an active investment account of the recorded client, and has a
+ * current owner (the client's agent). Whole accounts are always returned, so a single
  * affected holding is never mistaken for the whole portfolio. A CRM that cannot be
  * asked throws; it never falls back to fixture data or an old assignment.
  */
@@ -67,17 +66,13 @@ public class CurrentHoldingsReader {
             }
         }
         if (byAccount.isEmpty()) return List.of();
-        Map<UUID, ClientContext> clients = directory.clients(
-                byAccount.values().stream().map(r -> r.getFirst().clientId()).distinct().toList());
 
         List<AccountPortfolio> result = new ArrayList<>();
         for (List<Row> accountRows : byAccount.values()) {
-            Row first = accountRows.getFirst();
-            ClientContext client = clients.get(first.clientId());
-            if (client == null || client.assignedAgentSubject() == null
-                    || client.assignedAgentSubject().isBlank()) continue;
-            if (agentSubject != null && !agentSubject.equals(client.assignedAgentSubject())) continue;
-            result.add(toPortfolio(accountRows, client.assignedAgentSubject(), asOf));
+            String owner = accounts.get(accountRows.getFirst().accountId()).ownerAgentSubject();
+            if (owner == null || owner.isBlank()) continue;
+            if (agentSubject != null && !agentSubject.equals(owner)) continue;
+            result.add(toPortfolio(accountRows, owner, asOf));
         }
         return result;
     }

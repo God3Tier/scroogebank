@@ -28,25 +28,31 @@ override_data {
   values = {
     outputs = {
       alerts_worker_inputs = {
-        cluster_arn            = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
-        subnet_ids             = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
-        alerts_db_address      = "crm-sg-prod-alerts.example.ap-southeast-1.rds.amazonaws.com"
-        alerts_db_secret_arn   = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:rds!db-example"
-        alerts_db_sg           = "sg-0db"
-        alerts_service_sg      = "sg-0alerts"
-        task_definition_family = "crm-sg-prod-event-alert-service"
-        audit_queue_url        = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
-        alarm_topic_arn        = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
-        name_prefix            = "crm-sg-prod"
-        region                 = "ap-southeast-1"
-        cluster_name           = "crm-sg-prod"
-        alerts_db_name         = "alerts"
-        image                  = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/event-alert-service:abc1234"
-        cpu_architecture       = "X86_64"
-        use_spot               = false
-        log_retention_days     = 30
-        running                = true
-        deletion_protection    = true
+        cluster_arn               = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
+        subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+        alerts_db_address         = "crm-sg-prod-alerts.example.ap-southeast-1.rds.amazonaws.com"
+        alerts_db_secret_arn      = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:rds!db-example"
+        alerts_db_sg              = "sg-0db"
+        alerts_service_sg         = "sg-0alerts"
+        task_definition_family    = "crm-sg-prod-event-alert-service"
+        audit_queue_url           = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+        alarm_topic_arn           = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
+        name_prefix               = "crm-sg-prod"
+        region                    = "ap-southeast-1"
+        cluster_name              = "crm-sg-prod"
+        alerts_db_name            = "alerts"
+        image                     = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/event-alert-service:abc1234"
+        cpu_architecture          = "X86_64"
+        use_spot                  = false
+        log_retention_days        = 30
+        running                   = true
+        deletion_protection       = true
+        holdings_mode             = "fixture"
+        crm_account_directory_url = ""
+        crm_token_endpoint        = ""
+        crm_client_id             = ""
+        crm_scope                 = ""
+        crm_client_secret_arn     = ""
       }
     }
   }
@@ -119,25 +125,31 @@ run "crm_stack_stopped" {
     values = {
       outputs = {
         alerts_worker_inputs = {
-          cluster_arn            = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
-          subnet_ids             = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
-          alerts_db_address      = "crm-sg-prod-alerts.example.ap-southeast-1.rds.amazonaws.com"
-          alerts_db_secret_arn   = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:rds!db-example"
-          alerts_db_sg           = "sg-0db"
-          alerts_service_sg      = "sg-0alerts"
-          task_definition_family = "crm-sg-prod-event-alert-service"
-          audit_queue_url        = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
-          alarm_topic_arn        = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
-          name_prefix            = "crm-sg-prod"
-          region                 = "ap-southeast-1"
-          cluster_name           = "crm-sg-prod"
-          alerts_db_name         = "alerts"
-          image                  = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/event-alert-service:abc1234"
-          cpu_architecture       = "X86_64"
-          use_spot               = false
-          log_retention_days     = 30
-          running                = false
-          deletion_protection    = true
+          cluster_arn               = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
+          subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+          alerts_db_address         = "crm-sg-prod-alerts.example.ap-southeast-1.rds.amazonaws.com"
+          alerts_db_secret_arn      = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:rds!db-example"
+          alerts_db_sg              = "sg-0db"
+          alerts_service_sg         = "sg-0alerts"
+          task_definition_family    = "crm-sg-prod-event-alert-service"
+          audit_queue_url           = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+          alarm_topic_arn           = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
+          name_prefix               = "crm-sg-prod"
+          region                    = "ap-southeast-1"
+          cluster_name              = "crm-sg-prod"
+          alerts_db_name            = "alerts"
+          image                     = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/event-alert-service:abc1234"
+          cpu_architecture          = "X86_64"
+          use_spot                  = false
+          log_retention_days        = 30
+          running                   = false
+          deletion_protection       = true
+          holdings_mode             = "fixture"
+          crm_account_directory_url = ""
+          crm_token_endpoint        = ""
+          crm_client_id             = ""
+          crm_scope                 = ""
+          crm_client_secret_arn     = ""
         }
       }
     }
@@ -181,3 +193,76 @@ run "metrics_secret_and_replay" {
   }
 }
 
+
+run "fixture_mode_passes_no_directory_settings" {
+  command = plan
+
+  assert {
+    condition     = module.event_alert_worker.app_environment["ALERT_HOLDINGS_MODE"] == "fixture"
+    error_message = "The worker uses the holdings mode the CRM stack publishes (ADR-0066)."
+  }
+  assert {
+    condition     = !contains(keys(module.event_alert_worker.app_environment), "ALERT_CRM_ACCOUNT_DIRECTORY_URL") && !contains(keys(module.event_alert_worker.app_secrets), "ALERT_CRM_CLIENT_SECRET")
+    error_message = "Fixture mode asks for no CRM directory and reads no directory secret."
+  }
+}
+
+run "database_mode_matches_the_api_and_keeps_the_secret_out_of_the_environment" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.crm
+    values = {
+      outputs = {
+        alerts_worker_inputs = {
+          cluster_arn               = "arn:aws:ecs:ap-southeast-1:123456789012:cluster/crm-sg-prod"
+          subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+          alerts_db_address         = "crm-sg-prod-alerts.example.ap-southeast-1.rds.amazonaws.com"
+          alerts_db_secret_arn      = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:rds!db-example"
+          alerts_db_sg              = "sg-0db"
+          alerts_service_sg         = "sg-0alerts"
+          task_definition_family    = "crm-sg-prod-event-alert-service"
+          audit_queue_url           = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+          alarm_topic_arn           = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
+          name_prefix               = "crm-sg-prod"
+          region                    = "ap-southeast-1"
+          cluster_name              = "crm-sg-prod"
+          alerts_db_name            = "alerts"
+          image                     = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/crm-sg-prod/event-alert-service:abc1234"
+          cpu_architecture          = "X86_64"
+          use_spot                  = false
+          log_retention_days        = 30
+          running                   = true
+          deletion_protection       = true
+          holdings_mode             = "database"
+          crm_account_directory_url = "https://alb.example.test/internal/alerts/accounts/lookup"
+          crm_token_endpoint        = "https://crm-sg-prod.auth.ap-southeast-1.amazoncognito.com/oauth2/token"
+          crm_client_id             = "alertdirectoryclientid"
+          crm_scope                 = "crm-accounts/alert-directory"
+          crm_client_secret_arn     = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/alert-directory-AbCdEf"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.event_alert_worker.app_environment["ALERT_HOLDINGS_MODE"] == "database" && module.event_alert_worker.app_environment["ALERT_CRM_ACCOUNT_DIRECTORY_URL"] == "https://alb.example.test/internal/alerts/accounts/lookup"
+    error_message = "Database mode passes the HTTPS directory URL the CRM stack published."
+  }
+  assert {
+    condition     = module.event_alert_worker.app_environment["ALERT_CRM_SCOPE"] == "crm-accounts/alert-directory" && module.event_alert_worker.app_environment["ALERT_CRM_CLIENT_ID"] == "alertdirectoryclientid"
+    error_message = "The worker asks for the one alert-directory scope with the alert app client."
+  }
+  assert {
+    condition     = module.event_alert_worker.app_secrets["ALERT_CRM_CLIENT_SECRET"] == "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/alert-directory-AbCdEf:client_secret::"
+    error_message = "The client secret is injected from Secrets Manager (a JSON key), not an environment value."
+  }
+  assert {
+    condition     = !contains(keys(module.event_alert_worker.app_environment), "ALERT_CRM_CLIENT_SECRET") && !anytrue([for v in values(module.event_alert_worker.app_environment) : can(regex("client_secret", v))])
+    error_message = "No secret value or secret reference appears in the plain task environment."
+  }
+  assert {
+    condition     = module.event_alert_worker.app_environment["ALERT_INGESTION_ENABLED"] == "false" && module.event_alert_worker.app_environment["ALERT_AI_ENABLED"] == "false"
+    error_message = "Outbound ingestion and the model stay off by default."
+  }
+}

@@ -275,6 +275,63 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '500': { $ref: '#/components/responses/JsonError' }
 
+  /internal/alerts/accounts/lookup:
+    post:
+      tags: [internal]
+      summary: Look up accounts for the event-alert service
+      description: |
+        Called only by the event-alert service, with its own client-credentials
+        token holding the `crm-accounts/alert-directory` scope (ADR-0066). The
+        transaction import's token is refused here, and this token is refused on
+        `/internal/accounts/lookup`. Returns the accounts among `ids` (at most
+        200 distinct) that exist and are not deleted, with the client, type,
+        status, currency and the agent who owns the account now. The owner
+        follows a client's reassignment (ADR-0060). Unknown IDs are left out.
+        Not audited.
+      operationId: lookupAlertAccounts
+      security: [{ serviceAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  maxItems: 200
+                  items: { type: string }
+      responses:
+        '200':
+          description: The accounts found.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, client_id, type, status, currency, owner_agent_id]
+                      properties:
+                        id: { type: string, format: uuid }
+                        client_id: { type: string, format: uuid }
+                        type: { type: string }
+                        status: { type: string }
+                        currency: { type: string }
+                        owner_agent_id: { type: string }
+        '400': { $ref: '#/components/responses/JsonError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: The token lacks the alert-directory scope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500': { $ref: '#/components/responses/JsonError' }
+
   /ownership/accounts:
     put:
       tags: [internal]

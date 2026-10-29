@@ -1,7 +1,7 @@
 # CRM-linked current holdings for event-driven alerts
 
-Status: Approved by Azeez (relayed by Hayyun, 2026-10-30). CH-02, CH-03, CH-04 and CH-04b are implemented on
-`feat/event-driven-alerts`; CH-01 (CRM directory routes) and CH-05 (Terraform) are not. See section 12.
+Status: Approved by Azeez (relayed by Hayyun, 2026-10-30). CH-01 to CH-05 are implemented and verified locally on
+`task/event-driven-alerts/current-holdings`; nothing has been applied to AWS and the branch awaits review. See sections 12 and 12.1.
 Owner: Azeez. Domain/API/migration reviewer: Hayyun.
 CRM ownership/security reviewer: Neo Jia Wen (coordination required before shared-service edits).
 Last verified: 2026-10-30, Asia/Singapore.
@@ -154,6 +154,14 @@ Existing `POST /internal/accounts/lookup` returns IDs, client IDs and, on curren
 dev, currency. It does not supply current client assignment and is protected for
 the transaction importer. Do not silently grant the worker that credential.
 
+**Implementation decision (2026-10-30): one route, not two.** On `dev`, a client reassignment moves the
+client's accounts to the new agent in the same transaction (ADR-0060: "a client and its accounts must never
+end up with different agents"), so `accounts.owner_agent_id` is the client's current agent. The alert service
+therefore needs only the account route, which returns the owner, and no client-service route or
+service-to-service login there. The cost: it cannot cross-check the account's agent against the client's.
+The text below is the original two-route proposal; the account route is built as described in
+`docs/api/accounts-api.yaml`, and the client route is not built.
+
 Propose `POST /internal/alerts/accounts/lookup` on account-service and
 `POST /internal/alerts/clients/lookup` on client-service, each accepting
 `{"ids": [...]}` with at most 200 distinct UUIDs. Return only IDs,
@@ -283,12 +291,12 @@ before implementation. No teammate has been contacted by this planning task.
 | Task | Primary owner | Expected files/components | Branch / dependency | Status |
 |---|---|---|---|---|
 | CH-00: approve model/contracts and reconcile current dev | Azeez; Hayyun domain review; Neo Jia Wen CRM review | This plan, ADR-0066, parent plan, account/client contracts | `task/event-driven-alerts/current-holdings-plan`; prerequisite retrieval and CRM PRs | Proposed |
-| CH-01: private CRM account/client context | Neo Jia Wen, proposed pending owner coordination | account/client controller/service/repository/security tests; accounts/clients OpenAPI | Owning CRM feature's `task/*/alert-directory`; CH-00 | Planned |
+| CH-01: private CRM account/client context | Neo Jia Wen, proposed pending owner coordination | account/client controller/service/repository/security tests; accounts/clients OpenAPI | Owning CRM feature's `task/*/alert-directory`; CH-00 | Implemented for account-service only (see section 12); awaiting Neo Jia Wen's review |
 | CH-02: current holdings schema, API and audit | Hayyun | alert domain/repository/API/security, forward Flyway migration, schema and OpenAPI | `task/event-driven-alerts/current-holdings`; CH-00/01 | Planned |
 | CH-03: DB providers, full-account exposure, snapshot detail and current-owner routing | Azeez with required Hayyun review | holdings/ingestion/processing/repository/API authorization and integration tests | Same alert task; CH-02 and retrieval fixes | Planned |
 | CH-04: existing account-page holdings editor | Hayyun | existing frontend client/account and alert views, API adapter and tests | Alert task after API contract; coordinate frontend owner | Planned |
 | CH-04b: one agent-event briefing with affected-client drill-down and event actions | Hayyun; Azeez reviews shared briefing/retrieval boundary | agent-event read/decision API, mapping to client evidence, grouped alert frontend, contracts/audit and tests | After grouped contract agreement and current retrieval integration; no implementation in this planning branch | Planned |
-| CH-05: Terraform wiring, validation and developer handoff | Receiving infrastructure developer (record named owner before editing); Azeez application coordination; Neo Jia Wen infrastructure review | CRM/alert-worker Terraform, service configuration, runbooks, cost/evaluation evidence; detailed handoff below | `task/event-driven-alerts/current-holdings-infra` from updated feature; CH-01..04/04b configuration contracts | Planned; handed off, no implementation |
+| CH-05: Terraform wiring, validation and developer handoff | Receiving infrastructure developer (record named owner before editing); Azeez application coordination; Neo Jia Wen infrastructure review | CRM/alert-worker Terraform, service configuration, runbooks, cost/evaluation evidence; detailed handoff below | `task/event-driven-alerts/current-holdings-infra` from updated feature; CH-01..04/04b configuration contracts | Implemented and validated locally (see section 12); no named infrastructure developer yet; not applied to AWS |
 
 All tasks last synchronized on 2026-10-29. Execute sequentially unless owners
 explicitly coordinate separate work; do not delegate or edit teammates' areas
@@ -490,49 +498,57 @@ authorized steps.
 
 ## 12. Implementation record (2026-10-30)
 
-Implemented directly on `feat/event-driven-alerts` at Hayyun's request after Azeez's
-approval, instead of the `task/*` branch and PR path in section 3. Nothing was pushed.
+Implemented on `task/event-driven-alerts/current-holdings` (cut from `feat/event-driven-alerts`, then `dev` merged
+in) at Hayyun's request after Azeez's approval. The merge to `feat/event-driven-alerts` and `dev` is not done and
+needs the PR path in section 3.
 
 | Task | State | Evidence |
 |---|---|---|
-| CH-01 CRM directory routes | **Not done.** Needs the owning CRM team and the `dev` CRM sync first: this branch has no `/internal` service-auth in client-service and no reassignment (`assigned_agent_id`) | Contract documented in `docs/api/event-driven-alerts-contracts.md`; consumer tested against a stub HTTP server (`HttpCrmDirectoryTest`) |
-| CH-02 schema, API, audit | Done | `V10__current_holdings.sql`; `PortfolioService`, `PortfolioController`; `CurrentHoldingsIntegrationTest`, `PortfolioControllerTest` |
-| CH-03 database providers, full-account exposure, snapshot detail, current-owner routing | Done | `DatabaseHoldingsProvider`, `CurrentHoldingsReader`, `DatabaseSearchUniverseProvider`, `CurrentOwnership`, `AlertGenerationService`; `DatabaseHoldingsModeApplicationTest` |
-| CH-04 holdings editor | Done (investment accounts, on the client's accounts page) | `HoldingsEditor.jsx` and tests |
-| CH-04b event briefing, drill-down, actions | Done | `AgentEventController`, `AgentEventActionService`, `EventBriefings.jsx` and tests |
-| CH-05 Terraform | **Not done** (assigned to the infrastructure developer, section 9.1) | None |
+| CH-01 CRM directory | **Done for account-service, one route** (decision in section 5). Needs Neo Jia Wen's review before merge | `POST /internal/alerts/accounts/lookup`, own scope `crm-accounts/alert-directory` and client allow-list `COGNITO_ALERT_DIRECTORY_CLIENT_IDS`; `docs/api/accounts-api.yaml`; Go tests; real-service run `e2e-real-account.mjs` |
+| CH-02 schema, API, audit | Done | `V10__current_holdings.sql`; `PortfolioService`, `PortfolioController`; `CurrentHoldingsIntegrationTest`, `PortfolioControllerTest`, `LegacyMigrationTest` |
+| CH-03 database providers, full-account exposure, snapshot detail, current-owner routing | Done | `DatabaseHoldingsProvider`, `CurrentHoldingsReader`, `DatabaseSearchUniverseProvider`, `SearchUniverseSelector`, `CurrentOwnership`, `AlertGenerationService`; `DatabaseHoldingsModeApplicationTest`, `SearchUniverseSelectorTest` |
+| CH-04 holdings editor | Done (investment accounts, on the client's accounts page; not shown to admins) | `HoldingsEditor.jsx` and tests |
+| CH-04b event briefing, drill-down, actions | Done | `AgentEventController`, `AgentEventActionService`, `EventBriefings.jsx` and tests; routes in `docs/api/openapi.yaml` |
+| CH-05 Terraform | **Done and validated locally; not applied.** No infrastructure developer is named yet | `stacks/crm` (Cognito scope and app client, secret, `alert_holdings_mode`, ALB rules, security-group rule, outputs) and `stacks/alert-worker`; `terraform fmt`, `validate` and mocked `terraform test` (11 and 8 passing) |
 
-Known gaps against the plan: the alert detail does not yet name the selected account
-when a client holds an instrument in two accounts; writes check ownership through
-the directory with the service credential rather than forwarding the user token;
-there is no live run against real CRM services, because CH-01 does not exist.
+### 12.1 Verification, deviations and what is left (2026-10-30)
 
-### 12.1 Verification so far, and where to pick up (2026-10-30)
+Run and passing on this branch:
+- `mvn -pl services/event-alert-service test`: PostgreSQL in Docker (Testcontainers). Includes the contract tests
+  that check every route and response against `docs/api/openapi.yaml` (ADR-0063).
+- Frontend: `npm ci && npx vitest run && npx eslint src && npx vite build`.
+- account-service: its Docker test run (`make test` steps: SQLBoiler, mockery, `go test ./...`), including
+  `TestEveryRouteIsInAContract` and `TestInternalRoutesUseTheirOwnServiceMiddleware`. `make` is not installed on
+  Hayyun's machine; the same steps were run with Docker Compose directly.
+- Terraform, in `stacks/crm` and `stacks/alert-worker`: `terraform fmt -check -recursive`, `init -backend=false`,
+  `validate`, `test` (no AWS access).
+- Real-process checks (need Docker and Node): `node scripts/local-crm-stub/e2e.mjs` (stub CRM, 19 checks) and
+  `node scripts/local-crm-stub/e2e-real-account.mjs` (the **real account-service image and database**, with only
+  Cognito stubbed, 26 checks: route security, per-scope refusal, ownership, real reassignment through
+  `/ownership/accounts`, closed and deleted accounts, outage, restart persistence, one-shot worker).
+  See `scripts/local-crm-stub/README.md`.
 
-Done and passing:
-- `event-alert-service`: 226 tests against PostgreSQL in Docker (`mvn -pl services/event-alert-service test`).
-- Frontend: 125 tests, lint and build (`npm ci && npx vitest run && npx eslint src && npx vite build`).
-- Real-process check, 19 steps: `node scripts/local-crm-stub/e2e.mjs` (see the README there). It runs the
-  packaged jar in database mode with PostgreSQL in Docker and a **stub** CRM, and covers record, replay,
-  refusals, restart persistence, reassignment, CRM outage and a one-shot worker run.
-- OpenAPI: `docs/api/event-driven-alerts-holdings.openapi.yaml`, kept in step with the controllers by
-  `OpenApiContractTest`.
+Deviations from this plan, on purpose:
+1. One CRM route instead of two (section 5).
+2. Holdings writes verify ownership with the directory's service credential, not the forwarded user token.
+3. Work was done on a task branch off `feat/event-driven-alerts` with `dev` merged in, not by PR to the feature.
+4. In the CRM stack, `alert_holdings_mode` is the one switch for the API and the worker. Database mode requires
+   `domain_name` (plan fails without it) so the directory is never reached over HTTP. The worker uses the JVM's
+   default trust store, which trusts the ALB's public certificate.
 
-**Not done, and why. Do these next, in this order:**
-1. **CH-01 CRM directory routes** (`POST /internal/alerts/accounts/lookup`, `/internal/alerts/clients/lookup`;
-   contract in `docs/api/event-driven-alerts-contracts.md`). Not written: this branch's client-service has no
-   `/internal` service auth and no agent reassignment (both are on `dev`), and section 3 forbids copying old
-   CRM code over newer. Sync `dev` first (ADR-0059/0060/0063), then add the routes with the CRM owner.
-2. **Real-CRM end-to-end** (acceptance items 1, 6 and the real-service half of 13): create a client and an
-   active investment account through the real CRM, record a portfolio, reassign the client, check the alerts
-   move. Blocked on 1; the stub is not a substitute.
-3. **Go tests** for the CRM routes. Not run: the Go install on Hayyun's machine is broken
-   (`go: cannot find GOROOT`). Each Go service's `make test` runs in Docker and works; use that.
-4. **CH-05 Terraform** (section 9.1) for the named infrastructure developer. No Terraform was changed, so
-   there was nothing to validate.
-5. **Alert generation in a real process**: needs a search provider and a model, which stay off by default.
-   Generation, grouping and actions are covered by the PostgreSQL integration tests only. Not exercised:
-   the 30-client case (item 3), migration from a database with existing alerts (item 11, only from empty),
-   and the captured search/model payload privacy check (item 12).
-6. Small gaps: detail does not name the selected account when a client holds an instrument in two accounts;
-   holdings writes verify ownership through the directory service credential, not the forwarded user token.
+**Not done, and why. Do these next:**
+1. **Review and merge**: Azeez, Hayyun and Neo Jia Wen review the branch; then PR to `feat/event-driven-alerts`.
+   Neo Jia Wen reviews the account-service route and the Cognito/ALB Terraform.
+2. **Run against real AWS and a real Cognito pool.** Nothing here was applied. Applying the CRM stack with
+   `alert_holdings_mode = "database"`, populating nothing by hand (the secret is created by Terraform), and
+   checking an agent can record and read holdings needs separate authorization (section 11).
+3. **The real client-service reassignment path** was not run end to end. `/ownership/accounts` (the call it
+   makes) was exercised directly; client-service and its documents/encryption dependencies were not started.
+4. **Alert generation in a running process**: needs a search provider and a model, which stay off by default.
+   Generation, grouping, scoring and actions are covered by the PostgreSQL integration tests only.
+5. **Not implemented from section 8:** audit events for a routing (reassignment) change, which the CRM audits
+   itself; the aggregate operational metrics (maintained portfolios, missing holdings, expired valuations,
+   invalid CRM links, directory failures, pending deferrals); and the check that captured search and model
+   requests carry no private fields (the search universe exposes only instrument IDs by construction).
+6. **Small gaps:** alert detail does not name the selected account when a client holds an instrument in two
+   accounts; the agent-event list has no paging beyond `limit`.

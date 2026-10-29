@@ -117,3 +117,16 @@ and Docker/Java/Go/UI/contract/Terraform checks.
 - [ADR-0037](ADR-0037-transactions-database-and-account-linking.md)
 - Current-dev ADR-0059/0060/0063: see the pinned branch evidence rather than
   assuming those files already exist on the older feature baseline.
+
+## Implementation addendum (2026-10-30)
+
+- **One CRM route.** The current agent is read from `accounts.owner_agent_id`, which ADR-0060 keeps equal to the
+  client's assigned agent in the same transaction as a reassignment. The alert service therefore calls only
+  `POST /internal/alerts/accounts/lookup` on account-service and no client-service route. Trade-off: no
+  cross-check against client-service; it relies on ADR-0060's invariant.
+- **Own scope.** `crm-accounts/alert-directory` with its own app client and allow-list, separate from the
+  transaction import's `crm-accounts/lookup`, so neither token opens the other's route.
+- **One holdings switch.** In Terraform, `alert_holdings_mode` is read by both the API and the worker. Database
+  mode needs the custom domain so the directory is reached over HTTPS.
+- **Not covered here:** metrics for portfolios and directory failures, audit of routing changes (the CRM audits a
+  reassignment), and a live AWS run.

@@ -18,30 +18,31 @@ locals {
   }
 
   security_groups = {
-    vpc_link     = "API Gateway VPC Link interfaces"
-    alb          = "Internal ALB"
-    user         = "user-service tasks"
-    client       = "client-service tasks"
-    account      = "account-service tasks"
-    auditor      = "auditor tasks"
-    chain_verify = "chain-verify tasks"
-    transaction  = "transaction-service tasks"
-    alerts       = "event-alert-service tasks"
+    vpc_link      = "API Gateway VPC Link interfaces"
+    alb           = "Internal ALB"
+    user          = "user-service tasks"
+    client        = "client-service tasks"
+    account       = "account-service tasks"
+    auditor       = "auditor tasks"
+    chain_verify  = "chain-verify tasks"
+    transaction   = "transaction-service tasks"
+    alerts        = "event-alert-service tasks"
     client_health = "Client Health Monitor tasks"
-    ingest       = "transaction-ingest Lambda"
-    db_console   = "One-off database console tasks (runbook)"
-    db_users     = "users-db"
-    db_clients   = "clients-db"
-    db_accounts  = "accounts-db"
-    db_trans     = "transactions-db"
-    db_audit     = "audit-db"
-    db_alerts    = "alerts-db"
+    ingest        = "transaction-ingest Lambda"
+    db_console    = "One-off database console tasks (runbook)"
+    db_users      = "users-db"
+    db_clients    = "clients-db"
+    db_accounts   = "accounts-db"
+    db_trans      = "transactions-db"
+    db_audit      = "audit-db"
+    db_alerts     = "alerts-db"
   }
 
   # to <- from on port
   sg_ingress = [
     { to = "alb", from = "vpc_link", port = local.alb_port },
     { to = "alb", from = "ingest", port = local.alb_port },
+    { to = "alb", from = "alerts", port = local.alb_port }, # account directory, API and worker (ADR-0066)
 
     { to = "user", from = "alb", port = local.ports.user },
     { to = "user", from = "client", port = local.ports.user }, # reassigning clients (ADR-0060)

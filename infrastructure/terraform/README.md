@@ -143,6 +143,9 @@ To restore one, uncomment it, and for the DR vault the prod assertion in `stacks
 | GitHub deploy role (`enable_github_deploy_role`) and deploy workflows. `.github/workflows/ci.yml` builds and tests every pull request, but nothing pushes images or applies Terraform | INF-09: deferred while deployments are run by hand |
 | SES e-mail for client verification | [Open item 19](../../docs/architecture/open-items.md#19-client-verification-request-feature-2): agents check ID documents by hand for now. SES itself is deployed for agent engagement (`stacks/mail-identity`) |
 
+
+**Current holdings (ADR-0066).** The CRM stack's `alert_holdings_mode` (`fixture` by default, or `database`) is the one switch for both the event-alert API and this worker: the worker reads it, and the directory URL, token endpoint, app client and scope, from `alerts_worker_inputs`, so the two cannot differ. Database mode needs `domain_name` (the directory is reached over HTTPS through the internal ALB, and the plan fails without it), reads the client secret from Secrets Manager (`<name>/cognito/alert-directory`, never an environment value) and adds `/internal/alerts/accounts/*` to the account-service ALB rule and `/api/alert-portfolios/*` to the alert API's. The `alert-directory` app client holds only the `crm-accounts/alert-directory` scope; the transaction import's client keeps only `crm-accounts/lookup`. The client secret is in Terraform state like the other app clients' secrets, so the state bucket's access controls apply. Ingestion and the model stay off by default. Apply the CRM stack, then the alert-worker stack, then switch `alert_holdings_mode` after the application's V10 migration has run.
+
 ## Checks
 
 ```sh

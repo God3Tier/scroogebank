@@ -40,8 +40,9 @@ class HttpCrmDirectoryTest {
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         base = "http://127.0.0.1:" + server.getAddress().getPort();
-        accountBody = "{\"items\":[{\"id\":\"" + ACCOUNT + "\",\"clientId\":\"" + CLIENT
-                + "\",\"type\":\"INVESTMENT\",\"status\":\"ACTIVE\",\"currency\":\"SGD\"}]}";
+        accountBody = "{\"items\":[{\"id\":\"" + ACCOUNT + "\",\"client_id\":\"" + CLIENT
+                + "\",\"type\":\"INVESTMENT\",\"status\":\"ACTIVE\",\"currency\":\"SGD\","
+                + "\"owner_agent_id\":\"agent-a\"}]}";
         server.createContext("/token", exchange -> {
             tokenCalls++;
             respond(exchange, 200, "{\"access_token\":\"machine-token-" + tokenCalls + "\",\"expires_in\":" + tokenTtl + "}");
@@ -52,8 +53,6 @@ class HttpCrmDirectoryTest {
             batchSizes.add(request.split(",", -1).length);
             respond(exchange, accountStatus, accountBody);
         });
-        server.createContext("/clients", exchange -> respond(exchange, 200,
-                "{\"items\":[{\"id\":\"" + CLIENT + "\",\"assignedAgentSubject\":\"agent-a\"}]}"));
         server.start();
     }
 
@@ -71,22 +70,23 @@ class HttpCrmDirectoryTest {
     }
 
     private HttpCrmDirectory directory(Clock clock) {
-        return new HttpCrmDirectory(new CrmDirectoryProperties(base + "/accounts", base + "/clients",
-                base + "/token", "alert-worker", "not-a-real-secret", "crm-alerts/directory-read",
+        return new HttpCrmDirectory(new CrmDirectoryProperties(base + "/accounts",
+                base + "/token", "alert-worker", "not-a-real-secret", "crm-accounts/alert-directory",
                 Duration.ofSeconds(2)), clock);
     }
 
     @Test
-    void resolvesAccountsAndClientsWithAMachineTokenAndReusesItUntilExpiry() {
+    void resolvesAccountsWithTheirOwnerUsingAMachineTokenAndReusesItUntilExpiry() {
         HttpCrmDirectory directory = directory(Clock.fixed(Instant.parse("2026-10-30T00:00:00Z"), ZoneOffset.UTC));
 
         var accounts = directory.accounts(List.of(ACCOUNT));
-        var clients = directory.clients(List.of(CLIENT));
+        directory.accounts(List.of(ACCOUNT));
 
         assertThat(accounts.get(ACCOUNT).activeInvestment()).isTrue();
         assertThat(accounts.get(ACCOUNT).clientId()).isEqualTo(CLIENT);
-        assertThat(clients.get(CLIENT).assignedAgentSubject()).isEqualTo("agent-a");
-        assertThat(authorizations).containsExactly("Bearer machine-token-1");
+        assertThat(accounts.get(ACCOUNT).ownedBy("agent-a")).isTrue();
+        assertThat(accounts.get(ACCOUNT).ownedBy("agent-b")).isFalse();
+        assertThat(authorizations).containsExactly("Bearer machine-token-1", "Bearer machine-token-1");
         assertThat(tokenCalls).isOne();
     }
 
@@ -127,10 +127,10 @@ class HttpCrmDirectoryTest {
     @Test
     void requiresCompleteHttpsConfigurationAndNeverDowngradesToHttp() {
         assertThatThrownBy(() -> new HttpCrmDirectory(
-                new CrmDirectoryProperties("", "", "", "", "", "", null), Clock.systemUTC()))
+                new CrmDirectoryProperties("", "", "", "", "", null), Clock.systemUTC()))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("ALERT_CRM_");
         assertThatThrownBy(() -> new HttpCrmDirectory(
-                new CrmDirectoryProperties("http://crm.internal/a", "https://crm.internal/c",
+                new CrmDirectoryProperties("http://crm.internal/a",
                         "https://idp.example/token", "id", "secret", "scope", null), Clock.systemUTC()))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("HTTPS");
     }

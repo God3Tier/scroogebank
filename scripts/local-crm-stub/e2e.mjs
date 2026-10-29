@@ -24,10 +24,20 @@ const env = (mode) => ({
   EVENT_ALERT_DB_USERNAME: 'event_alert', EVENT_ALERT_DB_PASSWORD: 'e2e',
   COGNITO_ISSUER_URI: STUB, COGNITO_APP_CLIENT_ID: 'local-app-client',
   ALERT_HOLDINGS_MODE: 'database',
-  ALERT_CRM_ACCOUNT_DIRECTORY_URL: `${STUB}/accounts`, ALERT_CRM_CLIENT_DIRECTORY_URL: `${STUB}/clients`,
+  ALERT_CRM_ACCOUNT_DIRECTORY_URL: `${STUB}/accounts`,
   ALERT_CRM_TOKEN_ENDPOINT: `${STUB}/token`, ALERT_CRM_CLIENT_ID: 'alert-directory',
-  ALERT_CRM_CLIENT_SECRET: 'local-only-not-a-secret', ALERT_CRM_SCOPE: 'crm-alerts/directory-read',
+  ALERT_CRM_CLIENT_SECRET: 'local-only-not-a-secret', ALERT_CRM_SCOPE: 'crm-accounts/alert-directory',
 })
+
+// On Windows the `java` launcher starts the real JVM as a child, so kill the whole tree.
+function killTree(child) {
+  if (child.exitCode !== null) return
+  if (process.platform === 'win32') {
+    try { execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }) } catch { /* already gone */ }
+  } else {
+    child.kill()
+  }
+}
 
 let failures = 0
 function check(name, ok, detail = '') {
@@ -65,14 +75,13 @@ async function waitHealthy(app) {
   }
   return false
 }
-const stop = (app) => new Promise((resolve) => { app.child.once('exit', resolve); app.child.kill() })
+const stop = (app) => new Promise((resolve) => { app.child.once('exit', resolve); killTree(app.child) })
 
 const crmRecords = (agent) => ({
   accounts: [
-    { id: ACCOUNT, clientId: CLIENT, type: 'INVESTMENT', status: 'ACTIVE', currency: 'SGD' },
-    { id: SAVINGS, clientId: CLIENT, type: 'SAVINGS', status: 'ACTIVE', currency: 'SGD' },
+    { id: ACCOUNT, client_id: CLIENT, type: 'INVESTMENT', status: 'ACTIVE', currency: 'SGD', owner_agent_id: agent },
+    { id: SAVINGS, client_id: CLIENT, type: 'SAVINGS', status: 'ACTIVE', currency: 'SGD', owner_agent_id: agent },
   ],
-  clients: [{ id: CLIENT, assignedAgentSubject: agent }],
 })
 const portfolio = {
   expectedRevision: 0, sourceLabel: 'e2e-entry',
@@ -131,7 +140,7 @@ try {
   const exit = await new Promise((resolve) => { api.child.once('exit', resolve); setTimeout(() => resolve('timeout'), 90_000) })
   check('the worker runs once in database mode and exits cleanly with outbound calls off', exit === 0, `${exit}\n${api.log().slice(-600)}`)
 } finally {
-  if (api && api.child.exitCode === null) api.child.kill()
+  if (api) killTree(api.child)
   stub.kill()
 }
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`)

@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Calls the account and client services' private alert-directory routes with a
+ * Calls account-service's private alert-directory route with a
  * dedicated client-credentials token. The token is held only until shortly
  * before it expires and is never logged.
  */
@@ -49,20 +49,9 @@ public class HttpCrmDirectory implements CrmDirectory {
         for (List<UUID> batch : batches(accountIds)) {
             for (JsonNode node : lookup(properties.accountDirectoryUrl(), batch)) {
                 UUID id = uuid(node, "id");
-                result.put(id, new AccountContext(id, uuid(node, "clientId"),
-                        text(node, "type"), text(node, "status"), text(node, "currency")));
-            }
-        }
-        return result;
-    }
-
-    @Override
-    public Map<UUID, ClientContext> clients(Collection<UUID> clientIds) {
-        Map<UUID, ClientContext> result = new LinkedHashMap<>();
-        for (List<UUID> batch : batches(clientIds)) {
-            for (JsonNode node : lookup(properties.clientDirectoryUrl(), batch)) {
-                UUID id = uuid(node, "id");
-                result.put(id, new ClientContext(id, text(node, "assignedAgentSubject")));
+                result.put(id, new AccountContext(id, uuid(node, "client_id"),
+                        text(node, "type"), text(node, "status"), text(node, "currency"),
+                        text(node, "owner_agent_id")));
             }
         }
         return result;

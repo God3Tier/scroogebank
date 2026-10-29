@@ -49,7 +49,7 @@ func serveAggregates(principal *security.Principal, path string) (*httptest.Resp
 	router := gin.New()
 	aggregates := &recordingAggregates{}
 	pass := func(c *gin.Context) { c.Next() }
-	RegisterRoutes(router, accountcontroller.NewAccountController(nil), aggregates, nil, signedInAs(principal), pass, pass)
+	RegisterRoutes(router, accountcontroller.NewAccountController(nil), aggregates, nil, signedInAs(principal), pass, pass, pass)
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path, nil))
 	return res, aggregates
@@ -127,7 +127,7 @@ func TestAccountWritesRefuseAdmins(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			router := gin.New()
 			pass := func(c *gin.Context) { c.Next() }
-			RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, signedInAs(admin), pass, pass)
+			RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, signedInAs(admin), pass, pass, pass)
 			res := httptest.NewRecorder()
 
 			router.ServeHTTP(res, httptest.NewRequest(request.method, request.path, nil))
@@ -153,7 +153,7 @@ func TestOwnershipIsForAdminsOnly(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			router := gin.New()
 			pass := func(c *gin.Context) { c.Next() }
-			RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, signedInAs(test.principal), pass, pass)
+			RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, signedInAs(test.principal), pass, pass, pass)
 			res := httptest.NewRecorder()
 
 			router.ServeHTTP(res, httptest.NewRequest(http.MethodPut, "/ownership/accounts", strings.NewReader(`{`)))
@@ -169,7 +169,40 @@ func TestEveryRouteIsInAContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	pass := func(c *gin.Context) { c.Next() }
-	RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, pass, pass, pass)
+	RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil, pass, pass, pass, pass)
 
 	contract.CheckRoutes(t, router.Routes(), "accounts-api.yaml", "dashboard-aggregates.yaml")
+}
+
+// The import's token and the alert service's token open different routes (ADR-0066).
+func TestInternalRoutesUseTheirOwnServiceMiddleware(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	var ran []string
+	service := func(name string, allow bool) gin.HandlerFunc {
+		return func(c *gin.Context) {
+			ran = append(ran, name)
+			if !allow {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "service scope required"})
+				return
+			}
+			c.Next()
+		}
+	}
+	pass := func(c *gin.Context) { c.Next() }
+	RegisterRoutes(router, accountcontroller.NewAccountController(nil), &recordingAggregates{}, nil,
+		pass, service("import", false), service("alert", true), pass)
+
+	post := func(path string) int {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("{"))
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		return res.Code
+	}
+
+	assert.Equal(t, http.StatusBadRequest, post("/internal/alerts/accounts/lookup")) // alert token admitted, body refused
+	assert.Equal(t, []string{"alert"}, ran)
+	ran = nil
+	assert.Equal(t, http.StatusForbidden, post("/internal/accounts/lookup")) // the alert token is not the import's
+	assert.Equal(t, []string{"import"}, ran)
 }

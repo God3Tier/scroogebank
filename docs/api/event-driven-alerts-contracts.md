@@ -109,9 +109,13 @@ Event action `outcome` is one of `APPLIED`, `STALE_VERSION`, `INVALID_TRANSITION
 (`clientContacted: false`) is written with the action. `INFORM_CLIENT` records
 intent only. Replaying the same key and body returns the stored result.
 
-### CRM directory contract (consumed, owned by the CRM services)
+### CRM directory contract (consumed; owned by account-service)
 
-`POST /internal/alerts/accounts/lookup` and `POST /internal/alerts/clients/lookup`,
-body `{"ids": [<=200 UUIDs]}`, machine token with only the directory read scope.
-Response `{"items": [...]}`; unknown or deleted IDs are omitted. Account item:
-`{id, clientId, type, status, currency}`. Client item: `{id, assignedAgentSubject}`.
+The routes above are in `docs/api/openapi.yaml`, checked against the controllers by the contract tests (ADR-0063).
+The alert service reads the CRM through one private route, defined in `docs/api/accounts-api.yaml`:
+`POST /internal/alerts/accounts/lookup`, body `{"ids": [<=200 distinct UUIDs]}`, client-credentials token with only
+the scope `crm-accounts/alert-directory`. Response `{"items": [{id, client_id, type, status, currency,
+owner_agent_id}]}`; unknown and deleted accounts are omitted; `type` and `status` are as stored (lower case) and
+read case-insensitively. `owner_agent_id` is the client's current agent: the CRM moves it with the client on
+reassignment (ADR-0060). The transaction import's token cannot call this route, and this token cannot call the
+import's.

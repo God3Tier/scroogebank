@@ -79,6 +79,12 @@ variables {
   running                 = true
 }
 
+override_resource {
+  target          = aws_secretsmanager_secret.alert_directory
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/alert-directory" }
+}
+
 run "prod" {
   command = plan
 
@@ -344,4 +350,96 @@ run "teardown_ready" {
     condition     = local.db_settings.skip_final_snapshot && alltrue([for s in aws_secretsmanager_secret.service_tls : s.recovery_window_in_days == 0])
     error_message = "deletion_protection = false deletes the secrets at once and takes no final snapshot, so the stack can be created again straight away."
   }
+}
+
+# ---------------------------------------------------------------- event-alert holdings (ADR-0066)
+
+run "alert_directory_identity_and_fixture_default" {
+  command = plan
+
+  assert {
+    condition     = toset(aws_cognito_user_pool_client.alert_directory.allowed_oauth_scopes) == toset(["crm-accounts/alert-directory"]) && toset(aws_cognito_user_pool_client.alert_directory.allowed_oauth_flows) == toset(["client_credentials"])
+    error_message = "The event-alert app client holds only the alert-directory scope, by client credentials."
+  }
+  assert {
+    condition     = toset(aws_cognito_user_pool_client.transaction_ingest.allowed_oauth_scopes) == toset(["crm-accounts/lookup"])
+    error_message = "The transaction import keeps exactly its existing scope."
+  }
+  assert {
+    condition     = contains([for s in aws_cognito_resource_server.accounts.scope : s.scope_name], "alert-directory") && contains([for s in aws_cognito_resource_server.accounts.scope : s.scope_name], "lookup")
+    error_message = "The accounts resource server keeps lookup and adds alert-directory."
+  }
+  assert {
+    condition     = contains(keys(module.account_service.app_environment), "COGNITO_ALERT_DIRECTORY_CLIENT_IDS") && contains(keys(module.account_service.app_environment), "COGNITO_SERVICE_CLIENT_IDS")
+    error_message = "account-service names the alert app client in its own allow-list, next to the import's."
+  }
+  assert {
+    condition     = module.event_alert_service.app_environment["ALERT_HOLDINGS_MODE"] == "fixture" && !contains(keys(module.event_alert_service.app_environment), "ALERT_CRM_ACCOUNT_DIRECTORY_URL") && !contains(keys(module.event_alert_service.app_secrets), "ALERT_CRM_CLIENT_SECRET")
+    error_message = "Fixture is the default: no directory settings and no directory secret."
+  }
+  assert {
+    condition     = module.event_alert_service.app_environment["ALERT_INGESTION_ENABLED"] == "false" && module.event_alert_service.app_environment["ALERT_AI_ENABLED"] == "false"
+    error_message = "Ingestion and the model stay off by default."
+  }
+  assert {
+    condition     = contains(keys(aws_vpc_security_group_ingress_rule.this), "alb-from-alerts-80") && contains(keys(aws_vpc_security_group_ingress_rule.this), "alb-from-ingest-80")
+    error_message = "The alert tasks may call the internal ALB, and the ingest Lambda's rule is unchanged."
+  }
+  assert {
+    condition = output.alerts_worker_inputs.holdings_mode == "fixture" && alltrue([
+      for k in ["cluster_arn", "subnet_ids", "alerts_db_address", "alerts_db_secret_arn", "alerts_db_sg", "alerts_service_sg", "task_definition_family", "audit_queue_url", "alarm_topic_arn", "name_prefix", "region", "cluster_name", "alerts_db_name", "image", "cpu_architecture", "use_spot", "log_retention_days", "running", "deletion_protection", "holdings_mode", "crm_account_directory_url", "crm_token_endpoint", "crm_client_id", "crm_scope", "crm_client_secret_arn"] :
+      contains(keys(output.alerts_worker_inputs), k)
+    ])
+    error_message = "The worker's inputs keep every existing key and add the holdings keys (the alert-worker consumer reads them)."
+  }
+}
+
+run "database_holdings_through_the_https_alb" {
+  command = plan
+
+  variables {
+    domain_name         = "example.com"
+    alert_holdings_mode = "database"
+  }
+
+  assert {
+    condition     = module.event_alert_service.app_environment["ALERT_HOLDINGS_MODE"] == "database" && module.event_alert_service.app_environment["ALERT_CRM_ACCOUNT_DIRECTORY_URL"] == "https://alb.sg.example.com/internal/alerts/accounts/lookup"
+    error_message = "Database mode reaches the account directory over HTTPS through the internal ALB's certificate name."
+  }
+  assert {
+    condition     = startswith(module.event_alert_service.app_environment["ALERT_CRM_TOKEN_ENDPOINT"], "https://") && module.event_alert_service.app_environment["ALERT_CRM_SCOPE"] == "crm-accounts/alert-directory"
+    error_message = "The token endpoint is HTTPS and the scope is the alert-directory one."
+  }
+  assert {
+    condition     = module.event_alert_service.app_secrets["ALERT_CRM_CLIENT_SECRET"] == "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/alert-directory:client_secret::" && !contains(keys(module.event_alert_service.app_environment), "ALERT_CRM_CLIENT_SECRET")
+    error_message = "The client secret comes from Secrets Manager and is never a plain environment value."
+  }
+  assert {
+    condition     = output.alerts_worker_inputs.holdings_mode == "database" && output.alerts_worker_inputs.crm_account_directory_url == module.event_alert_service.app_environment["ALERT_CRM_ACCOUNT_DIRECTORY_URL"] && output.alerts_worker_inputs.crm_scope == "crm-accounts/alert-directory"
+    error_message = "The worker is handed the API's own holdings mode and directory URL, so they cannot differ."
+  }
+  assert {
+    condition     = contains(keys(aws_vpc_security_group_ingress_rule.this), "alb-from-alerts-443")
+    error_message = "With the custom domain the alert tasks reach the ALB on 443."
+  }
+}
+
+run "database_holdings_need_the_custom_domain" {
+  command = plan
+
+  variables {
+    alert_holdings_mode = "database"
+  }
+
+  expect_failures = [terraform_data.alert_holdings_guard]
+}
+
+run "rejects_an_unknown_holdings_mode" {
+  command = plan
+
+  variables {
+    alert_holdings_mode = "csv"
+  }
+
+  expect_failures = [var.alert_holdings_mode]
 }

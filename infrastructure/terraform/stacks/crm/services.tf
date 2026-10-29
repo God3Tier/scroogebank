@@ -312,6 +312,8 @@ module "account_service" {
     COGNITO_ISSUER_URI         = local.cognito_issuer
     COGNITO_APP_CLIENT_ID      = aws_cognito_user_pool_client.web.id
     COGNITO_SERVICE_CLIENT_IDS = aws_cognito_user_pool_client.transaction_ingest.id
+    # The event-alert service's own app client, for /internal/alerts/accounts/lookup (ADR-0066).
+    COGNITO_ALERT_DIRECTORY_CLIENT_IDS = aws_cognito_user_pool_client.alert_directory.id
   }
   secrets = {
     DB_USER     = "${local.app_login_secret["account_service"]}:username::"
@@ -334,13 +336,16 @@ module "account_service" {
   }
 
   # /internal/accounts/lookup is for the ingest Lambda, which cannot use
-  # Service Connect (ADR-0037, ADR-0019 decision 4).
+  # Service Connect (ADR-0037, ADR-0019 decision 4). The event-alert worker is
+  # a run-once task with no Service Connect proxy, so it reaches
+  # /internal/alerts/accounts/lookup the same way (ADR-0066). API Gateway has
+  # no route for /internal/*, so neither is public.
   load_balancer = merge(local.alb, {
     protocol          = "HTTPS"
     health_check_path = "/health"
     rules = [
       { priority = 40, paths = ["/api/accounts", "/api/accounts/*"] },
-      { priority = 41, paths = ["/internal/accounts/*"] },
+      { priority = 41, paths = ["/internal/accounts/*", "/internal/alerts/accounts/*"] },
     ]
   })
 
@@ -521,21 +526,21 @@ module "transaction_service" {
   port_name          = "https"
 
   environment = {
-    APP_ENV                  = "production"
-    APP_ADDR                 = ":${local.ports.transaction}"
-    COGNITO_ISSUER_URI       = local.cognito_issuer
+    APP_ENV                   = "production"
+    APP_ADDR                  = ":${local.ports.transaction}"
+    COGNITO_ISSUER_URI        = local.cognito_issuer
     COGNITO_HEALTH_CLIENT_IDS = aws_cognito_user_pool_client.client_health_read.id
-    APP_TLS_CERT_FILE        = "/tls/cert.pem"
-    APP_TLS_KEY_FILE         = "/tls/key.pem"
-    DB_HOST                  = module.db["transactions"].address
-    DB_PORT                  = "5432"
-    DB_NAME                  = module.db["transactions"].db_name
-    DB_SSLMODE               = "verify-full"
-    DB_SSLROOTCERT           = "/tls/rds-ca.pem"
-    ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
-    AWS_REGION               = local.region
-    AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
-    COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
+    APP_TLS_CERT_FILE         = "/tls/cert.pem"
+    APP_TLS_KEY_FILE          = "/tls/key.pem"
+    DB_HOST                   = module.db["transactions"].address
+    DB_PORT                   = "5432"
+    DB_NAME                   = module.db["transactions"].db_name
+    DB_SSLMODE                = "verify-full"
+    DB_SSLROOTCERT            = "/tls/rds-ca.pem"
+    ACCOUNT_SERVICE_BASE_URL  = "https://${local.sc.account}:${local.ports.account}"
+    AWS_REGION                = local.region
+    AUDIT_QUEUE_URL           = aws_sqs_queue.audit.url
+    COGNITO_APP_CLIENT_ID     = aws_cognito_user_pool_client.web.id
   }
   secrets = {
     DB_USER     = "${local.app_login_secret["transaction_service"]}:username::"
@@ -593,6 +598,38 @@ module "transaction_service" {
 # (ADR-0048); AgentCore in Tokyo waits for the live spike (EDA-D1-02).
 # Ingestion and the model stay switched off.
 
+locals {
+  # Holdings source for the API and the worker (ADR-0066). The worker reads the same
+  # values from alerts_worker_inputs, so the two cannot disagree. The directory is
+  # reached through the internal ALB over HTTPS with the alert-directory app client;
+  # its secret comes from Secrets Manager and is never an environment value.
+  alert_database_holdings = var.alert_holdings_mode == "database"
+  alert_holdings_environment = merge(
+    { ALERT_HOLDINGS_MODE = var.alert_holdings_mode },
+    local.alert_database_holdings ? {
+      ALERT_CRM_ACCOUNT_DIRECTORY_URL = "${local.alb_base_url}/internal/alerts/accounts/lookup"
+      ALERT_CRM_TOKEN_ENDPOINT        = "https://${aws_cognito_user_pool_domain.this.domain}.auth.${local.region}.amazoncognito.com/oauth2/token"
+      ALERT_CRM_CLIENT_ID             = aws_cognito_user_pool_client.alert_directory.id
+      ALERT_CRM_SCOPE                 = "crm-accounts/alert-directory"
+    } : {},
+  )
+  alert_holdings_secrets = local.alert_database_holdings ? {
+    ALERT_CRM_CLIENT_SECRET = "${aws_secretsmanager_secret.alert_directory.arn}:client_secret::"
+  } : {}
+  alert_holdings_secret_arns = local.alert_database_holdings ? [aws_secretsmanager_secret.alert_directory.arn] : []
+}
+
+# Database holdings read the account directory over HTTPS. Without the custom domain
+# the internal ALB serves plain HTTP, and the service refuses a non-HTTPS directory URL.
+resource "terraform_data" "alert_holdings_guard" {
+  lifecycle {
+    precondition {
+      condition     = !local.alert_database_holdings || local.custom_domain
+      error_message = "alert_holdings_mode = database needs domain_name: the account directory is reached over HTTPS through the internal ALB."
+    }
+  }
+}
+
 module "event_alert_service" {
   source = "../../modules/ecs-service"
 
@@ -609,7 +646,7 @@ module "event_alert_service" {
   port               = local.ports.alerts
   port_name          = "https"
 
-  environment = {
+  environment = merge(local.alert_holdings_environment, {
     EVENT_ALERT_DB_URL            = "jdbc:postgresql://${module.db["alerts"].address}:5432/${module.db["alerts"].db_name}?sslmode=require"
     COGNITO_ISSUER_URI            = local.cognito_issuer
     COGNITO_APP_CLIENT_ID         = aws_cognito_user_pool_client.web.id
@@ -620,13 +657,13 @@ module "event_alert_service" {
     ALERT_INGESTION_ENABLED       = "false"
     ALERT_AI_ENABLED              = "false"
     SPRING_FLYWAY_ENABLED         = "false" # db-migrate applies its migrations
-  }
-  secrets = {
+  })
+  secrets = merge(local.alert_holdings_secrets, {
     EVENT_ALERT_DB_USERNAME = "${local.app_login_secret["event_alert_service"]}:username::"
     EVENT_ALERT_DB_PASSWORD = "${local.app_login_secret["event_alert_service"]}:password::"
-  }
+  })
   # The master secret is for db-migrate only.
-  secret_arns        = [local.app_login_secret["event_alert_service"], local.db_master_secret["alerts"]]
+  secret_arns        = concat([local.app_login_secret["event_alert_service"], local.db_master_secret["alerts"]], local.alert_holdings_secret_arns)
   task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
   tls = {
     mode            = "java"
@@ -639,7 +676,10 @@ module "event_alert_service" {
   load_balancer = merge(local.alb, {
     protocol          = "HTTPS"
     health_check_path = "/actuator/health"
-    rules             = [{ priority = 60, paths = ["/api/alerts", "/api/alerts/*"] }]
+    rules = [
+      { priority = 60, paths = ["/api/alerts", "/api/alerts/*"] },
+      { priority = 61, paths = ["/api/alert-portfolios", "/api/alert-portfolios/*"] },
+    ]
   })
 
   min_tasks          = local.min_tasks

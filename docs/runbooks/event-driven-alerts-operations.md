@@ -234,7 +234,7 @@ crashed process releases it when its connection closes.
 
 `ALERT_HOLDINGS_MODE` is `fixture` (default; bundled synthetic JSON) or `database`
 (maintained CRM-linked portfolios). The API and the worker must use the same value.
-Database mode needs `ALERT_CRM_ACCOUNT_DIRECTORY_URL`, `ALERT_CRM_CLIENT_DIRECTORY_URL`,
+Database mode needs `ALERT_CRM_ACCOUNT_DIRECTORY_URL`,
 `ALERT_CRM_TOKEN_ENDPOINT`, `ALERT_CRM_CLIENT_ID`, `ALERT_CRM_CLIENT_SECRET` and
 `ALERT_CRM_SCOPE`; a missing value or a non-HTTPS URL stops start-up, and there is
 no fallback to fixture data. Enable it only after V10 is applied, the CRM

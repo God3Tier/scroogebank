@@ -1,7 +1,6 @@
 package bank.alert.portfolio;
 
 import bank.alert.crm.AccountContext;
-import bank.alert.crm.ClientContext;
 import bank.alert.crm.CrmDirectory;
 import bank.alert.domain.AuditOutbox;
 import bank.alert.domain.ValuationFreshness;
@@ -178,11 +177,7 @@ public class PortfolioService {
         AccountContext account = directory.accounts(Set.of(accountId)).get(accountId);
         if (account == null) throw PortfolioApiException.notFound();
         if (admin) return account;
-        ClientContext client = directory.clients(Set.of(account.clientId())).get(account.clientId());
-        if (client == null || client.assignedAgentSubject() == null
-                || !client.assignedAgentSubject().equals(actorSubject)) {
-            throw PortfolioApiException.notFound();
-        }
+        if (!account.ownedBy(actorSubject)) throw PortfolioApiException.notFound();
         return account;
     }
 

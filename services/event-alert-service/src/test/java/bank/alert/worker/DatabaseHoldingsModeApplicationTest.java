@@ -26,11 +26,10 @@ import static org.assertj.core.api.Assertions.assertThat;
         "alert.mode=API",
         "alert.holdings.mode=database",
         "alert.crm.account-directory-url=https://crm.internal.invalid/internal/alerts/accounts/lookup",
-        "alert.crm.client-directory-url=https://crm.internal.invalid/internal/alerts/clients/lookup",
         "alert.crm.token-endpoint=https://idp.invalid/oauth2/token",
         "alert.crm.client-id=alert-directory",
         "alert.crm.client-secret=not-a-real-secret",
-        "alert.crm.scope=crm-alerts/directory-read"})
+        "alert.crm.scope=crm-accounts/alert-directory"})
 @Testcontainers
 class DatabaseHoldingsModeApplicationTest {
 

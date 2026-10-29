@@ -29,10 +29,9 @@ alert:
     # database: maintained CRM-linked portfolios; API and worker must use the same mode.
     mode: ${ALERT_HOLDINGS_MODE:fixture}
   crm:
-    # Only read in database mode: private alert-directory routes plus a dedicated
+    # Only read in database mode: the private account alert-directory route plus a dedicated
     # client-credentials identity holding just the directory read scopes.
     account-directory-url: ${ALERT_CRM_ACCOUNT_DIRECTORY_URL:}
-    client-directory-url: ${ALERT_CRM_CLIENT_DIRECTORY_URL:}
     token-endpoint: ${ALERT_CRM_TOKEN_ENDPOINT:}
     client-id: ${ALERT_CRM_CLIENT_ID:}
     client-secret: ${ALERT_CRM_CLIENT_SECRET:}

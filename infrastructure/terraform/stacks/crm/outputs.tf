@@ -68,10 +68,10 @@ output "cognito_user_pool_id" {
 output "client_health_transaction_read" {
   description = "Client Health Monitor client-credentials configuration; retrieve its secret from Secrets Manager, not Terraform output."
   value = {
-    client_id     = aws_cognito_user_pool_client.client_health_read.id
-    secret_arn    = aws_secretsmanager_secret.client_health_read.arn
-    scope         = "crm-transactions/read"
-    service_group = local.sg["client_health"]
+    client_id       = aws_cognito_user_pool_client.client_health_read.id
+    secret_arn      = aws_secretsmanager_secret.client_health_read.arn
+    scope           = "crm-transactions/read"
+    service_group   = local.sg["client_health"]
     transaction_url = "https://${local.sc.transaction}:${local.ports.transaction}/internal/v1/transactions"
   }
 }
@@ -243,5 +243,13 @@ output "alerts_worker_inputs" {
     log_retention_days  = local.log_retention_days
     running             = var.running
     deletion_protection = local.deletion_protection
+
+    # Added for current holdings (ADR-0066). The worker uses the API's own values.
+    holdings_mode             = var.alert_holdings_mode
+    crm_account_directory_url = try(local.alert_holdings_environment["ALERT_CRM_ACCOUNT_DIRECTORY_URL"], "")
+    crm_token_endpoint        = try(local.alert_holdings_environment["ALERT_CRM_TOKEN_ENDPOINT"], "")
+    crm_client_id             = try(local.alert_holdings_environment["ALERT_CRM_CLIENT_ID"], "")
+    crm_scope                 = try(local.alert_holdings_environment["ALERT_CRM_SCOPE"], "")
+    crm_client_secret_arn     = local.alert_database_holdings ? aws_secretsmanager_secret.alert_directory.arn : ""
   }
 }

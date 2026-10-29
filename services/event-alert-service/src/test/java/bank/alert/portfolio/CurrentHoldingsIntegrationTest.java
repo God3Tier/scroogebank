@@ -6,7 +6,6 @@ import bank.alert.ai.EventClassification;
 import bank.alert.ai.EventDirection;
 import bank.alert.ai.EventType;
 import bank.alert.crm.AccountContext;
-import bank.alert.crm.ClientContext;
 import bank.alert.crm.CrmDirectory;
 import bank.alert.crm.CurrentOwnership;
 import bank.alert.crm.DirectoryUnavailableException;
@@ -98,22 +97,21 @@ class CurrentHoldingsIntegrationTest {
     /** A CRM whose records and failures the test controls. */
     static class StubDirectory implements CrmDirectory {
         final Map<UUID, AccountContext> accounts = new HashMap<>();
-        final Map<UUID, ClientContext> clients = new HashMap<>();
+        /** The agent who owns each client now; accounts are served with their client's owner. */
+        final Map<UUID, String> owners = new HashMap<>();
         boolean down;
 
         @Override
         public Map<UUID, AccountContext> accounts(Collection<UUID> ids) {
             if (down) throw new DirectoryUnavailableException("down");
             Map<UUID, AccountContext> result = new HashMap<>();
-            ids.forEach(id -> { if (accounts.containsKey(id)) result.put(id, accounts.get(id)); });
-            return result;
-        }
-
-        @Override
-        public Map<UUID, ClientContext> clients(Collection<UUID> ids) {
-            if (down) throw new DirectoryUnavailableException("down");
-            Map<UUID, ClientContext> result = new HashMap<>();
-            ids.forEach(id -> { if (clients.containsKey(id)) result.put(id, clients.get(id)); });
+            ids.forEach(id -> {
+                AccountContext account = accounts.get(id);
+                if (account != null) {
+                    result.put(id, new AccountContext(account.accountId(), account.clientId(), account.type(),
+                            account.status(), account.currency(), owners.get(account.clientId())));
+                }
+            });
             return result;
         }
     }
@@ -150,12 +148,12 @@ class CurrentHoldingsIntegrationTest {
                 """);
         crm.down = false;
         crm.accounts.clear();
-        crm.clients.clear();
-        crm.accounts.put(ACCOUNT_1, new AccountContext(ACCOUNT_1, CLIENT_1, "INVESTMENT", "ACTIVE", "SGD"));
-        crm.accounts.put(ACCOUNT_2, new AccountContext(ACCOUNT_2, CLIENT_2, "INVESTMENT", "ACTIVE", "SGD"));
-        crm.accounts.put(ACCOUNT_SAVINGS, new AccountContext(ACCOUNT_SAVINGS, CLIENT_1, "SAVINGS", "ACTIVE", "SGD"));
-        crm.clients.put(CLIENT_1, new ClientContext(CLIENT_1, "agent-a"));
-        crm.clients.put(CLIENT_2, new ClientContext(CLIENT_2, "agent-a"));
+        crm.owners.clear();
+        crm.accounts.put(ACCOUNT_1, new AccountContext(ACCOUNT_1, CLIENT_1, "INVESTMENT", "ACTIVE", "SGD", null));
+        crm.accounts.put(ACCOUNT_2, new AccountContext(ACCOUNT_2, CLIENT_2, "INVESTMENT", "ACTIVE", "SGD", null));
+        crm.accounts.put(ACCOUNT_SAVINGS, new AccountContext(ACCOUNT_SAVINGS, CLIENT_1, "SAVINGS", "ACTIVE", "SGD", null));
+        crm.owners.put(CLIENT_1, "agent-a");
+        crm.owners.put(CLIENT_2, "agent-a");
     }
 
     private static PortfolioReplaceRequest.Position position(String instrument, String qty, String price) {
@@ -262,10 +260,10 @@ class CurrentHoldingsIntegrationTest {
         var request = new HoldingsReadRequest(java.util.Set.of("SYN-SGX-001"), NOW, "agent-a");
         assertThat(provider.read(request).positions()).hasSize(1);
 
-        crm.accounts.put(ACCOUNT_1, new AccountContext(ACCOUNT_1, CLIENT_1, "INVESTMENT", "CLOSED", "SGD"));
+        crm.accounts.put(ACCOUNT_1, new AccountContext(ACCOUNT_1, CLIENT_1, "INVESTMENT", "CLOSED", "SGD", null));
         assertThat(provider.read(request).positions()).isEmpty();
-        crm.accounts.put(ACCOUNT_1, new AccountContext(ACCOUNT_1, CLIENT_1, "INVESTMENT", "ACTIVE", "SGD"));
-        crm.clients.put(CLIENT_1, new ClientContext(CLIENT_1, "agent-b"));
+        crm.accounts.put(ACCOUNT_1, new AccountContext(ACCOUNT_1, CLIENT_1, "INVESTMENT", "ACTIVE", "SGD", null));
+        crm.owners.put(CLIENT_1, "agent-b");
         assertThat(provider.read(request).positions()).isEmpty();
         assertThat(provider.assignedAgentsHolding(java.util.Set.of("SYN-SGX-001"))).containsExactly("agent-b");
 
@@ -292,7 +290,7 @@ class CurrentHoldingsIntegrationTest {
         assertThat(detail.clients()).extracting(c -> c.portfolioPercentage().intValue()).containsExactlyInAnyOrder(90, 80);
 
         // client 2 is reassigned to agent-b through the CRM
-        crm.clients.put(CLIENT_2, new ClientContext(CLIENT_2, "agent-b"));
+        crm.owners.put(CLIENT_2, "agent-b");
         var aCards = eventQueries.list("agent-a", false, 25).items();
         assertThat(aCards.getFirst().affectedClientCount()).isEqualTo(1);
         assertThat(eventQueries.list("agent-b", false, 25).items().getFirst().affectedClientCount()).isEqualTo(1);

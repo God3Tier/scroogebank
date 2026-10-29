@@ -47,16 +47,34 @@ public class CurrentOwnership {
         if (refs.size() > MAX_REFERENCED_CLIENTS) {
             throw new DirectoryUnavailableException("too many referenced clients to verify ownership");
         }
-        Map<UUID, ClientContext> clients = crm.clients(refs.stream().map(UUID::fromString).toList());
+        // Each client is asked about through its recorded accounts. All of them must agree on the
+        // owner; a client with no account the CRM still returns, or with disagreeing owners, has
+        // no owner and nobody sees its alerts.
+        List<Map<String, Object>> links = jdbc.queryForList(
+                "SELECT client_id, account_id FROM current_portfolio WHERE client_id::text IN ("
+                        + String.join(",", java.util.Collections.nCopies(refs.size(), "?")) + ")",
+                refs.toArray());
+        Map<UUID, AccountContext> accounts = crm.accounts(
+                links.stream().map(row -> (UUID) row.get("account_id")).toList());
+        Map<String, java.util.Set<String>> owners = new java.util.HashMap<>();
+        for (Map<String, Object> link : links) {
+            UUID clientId = (UUID) link.get("client_id");
+            AccountContext account = accounts.get((UUID) link.get("account_id"));
+            if (account != null && account.clientId().equals(clientId) && account.ownerAgentSubject() != null
+                    && !account.ownerAgentSubject().isBlank()) {
+                owners.computeIfAbsent(clientId.toString(), key -> new java.util.HashSet<>())
+                        .add(account.ownerAgentSubject());
+            }
+        }
         Timestamp now = Timestamp.from(clock.instant());
         for (String ref : refs) {
-            ClientContext client = clients.get(UUID.fromString(ref));
-            // A client the CRM no longer returns has no owner: nobody sees its alerts.
+            java.util.Set<String> agreed = owners.getOrDefault(ref, java.util.Set.of());
+            String owner = agreed.size() == 1 ? agreed.iterator().next() : null;
             jdbc.update("""
                     INSERT INTO client_assignment (client_ref, agent_subject, checked_at) VALUES (?, ?, ?)
                     ON CONFLICT (client_ref) DO UPDATE
                        SET agent_subject = EXCLUDED.agent_subject, checked_at = EXCLUDED.checked_at
-                    """, ref, client == null ? null : client.assignedAgentSubject(), now);
+                    """, ref, owner, now);
         }
     }
 

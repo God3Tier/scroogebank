@@ -12,7 +12,6 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "alert.crm")
 public record CrmDirectoryProperties(
         String accountDirectoryUrl,
-        String clientDirectoryUrl,
         String tokenEndpoint,
         String clientId,
         String clientSecret,
@@ -25,12 +24,11 @@ public record CrmDirectoryProperties(
 
     public void requireComplete() {
         require(accountDirectoryUrl, "ALERT_CRM_ACCOUNT_DIRECTORY_URL");
-        require(clientDirectoryUrl, "ALERT_CRM_CLIENT_DIRECTORY_URL");
         require(tokenEndpoint, "ALERT_CRM_TOKEN_ENDPOINT");
         require(clientId, "ALERT_CRM_CLIENT_ID");
         require(clientSecret, "ALERT_CRM_CLIENT_SECRET");
         require(scope, "ALERT_CRM_SCOPE");
-        for (String url : new String[] {accountDirectoryUrl, clientDirectoryUrl, tokenEndpoint}) {
+        for (String url : new String[] {accountDirectoryUrl, tokenEndpoint}) {
             if (!url.startsWith("https://") && !isLoopbackHttp(url)) {
                 throw new IllegalStateException("CRM directory URLs must use HTTPS");
             }

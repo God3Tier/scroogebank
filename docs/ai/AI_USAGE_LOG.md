@@ -1087,9 +1087,9 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Team member: Hayyun
 - AI tool: Claude Code
 - Task/purpose: Implement the approved CRM-linked current-holdings plan (CH-02, CH-03, CH-04, CH-04b) on `feat/event-driven-alerts`.
-- Files/components affected: V10 migration, portfolio API, CRM directory client, database holdings and search-universe providers, full-portfolio per-instrument scoring, current-owner routing, agent-event briefing/action API, holdings editor and event briefing frontend, tests, contract/schema/runbook docs.
-- Verification: event-alert-service 224 tests pass against PostgreSQL in Docker; frontend 125 tests, lint and build pass. No AWS, Tavily or model calls; synthetic data only.
-- Human verification required: Azeez and Hayyun to review; the CRM owner to implement and review the directory routes (CH-01); the infrastructure developer for CH-05.
+- Files/components affected: V10 migration, portfolio API, CRM directory client, database holdings and search-universe providers, full-portfolio per-instrument scoring, current-owner routing, agent-event briefing/action API, holdings editor and event briefing frontend, account-service alert-directory route, Terraform (crm and alert-worker stacks), local stub and end-to-end scripts, tests, contract/schema/runbook/cost docs.
+- Verification: event-alert-service, frontend, account-service (Docker) and Terraform (mocked, no AWS) tests pass; two real-process runs including one against the real account-service image. No AWS apply, Tavily or model calls; synthetic data only.
+- Human verification required: Azeez and Hayyun to review; Neo Jia Wen to review the account-service route and the Cognito/ALB Terraform; a person with AWS access for any apply.
 ## 2026-10-16 — Client Health SF01 transaction intake decision
 
 - Human owner: Garvit; Feature 3 owners must review provider-side changes.

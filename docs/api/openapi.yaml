@@ -244,6 +244,127 @@ paths:
         '422': {$ref: '#/components/responses/UnprocessableEntity'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events:
+    get:
+      tags: [Alerts]
+      operationId: listAgentEvents
+      summary: One card per public event for the signed-in agent
+      description: >-
+        Groups the agent's per-client alerts by public event (ADR-0066). Only the signed-in
+        agent's current clients are counted; a client with two accounts counts once.
+      parameters:
+        - name: onlyOpen
+          in: query
+          schema: {type: boolean, default: false}
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Event cards.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}:
+    get:
+      tags: [Alerts]
+      operationId: getAgentEvent
+      summary: One event card with the agent's affected clients and latest action
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Event detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventDetail'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}/actions:
+    post:
+      tags: [Alerts]
+      operationId: recordAgentEventAction
+      summary: Inform, monitor or dismiss for an explicit set of the agent's clients
+      description: >-
+        Applies one choice to the listed clients only and records an outcome for each. Inform
+        records intent; it never contacts a client. Reusing an idempotency key with the same
+        body replays the stored result.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventActionRequest'}
+      responses:
+        '200':
+          description: Per-client outcomes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventActionResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alert-portfolios/{accountId}:
+    get:
+      tags: [Alerts]
+      operationId: getAlertPortfolio
+      summary: The dummy holdings recorded for a CRM account
+      description: >-
+        Present only when ALERT_HOLDINGS_MODE=database (ADR-0066). The client's current agent,
+        or an admin (read-only). 404 when nothing was recorded or the account is not visible.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Recorded portfolio.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Portfolio'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [Alerts]
+      operationId: replaceAlertPortfolio
+      summary: Replace the complete recorded portfolio of a CRM account
+      description: >-
+        Bookkeeping only; it never places a trade. The client's current agent only. The client and
+        agent come from the CRM and the token, never from the body. 409: stale revision, reused
+        key with another body, or the account is not an active investment account. 422: unknown
+        or duplicate instrument, bad number, future valuedAt.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PortfolioReplaceRequest'}
+      responses:
+        '200':
+          description: Stored portfolio, or the stored result of an identical retry.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Portfolio'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/Unavailable'}
 components:
   securitySchemes:
     bearerAuth:
@@ -252,6 +373,16 @@ components:
       bearerFormat: JWT
       description: Cognito-issued JWT; subject and role are taken only from validated claims.
   parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     AlertId:
       name: alertId
       in: path
@@ -344,6 +475,155 @@ components:
       description: Request rejected by an edge or service rate limit.
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
+    PortfolioFreshness:
+      type: string
+      enum: [FRESH, STALE, EXPIRED, MISSING]
+    PortfolioPositionInput:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, quantity, unitPrice, valuationCurrency, fxToSgd, valuedAt]
+      properties:
+        instrumentId: {type: string, maxLength: 32}
+        quantity: {type: number}
+        unitPrice: {type: number}
+        valuationCurrency: {type: string, pattern: '^[A-Z]{3}$'}
+        fxToSgd: {type: number}
+        valuedAt: {type: string, format: date-time}
+    PortfolioReplaceRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, sourceLabel, positions]
+      properties:
+        expectedRevision: {type: integer, minimum: 0, description: 0 for the first save.}
+        sourceLabel: {type: string, minLength: 1, maxLength: 64}
+        positions:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PortfolioPositionInput'}
+    PortfolioPosition:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, ticker, issuerName, quantity, unitPrice, valuationCurrency, fxToSgd, valueSgd, valuedAt, freshness]
+      properties:
+        instrumentId: {type: string}
+        ticker: {type: string}
+        issuerName: {type: string}
+        quantity: {type: number}
+        unitPrice: {type: number}
+        valuationCurrency: {type: string}
+        fxToSgd: {type: number}
+        valueSgd: {type: number}
+        valuedAt: {type: string, format: date-time}
+        freshness: {$ref: '#/components/schemas/PortfolioFreshness'}
+    Portfolio:
+      type: object
+      additionalProperties: false
+      required: [accountId, clientId, revision, sourceLabel, updatedAt, totalSgd, positions]
+      properties:
+        accountId: {type: string, format: uuid}
+        clientId: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        sourceLabel: {type: string}
+        updatedAt: {type: string, format: date-time}
+        totalSgd: {type: number}
+        positions:
+          type: array
+          items: {$ref: '#/components/schemas/PortfolioPosition'}
+    EventCard:
+      type: object
+      additionalProperties: false
+      required: [eventId, headline, summary, aiGenerated, uncertainty, evidence, affectedClientCount, openClientCount, topScore, latestAlertAt]
+      properties:
+        eventId: {type: string, format: uuid}
+        headline: {type: string}
+        summary: {type: string, nullable: true}
+        aiGenerated: {type: boolean}
+        uncertainty: {type: string, nullable: true}
+        evidence: {$ref: '#/components/schemas/Evidence'}
+        affectedClientCount: {type: integer, minimum: 0}
+        openClientCount: {type: integer, minimum: 0}
+        topScore: {type: number}
+        latestAlertAt: {type: string, format: date-time}
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/EventCard'}
+    AffectedClient:
+      type: object
+      additionalProperties: false
+      required: [alertId, clientRef, instrumentId, status, score, portfolioPercentage, amountSgd, version]
+      properties:
+        alertId: {type: string, format: uuid}
+        clientRef: {type: string}
+        instrumentId: {type: string}
+        status: {$ref: '#/components/schemas/AlertStatus'}
+        score: {type: number}
+        portfolioPercentage: {type: number, nullable: true}
+        amountSgd: {type: string}
+        version: {type: integer, minimum: 0}
+    EventActionMember:
+      type: object
+      additionalProperties: false
+      required: [alertId, expectedVersion]
+      properties:
+        alertId: {type: string, format: uuid}
+        expectedVersion: {type: integer, minimum: 0}
+    EventActionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, members]
+      properties:
+        decision: {$ref: '#/components/schemas/Decision'}
+        note: {type: string, maxLength: 500, nullable: true}
+        members:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: {$ref: '#/components/schemas/EventActionMember'}
+    EventActionMemberResult:
+      type: object
+      additionalProperties: false
+      required: [alertId, outcome, previousStatus, newStatus]
+      properties:
+        alertId: {type: string, format: uuid}
+        outcome: {type: string, enum: [APPLIED, STALE_VERSION, INVALID_TRANSITION, NOT_AUTHORISED]}
+        previousStatus:
+          anyOf:
+            - {$ref: '#/components/schemas/AlertStatus'}
+            - {$ref: '#/components/schemas/NullValue'}
+        newStatus:
+          anyOf:
+            - {$ref: '#/components/schemas/AlertStatus'}
+            - {$ref: '#/components/schemas/NullValue'}
+    EventActionResult:
+      type: object
+      additionalProperties: false
+      required: [actionId, eventId, decision, recordedAt, members]
+      properties:
+        actionId: {type: string, format: uuid}
+        eventId: {type: string, format: uuid}
+        decision: {$ref: '#/components/schemas/Decision'}
+        recordedAt: {type: string, format: date-time}
+        members:
+          type: array
+          items: {$ref: '#/components/schemas/EventActionMemberResult'}
+    EventDetail:
+      type: object
+      additionalProperties: false
+      required: [card, clients, latestAction]
+      properties:
+        card: {$ref: '#/components/schemas/EventCard'}
+        clients:
+          type: array
+          items: {$ref: '#/components/schemas/AffectedClient'}
+        latestAction:
+          anyOf:
+            - {$ref: '#/components/schemas/EventActionResult'}
+            - {$ref: '#/components/schemas/NullValue'}
     NullValue:
       description: JSON null. OpenAPI 3.0 has no null type, so a nullable reference is anyOf the schema and this.
       type: object
