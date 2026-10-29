@@ -35,6 +35,7 @@ to evaluate exposure at a particular time.
 _Avoid_: Affected holdings only
 
 **Alert**:
-An evidence-backed public-event briefing linked to an affected client for their
-agent's review and decision. An alert is not an instruction to contact or trade.
+An evidence-backed event briefing for an agent, with their affected-client list
+supporting review and decisions. Individual client evidence is not a separate
+personalised investment review; the briefing does not instruct contact or trading.
 _Avoid_: Automatic client advice

@@ -1,5 +1,14 @@
 # AI usage log
 
+## 2026-10-30 - Clarify the agent-event workflow and prepare feature integration
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Record the feature owner's clarification that agents receive a shared event briefing with an affected-client list and choose what to do; prepare integration of existing retrieval work and planning documents into feat/event-driven-alerts before new implementation.
+- Files/components affected: Parent/current-holdings plans, proposed ADR-0066 and glossary; integration evidence follows the actual Git/CI result.
+- Verification: Check documentation consistency/links and combined branch ancestry, resolve documentation overlaps while preserving retrieval evidence, and run the relevant existing service/Terraform checks before integration. The event-grouping feature remains planned; no personalised-review or automatic-contact implementation is claimed.
+- Data/calls: Repository and GitHub workflow information only; no private project records or secrets in prompts and no AWS, model or paid news calls.
+
 ## 2026-10-29 - Verify and plan CRM-linked current alert holdings
 
 - Team member: Azeez.

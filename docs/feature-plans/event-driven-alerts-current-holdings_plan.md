@@ -3,7 +3,7 @@
 Status: Proposed implementation plan; no application change is authorized by this document alone.
 Owner: Azeez. Domain/API/migration reviewer: Hayyun.
 CRM ownership/security reviewer: Neo Jia Wen (coordination required before shared-service edits).
-Last verified: 2026-10-29, Asia/Singapore.
+Last verified: 2026-10-30, Asia/Singapore.
 Planning branch: `task/event-driven-alerts/current-holdings-plan`, created from
 `origin/feat/event-driven-alerts` at `dedb306`.
 Parent: [event-driven alerts plan](event-driven-alerts_plan.md).
@@ -25,6 +25,38 @@ with no holdings does not fabricate holdings or make an empty account searchable
 The summary remains decision support for the agent; no client contact or trade
 is performed.
 
+### Agent-event experience clarified by the feature owner, 2026-10-30
+
+The primary workflow is an agent receiving an event briefing: "This happened;
+these clients may be affected; would you like to inform them, monitor, or dismiss?"
+It is not a requirement for the agent to inspect each client and request a
+personalised investment review.
+
+- Show one card per authenticated agent and public event, with one shared news
+  summary, evidence/citations, why it matters and that agent's affected-client
+  count/list. Multiple eligible client/instrument/account evidence rows must not
+  become duplicate primary news cards.
+- Holdings support relevance, priority and the optional affected-client drill-down.
+  They do not require a separate model-generated recommendation per client.
+  Keep client exposure/scoring evidence internally and display it on drill-down.
+- The agent chooses Inform clients, Monitor, or Dismiss from the event workflow.
+  Inform records intent and an explicit selected client set; it does not send a
+  message, execute a trade, or silently choose every client. Preserve the existing
+  meaning that an inform decision is not proof of contact.
+- Group by the identified public event, not ticker alone. Keep separate agents'
+  cards, membership and decisions isolated. A client appearing through two
+  accounts counts once in the card's client count.
+- Specify the agent-event read/decision contract and its relation to existing
+  per-client decision rows before implementation. Persist an auditable group
+  operation and explicit member outcomes; do not disguise it as an untracked
+  browser loop over client endpoints. Enforce current ownership, idempotency and
+  concurrency on the selected membership. New members must not inherit an old
+  inform intent automatically.
+- Existing shared briefing generation is reusable. Current per-client alert
+  storage/API/UI are the technical baseline, not evidence that this grouped
+  experience has already been implemented. Grouping/API/UI work belongs to the
+  new plan after the current retrieval changes are integrated.
+
 There is a related correctness defect: the existing provider filters to affected
 instruments before exposure is calculated. A single affected holding can therefore
 become 100% of the returned subset rather than its actual account share. The
@@ -38,6 +70,8 @@ replacement must return complete portfolios for accounts containing a match.
   Never map `syn-client-001` to a CRM UUID by row order or a guessed relationship.
 - Add one complete account-holdings read/replace API and a small holdings editor
   within the existing client/account experience. API tests precede UI work.
+- Add the agent-event card/read/decision workflow described above; holdings entry
+  is supporting maintenance, not the primary news-review journey.
 - Keep all project records dummy/synthetic; editable database data is still dummy
   data. No live price feed, market-data subscription, new microservice, broker,
   vector store, or trading ledger.
@@ -244,6 +278,7 @@ before implementation. No teammate has been contacted by this planning task.
 | CH-02: current holdings schema, API and audit | Hayyun | alert domain/repository/API/security, forward Flyway migration, schema and OpenAPI | `task/event-driven-alerts/current-holdings`; CH-00/01 | Planned |
 | CH-03: DB providers, full-account exposure, snapshot detail and current-owner routing | Azeez with required Hayyun review | holdings/ingestion/processing/repository/API authorization and integration tests | Same alert task; CH-02 and retrieval fixes | Planned |
 | CH-04: existing account-page holdings editor | Hayyun | existing frontend client/account and alert views, API adapter and tests | Alert task after API contract; coordinate frontend owner | Planned |
+| CH-04b: one agent-event briefing with affected-client drill-down and event actions | Hayyun; Azeez reviews shared briefing/retrieval boundary | agent-event read/decision API, mapping to client evidence, grouped alert frontend, contracts/audit and tests | After grouped contract agreement and current retrieval integration; no implementation in this planning branch | Planned |
 | CH-05: runtime wiring and validation | Azeez; Neo Jia Wen infrastructure review | CRM/alert-worker Terraform, service configuration, runbooks, cost/evaluation evidence | Alert task; CH-01..04 | Planned |
 
 All tasks last synchronized on 2026-10-29. Execute sequentially unless owners
@@ -287,6 +322,15 @@ merely because this table proposes work.
     Java/Go/frontend tests, and changed-stack Terraform validation/native tests.
     No paid calls are necessary for these gates. A separate approved live provider
     evaluation remains required for production retrieval quality.
+14. One event affecting five eligible clients of one agent produces one primary
+    event card with five distinct affected clients and one shared briefing.
+    The same event for another agent shows only that agent's clients; two
+    accounts for one client do not duplicate the card or its client count.
+15. Event actions are scoped to an explicit current authorised client set and
+    audited/idempotent. Monitor/dismiss/inform semantics and member-level
+    outcomes are contract-tested. No action sends a client communication.
+    Retries, partial membership changes and reassignment do not leak another
+    agent's clients or apply an old inform intent to newly affected clients.
 
 ## 11. Migration, rollback and completion gates
 

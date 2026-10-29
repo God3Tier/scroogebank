@@ -39,6 +39,20 @@ integrated through their feature branches.
 
 ## Proposed decision
 
+### Feature-owner product clarification, 2026-10-30
+
+The agent's primary experience is one event briefing with their affected-client
+list and Inform clients / Monitor / Dismiss choices. Holdings and individual
+exposure rows support relevance and drill-down, not one personalised model
+review or primary card per client. A shared briefing is reused, with no client
+PII in the model request. An inform choice records intent for an explicit
+authorised client set and does not send a communication.
+
+The new implementation must define an agent-event grouping/decision contract
+over the existing client evidence and preserve current-owner access, auditable
+member outcomes and idempotency. This is planned work, not a claim that grouping
+already exists in the current API/UI.
+
 Use option 2 for dummy project data. Store complete revisioned account portfolios
 in alerts-db, expose agent-owned read/replace operations, and retain historical
 score inputs separately. New clients have no positions until recorded; no holdings

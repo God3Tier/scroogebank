@@ -93,6 +93,15 @@ advice, contact clients, execute trades, or change portfolios.
 
 ## 4. Proposed User Outcome
 
+**Feature-owner clarification (2026-10-30):** the primary agent view is one
+event briefing with a shared summary and an affected-client count/list, followed
+by the agent's Inform clients / Monitor / Dismiss choice. Client holdings and
+exposure support relevance and drill-down; they are not a requirement to generate
+one personalised investment review or primary card per client. Inform records
+intent, never an automatic communication. The grouped read/decision workflow is
+future work in the [current-holdings subplan](event-driven-alerts-current-holdings_plan.md);
+existing per-client evidence remains the implementation baseline until then.
+
 An authenticated agent can see a prioritized alert for a client they own, inspect
 the source and scoring factors, and choose one of:
 
