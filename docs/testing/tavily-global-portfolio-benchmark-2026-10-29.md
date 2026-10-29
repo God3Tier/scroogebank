@@ -103,3 +103,40 @@ ingestion remains disabled because Recall@10 is unproven and commercial-source
 terms review is incomplete. These 28 implementation calls are additional to the
 six worker calls and 18 query-design calls recorded above. Account-dashboard
 confirmation remains required for billing evidence.
+
+## Full repeat verification
+
+The complete repository and live retrieval path were repeated after commit
+`89b7713`:
+
+- `mvn -B clean verify` passed all six reactor modules: 449 tests, zero
+  failures/errors/skips. This included PostgreSQL/Testcontainers, Flyway V1-V9,
+  the event pipeline and LocalStack-backed Cognito tests.
+- Alert-worker Terraform formatting, initialization, validation and all six
+  native tests passed.
+- A fresh 12-issuer, 30-day Tavily pass used the exact compact query and local
+  relevance rules from ADR-0051. Against the eight previously human-labelled
+  reference events, raw and filtered Recall@10 were both 7/8 (87.5%). The missed
+  item was DBS's older SGX director appointment, which Tavily did not return in
+  its top ten on this repeat.
+- The local gate admitted eight results: Microsoft (2), Alphabet (1), JPMorgan
+  (2), Visa (1) and HSBC (2). Manual title review labelled 8/8 actionable and
+  issuer-correct, for a precision sample of 100%, with zero cross-issuer result.
+- Per-query wall time ranged from 509 ms to 7.645 s, below the 30-second adapter
+  timeout. The API response did not expose a credit field, so zero in the local
+  collector means "not reported", not "free"; dashboard billing confirmation
+  remains required.
+- The packaged worker then ran four real Tavily calls against a disposable fresh
+  PostgreSQL 16 database. It applied V1-V9, selected the bounded portfolio batch,
+  completed the current four-hour window with `SUCCEEDED`, zero recent accepted
+  results, model disabled, and a clean exit. No AWS or model call was made.
+
+The repeat used 28 basic Tavily calls: 12 in an evaluator run whose local URL
+metric processing failed and whose measurements were discarded, 12 in the valid
+labelled pass, and four through the packaged worker. All calls count toward
+provider usage even though the first run produced no usable local metrics.
+
+This repeat meets ADR-0051's recall, precision, cross-issuer and timeout numbers
+on the small retrospective reference set. It is not independent production
+approval: the reference set was derived from the earlier investigation, source
+terms are still pending, and provider-dashboard credits remain unverified.

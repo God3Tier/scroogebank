@@ -593,3 +593,13 @@
 - Data and calls: Synthetic public instrument terms only; 28 Tavily basic-search calls (two 12-issuer passes and one four-issuer confirmation). No AWS/model call, private portfolio fact or secret output.
 - Verification: The final confirmation returned seven of seven manually actionable, issuer-correct results with zero cross-issuer result. This does not measure Recall@10, so production ingestion remains disabled.
 - Human verification required: Curate an independent known-event set, review source terms, verify provider billing, and approve through the normal PR path.
+
+# 2026-10-29 - Retrieval-usability full repeat verification
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Repeat the complete repository, Terraform, live multi-market retrieval and packaged-worker checks and measure retrieval accuracy separately from downstream generation.
+- Files/components affected: Benchmark, cost and AI-usage evidence only; no production code changed.
+- Data and calls: Synthetic portfolio/public issuer terms only; 28 Tavily basic calls, including 12 calls whose local metrics were discarded after an evaluator error. No AWS/model call, private portfolio fact or secret output.
+- Verification: 449 Maven tests passed across six modules; six Terraform tests passed; the valid 12-issuer pass measured 7/8 Recall@10, 8/8 manually actionable precision, zero cross-issuer results and sub-30-second calls; the packaged worker applied Flyway V1-V9 and completed four live searches against disposable PostgreSQL.
+- Human verification required: Independently curate the historical reference set, review publisher terms, reconcile provider-dashboard credits, and complete PR/ADR review before enablement.

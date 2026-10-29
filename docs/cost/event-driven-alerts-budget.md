@@ -50,6 +50,13 @@ The calls established a 7/7 manually reviewed precision sample after local
 title and preview filtering, but billing-dashboard confirmation and an
 independent Recall@10 set are still required.
 
+The full repeat verification made a further 28 basic-search calls and no AWS or
+model calls: 12 calls from a discarded local-metric run, 12 calls from the valid
+12-issuer labelled pass, and four calls through the packaged worker. The valid
+pass measured 7/8 Recall@10 and 8/8 manually actionable precision. Tavily did not
+return a usage-credit field in these responses, so the provider dashboard remains
+the billing source of truth; the discarded calls must still be counted there.
+
 ## Enforced application controls
 
 - Ingestion and model access default to disabled.

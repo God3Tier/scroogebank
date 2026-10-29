@@ -75,8 +75,10 @@ unset TAVILY_API_KEY
 ```
 
 Keep `ingestion_enabled = false` until that command succeeds and a provider
-benchmark passes. The 2026-10-29 local global-portfolio benchmark failed its
-usefulness gate, so it is not approval to enable the schedule. A task cannot
+benchmark passes. The initial 2026-10-29 global-portfolio benchmark failed; a
+later single-issuer repeat met the numeric gates only on a small retrospective
+reference set. It is not approval to enable the schedule until independent
+labels, source terms and billed credits are reviewed. A task cannot
 start if its referenced secret has no
 current version.
 
