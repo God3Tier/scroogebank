@@ -15,3 +15,7 @@ state_bucket = "crm-tfstate-123456789012"
 # benchmark has passed and the AI benchmark gates are met.
 ingestion_enabled = false
 ai_enabled        = false
+
+# Keep empty until the source register records an approved commercial-publisher
+# terms review. Official issuer/exchange/regulator domains come from alerts-db.
+approved_news_domains = []

@@ -86,7 +86,7 @@ To implement the direct-API option:
 1. **Pick a provider** (Tavily is the one discussed; Bing Search or a
    comparable news/web API would fit the same seam). Check its terms allow
    the use case and its pricing against ADR-0009's original bound (1,000
-   searches/month, 4 grouped queries/run, 10 results/query).
+   searches/month, 4 rotating single-issuer queries/run, 10 results/query).
 2. **Implement `PublicSearchProvider`** — use the interface at
    [`PublicSearchProvider.java`](../../services/event-alert-service/src/main/java/bank/alert/ingestion/PublicSearchProvider.java).
    A new class (e.g. `TavilySearchProvider`) implementing the same

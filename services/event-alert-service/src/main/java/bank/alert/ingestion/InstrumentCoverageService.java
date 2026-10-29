@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class InstrumentCoverageService {
-    static final int BATCH_SIZE = 32;
     private static final Duration SLOT = Duration.ofHours(4);
 
     private final InstrumentSearchCoverageRepository repository;
@@ -69,12 +68,13 @@ public class InstrumentCoverageService {
         }).toList());
     }
 
-    private static List<String> select(List<String> sortedIds, Instant windowTo) {
+    private List<String> select(List<String> sortedIds, Instant windowTo) {
         if (sortedIds.isEmpty()) return List.of();
-        int batches = (sortedIds.size() + BATCH_SIZE - 1) / BATCH_SIZE;
+        int batchSize = properties.maxQueriesPerRun();
+        int batches = (sortedIds.size() + batchSize - 1) / batchSize;
         int batch = Math.floorMod(windowTo.getEpochSecond() / SLOT.toSeconds(), batches);
-        int start = batch * BATCH_SIZE;
-        return List.copyOf(sortedIds.subList(start, Math.min(start + BATCH_SIZE, sortedIds.size())));
+        int start = batch * batchSize;
+        return List.copyOf(sortedIds.subList(start, Math.min(start + batchSize, sortedIds.size())));
     }
 
     public record CoverageBatch(List<String> instrumentIds, Instant windowFrom, Instant windowTo) {}

@@ -63,15 +63,38 @@ alert:
       endpoint: https://api.tavily.com/search
       timeout: 30s
       max-response-bytes: 262144
-    approved-domains:
-      - mas.gov.sg
-      - sgx.com
+    # Optional shared publishers. Deployment keeps this empty until each
+    # publisher's terms review is recorded; every issuer still adds its own
+    # official domains from the instrument master.
+    approved-domains: []
     event-terms:
       - earnings
-      - regulatory
+        - results
+      - financial results
+      - profit
+      - revenue
+      - guidance
+      - regulatory action
+      - investigation
+      - fine
+      - filing
+      - approval
       - merger
-      - credit
-      - leadership
+      - acquisition
+      - takeover
+      - divestment
+      - buyback
+      - credit rating
+      - downgrade
+      - upgrade
+      - default
+      - credit outlook
+      - appointment
+      - appointed
+        - appoints
+      - resignation
+      - resigned
+      - steps down
   ai:
     # Independent fail-closed switch; no model can be invoked by default.
     enabled: ${ALERT_AI_ENABLED:false}

@@ -21,6 +21,7 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_INGESTION_ENABLED` | `false` | Allows provider ingestion reservations |
 | `ALERT_SEARCH_PROVIDER` | `tavily` | Selected public-news adapter; the worker stack pins this value |
 | `ALERT_TAVILY_API_KEY` | empty | Tavily key; injected from the worker-owned Secrets Manager secret, never set in a committed file |
+| `ALERT_INGESTION_APPROVED_DOMAINS` | empty | Optional comma-separated reviewed commercial publishers; keep empty until ADR-0011 terms approval. Issuer official domains come from alerts-db |
 | `ALERT_AI_ENABLED` | `false` | Allows model invocation and model-token reservations |
 | `ALERT_AI_PROVIDER` | `none` | Set to `bedrock` together with `ALERT_AI_ENABLED=true`; the worker stack sets it automatically |
 | `ALERT_AI_MODEL` | `global.amazon.nova-2-lite-v1:0` | Pinned Nova 2 Lite global inference profile |
@@ -162,7 +163,7 @@ cost as authoritative.
 Bounded historical ingestion replay is implemented behind the internal worker
 boundary. It does not move the scheduler watermark. Before a production replay:
 
-Scheduled runs sort eligible instruments, select at most 32 from the current
+Scheduled runs sort eligible instruments, select at most four from the current
 four-hour UTC slot, and resume from `instrument_search_coverage` with the normal
 deduplication overlap. Replays use the same deterministic slot selection but
 never advance coverage. A failed or blocked run also leaves coverage unchanged.

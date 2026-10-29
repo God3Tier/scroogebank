@@ -7,6 +7,8 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.util.List;
+
 @Entity
 @Table(name = "instrument")
 public class Instrument {
@@ -31,6 +33,14 @@ public class Instrument {
     @Column(nullable = false)
     private boolean active;
 
+    @Column(name = "search_aliases", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<String> searchAliases = List.of();
+
+    @Column(name = "official_domains", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<String> officialDomains = List.of();
+
     protected Instrument() {
     }
 
@@ -40,4 +50,6 @@ public class Instrument {
     public String getSector() { return sector; }
     public String getCurrency() { return currency; }
     public boolean isActive() { return active; }
+    public List<String> getSearchAliases() { return List.copyOf(searchAliases); }
+    public List<String> getOfficialDomains() { return List.copyOf(officialDomains); }
 }

@@ -29,14 +29,26 @@ replaced AgentCore with Tavily; no dollar amount is approved until the owner
 records the account plan and a billed lower-environment benchmark. It is a
 planning assumption, not a billing claim.
 
-The portfolio-aware universe does not raise this ceiling: rotation still permits
-at most four grouped searches with eight instruments each per scheduled run.
+The portfolio-aware universe does not raise this ceiling: ADR-0051 permits at
+most four single-issuer searches per scheduled run. A 12-instrument universe
+therefore rotates over about 12 hours without losing its per-instrument window.
 
 On 2026-10-29 the local benchmark made six Tavily basic-search calls (three
 two-query worker passes) and no AWS or model calls. Under the documented basic
 contract this is six search credits; the adapter does not request a usage object,
 so account-dashboard billing evidence is still required. The benchmark failed
 the usefulness gate and does not authorize live ingestion.
+
+The 2026-10-29 query-design investigation made another 18 Tavily basic-search
+calls and no AWS/model calls. Tavily reported one credit for every call. These
+calls compared `news`/`finance`, exact-match, preferred-web and restricted
+official/vetted sources; they are design evidence, not a passing benchmark.
+
+The ADR-0051 implementation smoke test then made 28 basic-search calls: two
+12-issuer passes and a four-issuer confirmation. It made no AWS/model call.
+The calls established a 7/7 manually reviewed precision sample after local
+title and preview filtering, but billing-dashboard confirmation and an
+independent Recall@10 set are still required.
 
 ## Enforced application controls
 

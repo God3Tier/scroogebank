@@ -69,8 +69,9 @@ run "ingestion_on_while_running" {
   command = plan
 
   variables {
-    ingestion_enabled = true
-    ai_enabled        = true
+    ingestion_enabled     = true
+    ai_enabled            = true
+    approved_news_domains = ["reuters.com", "cnbc.com", "ft.com"]
   }
 
   assert {
@@ -94,6 +95,16 @@ run "ingestion_on_while_running" {
     error_message = "The by-hand run command targets the CRM cluster and the alerts security group."
   }
 
+}
+
+run "rejects_unreviewed_news_domain" {
+  command = plan
+
+  variables {
+    approved_news_domains = ["unreviewed.example"]
+  }
+
+  expect_failures = [var.approved_news_domains]
 }
 
 run "crm_stack_stopped" {

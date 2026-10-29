@@ -53,3 +53,53 @@ smaller or per-instrument queries, and only consider another provider if the
 bounded Tavily design still cannot meet coverage and actionable-precision gates.
 Repeat the same synthetic universe and record account-dashboard credits before
 changing the enablement decision.
+
+## Follow-up query-design investigation
+
+Eighteen additional one-credit basic calls compared four representative issuers
+(DBS, Apple, HSBC and Tencent):
+
+- Tavily's `finance` topic returned no result for DBS, HSBC or Tencent and an
+  unrelated SGX report for Apple.
+- Exact-match with official-only domains suppressed the valid DBS appointment
+  and still returned cross-issuer Apple/Tencent results.
+- Broad-web `prefer` found strong Reuters/CNBC HSBC coverage but produced heavy
+  noise for the other issuers.
+- Single-issuer `news` queries restricted to issuer-official domains plus
+  Reuters/CNBC/FT produced useful DBS, Apple and HSBC candidates, while Tencent
+  still lacked an issuer-relevant result.
+
+This investigation selected ADR-0051's design but did not run the complete
+12-issuer labelled production gate. Ingestion remains disabled.
+
+## ADR-0051 implementation benchmark
+
+The implemented single-issuer design was exercised against 12 eligible issuers
+from the same 20-client fixture over a 30-day lookback. Reuters, CNBC and FT were
+enabled only as local benchmark candidates; no AWS or model call was made.
+
+The first 12-call pass used the full event vocabulary in every query and matched
+issuer/event phrases across title plus excerpt. All calls returned results, but
+37 passed the local gate and obvious unrelated articles were admitted for DBS,
+Apple, JPMorgan and Visa. That design was rejected.
+
+The second 12-call pass used compact high-signal discovery terms and required
+both issuer and event phrases in the title. It admitted 18 results for Microsoft,
+Alphabet, JPMorgan and HSBC and none for the other eight issuers. Manual review
+found that most remaining noise was earnings previews rather than completed
+events. The implementation therefore rejects explicit preview language such as
+`set to report`, `ahead of earnings`, `earnings playbook`, `what to expect` and
+`what to watch`.
+
+A final four-call confirmation over the four issuers with accepted results
+produced seven results: two Microsoft results/earnings articles, one Alphabet
+earnings miss, two JPMorgan earnings reports and two HSBC profit reports. Manual
+review labelled 7/7 issuer-correct and actionable, with no cross-issuer result.
+This is a precision smoke test, not a Recall@10 measurement: the fixture does
+not yet contain a human-curated independent event set for the 30-day window.
+
+The implementation is usable enough for offline evaluation, but production
+ingestion remains disabled because Recall@10 is unproven and commercial-source
+terms review is incomplete. These 28 implementation calls are additional to the
+six worker calls and 18 query-design calls recorded above. Account-dashboard
+confirmation remains required for billing evidence.

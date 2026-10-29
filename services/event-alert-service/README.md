@@ -12,7 +12,7 @@ independent enable switch are explicitly configured. Synthetic holdings are load
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
 
 The ingestion core is provider-neutral and outbound-disabled by default with
-`ALERT_INGESTION_ENABLED=false`. It builds at most four grouped public-market
+`ALERT_INGESTION_ENABLED=false`. It builds at most four single-issuer public-market
 queries from instruments held by enough distinct clients, requests at most ten
 results per query, applies a five-minute watermark
 overlap, retries retryable provider failures at most three times, validates the
@@ -34,6 +34,12 @@ default an instrument is eligible when it is held by at least two clients and
 20% of clients in the snapshot, or reaches 50% of one account's positive SGD
 value. Tavily receives none of those counts or private holding facts.
 Unknown/inactive IDs and an empty eligible universe fail closed.
+Each selected instrument contributes governed aliases and official domains.
+Results persist only when the title contains a controlled event phrase and
+names the issuer or an approved alias. A governed issuer/exchange domain may
+carry the issuer name in its excerpt when the event remains explicit in the
+title. Ticker-only, sector-only, product-only, cross-issuer and explicit
+event-preview results are rejected locally.
 
 The AI boundary is independently disabled by default with
 `ALERT_AI_ENABLED=false` and `ALERT_AI_PROVIDER=none`. The adapters accept public evidence only,
@@ -129,7 +135,10 @@ for the next run. The run exits 1 if a source errors. Its summary line is
 `ALERT_SEARCH_PROVIDER=tavily` and `ALERT_TAVILY_API_KEY` switch on the selected
 live-news adapter (ADR-0050). In AWS the key is injected from the worker-owned
 Secrets Manager secret; never commit or place it in Terraform. Requests use
-Tavily's restrictive domain mode and published-date filter, and results are
+Tavily's restrictive domain mode and published-date filter. Each query combines
+that issuer's official domains with optional shared publishers from
+`ALERT_INGESTION_APPROVED_DOMAINS`; deployment keeps the shared list empty until
+ADR-0011's terms review is recorded. Results are
 checked again for approved HTTPS domains, the exact UTC window, count and body
 size before persistence. With no key the search fails cleanly as
 `PROVIDER_NOT_CONFIGURED`.
@@ -149,6 +158,8 @@ date checks, domain checks, persistence, and deduplication work. It did not meet
 the usefulness gate: the expanded global pass covered only one of 12 eligible
 instruments and produced no taxonomy-actionable result. Keep ingestion disabled;
 see the [benchmark report](../../docs/testing/tavily-global-portfolio-benchmark-2026-10-29.md).
+ADR-0051's single-issuer design is implemented for the next benchmark, but it is
+not enablement evidence until the production usefulness gates pass.
 
 Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
 every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database

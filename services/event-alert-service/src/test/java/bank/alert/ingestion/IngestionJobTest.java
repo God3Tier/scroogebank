@@ -50,6 +50,8 @@ class IngestionJobTest {
         when(instrument.getTicker()).thenReturn("SYN");
         when(instrument.getIssuerName()).thenReturn("Synthetic Issuer");
         when(instrument.getSector()).thenReturn("Synthetic");
+        when(instrument.getSearchAliases()).thenReturn(List.of("Synthetic Issuer"));
+        when(instrument.getOfficialDomains()).thenReturn(List.of("sgx.com"));
         when(instrument.getId()).thenReturn("SYN-SGX-001");
         when(instrument.isActive()).thenReturn(true);
         Instrument inactive = mock(Instrument.class);
@@ -66,7 +68,9 @@ class IngestionJobTest {
 
         verify(coordinator).replay(org.mockito.ArgumentMatchers.eq(from),
                 org.mockito.ArgumentMatchers.eq(to), org.mockito.ArgumentMatchers.argThat(terms ->
-                        terms.size() == 1 && terms.getFirst().ticker().equals("SYN")));
+                        terms.size() == 1 && terms.getFirst().ticker().equals("SYN")
+                                && terms.getFirst().aliases().equals(List.of("Synthetic Issuer"))
+                                && terms.getFirst().officialDomains().equals(List.of("sgx.com"))));
     }
 
     private static IngestionProperties properties() {

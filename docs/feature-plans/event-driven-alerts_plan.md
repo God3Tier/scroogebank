@@ -248,7 +248,7 @@ The prerequisite ADRs must confirm them before infrastructure is created.
 | Amazon ECS on Fargate | Singapore | Run the Java 25 alert API and scheduled worker | Prefer one image with API and worker entry points; autoscaling and task sizing require measurement |
 | Amazon ECR | Singapore | Store the alert-service container image | Lifecycle policy removes unneeded images |
 | Amazon EventBridge Scheduler | Singapore | Start bounded discovery runs | Proposed cadence: every four hours; invoke an ECS task with retry limits |
-| Tavily HTTPS API | External provider | Search current public web sources | Four grouped searches/run, maximum ten results/search, restrictive domains/date window, local validation |
+| Tavily HTTPS API | External provider | Search current public web sources | Four single-issuer searches/run, maximum ten results/search, restrictive per-issuer domains/date window, local issuer/event validation |
 | Amazon Bedrock GPT-5.6 Luna through `bedrock-runtime` | Invoked from Singapore using Global CRIS | Classify public events and generate constrained briefs | Provider adapter, structured validation, public content only, explicit token/output caps |
 | Amazon RDS for PostgreSQL | Singapore | Persist search metadata, structured events, alerts, decisions, and processing watermarks | Whether to provision a service-owned instance or use another approved topology is an ADR and cost gate |
 | AWS Secrets Manager | Singapore | Store the Tavily API key | Worker-owned secret; never place its value in source or Terraform variables |
@@ -269,7 +269,7 @@ is an application dependency rather than an alert-processing service choice.
 ### FR-1 — News Ingestion
 
 - Invoke Tavily from a bounded Singapore scheduler. The
-  initial operating target is four grouped searches every four hours, not a query
+  initial operating target is four single-issuer searches every four hours, not a query
   per client or per instrument.
 - Derive the candidate instrument universe inside Singapore from distinct client
   holdings. An instrument must meet the configured minimum client count and
@@ -281,7 +281,7 @@ is an application dependency rather than an alert-processing service choice.
 - Pass a request-level publication window from the last successful watermark to
   the current run. Apply a small overlap and deduplicate results to avoid missing
   boundary events.
-- Request no more than ten results per grouped search for the MVP.
+- Request no more than ten results per issuer search for the MVP.
 - Store source name, canonical URL, publication time, retrieval time, title,
   permitted content or excerpt, and a deduplication hash.
 - Respect source terms, licensing, retention requirements, and rate limits.
@@ -557,10 +557,10 @@ and backups, any event infrastructure, vector storage, model usage, logging,
 metrics, alarms, data transfer, retention, and testing.
 
 AgentCore Web Search is currently priced at USD 7 per 1,000 queries. The proposed
-MVP schedule is four grouped searches every four hours:
+MVP schedule is four single-issuer searches every four hours:
 
 ```text
-4 search groups × 6 runs/day × 30 days = 720 queries/month
+4 issuer searches × 6 runs/day × 30 days = 720 queries/month
 720 / 1,000 × USD 7 = USD 5.04/month
 ```
 
@@ -713,6 +713,7 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 | EDA-D1-06 | Neo Jia Wen; Azeez reviews as scheduled-worker owner | Run-once worker and container image: in `WORKER` mode the service runs one ingestion window, starts no web server or timers, and exits with code 1 if the window failed; one non-root image for both modes; tests show each mode starts with the other off (ADR-0007) | `services/event-alert-service/` (`worker/`, `SchedulingConfiguration`, `Dockerfile`), service README, operations runbook | `task/event-driven-alerts/worker-runner` | EDA-D1-03 | In Progress — offline work complete: unit and Testcontainers tests pass, and the image was run in both modes locally; Azeez review pending. Found on the way: nothing turns source results into alerts in a worker run yet, and the monthly quota, budget stop and disables were in memory (fixed 2026-10-20 on `task/event-driven-alerts/persist-controls`, as was overlapping runs; all five gaps: [event-driven-alerts_gaps.md](event-driven-alerts_gaps.md)) | 2026-10-14 |
 | EDA-SEC-01 | Neo Jia Wen; Azeez and Hayyun review as feature and API owners | API mode accepts only Cognito access tokens issued to the CRM app client (`token_use` `access`, `client_id` = `COGNITO_APP_CLIENT_ID`), as ADR-0005 and ADR-0025 require of every service; until now it checked the issuer only, so an ID token, which carries `cognito:groups`, was accepted. API mode refuses to start without `COGNITO_APP_CLIENT_ID`; the crm stack sets it | `services/event-alert-service/` (`security/SecurityConfiguration`, `security/CognitoAccessTokenValidator`, `application.yml`, tests), service README, `infrastructure/terraform/stacks/crm/services.tf` | `task/base-features/review-fixes` | ADR-0005, ADR-0025 | Implemented; `mvn verify` passes (123 tests); not run against Cognito | 2026-10-16 |
 | EDA-D1-08 | Azeez; Hayyun required domain reviewer | Portfolio-aware search universe: inclusive 20%/two-holder commonality OR 50% per-account concentration, deterministic 32-instrument rotation, per-instrument successful coverage, redacted aggregate metrics, Terraform configuration, migration and operational documentation | `services/event-alert-service/`, `infrastructure/terraform/stacks/alert-worker/`, ADR-0016, schema/runbook/cost/AI docs | `task/event-driven-alerts/search-universe-thresholds` | PR #144 merged as `dedb306`; ADR-0005, ADR-0014, ADR-0016, ADR-0048, ADR-0050 | Implemented — persistent 20-client/16-real-instrument global fixture, 100-client threshold/rotation test, Flyway/PostgreSQL integration and Terraform checks. The six-call live Tavily benchmark passed technical controls but failed usefulness, so production ingestion remains disabled. PR #163 and Hayyun review remain | 2026-10-29 |
+| EDA-D1-09 | Azeez; Hayyun required source/domain reviewer | Make retrieval usable with single-issuer queries, governed aliases/official domains, deterministic issuer/event filtering, four-instrument rotation and a production usefulness gate | Event-alert ingestion, instrument migration, ADR-0051, source register and benchmark evidence | `task/event-driven-alerts/retrieval-usability` | EDA-D1-08 / PR #163; ADR-0011, ADR-0016, ADR-0032, ADR-0050 | In Progress — implementation stacked on PR #163; 18 planning calls selected the design, and 28 implementation calls reduced the live smoke sample to 7/7 manually actionable, issuer-correct results. Production remains disabled pending terms review and an independent Recall@10 benchmark | 2026-10-29 |
 
 ### 19.3 Execution Sequence for Two Developers
 

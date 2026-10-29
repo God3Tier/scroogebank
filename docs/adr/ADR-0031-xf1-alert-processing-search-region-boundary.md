@@ -77,7 +77,7 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
    - account sector exposures and public events;
    - alerts, decisions and the outbox.
 5. **Controls:**
-   - a search cap (the branch cap of 4 grouped searches per run, about 720 searches a month, within the 1,000-query monthly quota);
+   - a search cap (4 rotating single-issuer searches per run under ADR-0051, about 720 searches a month, within the 1,000-query monthly quota);
    - kill switches for search and model calls, whose state, the monthly counts and the estimated cost are kept in alerts-db so that every worker run and the API share them (see the amendment in ADR-0014);
    - one ingestion run at a time, enforced by a PostgreSQL advisory lock;
    - a separate Bedrock budget alert;

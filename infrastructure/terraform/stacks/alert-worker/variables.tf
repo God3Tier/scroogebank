@@ -68,6 +68,19 @@ variable "minimum_account_concentration" {
   }
 }
 
+variable "approved_news_domains" {
+  description = "Commercial news domains added to every issuer query. Keep empty until ADR-0011's terms review is recorded."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for domain in var.approved_news_domains : contains(["reuters.com", "cnbc.com", "ft.com"], domain)
+    ])
+    error_message = "approved_news_domains may contain only the reviewed candidate domains: reuters.com, cnbc.com, and ft.com."
+  }
+}
+
 variable "bedrock_region" {
   description = "Singapore source Region for the global Nova 2 Lite inference profile (ALERT_AI_BEDROCK_REGION). Global inference may process the request in another supported AWS Region."
   type        = string

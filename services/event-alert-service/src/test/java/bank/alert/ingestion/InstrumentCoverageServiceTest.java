@@ -23,13 +23,13 @@ class InstrumentCoverageServiceTest {
     private static final Instant TO = Instant.parse("2026-10-28T12:00:00Z");
 
     @Test
-    void selectsAtMostThirtyTwoAndResumesFromOldestCoverageWithOverlap() {
+    void selectsAtMostFourAndResumesFromOldestCoverageWithOverlap() {
         InstrumentSearchCoverageRepository repository = mock(InstrumentSearchCoverageRepository.class);
         List<String> ids = java.util.stream.IntStream.range(0, 40)
                 .mapToObj(i -> "I%02d".formatted(i)).toList();
-        List<String> selected = ids.subList(32, 40); // slot 124527 selects batch 1 of 2
+        List<String> selected = ids.subList(28, 32); // slot 124527 selects batch 7 of 10
         when(repository.findAllById(selected)).thenReturn(List.of(
-                new InstrumentSearchCoverage("I32", TO.minus(Duration.ofHours(3)), TO)));
+                new InstrumentSearchCoverage("I28", TO.minus(Duration.ofHours(3)), TO)));
         InstrumentCoverageService service = service(repository);
 
         InstrumentCoverageService.CoverageBatch batch = service.scheduled(ids, TO);
@@ -51,15 +51,15 @@ class InstrumentCoverageServiceTest {
     }
 
     @Test
-    void rotatesOneHundredEligibleInstrumentsAcrossFourSlots() {
+    void rotatesOneHundredEligibleInstrumentsAcrossTwentyFiveSlots() {
         InstrumentCoverageService service = service(mock(InstrumentSearchCoverageRepository.class));
         List<String> ids = IntStream.range(0, 100).mapToObj(i -> "I%03d".formatted(i)).toList();
 
-        List<List<String>> batches = IntStream.range(0, 4)
+        List<List<String>> batches = IntStream.range(0, 25)
                 .mapToObj(slot -> service.replay(ids, TO.plus(Duration.ofHours(4L * slot))))
                 .toList();
 
-        assertThat(batches).allSatisfy(batch -> assertThat(batch).hasSizeLessThanOrEqualTo(32));
+        assertThat(batches).allSatisfy(batch -> assertThat(batch).hasSize(4));
         assertThat(batches.stream().flatMap(List::stream).toList())
                 .containsExactlyInAnyOrderElementsOf(ids);
         assertThat(service.replay(ids, TO)).isEqualTo(batches.getFirst());

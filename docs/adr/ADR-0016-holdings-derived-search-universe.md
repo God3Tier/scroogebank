@@ -8,6 +8,10 @@
 - Related branch: `task/event-driven-alerts/search-universe-thresholds`
 - Supersedes: None
 
+> **2026-10-29:** Decision 6's 32-instrument grouped-query shape is superseded
+> by [ADR-0051](ADR-0051-single-issuer-search-and-relevance-gate.md). Holdings
+> eligibility and per-instrument coverage decisions remain in force.
+
 ## Context
 
 The initial ingestion implementation searched every active instrument in a

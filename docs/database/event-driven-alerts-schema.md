@@ -32,7 +32,7 @@ alert/public_event mutations 1--* audit_outbox
 | `alert_decision` | Immutable agent decision, actor subject, prior/new state, resulting alert version, note, idempotency key, and time. Unique actor/idempotency key. |
 | `alert_feedback` | Agent quality rating/reason/comment, actor, observed alert version, idempotency key, and time. Unique actor/idempotency key. |
 | `processing_watermark` | Last successful provider window with overlap and optimistic version. |
-| `instrument_search_coverage` | Last successful scheduled-search end and update time per active instrument; drives deterministic 32-instrument rotation. Replays never update it. |
+| `instrument_search_coverage` | Last successful scheduled-search end and update time per active instrument; drives deterministic four-instrument rotation. Replays never update it. |
 | `outbound_usage` | Search count, model tokens and estimated cost per UTC month, shared by the API and every worker run. |
 | `outbound_control` | The disabled reason for each outbound capability (`INGESTION`, `MODEL`), if any. |
 | `audit_outbox` | Event ID/type/version, redacted JSON payload, attempt/lease state, acknowledgement, and created time. Unique event ID. |
@@ -76,3 +76,8 @@ lookback. Failed, quota-blocked and replay runs leave it unchanged.
 the existing DBS reference, then upserts 20 opaque synthetic clients/accounts
 assigned round-robin to four synthetic agents. The matching deterministic
 holdings fixture contains no real PII and spans SGX, NASDAQ, NYSE, LSE, and HKEX.
+
+`V9__instrument_search_metadata.sql` adds JSON-array `search_aliases` and
+`official_domains` reference fields to `instrument` and seeds them for the
+synthetic global catalogue. They are public, governed query metadata only; no
+portfolio facts are stored in either field.

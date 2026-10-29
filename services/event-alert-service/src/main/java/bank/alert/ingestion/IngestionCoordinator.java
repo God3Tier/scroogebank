@@ -27,7 +27,7 @@ public class IngestionCoordinator {
 
     private final IngestionProperties properties;
     private final PublicSearchProvider provider;
-    private final GroupedQueryBuilder queryBuilder;
+    private final IssuerQueryBuilder queryBuilder;
     private final BoundedRetryExecutor retryExecutor;
     private final PublicUrlCanonicalizer canonicalizer;
     private final SearchRunRepository searchRuns;
@@ -39,7 +39,7 @@ public class IngestionCoordinator {
     private final Clock clock;
 
     public IngestionCoordinator(IngestionProperties properties, PublicSearchProvider provider,
-            GroupedQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
+            IssuerQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
             PublicUrlCanonicalizer canonicalizer, SearchRunRepository searchRuns,
             SourceResultRepository sourceResults, ProcessingWatermarkRepository watermarks,
             IngestionRunFinalizer finalizer, OutboundControlService outboundControls,
@@ -99,7 +99,8 @@ public class IngestionCoordinator {
 
     private IngestionOutcome executeLocked(Instant windowFrom, Instant windowTo,
             List<InstrumentSearchTerms> catalogue, boolean advanceWatermark) {
-        List<String> queries = queryBuilder.build(catalogue, properties.maxQueriesPerRun());
+        List<IssuerSearchQuery> queries = queryBuilder.build(
+                catalogue, properties.approvedDomains(), properties.maxQueriesPerRun());
         if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 
         Instant now = clock.instant();
@@ -135,11 +136,11 @@ public class IngestionCoordinator {
         int rejected = 0;
         Set<String> batchHashes = new HashSet<>();
 
-        for (String query : queries) {
+        for (IssuerSearchQuery query : queries) {
             RetryResult<List<PublicSearchResult>> response;
             try {
                 response = retryExecutor.execute(properties.maxAttempts(), () -> provider.search(
-                        new PublicSearchRequest(query, properties.approvedDomains(), windowFrom,
+                        new PublicSearchRequest(query.query(), query.approvedDomains(), windowFrom,
                                 windowTo, properties.maxResultsPerQuery())));
                 attempts += response.attempts();
                 run.recordSearchAttempts(response.attempts());
@@ -164,13 +165,17 @@ public class IngestionCoordinator {
             }
 
             for (PublicSearchResult result : response.value()) {
+                if (!query.accepts(result)) {
+                    rejected++;
+                    continue;
+                }
                 if (!insideWindow(result.publishedAt(), windowFrom, windowTo)) {
                     rejected++;
                     continue;
                 }
                 CanonicalPublicUrl url;
                 try {
-                    url = canonicalizer.canonicalize(result.url(), properties.approvedDomains());
+                    url = canonicalizer.canonicalize(result.url(), query.approvedDomains());
                 } catch (IllegalArgumentException exception) {
                     rejected++;
                     continue;

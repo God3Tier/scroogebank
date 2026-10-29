@@ -87,7 +87,7 @@ This keeps every already-proven part of the pipeline untouched — matching, cla
 
 ## Cost Impact
 
-Depends on the provider Azeez chooses and its pricing (typically a per-query or monthly-tier model for search APIs). To be benchmarked against ADR-0009's 1,000 searches/month and four grouped queries/run bound, and checked against [the event-driven-alerts budget](../cost/event-driven-alerts-budget.md) and the `crm-bedrock`/Bedrock-adjacent budgets in `bootstrap` before this goes live.
+Depends on the provider Azeez chooses and its pricing (typically a per-query or monthly-tier model for search APIs). To be benchmarked against ADR-0009's 1,000 searches/month and ADR-0051's four single-issuer queries/run bound, and checked against [the event-driven-alerts budget](../cost/event-driven-alerts-budget.md) and the `crm-bedrock`/Bedrock-adjacent budgets in `bootstrap` before this goes live.
 
 ## Operational Impact
 

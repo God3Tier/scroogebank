@@ -142,6 +142,14 @@ class SourcePipelineIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM synthetic_portfolio", Long.class)).isEqualTo(20);
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM instrument WHERE id <> 'SYN-SGX-001'", Long.class)).isEqualTo(16);
+        assertThat(jdbc.queryForObject("""
+                SELECT search_aliases @> '["DBS"]'::jsonb
+                FROM instrument WHERE id = 'SGX-D05'
+                """, Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject("""
+                SELECT official_domains @> '["sgx.com", "dbs.com"]'::jsonb
+                FROM instrument WHERE id = 'SGX-D05'
+                """, Boolean.class)).isTrue();
     }
 
     @Test

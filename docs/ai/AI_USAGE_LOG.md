@@ -573,3 +573,23 @@
 - Data and calls: Synthetic opaque clients only; six Tavily basic-search calls. No AWS or model calls, and no secret was logged or committed.
 - Verification: Focused fixture/universe tests pass. Three worker passes verified domain/date/persistence/deduplication controls; usefulness failed at 1/12 eligible-instrument coverage and zero actionable expanded-pass events, so ingestion remains disabled.
 - Human verification required: Review the fixture distribution, provider dashboard credit evidence, and the proposed query/provider redesign before enablement.
+
+# 2026-10-29 - Retrieval-usability redesign
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Compare bounded Tavily query/source variants and implement single-issuer retrieval with governed aliases/domains and deterministic pre-persistence filtering.
+- Files/components affected: event-alert ingestion/coverage/domain model, Flyway V9, alert-worker Terraform, ADR-0051, source register, benchmark/runbook/cost records.
+- Data and calls: Synthetic public instrument terms only; 18 Tavily basic-search calls reporting one credit each. No AWS/model call, private portfolio fact or secret output.
+- Verification: Focused query/filter/coordinator/rotation tests, full PostgreSQL Testcontainers verification, Terraform checks and the labelled 12-issuer production benchmark are required before enablement.
+- Human verification required: Hayyun source/domain review, commercial-publisher terms approval, PR review and a passing production retrieval gate.
+
+# 2026-10-29 - Retrieval-usability implementation smoke test
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Exercise the implemented query and local relevance gate across the multi-market portfolio, remove observed snippet noise and earnings previews, and confirm the tightened output.
+- Files/components affected: issuer query/filter implementation and tests; ADR-0051; feature-plan, benchmark and cost evidence.
+- Data and calls: Synthetic public instrument terms only; 28 Tavily basic-search calls (two 12-issuer passes and one four-issuer confirmation). No AWS/model call, private portfolio fact or secret output.
+- Verification: The final confirmation returned seven of seven manually actionable, issuer-correct results with zero cross-issuer result. This does not measure Recall@10, so production ingestion remains disabled.
+- Human verification required: Curate an independent known-event set, review source terms, verify provider billing, and approve through the normal PR path.

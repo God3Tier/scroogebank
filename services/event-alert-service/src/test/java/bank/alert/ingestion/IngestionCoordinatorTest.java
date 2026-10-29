@@ -132,6 +132,24 @@ class IngestionCoordinatorTest {
     }
 
     @Test
+    void rejectsCrossIssuerAndNonActionableResultsBeforePersistence() {
+        when(sourceResults.existsByCanonicalUrlHash(any())).thenReturn(false);
+        when(sourceResults.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(provider.search(any())).thenReturn(List.of(
+                new PublicSearchResult("r1", "https://www.sgx.com/news/1",
+                        "Apple earnings rise", Instant.parse("2026-09-28T03:00:00Z"), NOW, null),
+                new PublicSearchResult("r2", "https://www.sgx.com/news/2",
+                        "Synthetic Issuer launches a product", Instant.parse("2026-09-28T03:00:00Z"), NOW, null),
+                result("r3", "https://www.sgx.com/news/3")));
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.acceptedResults()).isOne();
+        assertThat(outcome.rejectedResults()).isEqualTo(2);
+        verify(sourceResults).saveAndFlush(any());
+    }
+
+    @Test
     void retainsTheWatermarkWhenTheProviderExhaustsRetries() {
         when(provider.search(any())).thenThrow(new SearchProviderException("TIMEOUT", true, "timeout"));
 
@@ -244,13 +262,13 @@ class IngestionCoordinatorTest {
                 "tavily", Duration.ofMinutes(5), Duration.ofHours(4),
                 4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
                 List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
-        return new IngestionCoordinator(properties, provider, new GroupedQueryBuilder(),
+        return new IngestionCoordinator(properties, provider, new IssuerQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,
                 watermarks, finalizer, outboundControls, runLock, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static PublicSearchResult result(String id, String url) {
-        return new PublicSearchResult(id, url, "Synthetic public announcement",
+        return new PublicSearchResult(id, url, "Synthetic Issuer earnings announcement",
                 Instant.parse("2026-09-28T03:00:00Z"), NOW, null);
     }
 }

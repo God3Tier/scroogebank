@@ -65,7 +65,7 @@ public class IngestionJob {
                 .sorted(Comparator.comparing(instrument -> instrument.getId()))
                 .map(instrument -> new CatalogueEntry(instrument.getId(), new InstrumentSearchTerms(
                         instrument.getTicker(), instrument.getIssuerName(), instrument.getSector(),
-                        List.of(), properties.eventTerms())))
+                        instrument.getSearchAliases(), properties.eventTerms(), instrument.getOfficialDomains())))
                 .toList();
     }
 
