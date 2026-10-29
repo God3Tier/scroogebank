@@ -23,6 +23,7 @@ import bank.alert.holdings.CurrentHoldingsReader;
 import bank.alert.holdings.DatabaseHoldingsProvider;
 import bank.alert.holdings.HoldingsReadRequest;
 import bank.alert.holdings.ValuationFreshnessPolicy;
+import bank.alert.operations.OperationalMetrics;
 import bank.alert.processing.AlertGenerationOutcome;
 import bank.alert.processing.AlertGenerationRequest;
 import bank.alert.processing.AlertGenerationService;
@@ -36,6 +37,8 @@ import bank.alert.scoring.ExposureResult;
 import bank.alert.scoring.MaterialityScorer;
 import bank.alert.service.AlertStateMachine;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -120,6 +123,8 @@ class CurrentHoldingsIntegrationTest {
     static class Config {
         @Bean StubDirectory stubDirectory() { return new StubDirectory(); }
         @Bean ObjectMapper objectMapper() { return new ObjectMapper().findAndRegisterModules(); }
+        @Bean MeterRegistry meterRegistry() { return new SimpleMeterRegistry(); }
+        @Bean OperationalMetrics operationalMetrics(MeterRegistry registry) { return new OperationalMetrics(registry); }
         @Bean Clock clock() { return Clock.fixed(NOW, ZoneOffset.UTC); }
     }
 
@@ -137,6 +142,8 @@ class CurrentHoldingsIntegrationTest {
     @Autowired AuditOutboxRepository outbox;
     @Autowired ObjectMapper mapper;
     @Autowired Clock clock;
+    @Autowired MeterRegistry meters;
+    @Autowired CurrentHoldingsReader reader;
 
     @BeforeEach
     void seed() {
@@ -273,6 +280,24 @@ class CurrentHoldingsIntegrationTest {
     }
 
     @Test
+    void aggregateGaugesDescribeTheBookWithoutIdentifiers() {
+        put(ACCOUNT_1, "key-45000001", 0, position("SYN-SGX-001", "10", "1.0"), position("SYN-SGX-002", "90", "1.0"));
+        put(ACCOUNT_2, "key-45000002", 0, position("SYN-SGX-001", "5", "1.0"));
+        jdbc.update("UPDATE current_position SET valued_at = ? WHERE instrument_id = 'SYN-SGX-002'",
+                java.sql.Timestamp.from(NOW.minusSeconds(80 * 3600)));
+        crm.accounts.put(ACCOUNT_2, new AccountContext(ACCOUNT_2, CLIENT_2, "INVESTMENT", "CLOSED", "SGD", null));
+
+        reader.read(NOW, null, null);
+
+        assertThat(meters.get("alert.holdings.portfolios.maintained").gauge().value()).isEqualTo(1.0);
+        assertThat(meters.get("alert.holdings.positions.expired").gauge().value()).isEqualTo(1.0);
+        assertThat(meters.get("alert.holdings.positions.missing").gauge().value()).isEqualTo(0.0);
+        assertThat(meters.get("alert.holdings.crm.links.invalid").gauge().value()).isEqualTo(1.0);
+        meters.getMeters().forEach(meter -> meter.getId().getTags().forEach(tag ->
+                assertThat(tag.getValue()).doesNotContain(CLIENT_1.toString(), ACCOUNT_1.toString(), "agent-")));
+    }
+
+    @Test
     void groupsAlertsIntoOneEventCardAndFollowsReassignment() {
         put(ACCOUNT_1, "key-50000001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
         put(ACCOUNT_2, "key-50000002", 0, position("SYN-SGX-001", "80", "1.0"), position("SYN-SGX-002", "20", "1.0"));
@@ -300,6 +325,16 @@ class CurrentHoldingsIntegrationTest {
         assertThat(alertList.findVisibleDetail(alertOfClient2, "agent-a", false)).isEmpty();
         assertThat(alertList.findVisibleDetail(alertOfClient2, "agent-b", false)).isPresent();
         assertThat(alertList.findVisible("agent-a", false, null, null, null, null, 10)).hasSize(1);
+
+        // the visibility change is audited once, with opaque identifiers only (plan section 8)
+        List<String> routing = jdbc.queryForList(
+                "SELECT payload::text FROM audit_outbox WHERE event_type = 'alert.routing-changed'", String.class);
+        assertThat(routing).hasSize(1);
+        assertThat(routing.getFirst()).contains(CLIENT_2.toString(), "agent-a", "agent-b", "REASSIGNED")
+                .doesNotContain("quantity", "valueSgd", "unitPrice");
+        ownership.refresh(); // nothing changed since: no second event
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM audit_outbox WHERE event_type = 'alert.routing-changed'", Long.class)).isOne();
 
         // the CRM cannot be reached: protected reads fail rather than reuse an old assignment
         crm.down = true;
@@ -357,7 +392,10 @@ class CurrentHoldingsIntegrationTest {
         put(ACCOUNT_1, "key-70000002", 1, position("SYN-SGX-001", "1", "1.0"), position("SYN-SGX-002", "99", "1.0"));
 
         assertThat(alertList.findVisibleDetail(alertId, "agent-a", false)).hasValueSatisfying(detail ->
-                assertThat(detail.portfolioPercentage()).isEqualByComparingTo("90.0000"));
+        {
+            assertThat(detail.portfolioPercentage()).isEqualByComparingTo("90.0000");
+            assertThat(detail.accountRef()).isEqualTo(ACCOUNT_1.toString());
+        });
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM portfolio_snapshot", Long.class)).isOne();
         assertThat(jdbc.queryForObject("SELECT portfolio_revision FROM holding_snapshot LIMIT 1", Long.class)).isOne();
     }

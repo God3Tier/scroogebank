@@ -33,7 +33,15 @@ public class HttpCrmDirectory implements CrmDirectory {
     private String token;
     private Instant tokenExpiry = Instant.EPOCH;
 
+    private final Runnable onFailure;
+
     public HttpCrmDirectory(CrmDirectoryProperties properties, Clock clock) {
+        this(properties, clock, () -> { });
+    }
+
+    /** @param onFailure called once for each lookup that fails, for aggregate metrics */
+    public HttpCrmDirectory(CrmDirectoryProperties properties, Clock clock, Runnable onFailure) {
+        this.onFailure = onFailure;
         properties.requireComplete();
         this.properties = properties;
         this.clock = clock;
@@ -45,16 +53,21 @@ public class HttpCrmDirectory implements CrmDirectory {
 
     @Override
     public Map<UUID, AccountContext> accounts(Collection<UUID> accountIds) {
-        Map<UUID, AccountContext> result = new LinkedHashMap<>();
-        for (List<UUID> batch : batches(accountIds)) {
-            for (JsonNode node : lookup(properties.accountDirectoryUrl(), batch)) {
-                UUID id = uuid(node, "id");
-                result.put(id, new AccountContext(id, uuid(node, "client_id"),
-                        text(node, "type"), text(node, "status"), text(node, "currency"),
-                        text(node, "owner_agent_id")));
+        try {
+            Map<UUID, AccountContext> result = new LinkedHashMap<>();
+            for (List<UUID> batch : batches(accountIds)) {
+                for (JsonNode node : lookup(properties.accountDirectoryUrl(), batch)) {
+                    UUID id = uuid(node, "id");
+                    result.put(id, new AccountContext(id, uuid(node, "client_id"),
+                            text(node, "type"), text(node, "status"), text(node, "currency"),
+                            text(node, "owner_agent_id")));
+                }
             }
+            return result;
+        } catch (DirectoryUnavailableException exception) {
+            onFailure.run();
+            throw exception;
         }
-        return result;
     }
 
     private JsonNode lookup(String url, List<UUID> ids) {

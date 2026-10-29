@@ -78,7 +78,7 @@ public class AlertQueryService {
                 summary.status(), summary.score(), summary.createdAt(), summary.version(),
                 new ExposureResponse(
                         row.amountSgd().setScale(2, RoundingMode.HALF_UP).toPlainString(),
-                        row.portfolioPercentage(), row.valuationAsOf(), row.freshness()),
+                        row.portfolioPercentage(), row.valuationAsOf(), row.freshness(), row.accountRef()),
                 repository.findFactors(alertId), List.of(row.evidence()),
                 row.briefing(), latestDecision);
     }

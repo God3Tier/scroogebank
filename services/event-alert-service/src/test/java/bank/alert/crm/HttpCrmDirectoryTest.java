@@ -125,6 +125,21 @@ class HttpCrmDirectoryTest {
     }
 
     @Test
+    void countsEachFailedLookupForTheAggregateMetric() {
+        java.util.concurrent.atomic.AtomicInteger failures = new java.util.concurrent.atomic.AtomicInteger();
+        HttpCrmDirectory directory = new HttpCrmDirectory(new CrmDirectoryProperties(base + "/accounts",
+                base + "/token", "alert-worker", "not-a-real-secret", "crm-accounts/alert-directory",
+                Duration.ofSeconds(2)), Clock.systemUTC(), failures::incrementAndGet);
+        accountStatus = 503;
+
+        assertThatThrownBy(() -> directory.accounts(List.of(ACCOUNT))).isInstanceOf(DirectoryUnavailableException.class);
+        accountStatus = 200;
+        directory.accounts(List.of(ACCOUNT));
+
+        assertThat(failures).hasValue(1);
+    }
+
+    @Test
     void requiresCompleteHttpsConfigurationAndNeverDowngradesToHttp() {
         assertThatThrownBy(() -> new HttpCrmDirectory(
                 new CrmDirectoryProperties("", "", "", "", "", null), Clock.systemUTC()))

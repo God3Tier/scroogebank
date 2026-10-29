@@ -1,5 +1,6 @@
 package bank.alert.config;
 
+import bank.alert.operations.OperationalMetrics;
 import bank.alert.crm.CrmDirectory;
 import bank.alert.crm.CrmDirectoryProperties;
 import bank.alert.crm.HttpCrmDirectory;
@@ -35,7 +36,7 @@ public class AlertServiceConfiguration {
      */
     @Bean
     @ConditionalOnProperty(name = "alert.holdings.mode", havingValue = "database")
-    CrmDirectory crmDirectory(CrmDirectoryProperties properties, Clock clock) {
-        return new HttpCrmDirectory(properties, clock);
+    CrmDirectory crmDirectory(CrmDirectoryProperties properties, Clock clock, OperationalMetrics metrics) {
+        return new HttpCrmDirectory(properties, clock, metrics::directoryFailure);
     }
 }

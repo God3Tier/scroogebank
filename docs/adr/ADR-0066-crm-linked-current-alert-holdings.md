@@ -128,5 +128,9 @@ and Docker/Java/Go/UI/contract/Terraform checks.
   transaction import's `crm-accounts/lookup`, so neither token opens the other's route.
 - **One holdings switch.** In Terraform, `alert_holdings_mode` is read by both the API and the worker. Database
   mode needs the custom domain so the directory is reached over HTTPS.
-- **Not covered here:** metrics for portfolios and directory failures, audit of routing changes (the CRM audits a
-  reassignment), and a live AWS run.
+- **Routing audit and metrics.** `alert.routing-changed` is written transactionally when the ownership refresh
+  sees a client's agent change (fails closed if the outbox is full). Aggregate gauges and a directory-failure
+  counter carry no identifiers (operations runbook). Alert detail returns the account that produced the score
+  (`exposure.accountRef`). A test captures the real Tavily request and the model requests built from private
+  portfolios and checks for private values.
+- **Not covered here:** a live AWS run.

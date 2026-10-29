@@ -546,9 +546,12 @@ Deviations from this plan, on purpose:
    makes) was exercised directly; client-service and its documents/encryption dependencies were not started.
 4. **Alert generation in a running process**: needs a search provider and a model, which stay off by default.
    Generation, grouping, scoring and actions are covered by the PostgreSQL integration tests only.
-5. **Not implemented from section 8:** audit events for a routing (reassignment) change, which the CRM audits
-   itself; the aggregate operational metrics (maintained portfolios, missing holdings, expired valuations,
-   invalid CRM links, directory failures, pending deferrals); and the check that captured search and model
-   requests carry no private fields (the search universe exposes only instrument IDs by construction).
-6. **Small gaps:** alert detail does not name the selected account when a client holds an instrument in two
-   accounts; the agent-event list has no paging beyond `limit`.
+5. **Section 8, now done (2026-10-30):** the `alert.routing-changed` audit event, written in the same transaction
+   as the ownership refresh that sees the change (fails closed when the outbox is full; test in
+   `CurrentHoldingsIntegrationTest`); the aggregate gauges and directory-failure counter (maintained portfolios,
+   missing and expired positions, invalid CRM links, directory failures; pending deferrals already existed;
+   test `aggregateGaugesDescribeTheBookWithoutIdentifiers`); and the captured-request privacy check
+   (`OutboundPrivacyTest` drives the real Tavily client and classifier/briefing generator and searches every
+   request for client, account, agent, quantity and valuation values).
+6. **Small gaps:** the agent-event list has no paging beyond `limit`. Alert detail now names the account that
+   produced the score (`exposure.accountRef`, in `docs/api/openapi.yaml`); the frontend does not display it yet.

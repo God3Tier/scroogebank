@@ -1,6 +1,13 @@
 package bank.alert.crm;
 
+import bank.alert.domain.AuditOutbox;
+import bank.alert.repository.AuditOutboxRepository;
+import bank.alert.service.AuditUnavailableException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,11 +37,19 @@ public class CurrentOwnership {
     private final JdbcTemplate jdbc;
     private final ObjectProvider<CrmDirectory> directory;
     private final Clock clock;
+    private final AuditOutboxRepository outbox;
+    private final ObjectMapper mapper;
+    private final int maxPendingAuditEvents;
 
-    public CurrentOwnership(JdbcTemplate jdbc, ObjectProvider<CrmDirectory> directory, Clock clock) {
+    public CurrentOwnership(JdbcTemplate jdbc, ObjectProvider<CrmDirectory> directory, Clock clock,
+            AuditOutboxRepository outbox, ObjectMapper mapper,
+            @Value("${alert.audit.max-pending:10000}") int maxPendingAuditEvents) {
+        this.maxPendingAuditEvents = maxPendingAuditEvents;
         this.jdbc = jdbc;
         this.directory = directory;
         this.clock = clock;
+        this.outbox = outbox;
+        this.mapper = mapper;
     }
 
     @Transactional
@@ -67,14 +82,44 @@ public class CurrentOwnership {
             }
         }
         Timestamp now = Timestamp.from(clock.instant());
+        Map<String, String> previous = new java.util.HashMap<>();
+        jdbc.query("SELECT client_ref, agent_subject FROM client_assignment", rs -> {
+            previous.put(rs.getString("client_ref"), rs.getString("agent_subject"));
+        });
         for (String ref : refs) {
             java.util.Set<String> agreed = owners.getOrDefault(ref, java.util.Set.of());
             String owner = agreed.size() == 1 ? agreed.iterator().next() : null;
+            // The CRM audits the reassignment itself; this records that alert visibility followed it.
+            if (previous.containsKey(ref) && !java.util.Objects.equals(previous.get(ref), owner)) {
+                auditRoutingChange(ref, previous.get(ref), owner, now.toInstant());
+            }
             jdbc.update("""
                     INSERT INTO client_assignment (client_ref, agent_subject, checked_at) VALUES (?, ?, ?)
                     ON CONFLICT (client_ref) DO UPDATE
                        SET agent_subject = EXCLUDED.agent_subject, checked_at = EXCLUDED.checked_at
                     """, ref, owner, now);
+        }
+    }
+
+    private void auditRoutingChange(String clientRef, String before, String after, java.time.Instant now) {
+        // Opaque identifiers only: no names, quantities or valuations. Fails the refresh (and so the
+        // read or mutation that needed it) rather than letting a routing change go unrecorded.
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("clientId", clientRef);
+        payload.put("actorSubject", "event-alert-service");
+        payload.put("actorRole", "SERVICE");
+        payload.put("previousAgentSubject", before);
+        payload.put("currentAgentSubject", after);
+        payload.put("outcome", after == null ? "UNASSIGNED" : before == null ? "ASSIGNED" : "REASSIGNED");
+        payload.put("occurredAt", now.toString());
+        try {
+            if (outbox.countByStatusIn(List.of("PENDING", "FAILED")) >= maxPendingAuditEvents) {
+                throw new AuditUnavailableException("audit outbox is at capacity");
+            }
+            outbox.saveAndFlush(new AuditOutbox(UUID.randomUUID(), "alert.routing-changed", 1,
+                    mapper.writeValueAsString(payload), now));
+        } catch (DataAccessException | JsonProcessingException exception) {
+            throw new AuditUnavailableException("durable audit persistence is unavailable", exception);
         }
     }
 

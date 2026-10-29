@@ -68,7 +68,7 @@ class AlertQueryServiceTest {
         when(repository.findVisibleDetail(FIRST_ID, "syn-agent-001", false))
                 .thenReturn(Optional.of(new AlertListRepository.DetailRow(
                         summary, new BigDecimal("2500.0000"), new BigDecimal("25.0000"),
-                        CREATED_AT, ValuationFreshness.FRESH, evidence, briefing)));
+                        CREATED_AT, ValuationFreshness.FRESH, "syn-account-001", evidence, briefing)));
         when(repository.findFactors(FIRST_ID)).thenReturn(List.of(
                 new ExplanationFactorResponse(
                         "EXPOSURE", new BigDecimal("35.00"), "Synthetic exposure factor")));

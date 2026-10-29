@@ -247,6 +247,15 @@ current agent, refreshed on every list, detail, decision and event action (at mo
 is a short window between that check and the commit in which a reassignment is
 not seen; it is not an atomic cross-service revocation.
 
+Audit and metrics. Besides `alert.portfolio-replaced` and `alert.portfolio-cleared`, a change of a
+client's current agent seen during that refresh is recorded as `alert.routing-changed` (opaque client ID,
+previous and current agent subject, outcome; no quantities or valuations). If the audit outbox is at capacity or
+cannot be written, the refresh and the call that needed it fail. Aggregate gauges, with no identifiers in any
+label: `alert.holdings.portfolios.maintained`, `alert.holdings.positions.missing`,
+`alert.holdings.positions.expired`, `alert.holdings.crm.links.invalid` (set by each full read, which the search
+universe makes every run), the counter `alert.holdings.crm.directory.failures`, and the existing
+`alert.search.batch.deferred` for pending-source deferrals.
+
 Rollback: set `ALERT_HOLDINGS_MODE=fixture` and stop portfolio edits. All recorded
 portfolios, snapshots and audit events remain. Do not restore a former agent's
 access by hand; correct the assignment in the CRM.

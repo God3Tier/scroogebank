@@ -696,9 +696,10 @@ components:
     Exposure:
       type: object
       additionalProperties: false
-      required: [amountSgd, portfolioPercentage, valuationAsOf, freshness]
+      required: [amountSgd, portfolioPercentage, valuationAsOf, freshness, accountRef]
       properties:
         amountSgd: {type: string, pattern: '^[0-9]+\.[0-9]{2}$'}
+        accountRef: {type: string, maxLength: 128, description: The account whose holding produced this alert's score (the highest-scoring account when a client holds the instrument in several)}
         portfolioPercentage: {type: number, minimum: 0, maximum: 100}
         valuationAsOf: {type: string, format: date-time}
         freshness: {$ref: '#/components/schemas/ValuationFreshness'}

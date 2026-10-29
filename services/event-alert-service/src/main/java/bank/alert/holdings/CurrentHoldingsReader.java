@@ -4,6 +4,7 @@ import bank.alert.crm.AccountContext;
 import bank.alert.crm.CrmDirectory;
 import bank.alert.domain.HoldingSnapshot;
 import bank.alert.domain.ValuationFreshness;
+import bank.alert.operations.OperationalMetrics;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -36,12 +37,14 @@ public class CurrentHoldingsReader {
     private final JdbcTemplate jdbc;
     private final CrmDirectory directory;
     private final ValuationFreshnessPolicy freshnessPolicy;
+    private final OperationalMetrics metrics;
 
     public CurrentHoldingsReader(JdbcTemplate jdbc, CrmDirectory directory,
-            ValuationFreshnessPolicy freshnessPolicy) {
+            ValuationFreshnessPolicy freshnessPolicy, OperationalMetrics metrics) {
         this.jdbc = jdbc;
         this.directory = directory;
         this.freshnessPolicy = freshnessPolicy;
+        this.metrics = metrics;
     }
 
     public record AccountPortfolio(UUID accountId, UUID clientId, String agentSubject, long revision,
@@ -54,7 +57,10 @@ public class CurrentHoldingsReader {
      */
     public List<AccountPortfolio> read(Instant asOf, Set<String> holdingAnyOf, String agentSubject) {
         List<Row> rows = loadRows(holdingAnyOf);
-        if (rows.isEmpty()) return List.of();
+        if (rows.isEmpty()) {
+            if (holdingAnyOf == null && agentSubject == null) metrics.portfolios(0, 0, 0, 0);
+            return List.of();
+        }
 
         Map<UUID, AccountContext> accounts = directory.accounts(
                 rows.stream().map(Row::accountId).distinct().toList());
@@ -65,14 +71,22 @@ public class CurrentHoldingsReader {
                 byAccount.computeIfAbsent(row.accountId(), id -> new ArrayList<>()).add(row);
             }
         }
-        if (byAccount.isEmpty()) return List.of();
-
         List<AccountPortfolio> result = new ArrayList<>();
         for (List<Row> accountRows : byAccount.values()) {
             String owner = accounts.get(accountRows.getFirst().accountId()).ownerAgentSubject();
             if (owner == null || owner.isBlank()) continue;
             if (agentSubject != null && !agentSubject.equals(owner)) continue;
             result.add(toPortfolio(accountRows, owner, asOf));
+        }
+        if (holdingAnyOf == null && agentSubject == null) {
+            // A full read describes the whole book, so it is the one that feeds the aggregate gauges.
+            long distinctAccounts = rows.stream().map(Row::accountId).distinct().count();
+            List<ValuationFreshness> all = result.stream().flatMap(p -> p.positions().stream())
+                    .map(HoldingSnapshot::getFreshness).toList();
+            metrics.portfolios(result.size(),
+                    (int) all.stream().filter(f -> f == ValuationFreshness.MISSING).count(),
+                    (int) all.stream().filter(f -> f == ValuationFreshness.EXPIRED).count(),
+                    (int) (distinctAccounts - byAccount.size()));
         }
         return result;
     }

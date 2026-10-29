@@ -85,7 +85,7 @@ public class AlertListRepository {
         StringBuilder sql = new StringBuilder("""
                 SELECT a.id, a.client_ref, a.instrument_id, sr.title, a.status,
                        a.score, a.created_at, a.version,
-                       hs.value_sgd, hs.valued_at, hs.freshness,
+                       hs.value_sgd, hs.valued_at, hs.freshness, hs.account_ref,
                        ROUND(hs.value_sgd * 100 / NULLIF((
                            SELECT SUM(h2.value_sgd)
                              FROM holding_snapshot h2
@@ -138,6 +138,7 @@ public class AlertListRepository {
                     resultSet.getBigDecimal("portfolio_percentage"),
                     resultSet.getTimestamp("valued_at").toInstant(),
                     ValuationFreshness.valueOf(resultSet.getString("freshness")),
+                    resultSet.getString("account_ref"),
                     new EvidenceResponse(
                             resultSet.getString("title"),
                             resultSet.getString("canonical_url"),
@@ -169,6 +170,7 @@ public class AlertListRepository {
             BigDecimal portfolioPercentage,
             Instant valuationAsOf,
             ValuationFreshness freshness,
+            String accountRef,
             EvidenceResponse evidence,
             BriefingResponse briefing) {
     }
