@@ -29,6 +29,28 @@ class IssuerQueryBuilderTest {
     }
 
     @Test
+    void buildsQueriesForPreviouslyUnseenTickersAcrossMarkets() {
+        List<IssuerSearchQuery> queries = builder.build(List.of(
+                terms("7203", "Toyota Motor Corporation", List.of("Toyota"),
+                        List.of("global.toyota", "jpx.co.jp")),
+                terms("BHP", "BHP Group Limited", List.of("BHP"),
+                        List.of("bhp.com", "asx.com.au")),
+                terms("SAP", "SAP SE", List.of(), List.of("sap.com")),
+                terms("TSM", "Taiwan Semiconductor Manufacturing Company Limited",
+                        List.of("TSMC", "Taiwan Semiconductor"), List.of("tsmc.com", "nyse.com"))),
+                List.of("reuters.com"), 4);
+
+        assertThat(queries).hasSize(4);
+        assertThat(queries.get(0).query()).contains("7203", "Toyota Motor Corporation", "Toyota");
+        assertThat(queries.get(0).approvedDomains())
+                .containsExactly("global.toyota", "jpx.co.jp", "reuters.com");
+        assertThat(queries.get(1).query()).contains("BHP", "BHP Group Limited");
+        assertThat(queries.get(2).query()).contains("SAP", "SAP SE");
+        assertThat(queries.get(3).issuerTerms()).containsExactly(
+                "Taiwan Semiconductor Manufacturing Company Limited", "TSMC", "Taiwan Semiconductor");
+    }
+
+    @Test
     void refusesToSilentlyDropMoreInstrumentsThanQueries() {
         List<InstrumentSearchTerms> catalogue = IntStream.range(0, 5)
                 .mapToObj(index -> new InstrumentSearchTerms("T" + index, "Issuer " + index,
@@ -38,5 +60,11 @@ class IssuerQueryBuilderTest {
         assertThatThrownBy(() -> builder.build(catalogue, List.of("reuters.com"), 4))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("bounded query capacity");
+    }
+
+    private static InstrumentSearchTerms terms(
+            String ticker, String issuer, List<String> aliases, List<String> domains) {
+        return new InstrumentSearchTerms(ticker, issuer, "Test sector", aliases,
+                List.of("earnings", "appointment"), domains);
     }
 }

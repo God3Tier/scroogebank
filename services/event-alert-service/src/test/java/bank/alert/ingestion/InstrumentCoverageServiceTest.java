@@ -28,14 +28,30 @@ class InstrumentCoverageServiceTest {
         List<String> ids = java.util.stream.IntStream.range(0, 40)
                 .mapToObj(i -> "I%02d".formatted(i)).toList();
         List<String> selected = ids.subList(28, 32); // slot 124527 selects batch 7 of 10
-        when(repository.findAllById(selected)).thenReturn(List.of(
-                new InstrumentSearchCoverage("I28", TO.minus(Duration.ofHours(3)), TO)));
+        when(repository.findAllById(selected)).thenReturn(selected.stream()
+                .map(id -> new InstrumentSearchCoverage(id, TO.minus(Duration.ofHours(3)), TO)).toList());
         InstrumentCoverageService service = service(repository);
 
         InstrumentCoverageService.CoverageBatch batch = service.scheduled(ids, TO);
 
         assertThat(batch.instrumentIds()).containsExactlyElementsOf(selected);
         assertThat(batch.windowFrom()).isEqualTo(TO.minus(Duration.ofHours(3)).minus(Duration.ofMinutes(5)));
+    }
+
+    @Test
+    void mixedBatchPreservesInitialLookbackForNewInstrumentAndOlderCoverageForReturningOne() {
+        InstrumentSearchCoverageRepository repository = mock(InstrumentSearchCoverageRepository.class);
+        List<String> ids = List.of("NEW", "RETURNING");
+        when(repository.findAllById(ids)).thenReturn(List.of(
+                new InstrumentSearchCoverage("RETURNING", TO.minus(Duration.ofHours(1)), TO)));
+        InstrumentCoverageService service = service(repository);
+
+        assertThat(service.scheduled(ids, TO).windowFrom()).isEqualTo(TO.minus(Duration.ofHours(4)));
+
+        when(repository.findAllById(ids)).thenReturn(List.of(
+                new InstrumentSearchCoverage("RETURNING", TO.minus(Duration.ofHours(12)), TO)));
+        assertThat(service.scheduled(ids, TO).windowFrom())
+                .isEqualTo(TO.minus(Duration.ofHours(12)).minus(Duration.ofMinutes(5)));
     }
 
     @Test

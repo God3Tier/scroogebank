@@ -603,3 +603,26 @@
 - Data and calls: Synthetic portfolio/public issuer terms only; 28 Tavily basic calls, including 12 calls whose local metrics were discarded after an evaluator error. No AWS/model call, private portfolio fact or secret output.
 - Verification: 449 Maven tests passed across six modules; six Terraform tests passed; the valid 12-issuer pass measured 7/8 Recall@10, 8/8 manually actionable precision, zero cross-issuer results and sub-30-second calls; the packaged worker applied Flyway V1-V9 and completed four live searches against disposable PostgreSQL.
 - Human verification required: Independently curate the historical reference set, review publisher terms, reconcile provider-dashboard credits, and complete PR/ADR review before enablement.
+
+# 2026-10-29 - Unseen-instrument and 30-user retrieval check
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Verify that portfolio selection and issuer retrieval generalize beyond the seeded tickers and users, then repair accuracy issues found by the live check.
+- Files/components affected: portfolio-universe/query/worker tests, relevance preview filter, ingestion YAML, service README, benchmark/cost/feature-plan evidence.
+- Data and calls: Synthetic users and public issuer terms only; 12 Tavily basic-search calls for Toyota, BHP, SAP and TSMC. No AWS/model call, private portfolio fact or secret output.
+- Verification: The 30-user test covered common, concentrated and below-threshold instruments; the live check found one completed TSMC profit event, rejected issuers with no qualifying event, and exposed an `expected to report` preview that is now blocked. Focused and full service verification are recorded with the change.
+- Human verification required: Review new-instrument metadata governance, publisher terms and provider-dashboard credits before enablement; this smoke test is not an independent recall set.
+
+# 2026-10-29 - Retrieval feature follow-up code review
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Continue verification and review the complete retrieval-to-matching path for new instruments and other users.
+- Files/components affected: deterministic instrument matcher, mixed-batch coverage calculation, regression and PostgreSQL integration tests, feature plan, runbook and benchmark evidence.
+- Verification: New tests first reproduced ignored issuer aliases and shortened initial lookbacks in mixed batches; both now pass with fixes. Corrected the previous live-call description to identify its approximate PowerShell query/filter rather than claim execution of the Java path. No further Tavily, AWS or model calls were made.
+- Human verification required: Review alias governance and the test evidence; independent retrieval labels and commercial-source terms remain prerequisites for enablement.
+
+The review also found that provider retries bypassed monthly search accounting.
+Each retry now reserves quota before the external call; regression tests cover
+retry exhaustion and refusal to retry after the last available reservation.

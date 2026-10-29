@@ -81,6 +81,21 @@ class InstrumentMatcherTest {
     }
 
     @Test
+    void approvedAliasesMatchNewInstrumentsWithoutTheirTickerOrFullLegalName() {
+        Instrument tsmc = instrument("NYSE-TSM", "TSM",
+                "Taiwan Semiconductor Manufacturing Company Limited", "Semiconductors", true);
+        when(tsmc.getSearchAliases()).thenReturn(List.of("TSMC", "Taiwan Semiconductor"));
+
+        assertThat(matcher.match("TSMC posts record profit", null, List.of(tsmc)))
+                .singleElement().satisfies(match -> {
+                    assertThat(match.instrumentId()).isEqualTo("NYSE-TSM");
+                    assertThat(match.reason()).isEqualTo("ISSUER");
+                    assertThat(match.relevance()).isEqualByComparingTo("0.80");
+                });
+        assertThat(matcher.match("ATSMC launches a product", null, List.of(tsmc))).isEmpty();
+    }
+
+    @Test
     void inactiveInstrumentsAreNeverMatchedAndUnnamedOnesAreNeverGuessed() {
         assertThat(matcher.match("Old Holdings OLD1 news", null, master)).isEmpty();
         assertThat(matcher.match("A quiet day on the markets", "Nothing happened.", master)).isEmpty();

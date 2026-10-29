@@ -195,6 +195,22 @@ class SourcePipelineIntegrationTest {
     }
 
     @Test
+    void aliasOnlySourceReachesBothHoldingUsersThroughTheRealMatcher() {
+        jdbc.update("UPDATE instrument SET search_aliases = '[\"Approved Test Alias\"]'::jsonb WHERE id = 'SYN-SGX-001'");
+        SourceResult source = store("Approved Test Alias posts earnings",
+                "Quarterly profit increased after the public results announcement.", "d");
+
+        PipelineSummary summary = pipeline.processPending();
+
+        assertThat(summary.noMatch()).isZero();
+        assertThat(summary.alertsCreated()).isEqualTo(2);
+        assertThat(alerts.findAll()).extracting(Alert::getAssignedAgentSubject)
+                .containsExactlyInAnyOrder("syn-agent-001", "syn-agent-002");
+        assertThat(sourceResults.findById(source.getId()).orElseThrow().getProcessingOutcome())
+                .isEqualTo("ALERTS_CREATED");
+    }
+
+    @Test
     void aSourceTheModelCouldNotHandleStaysPendingAndIsRetriedLater() {
         SourceResult source = store("SYN1 posts synthetic earnings", "Synthetic Issuer One reported earnings.", "a");
         classification.set(new ClassificationOutcome(ClassificationStatus.ABSTAINED, null, "PROVIDER_FAILURE", 2));

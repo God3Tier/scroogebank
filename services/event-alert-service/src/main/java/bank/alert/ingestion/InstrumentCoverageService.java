@@ -36,8 +36,9 @@ public class InstrumentCoverageService {
         List<String> ids = select(sortedIds, windowTo);
         Map<String, InstrumentSearchCoverage> coverage = repository.findAllById(ids).stream()
                 .collect(Collectors.toMap(InstrumentSearchCoverage::getInstrumentId, Function.identity()));
-        Instant oldest = ids.stream().map(coverage::get).filter(java.util.Objects::nonNull)
-                .map(InstrumentSearchCoverage::getLastSuccessfulTo).min(Instant::compareTo)
+        Instant oldest = ids.stream().map(id -> coverage.containsKey(id)
+                        ? coverage.get(id).getLastSuccessfulTo()
+                        : windowTo.minus(properties.initialLookback())).min(Instant::compareTo)
                 .orElseGet(() -> windowTo.minus(properties.initialLookback()));
         metrics.searchBatch(ids.size(), sortedIds.size() - ids.size(),
                 Math.max(0, Duration.between(oldest, windowTo).toSeconds()));
@@ -45,9 +46,10 @@ public class InstrumentCoverageService {
                 && !coverage.get(id).getLastSuccessfulTo().isBefore(windowTo))) {
             return new CoverageBatch(List.of(), windowTo, windowTo);
         }
-        Instant from = coverage.isEmpty()
-                ? windowTo.minus(properties.initialLookback())
-                : oldest.minus(properties.overlap());
+        Instant from = ids.stream().map(id -> coverage.containsKey(id)
+                        ? coverage.get(id).getLastSuccessfulTo().minus(properties.overlap())
+                        : windowTo.minus(properties.initialLookback())).min(Instant::compareTo)
+                .orElse(windowTo.minus(properties.initialLookback()));
         return new CoverageBatch(ids, from, windowTo);
     }
 

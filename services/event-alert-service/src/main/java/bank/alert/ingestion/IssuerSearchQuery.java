@@ -15,7 +15,7 @@ public record IssuerSearchQuery(
 
     private static final Set<String> NON_EVENT_TITLE_PHRASES = Set.of(
             "ahead of earnings", "earnings playbook", "earnings season",
-            "key to gauging", "set to report", "will report", "will land",
+            "key to gauging", "set to report", "expected to report", "will report", "will land",
             "what to expect", "what to watch");
 
     public IssuerSearchQuery {

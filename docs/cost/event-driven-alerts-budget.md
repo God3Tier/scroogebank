@@ -57,10 +57,19 @@ pass measured 7/8 Recall@10 and 8/8 manually actionable precision. Tavily did no
 return a usage-credit field in these responses, so the provider dashboard remains
 the billing source of truth; the discarded calls must still be counted there.
 
+The unseen-instrument extensibility check made another 12 basic-search calls for
+Toyota, BHP, SAP and TSMC and no AWS or model calls. The API response again did
+not report usage credits, so all 12 must be reconciled in the Tavily dashboard.
+
 ## Enforced application controls
 
 - Ingestion and model access default to disabled.
-- Search use is limited to 4 reservations per run and 1,000 per UTC month.
+- Search selection is limited to four issuer queries per run and search attempts
+  consume a shared quota of 1,000 per UTC month.
+- Four issuer queries are selected per run; retries can add up to two attempts
+  per query. Each retry now reserves one additional search from the same shared
+  1,000-per-month quota before calling Tavily. Initial batch reservations are
+  conservative and are not refunded when a run fails before every query starts.
 - Model use is limited to 2,000 tokens per invocation and 200,000 per UTC month.
 - Reaching the USD 25 estimated monthly threshold disables ingestion and model
   access together.

@@ -10,13 +10,16 @@ The default runtime is offline and deterministic. It contains no provider
 credentials and makes no outbound provider calls unless an adapter and its
 independent enable switch are explicitly configured. Synthetic holdings are loaded
 from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
+Creating a CRM user or inserting a database holding does not automatically change
+this snapshot; live CRM holdings synchronization is not implemented by this MVP.
 
 The ingestion core is provider-neutral and outbound-disabled by default with
 `ALERT_INGESTION_ENABLED=false`. It builds at most four single-issuer public-market
 queries from instruments held by enough distinct clients, requests at most ten
 results per query, applies a five-minute watermark
-overlap, retries retryable provider failures at most three times, validates the
-approved-domain boundary, canonicalizes and deduplicates URLs, and advances the
+overlap, makes at most three attempts per query with monthly quota reserved for
+each attempt, validates the approved-domain boundary, canonicalizes and
+deduplicates URLs, and advances the
 watermark only after the complete run succeeds. Retrying a partially persisted
 failed window derives its final result count from durable rows, preserving
 idempotent replay accounting. Historical replay is restricted to `WORKER` mode,
@@ -125,7 +128,7 @@ without searching or using quota, whether it is scheduled, manual or a replay.
 After each window the worker runs a source-to-alert pipeline ([ADR-0049](../../docs/adr/ADR-0049-alert-source-to-alert-pipeline.md)).
 It takes the oldest stored sources not yet finished (at most
 `ALERT_PIPELINE_MAX_SOURCES_PER_RUN`, default 50), matches each to the
-instrument master by exact ticker, issuer or sector name, classifies it once, and
+instrument master by exact ticker, issuer name, approved issuer alias or sector name, classifies it once, and
 creates the alerts for every agent whose clients hold an affected instrument.
 Severity comes from a fixed table by event type. It does nothing while
 `ALERT_AI_ENABLED=false`, and a source the model cannot handle yet stays pending
@@ -143,6 +146,12 @@ checked again for approved HTTPS domains, the exact UTC window, count and body
 size before persistence. With no key the search fails cleanly as
 `PROVIDER_NOT_CONFIGURED`.
 
+The search code is not limited to the seeded tickers or exchanges. A new
+instrument becomes searchable when its active instrument-master row supplies a
+stable ID, ticker, legal issuer name, approved aliases and official domains and
+the holdings-derived thresholds select it. An unknown holding ID or an inactive
+row is deliberately skipped rather than searched with guessed metadata.
+
 An operator replays a past window by starting a one-off worker task with
 `ALERT_WORKER_REPLAY_FROM`, `ALERT_WORKER_REPLAY_TO`, `ALERT_WORKER_REPLAY_OPERATOR`
 and `ALERT_WORKER_REPLAY_CORRELATION_ID`. All four are required; the worker writes
@@ -153,13 +162,14 @@ cannot. A replay never moves the scheduler watermark.
 worker exits (namespace `ALERT_CLOUDWATCH_NAMESPACE`, default `CRM/EventAlerts`).
 It is off by default because every distinct metric and tag combination is billed.
 
-The 2026-10-29 local real-key benchmark proved that the worker/Tavily transport,
-date checks, domain checks, persistence, and deduplication work. It did not meet
-the usefulness gate: the expanded global pass covered only one of 12 eligible
-instruments and produced no taxonomy-actionable result. Keep ingestion disabled;
-see the [benchmark report](../../docs/testing/tavily-global-portfolio-benchmark-2026-10-29.md).
-ADR-0051's single-issuer design is implemented for the next benchmark, but it is
-not enablement evidence until the production usefulness gates pass.
+The 2026-10-29 local real-key repeat proved the worker/Tavily transport, date and
+domain checks, persistence, deduplication and single-issuer relevance gate. Its
+small retrospective set measured 7/8 Recall@10 and 8/8 manually actionable
+precision. A separate unseen-instrument check exercised Toyota, BHP, SAP and
+TSMC metadata and found one completed TSMC profit event while rejecting
+unrelated and preview results. Keep ingestion disabled: the labels were not
+independently curated, commercial-source terms and billed-credit evidence remain
+open. See the [benchmark report](../../docs/testing/tavily-global-portfolio-benchmark-2026-10-29.md).
 
 Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
 every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database

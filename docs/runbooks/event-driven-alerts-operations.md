@@ -165,6 +165,14 @@ cost as authoritative.
 Bounded historical ingestion replay is implemented behind the internal worker
 boundary. It does not move the scheduler watermark. Before a production replay:
 
+Approved aliases are also used by downstream deterministic instrument matching
+(`matcher-v2`), with the same relevance weight as a legal issuer name. New
+instrument onboarding must therefore review aliases for ambiguity as well as
+review official domains. Unknown/inactive IDs remain excluded. When a selected
+batch mixes new and returning instruments, its shared search start is the
+earliest required member start: initial lookback for a new member, or previous
+successful coverage minus overlap for a returning member.
+
 Scheduled runs sort eligible instruments, select at most four from the current
 four-hour UTC slot, and resume from `instrument_search_coverage` with the normal
 deduplication overlap. Replays use the same deterministic slot selection but

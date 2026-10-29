@@ -12,7 +12,8 @@ import java.util.regex.Pattern;
 
 /**
  * Deterministic matching of a public article to the instrument master (ADR-0032
- * decision 4, ADR-0049): an exact ticker, a named issuer, or a named sector. The
+ * decision 4, ADR-0049): an exact ticker, a named issuer (including governed
+ * instrument-master aliases), or a named sector. The
  * same text and master always give the same matches, each with the reason it
  * matched. No model and no similarity score is involved, and an instrument that
  * is not named is never guessed. Relevance feeds the materiality score's
@@ -21,7 +22,7 @@ import java.util.regex.Pattern;
 @Component
 public class InstrumentMatcher {
 
-    public static final String VERSION = "matcher-v1";
+    public static final String VERSION = "matcher-v2";
     public static final BigDecimal TICKER_AND_ISSUER = new BigDecimal("1.00");
     public static final BigDecimal TICKER_OR_ISSUER = new BigDecimal("0.80");
     public static final BigDecimal SECTOR_ONLY = new BigDecimal("0.40");
@@ -34,7 +35,8 @@ public class InstrumentMatcher {
         for (Instrument instrument : instruments) {
             if (!instrument.isActive()) continue;
             boolean ticker = containsTicker(text, instrument.getTicker());
-            boolean issuer = containsPhrase(normalized, instrument.getIssuerName());
+            boolean issuer = containsPhrase(normalized, instrument.getIssuerName())
+                    || instrument.getSearchAliases().stream().anyMatch(alias -> containsPhrase(normalized, alias));
             boolean sector = containsPhrase(normalized, instrument.getSector());
             if (ticker && issuer) {
                 matches.add(new InstrumentMatch(instrument.getId(), TICKER_AND_ISSUER, "TICKER_AND_ISSUER"));

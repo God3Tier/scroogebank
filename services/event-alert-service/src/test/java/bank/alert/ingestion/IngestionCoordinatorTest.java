@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
@@ -159,6 +160,23 @@ class IngestionCoordinatorTest {
         assertThat(outcome.searchAttempts()).isEqualTo(3);
         assertThat(outcome.errorCode()).isEqualTo("TIMEOUT");
         verify(finalizer).fail(any(SearchRun.class), any(), any());
+        verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
+        verify(outboundControls, times(3)).reserveSearches(1);
+    }
+
+    @Test
+    void stopsBeforeRetryingWhenTheMonthlyQuotaIsExhausted() {
+        when(outboundControls.reserveSearches(1)).thenReturn(
+                ReservationResult.allowed(0), ReservationResult.denied("SEARCH_QUOTA_REACHED", 0));
+        when(provider.search(any())).thenThrow(new SearchProviderException("TIMEOUT", true, "timeout"));
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.FAILED);
+        assertThat(outcome.errorCode()).isEqualTo("SEARCH_QUOTA_REACHED");
+        assertThat(outcome.searchAttempts()).isOne();
+        verify(provider).search(any());
+        verify(outboundControls, times(2)).reserveSearches(1);
         verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
     }
 

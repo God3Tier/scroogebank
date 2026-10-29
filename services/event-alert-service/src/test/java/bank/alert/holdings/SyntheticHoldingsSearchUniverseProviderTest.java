@@ -61,6 +61,38 @@ class SyntheticHoldingsSearchUniverseProviderTest {
         verify(metrics).searchUniverse(3, 2, 2);
     }
 
+    @Test
+    void derivesNewMultiMarketInstrumentsFromThirtyDifferentUsers() {
+        SyntheticFixtureLoader fixtures = mock(SyntheticFixtureLoader.class);
+        OperationalMetrics metrics = mock(OperationalMetrics.class);
+        List<SyntheticHoldingFixture.Position> positions = new java.util.ArrayList<>();
+        for (int client = 1; client <= 30; client++) {
+            positions.add(position("new-client-" + client, "new-account-" + client,
+                    "TSE-7203", "100.00"));
+        }
+        for (int client = 1; client <= 6; client++) {
+            positions.add(position("new-client-" + client, "new-account-" + client,
+                    "ASX-BHP", "10.00"));
+        }
+        for (int client = 1; client <= 5; client++) {
+            positions.add(position("new-client-" + client, "new-account-" + client,
+                    "XETRA-SAP", "10.00"));
+        }
+        positions.add(position("new-client-30", "concentrated-account", "NYSE-TSM", "60.00"));
+        positions.add(position("new-client-30", "concentrated-account", "TSE-7203", "40.00"));
+        when(fixtures.loadDefault()).thenReturn(new SyntheticHoldingFixture(1,
+                Instant.parse("2026-10-29T00:00:00Z"), positions, List.of()));
+
+        SyntheticHoldingsSearchUniverseProvider provider =
+                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(),
+                        new ExposureCalculator(), metrics);
+
+        assertThat(provider.eligibleInstrumentIds())
+                .containsExactly("ASX-BHP", "NYSE-TSM", "TSE-7203")
+                .doesNotContain("XETRA-SAP");
+        verify(metrics).searchUniverse(3, 2, 2);
+    }
+
     private static SyntheticHoldingFixture.Position position(
             String clientRef, String accountRef, String instrumentId, String valueSgd) {
         return new SyntheticHoldingFixture.Position(UUID.randomUUID(), clientRef,

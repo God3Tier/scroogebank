@@ -11,7 +11,7 @@ class IssuerSearchQueryTest {
 
     private final IssuerSearchQuery query = new IssuerSearchQuery("DBS news",
             List.of("DBS Group Holdings Ltd", "DBS"),
-            List.of("earnings", "financial results", "appointment", "steps down"),
+            List.of("earnings", "financial results", "profit", "appointment", "steps down"),
             List.of("sgx.com", "dbs.com"),
             List.of("sgx.com", "reuters.com"));
 
@@ -19,12 +19,14 @@ class IssuerSearchQueryTest {
     void acceptsOnlyNamedIssuerEvents() {
         assertThat(query.accepts(result("DBS announces appointment of independent director", null))).isTrue();
         assertThat(query.accepts(result("DBS financial results", "Quarterly update."))).isTrue();
+        assertThat(query.accepts(result("DBS posts record profit", "Quarterly update."))).isTrue();
         assertThat(query.accepts(result("Appointment of Non-Executive Director", "DBS Group announced the appointment."))).isTrue();
         assertThat(query.accepts(result("Appointment of Non-Executive Director", "DBS Group announced the appointment.",
                 "https://www.reuters.com/world/appointment"))).isFalse();
         assertThat(query.accepts(result("China exports stabilize inflation", "DBS expects stronger profit."))).isFalse();
         assertThat(query.accepts(result("What to watch as DBS reports earnings", null))).isFalse();
         assertThat(query.accepts(result("DBS set to report earnings tomorrow", null))).isFalse();
+        assertThat(query.accepts(result("DBS expected to report earnings tomorrow", null))).isFalse();
         assertThat(query.accepts(result("DBS earnings key to gauging regional demand", null))).isFalse();
         assertThat(query.accepts(result("Apple announces new product", "Launch event."))).isFalse();
         assertThat(query.accepts(result("DBS launches a mobile application", "New customer features."))).isFalse();

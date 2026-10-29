@@ -140,3 +140,53 @@ This repeat meets ADR-0051's recall, precision, cross-issuer and timeout numbers
 on the small retrospective reference set. It is not independent production
 approval: the reference set was derived from the earlier investigation, source
 terms are still pending, and provider-dashboard credits remain unverified.
+
+## Unseen-instrument and 30-user extensibility check
+
+A separate check used identifiers and metadata absent from the seeded catalogue:
+Toyota (`TSE-7203`), BHP (`ASX-BHP`), SAP (`XETRA-SAP`) and TSMC (`NYSE-TSM`).
+The synthetic 30-user test selected Toyota and BHP through the inclusive 20%
+commonality rule, selected TSMC through a 60% single-account concentration, and
+rejected SAP at 5/30 users and below 50% concentration. The worker-boundary test
+also confirmed that registered active metadata is passed to retrieval while an
+unknown holding ID and an inactive instrument fail closed.
+
+Twelve bounded Tavily basic calls were used to inspect and repeat the four
+unseen-issuer queries. These were exploratory PowerShell requests using the
+compact discovery words without the separate ticker token; title checks were an
+approximation, not an execution of the Java adapter and relevance gate. In the
+last pass every call completed in 0.735-1.736 seconds. The returned Toyota, BHP
+and SAP headlines contained no qualifying issuer/event combination; this does
+not establish that no relevant event occurred. TSMC returned one completed,
+issuer-correct profit headline on manual review. The check also exposed an `expected to report`
+preview, which is now rejected, and two accidentally folded YAML event terms,
+which are now separate list entries with a regression test.
+
+The unit tests establish generic selection and metadata handling; these live
+calls are exploratory retrieval evidence, not an end-to-end onboarding or recall
+benchmark. Three issuers had no labelled relevant event against which recall
+could be measured. New instruments still require governed aliases and official
+domains; the service intentionally does not invent metadata for an unknown
+ticker. No AWS or model call was made.
+
+## Follow-up code review
+
+Review found two additional defects: downstream matching ignored the governed
+aliases accepted by retrieval, and a mixed batch could shorten a new instrument's
+initial lookback to the last success of a previously searched instrument. Both
+are repaired with regression tests. Matching is now `matcher-v2`, retaining
+the existing relevance weights and treating an approved alias as an issuer name.
+A PostgreSQL integration test exercises alias-only source processing and alert
+fan-out to two synthetic holding users. No additional provider calls were needed.
+
+Provider retries also previously escaped monthly search accounting. Every retry
+now reserves an additional search before calling the provider. Tests check that
+all three attempts consume reservations and that a depleted quota prevents the
+next provider call while retaining unsuccessful coverage.
+
+Verification: the complete service `mvn -B -pl services/event-alert-service verify`
+run passed 204 tests with zero failures, errors or skips, including PostgreSQL
+and Flyway V1-V9. After the final retry-counter adjustment, the coordinator suite
+was repeated to check that a quota-denied retry is not counted as a provider call.
+The existing full-repository and Terraform evidence above was not rerun for
+these service-only corrections.
