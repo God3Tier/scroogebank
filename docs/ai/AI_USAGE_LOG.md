@@ -1667,3 +1667,16 @@ retry exhaustion and refusal to retry after the last available reservation.
   provider/consumer deployment requirement. ADR-0062 owner approval is still pending.
 - Verification: reproduced both errors with CI's pinned oasdiff v1.33.0 image;
   the same comparison passed after the entries. No runtime code or AWS changed.
+
+## 2026-10-30 — Retrieval review evidence
+
+- Tool: Codex (OpenAI), using evaluate-rag guidance to distinguish retrospective
+  metrics, independent labels and deployment-source coverage.
+- Use: prepare a retrieval review packet, research official Tavily terms and
+  credit documentation, and perform one public-issuer basic search with usage
+  reporting. API-reported cost: one credit; wall time: 11.057 seconds.
+- Data: public issuer terms only; ignored key loaded at runtime without printing
+  it. No result content was retained and no AWS/model call was made.
+- Human approval remains required from Azeez/Hayyun for ADR-0051 and the source
+  register. Publisher terms could not be verified; commercial domains remain
+  disabled. No independent human labels or approval were fabricated.

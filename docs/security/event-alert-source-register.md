@@ -3,6 +3,10 @@
 Owner: Azeez. Last review: 2026-10-29. ADR-0011 requires this register to be
 reviewed before staging/demo refreshes. Ingestion remains disabled by default.
 
+2026-10-30: the [retrieval review packet](../testing/event-alert-retrieval-review-2026-10-30.md)
+records current terms research and a one-credit API billing probe. Commercial
+publisher rights remain unverified; no domain approval was granted by that review.
+
 | Domains | Purpose | Terms/status | Deployment state |
 |---|---|---|---|
 | `sgx.com`, `mas.gov.sg`, `dbs.com`, `ocbc.com`, `singtel.com`, `singaporeair.com` | SGX issuers, exchange and regulator notices | Official public sources; MVP metadata/excerpt controls apply | Instrument-specific |

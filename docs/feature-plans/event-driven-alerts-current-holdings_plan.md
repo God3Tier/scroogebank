@@ -617,6 +617,13 @@ Vitest run had two unrelated five-second paging-test timeouts (260 passed);
 both passed in the bounded rerun. Terraform, Go and real-process evidence in
 section 12.2 remains applicable because those paths were not changed.
 
+All 13 PR CI checks passed at `c7f9360`. The
+[retrieval review packet](../testing/event-alert-retrieval-review-2026-10-30.md)
+records an additional basic-query billing probe (API-reported 1 credit,
+11.057 seconds), the remaining human decisions, and the proposed review scope
+with scheduled ingestion and commercial publishers disabled. This evidence
+does not grant production retrieval approval or independent human labels.
+
 The retrospective Tavily benchmark in
 [`tavily-global-portfolio-benchmark-2026-10-29.md`](../testing/tavily-global-portfolio-benchmark-2026-10-29.md)
 met the numerical ADR-0051 thresholds on eight previously labelled events,
