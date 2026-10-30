@@ -199,11 +199,11 @@ function EventBriefings() {
             </p>
             {card.summary && <p>{card.summary}</p>}
             {card.summary && card.aiGenerated && <p className="holdings-note">AI-generated summary. {card.uncertainty}</p>}
+            <p><a href={card.evidence.url} target="_blank" rel="noreferrer noopener">Source: {card.evidence.sourceDomain}</a></p>
             <p>
               <strong>{card.affectedClientCount}</strong> {card.affectedClientCount === 1 ? 'client' : 'clients'} may be affected
               {card.openClientCount < card.affectedClientCount ? ` (${card.openClientCount} still open)` : ''}.
             </p>
-            <a href={card.evidence.url} target="_blank" rel="noreferrer noopener">Read the source</a>
             <div>
               <button type="button" aria-expanded={openId === card.eventId}
                 onClick={() => setOpenId(openId === card.eventId ? null : card.eventId)}>

@@ -16,6 +16,6 @@ state_bucket = "crm-tfstate-123456789012"
 ingestion_enabled = false
 ai_enabled        = false
 
-# Keep empty until the source register records an approved commercial-publisher
-# terms review. Official issuer/exchange/regulator domains come from alerts-db.
-approved_news_domains = []
+# Requester-authorized sources; summaries include source links (ADR-0051).
+# Official issuer/exchange/regulator domains also come from alerts-db.
+approved_news_domains = ["reuters.com", "cnbc.com", "ft.com"]

@@ -76,10 +76,9 @@ alert:
       endpoint: https://api.tavily.com/search
       timeout: 30s
       max-response-bytes: 262144
-    # Optional shared publishers. Deployment keeps this empty until each
-    # publisher's terms review is recorded; every issuer still adds its own
-    # official domains from the instrument master.
-    approved-domains: []
+      # Shared publishers authorized by the requester on 2026-10-30; see ADR-0051.
+      # Every issuer also adds its official domains from the instrument master.
+      approved-domains: [reuters.com, cnbc.com, ft.com]
     event-terms:
       - earnings
       - results

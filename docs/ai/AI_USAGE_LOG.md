@@ -1680,3 +1680,15 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Human approval remains required from Azeez/Hayyun for ADR-0051 and the source
   register. Publisher terms could not be verified; commercial domains remain
   disabled. No independent human labels or approval were fabricated.
+
+## 2026-10-30 — Requester-directed commercial sources and citations
+
+- Tool: Codex (OpenAI). Requester explicitly instructed use of commercial news
+  with the source attached to the summary after discussing unverified rights.
+- Change: configure Reuters/CNBC/FT defaults in the application and worker
+  Terraform/example; place the clickable source-domain citation alongside each
+  event summary. Record the direction in ADR-0051 and associated documentation.
+- Verification: 4 event UI tests, 4 Java query/privacy tests, Terraform fmt,
+  validate and 8 mocked worker tests passed. No AWS call or apply was made.
+- Publisher rights were not represented as verified; named human ADR reviewer
+  approval was not invented. Scheduled ingestion remains disabled by default.

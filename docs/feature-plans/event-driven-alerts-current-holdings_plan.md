@@ -13,6 +13,12 @@ Evidence: [remote-branch audit](../testing/alert-holdings-branch-audit-2026-10-2
 
 ## 1. Verified problem and intended outcome
 
+2026-10-30 requester update: use commercial news candidates with a clickable
+source attached to each summary. Reuters/CNBC/FT are now configured in the
+application and worker defaults (ADR-0051 addendum); earlier notes describing
+them as disabled are superseded. Scheduled ingestion remains disabled by
+default, and this instruction does not establish publisher rights.
+
 The remote audit found an existing, deliberate synthetic-MVP boundary, not a
 broken CRM account insert. The CRM persists clients, accounts and agent assignment,
 but no maintained securities-position source was found. Every alert holdings

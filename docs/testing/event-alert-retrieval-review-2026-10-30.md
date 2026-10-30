@@ -1,5 +1,10 @@
 # Retrieval review packet — 2026-10-30
 
+Subsequent requester direction: use Reuters/CNBC/FT with source links in each
+summary. ADR-0051's 2026-10-30 addendum supersedes this packet's proposal to
+keep those domains empty. They are now configured; scheduled ingestion stays
+disabled and publisher-rights verification remains unresolved.
+
 Human decision owner: Azeez. Required reviewer: Hayyun.
 Related: ADR-0011, ADR-0050, ADR-0051 and PR #165.
 Prepared with Codex; no human approval is recorded by this packet.

@@ -143,8 +143,9 @@ live-news adapter (ADR-0050). In AWS the key is injected from the worker-owned
 Secrets Manager secret; never commit or place it in Terraform. Requests use
 Tavily's restrictive domain mode and published-date filter. Each query combines
 that issuer's official domains with optional shared publishers from
-`ALERT_INGESTION_APPROVED_DOMAINS`; deployment keeps the shared list empty until
-ADR-0011's terms review is recorded. Results are
+`ALERT_INGESTION_APPROVED_DOMAINS`. Defaults now include Reuters, CNBC and FT
+at the requester's direction (ADR-0051's 2026-10-30 addendum); event summaries
+display source-domain links. Publisher rights remain unverified. Results are
 checked again for approved HTTPS domains, the exact UTC window, count and body
 size before persistence. With no key the search fails cleanly as
 `PROVIDER_NOT_CONFIGURED`.

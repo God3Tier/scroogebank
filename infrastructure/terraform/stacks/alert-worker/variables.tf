@@ -69,9 +69,9 @@ variable "minimum_account_concentration" {
 }
 
 variable "approved_news_domains" {
-  description = "Commercial news domains added to every issuer query. Keep empty until ADR-0011's terms review is recorded."
+  description = "Requester-authorized commercial news domains added to every issuer query; summaries retain source citations. See ADR-0051's 2026-10-30 addendum."
   type        = list(string)
-  default     = []
+  default     = ["reuters.com", "cnbc.com", "ft.com"]
 
   validation {
     condition = alltrue([

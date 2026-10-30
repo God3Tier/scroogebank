@@ -34,6 +34,8 @@ describe('event briefings', () => {
     expect(await screen.findByText('Synthetic issuer earnings')).toBeInTheDocument()
     expect(screen.getByText(/may be affected/)).toHaveTextContent('2 clients may be affected')
     expect(screen.getByText('The issuer reported synthetic earnings.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Source: example.invalid' }))
+      .toHaveAttribute('href', CARD.evidence.url)
   })
 
   it('loads the next event page without replacing the first', async () => {
