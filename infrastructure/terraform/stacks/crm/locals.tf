@@ -78,7 +78,7 @@ locals {
   }
 
   # ------------------------------------------------------------- Cognito
-  cognito_issuer = "https://cognito-idp.${local.region}.amazonaws.com/${aws_cognito_user_pool.this.id}"
+  cognito_issuer    = "https://cognito-idp.${local.region}.amazonaws.com/${aws_cognito_user_pool.this.id}"
   cognito_token_url = "https://${aws_cognito_user_pool_domain.this.domain}.auth.${local.region}.amazoncognito.com/oauth2/token"
 
   # Service Connect names that services call each other by.

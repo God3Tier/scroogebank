@@ -1,7 +1,7 @@
 # Data stores: one RDS for PostgreSQL instance per service (ADR-0023), the
 # client-keys DynamoDB table (ADR-0030) and the ID-documents bucket (ADR-0041).
-# health-db is migrated by the Client Health API task; its scheduled analysis
-# task is added separately by RH-SF11D.
+# health-db is migrated by the Client Health API task and also used by its
+# daily analysis task.
 
 resource "aws_db_parameter_group" "postgres" {
   name   = "${local.name}-postgres17"
@@ -67,12 +67,12 @@ locals {
 # and the ingest Lambda has its own (infrastructure/db-migrate/transactions/).
 locals {
   app_logins = {
-    user_service        = { db = "users" }
-    client_service      = { db = "clients" }
-    account_service     = { db = "accounts" }
-    transaction_service = { db = "transactions" }
-    transaction_ingest  = { db = "transactions" }
-    event_alert_service = { db = "alerts" }
+    user_service          = { db = "users" }
+    client_service        = { db = "clients" }
+    account_service       = { db = "accounts" }
+    transaction_service   = { db = "transactions" }
+    transaction_ingest    = { db = "transactions" }
+    event_alert_service   = { db = "alerts" }
     client_health_service = { db = "health" }
   }
 }

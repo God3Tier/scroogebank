@@ -68,10 +68,10 @@ output "cognito_user_pool_id" {
 output "client_health_transaction_read" {
   description = "Client Health machine-read configuration; retrieve its shared secret from Secrets Manager, not Terraform output."
   value = {
-    client_id        = aws_cognito_user_pool_client.client_health_read.id
-    secret_arn       = aws_secretsmanager_secret.client_health_read.arn
-    token_url        = local.cognito_token_url
-    scope            = "crm-transactions/read" # compatibility alias
+    client_id         = aws_cognito_user_pool_client.client_health_read.id
+    secret_arn        = aws_secretsmanager_secret.client_health_read.arn
+    token_url         = local.cognito_token_url
+    scope             = "crm-transactions/read" # compatibility alias
     transaction_scope = "crm-transactions/read"
     assignment_scope  = "crm-clients/assignment.read"
     service_group     = local.sg["client_health"]
@@ -83,7 +83,7 @@ output "client_health_transaction_read" {
 output "client_health_deployment" {
   description = "Client Health API and scheduled-analysis identifiers for smoke checks and runbooks."
   value = {
-    api_service_name               = module.client_health_service.service_name
+    api_service_name                = module.client_health_service.service_name
     analysis_task_definition_family = module.client_health_analysis.task_definition_family
     analysis_schedule_name          = aws_scheduler_schedule.client_health_analysis.name
     security_group                  = local.sg["client_health"]

@@ -26,8 +26,8 @@ resource "aws_iam_role" "scheduler" {
 
 data "aws_iam_policy_document" "scheduler" {
   statement {
-    sid       = "StartScheduledTasks"
-    actions   = ["ecs:RunTask"]
+    sid     = "StartScheduledTasks"
+    actions = ["ecs:RunTask"]
     resources = [
       "arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task-definition/${module.chain_verify.task_definition_family}:*",
       "arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task-definition/${module.client_health_analysis.task_definition_family}:*",
@@ -41,7 +41,7 @@ data "aws_iam_policy_document" "scheduler" {
 
   statement {
     sid     = "PassScheduledTaskRoles"
-    actions   = ["iam:PassRole"]
+    actions = ["iam:PassRole"]
     resources = [
       module.chain_verify.task_role_arn,
       module.chain_verify.execution_role_arn,

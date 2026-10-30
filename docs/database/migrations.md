@@ -22,14 +22,17 @@ Terraform creates each RDS instance with an empty database, and each service own
   - it applies the service's migrations before the app starts, and the app starts only if it succeeds;
   - it runs Flyway 11.7.2 from the db-migrate image ([`infrastructure/db-migrate/`](../../infrastructure/db-migrate/Dockerfile)), as that database's master user, against that database only. Flyway locks the database while it migrates, so tasks that start together are safe;
   - no other container receives the master credentials;
-  - user-service's, event-alert-service's and the future Client Health ECS
-    service's own Flyway is off there (`SPRING_FLYWAY_ENABLED=false`), and
-    db-migrate uses Spring Boot's `__` separator, so its history matches what
-    the apps already wrote.
+  - user-service's, event-alert-service's and Client Health's own Flyway is
+    off there (`SPRING_FLYWAY_ENABLED=false`), and db-migrate uses Spring
+    Boot's `__` separator, so its history matches what the apps already wrote.
   - RH-SF11B packages Client Health's migrations and login callback at
     `/flyway/sql/health` and defines `local.migrations["health"]`; RH-SF11C
     attaches that init container to the Client Health API service so the schema
     and least-privilege login are created before the API starts.
+  - The image's build context is limited by
+    [`Dockerfile.dockerignore`](../../infrastructure/db-migrate/Dockerfile.dockerignore):
+    every directory the Dockerfile copies must be listed there too, or the
+    build fails with `not found`. RH-SF11F added Client Health's.
 - **Locally, the same image applies the Go services' migrations to each one's own Compose database**, so a local database behaves as a deployed one:
   - client-service, account-service and the auditor run it through `make run` or `make migrate`;
   - the SFTP stack's `db-migrate` service runs it before `receiver-api` starts, and `make db-up` runs it too.

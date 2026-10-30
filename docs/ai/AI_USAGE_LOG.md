@@ -1,5 +1,33 @@
 # AI usage log
 
+## 2026-10-30 — Client Health RH-SF11F deployment clean-up and local verification
+
+- Human owner: Neo Jia Wen; Client Health owners (Garvit, Swayam) and the
+  platform owner should review the shared CRM Terraform changes.
+- Tool: Claude Code (Anthropic, Claude Opus 5.5).
+- Use: compare the merged Client Health code with the architecture plan; drop
+  the unused direct `client_health` to transaction-service ingress so the
+  analysis task reaches transaction-service only through the ALB (ADR-0019
+  decision 4) and assert it in the mocked plan; fix stale Terraform comments;
+  run `terraform fmt`; make the CRM plan tests evaluable (plan-time overrides
+  for values a plan leaves unknown, and a set-safe `metric_query` check); add
+  Client Health's migrations to the db-migrate build context; and update the
+  feature plan, Terraform README and migrations guide on
+  `task/client-health-monitor/deploy-verification`.
+- Human verification required: review the Terraform and test changes; push
+  the images, apply the stack with the MFA deploy role and run the runbook's
+  Client Health smoke check (RH-SF12); confirm ADR-0065.
+- Data: repository content, synthetic migration placeholders and a throwaway
+  local PostgreSQL. No AWS credentials, real client data or AWS resources were
+  used.
+- Verification: `terraform validate` and `terraform test` (7 of 7 runs) pass
+  against mocked providers; the client-health-monitor-service, client-service,
+  auditor and db-migrate images build; Client Health `mvn verify` passes (163
+  tests); client-profile-management-service and Auditor `make test` pass; the
+  five health migrations apply through the db-migrate image on PostgreSQL 17,
+  a second run is a no-op, and `client_health_service` reads the 11 tables but
+  cannot create objects or read `flyway_schema_history`.
+
 ## 2026-10-30 — Client Health RH-SF11E2 Cloud observability
 
 - Human owner: Garvit; platform/Terraform review and lower-environment

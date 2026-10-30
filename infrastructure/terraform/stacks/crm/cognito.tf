@@ -191,8 +191,8 @@ resource "aws_cognito_user_pool_client" "client_health_read" {
     "crm-transactions/read",
     "crm-clients/assignment.read",
   ]
-  supported_identity_providers         = ["COGNITO"]
-  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+  supported_identity_providers = ["COGNITO"]
+  explicit_auth_flows          = ["ALLOW_REFRESH_TOKEN_AUTH"]
 
   depends_on = [
     aws_cognito_resource_server.transactions,
@@ -209,9 +209,9 @@ resource "aws_secretsmanager_secret" "client_health_read" {
 resource "aws_secretsmanager_secret_version" "client_health_read" {
   secret_id = aws_secretsmanager_secret.client_health_read.id
   secret_string = jsonencode({
-    client_id     = aws_cognito_user_pool_client.client_health_read.id
-    client_secret = aws_cognito_user_pool_client.client_health_read.client_secret
-    scope         = "crm-transactions/read"
+    client_id        = aws_cognito_user_pool_client.client_health_read.id
+    client_secret    = aws_cognito_user_pool_client.client_health_read.client_secret
+    scope            = "crm-transactions/read"
     assignment_scope = "crm-clients/assignment.read"
   })
 }
