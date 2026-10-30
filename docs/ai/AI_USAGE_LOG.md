@@ -1656,3 +1656,14 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Verification: 243 alert-service tests, 18 focused PostgreSQL cases after a
   final assertion, 262 frontend tests, ESLint and production build passed.
   No Terraform files changed; earlier mocked Terraform checks remain valid.
+
+## 2026-10-30 — Current holdings PR OpenAPI gate repair
+
+- Tool: Codex (OpenAI); requester asked to fix PR #165's failing contract job.
+- Cause: the inherited dev implementation changed per-agent booked deposits
+  from a single amount to a currency map, but the ADR-0063 exception register
+  omitted the two corresponding ADR-0062 compatibility errors.
+- Change: register only those exact operation/property errors with the joint
+  provider/consumer deployment requirement. ADR-0062 owner approval is still pending.
+- Verification: reproduced both errors with CI's pinned oasdiff v1.33.0 image;
+  the same comparison passed after the entries. No runtime code or AWS changed.
