@@ -201,6 +201,8 @@ run "prod" {
       module.client_health_service.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
       module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "true" &&
       module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_QUEUE_URL"] == aws_sqs_queue.audit.url &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED"] == "true" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE"] == "Scrooge/ClientHealth" &&
       module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "" &&
       module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE"] == "crm-clients/assignment.read" &&
       startswith(module.client_health_service.app_secrets["SPRING_DATASOURCE_USERNAME"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_health_service:") &&
@@ -218,6 +220,8 @@ run "prod" {
       module.client_health_analysis.app_environment["CLIENT_HEALTH_MODE"] == "ANALYSIS" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "false" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED"] == "true" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE"] == "Scrooge/ClientHealth" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_TRANSACTION_ENDPOINT"] == "" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "" &&
       startswith(module.client_health_analysis.app_secrets["CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read:") &&
@@ -225,6 +229,18 @@ run "prod" {
       aws_cloudwatch_event_target.client_health_analysis_failed.arn == aws_sns_topic.alarms.arn
     )
     error_message = "The shared machine client has only the two read scopes, and no-domain analysis remains a non-service task that fails closed."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.client_health_watermark_stale.namespace == "Scrooge/ClientHealth" &&
+      aws_cloudwatch_metric_alarm.client_health_watermark_stale.threshold == 97200 &&
+      aws_cloudwatch_metric_alarm.client_health_audit_oldest.threshold == 900 &&
+      aws_cloudwatch_metric_alarm.client_health_assignment_unavailable.dimensions["outcome"] == "unavailable" &&
+      strcontains(aws_cloudwatch_metric_alarm.client_health_analysis_failures.metric_query[0].expression, "outcome=\"failed\"") &&
+      strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "Client Health analysis") &&
+      strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "client_health_audit_backlog")
+    )
+    error_message = "Client Health metrics use the bounded namespace and drive freshness, dependency, audit and dashboard coverage."
   }
 }
 

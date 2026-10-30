@@ -1,5 +1,28 @@
 # AI usage log
 
+## 2026-10-30 — Client Health RH-SF11E2 Cloud observability
+
+- Human owner: Garvit; platform/Terraform review and lower-environment
+  calibration remain required.
+- Tool: Cursor.
+- Use: enable one-minute Client Health CloudWatch publication with task-role
+  permission restricted to `Scrooge/ClientHealth`; add dashboard panels for
+  analysis freshness, audit/dependencies and task/AI outcomes; add SNS alarms
+  for failed/stale analysis, audit backlog, assignment unavailability,
+  authorization denials and AI validation/provider failures; extend mocked-plan
+  assertions; and synchronize monitoring/runbook/cost/feature documentation on
+  `task/client-health-monitor/cloud-observability`.
+- Human verification required: run Terraform formatting, validation and mocked
+  provider tests; inspect a saved lower-environment plan; calibrate thresholds
+  with synthetic load; confirm SNS subscriptions; trigger and record one test
+  notification; then verify dashboard metric names/dimensions after deployment.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` and IDE lint pass. A clean Java 24
+  compiler-override run completed 163 tests with no failures (137 passed and 26
+  Docker-dependent tests skipped). Terraform and Docker remain unavailable
+  locally, so no Terraform plan, alarm drill or live apply is claimed.
+
 ## 2026-10-28 — Client Health RH-SF11D2 scheduled analysis deployment
 
 - Human owner: Garvit; platform/Terraform and live security review remain

@@ -72,6 +72,19 @@ data "aws_iam_policy_document" "send_audit" {
   }
 }
 
+data "aws_iam_policy_document" "client_health_metrics" {
+  statement {
+    sid       = "PublishClientHealthMetrics"
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = ["Scrooge/ClientHealth"]
+    }
+  }
+}
+
 # ------------------------------------------------------------- user-service
 
 data "aws_iam_policy_document" "user_service" {
@@ -690,6 +703,10 @@ module "client_health_service" {
     CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED                    = "true"
     CLIENT_HEALTH_AUDIT_QUEUE_URL                            = aws_sqs_queue.audit.url
     CLIENT_HEALTH_AUDIT_REGION                               = local.region
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED                 = "true"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE               = "Scrooge/ClientHealth"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION                  = local.region
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP                    = "1m"
     CLIENT_HEALTH_ASSIGNMENT_BASE_URL                        = local.custom_domain ? local.alb_base_url : ""
     CLIENT_HEALTH_ASSIGNMENT_OAUTH_TOKEN_URI                 = local.cognito_token_url
     CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE                     = "crm-clients/assignment.read"
@@ -707,7 +724,10 @@ module "client_health_service" {
     local.db_master_secret["health"],
     aws_secretsmanager_secret.client_health_read.arn,
   ]
-  task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
+  task_role_policies = {
+    audit   = data.aws_iam_policy_document.send_audit.json
+    metrics = data.aws_iam_policy_document.client_health_metrics.json
+  }
   tls = {
     mode            = "java"
     ca_pem          = local.ca_pem
@@ -764,6 +784,10 @@ module "client_health_analysis" {
     CLIENT_HEALTH_ANALYSIS_LEASE_DURATION                = "60m"
     CLIENT_HEALTH_AI_ENABLED                             = "false"
     CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED                = "false"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED             = "true"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE           = "Scrooge/ClientHealth"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION              = local.region
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP                = "1m"
     CLIENT_HEALTH_TRANSACTION_ENDPOINT                   = local.custom_domain ? "${local.alb_base_url}/internal/v1/transactions" : ""
     CLIENT_HEALTH_TRANSACTION_TOKEN_URI                  = local.cognito_token_url
     CLIENT_HEALTH_TRANSACTION_SCOPE                      = "crm-transactions/read"
@@ -784,6 +808,9 @@ module "client_health_analysis" {
     local.app_login_secret["client_health_service"],
     aws_secretsmanager_secret.client_health_read.arn,
   ]
+  task_role_policies = {
+    metrics = data.aws_iam_policy_document.client_health_metrics.json
+  }
 
   log_retention_days = local.log_retention_days
 

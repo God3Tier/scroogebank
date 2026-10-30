@@ -46,8 +46,9 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 locals {
-  alarm_actions    = [aws_sns_topic.alarms.arn]
-  metric_namespace = "CRM/${local.name}"
+  alarm_actions                  = [aws_sns_topic.alarms.arn]
+  metric_namespace               = "CRM/${local.name}"
+  client_health_metric_namespace = "Scrooge/ClientHealth"
 }
 
 # -------------------------------------------------------------- audit queue
@@ -254,6 +255,114 @@ resource "aws_cloudwatch_event_target" "client_health_analysis_failed" {
   arn  = aws_sns_topic.alarms.arn
 }
 
+# ---------------------------------------------------------- Client Health
+
+resource "aws_cloudwatch_metric_alarm" "client_health_watermark_stale" {
+  alarm_name          = "${local.name}-client-health-watermark-stale"
+  alarm_description   = "No successful Client Health analysis watermark within 27 hours. Primary: Garvit; backup: Swayam."
+  namespace           = local.client_health_metric_namespace
+  metric_name         = "client_health_analysis_watermark_age_seconds"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 27 * 60 * 60
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_analysis_failures" {
+  alarm_name          = "${local.name}-client-health-analysis-failures"
+  alarm_description   = "A deterministic Client Health analysis run failed. Primary: Garvit; backup: Swayam."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+
+  metric_query {
+    id          = "failures"
+    expression  = "SUM(SEARCH('{${local.client_health_metric_namespace}} MetricName=\"client_health_analysis_runs_total\" outcome=\"failed\"', 'Sum', 300))"
+    label       = "Failed analysis runs"
+    return_data = true
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_audit_backlog" {
+  alarm_name          = "${local.name}-client-health-audit-backlog"
+  alarm_description   = "Client Health has more than 100 undelivered audit events for 15 minutes. Primary: Garvit; backup: Swayam."
+  namespace           = local.client_health_metric_namespace
+  metric_name         = "client_health_audit_backlog"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 100
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_audit_oldest" {
+  alarm_name          = "${local.name}-client-health-audit-oldest"
+  alarm_description   = "Client Health's oldest undelivered audit event is over 15 minutes old. Primary: Garvit; backup: Swayam."
+  namespace           = local.client_health_metric_namespace
+  metric_name         = "client_health_audit_oldest_age_seconds"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 15 * 60
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_assignment_unavailable" {
+  alarm_name          = "${local.name}-client-health-assignment-unavailable"
+  alarm_description   = "Client assignment lookup was unavailable at least 3 times in 15 minutes. Primary: Garvit; backup: Swayam."
+  namespace           = local.client_health_metric_namespace
+  metric_name         = "client_health_assignment_requests_total"
+  dimensions          = { outcome = "unavailable" }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 3
+  datapoints_to_alarm = 1
+  threshold           = 3
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_authorization_denied" {
+  alarm_name          = "${local.name}-client-health-authorization-denied"
+  alarm_description   = "Client Health authorization denials exceeded 10 in 5 minutes. Primary: Garvit; backup: Swayam."
+  namespace           = local.client_health_metric_namespace
+  metric_name         = "client_health_authorization_denied_total"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 10
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_ai_safety" {
+  alarm_name          = "${local.name}-client-health-ai-safety"
+  alarm_description   = "Client Health AI output validation or provider safety failed. Primary: Garvit; backup: Swayam."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+
+  metric_query {
+    id          = "safety"
+    expression  = "SUM(SEARCH('{${local.client_health_metric_namespace}} MetricName=\"client_health_ai_validation_rejected_total\"', 'Sum', 300)) + SUM(SEARCH('{${local.client_health_metric_namespace}} MetricName=\"client_health_ai_provider_failures_total\"', 'Sum', 300))"
+    label       = "AI validation and provider failures"
+    return_data = true
+  }
+}
+
 # --------------------------------------------------------------- ingestion
 
 resource "aws_cloudwatch_metric_alarm" "ingest_errors" {
@@ -328,7 +437,7 @@ resource "aws_cloudwatch_dashboard" "this" {
           period = 300
           # dashboard-service runs in this cluster; the business-dashboard
           # stack deploys it (ADR-0047).
-          metrics = [for s in ["user-service", "client-service", "account-service", "auditor", "transaction-service", "dashboard-service", "event-alert-service"] :
+          metrics = [for s in ["user-service", "client-service", "account-service", "auditor", "transaction-service", "dashboard-service", "event-alert-service", "client-health-monitor-service"] :
             ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.this.name, "ServiceName", s]
           ]
         }
@@ -342,6 +451,51 @@ resource "aws_cloudwatch_dashboard" "this" {
           period = 300
           metrics = [for k, db in module.db :
             ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", db.identifier]
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 18, width = 12, height = 6
+        properties = {
+          title  = "Client Health analysis"
+          region = local.region
+          stat   = "Maximum"
+          period = 300
+          metrics = [
+            [local.client_health_metric_namespace, "client_health_analysis_watermark_age_seconds"],
+            [".", "client_health_analysis_duration_seconds", "outcome", "completed"],
+            [".", "client_health_analysis_runs_total", "failure_stage", "none", "outcome", "completed"],
+          ]
+        }
+      },
+      {
+        type = "metric", x = 12, y = 18, width = 12, height = 6
+        properties = {
+          title  = "Client Health dependencies and audit"
+          region = local.region
+          stat   = "Maximum"
+          period = 300
+          metrics = [
+            [local.client_health_metric_namespace, "client_health_audit_backlog"],
+            [".", "client_health_audit_oldest_age_seconds"],
+            [".", "client_health_assignment_requests_total", "outcome", "unavailable"],
+            [".", "client_health_authorization_denied_total"],
+          ]
+        }
+      },
+      {
+        type = "metric", x = 0, y = 24, width = 24, height = 6
+        properties = {
+          title  = "Client Health task and AI safety outcomes"
+          region = local.region
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            [local.client_health_metric_namespace, "client_health_task_outcomes_total", "outcome", "created"],
+            [".", "client_health_task_outcomes_total", "outcome", "suppressed_cooldown"],
+            [".", "client_health_task_outcomes_total", "outcome", "suppressed_daily_cap"],
+            [".", "client_health_ai_validation_rejected_total", "outcome", "invalid_output"],
+            [".", "client_health_ai_provider_failures_total", "outcome", "unavailable"],
           ]
         }
       },
