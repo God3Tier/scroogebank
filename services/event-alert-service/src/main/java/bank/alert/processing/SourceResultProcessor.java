@@ -1,5 +1,7 @@
 package bank.alert.processing;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import bank.alert.ai.BriefingGenerator;
 import bank.alert.ai.BriefingInput;
 import bank.alert.ai.BriefingOutcome;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class SourceResultProcessor {
+    private static final Logger log = LoggerFactory.getLogger(SourceResultProcessor.class);
 
     private final SourceResultRepository sourceResults;
     private final EventClassifier classifier;
@@ -67,6 +70,9 @@ public class SourceResultProcessor {
         ClassificationOutcome classification = classifier.classify(evidence);
         if (classification.status() != ClassificationStatus.MODEL_ACCEPTED
                 || classification.classification() == null) {
+            // Reason codes are fixed enumerated values, never model or article text.
+            log.info("source not classified source_id={} status={} reason_code={}",
+                    source.getId(), classification.status(), classification.reasonCode());
             return SourceFanOutOutcome.notAccepted(classification.status(), classification.reasonCode());
         }
 
@@ -80,6 +86,10 @@ public class SourceResultProcessor {
 
         BriefingOutcome briefing = briefingGenerator.generate(new BriefingInput(
                 classification.classification(), List.of(evidence)));
+        if (briefing.briefing() == null) {
+            log.warn("briefing not generated source_id={} status={} reason_code={} attempts={}",
+                    source.getId(), briefing.status(), briefing.reasonCode(), briefing.attempts());
+        }
         BigDecimal severity = severityPolicy.severity(classification.classification());
         BigDecimal relevance = affected.stream()
                 .map(id -> request.candidateRelevance().getOrDefault(id, InstrumentMatcher.SECTOR_ONLY))

@@ -111,6 +111,7 @@ module "event_alert_worker" {
     ALERT_MODE                          = "WORKER"
     ALERT_HOLDINGS_MODE                 = local.crm.holdings_mode
     EVENT_ALERT_DB_URL                  = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
+    SPRING_FLYWAY_ENABLED               = "false" # db-migrate applies the migrations, as for the API (found by the AWS test)
     AWS_REGION                          = var.aws_region
     ALERT_INGESTION_ENABLED             = tostring(var.ingestion_enabled)
     ALERT_SEARCH_PROVIDER               = "tavily"

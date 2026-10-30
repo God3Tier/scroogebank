@@ -34,6 +34,38 @@ class SafeBriefingGeneratorTest {
     }
 
     @Test
+    void acceptsACitationByTheSourcesUrlAndStoresItsReferenceId() {
+        SafeBriefingGenerator generator = generator((request, timeout) -> """
+                {"abstain":false,"abstentionReason":null,"headline":"Synthetic issuer update",
+                "summary":"The issuer reported a synthetic earnings change.",
+                "uncertainty":"The filing does not provide forward guidance.",
+                "sourceRefs":["https://example.invalid/source"],
+                "suggestedReviewActions":["Review the cited filing and current alert factors."]}
+                """, true);
+
+        BriefingOutcome outcome = generator.generate(input());
+
+        assertThat(outcome.status()).isEqualTo(BriefingStatus.GENERATED);
+        assertThat(outcome.briefing().sourceRefs()).containsExactly("source-1");
+    }
+
+    @Test
+    void stillRejectsACitationOfASourceThatWasNotSupplied() {
+        SafeBriefingGenerator generator = generator((request, timeout) -> """
+                {"abstain":false,"abstentionReason":null,"headline":"Synthetic issuer update",
+                "summary":"The issuer reported a synthetic earnings change.",
+                "uncertainty":"The filing does not provide forward guidance.",
+                "sourceRefs":["https://elsewhere.invalid/other"],
+                "suggestedReviewActions":["Review the cited filing and current alert factors."]}
+                """, true);
+
+        BriefingOutcome outcome = generator.generate(input());
+
+        assertThat(outcome.status()).isEqualTo(BriefingStatus.PENDING);
+        assertThat(outcome.reasonCode()).isEqualTo("MISSING_OR_UNKNOWN_CITATION");
+    }
+
+    @Test
     void rejectsAdviceLanguageAndLeavesBriefPending() {
         SafeBriefingGenerator generator = generator((request, timeout) -> """
                 {"abstain":false,"abstentionReason":null,"headline":"Synthetic update",
