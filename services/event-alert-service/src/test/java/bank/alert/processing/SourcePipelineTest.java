@@ -189,4 +189,20 @@ class SourcePipelineTest {
         assertThat(broken.getProcessedAt()).isNull();
         assertThat(fine.getProcessingOutcome()).isEqualTo("ALERTS_CREATED");
     }
+
+    @Test
+    void aCrmOutageLeavesTheSourcePendingAndIsNeverFinalisedAsNoHolders() {
+        SourceResult source = pending("outage", "x");
+        givenPending(source);
+        when(matcher.match(any(), any(), any())).thenReturn(List.of(
+                new InstrumentMatch("SGX-DBS", new BigDecimal("0.80"), "TICKER")));
+        when(processor.processForAgents(any()))
+                .thenThrow(new bank.alert.crm.DirectoryUnavailableException("CRM directory is unavailable"));
+
+        PipelineSummary summary = pipeline(true).processPending();
+
+        assertThat(summary.errors()).isOne();
+        assertThat(source.getProcessedAt()).isNull();
+        assertThat(source.getProcessingOutcome()).isNull();
+    }
 }

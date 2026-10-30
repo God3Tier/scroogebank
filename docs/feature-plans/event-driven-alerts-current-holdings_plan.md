@@ -4,7 +4,7 @@ Status: Approved by Azeez (relayed by Hayyun, 2026-10-30). CH-01 to CH-05 are im
 `task/event-driven-alerts/current-holdings`; nothing has been applied to AWS and the branch awaits review. See sections 12 and 12.1.
 Owner: Azeez. Domain/API/migration reviewer: Hayyun.
 CRM ownership/security reviewer: Neo Jia Wen (coordination required before shared-service edits).
-Last verified: 2026-10-30, Asia/Singapore.
+Last verified: 2026-10-30, Asia/Singapore (implementation re-checked against sections 5 to 11 the same day).
 Planning branch: `task/event-driven-alerts/current-holdings-plan`, created from
 `origin/feat/event-driven-alerts` at `dedb306`.
 Parent: [event-driven alerts plan](event-driven-alerts_plan.md).
@@ -290,12 +290,12 @@ before implementation. No teammate has been contacted by this planning task.
 
 | Task | Primary owner | Expected files/components | Branch / dependency | Status |
 |---|---|---|---|---|
-| CH-00: approve model/contracts and reconcile current dev | Azeez; Hayyun domain review; Neo Jia Wen CRM review | This plan, ADR-0066, parent plan, account/client contracts | `task/event-driven-alerts/current-holdings-plan`; prerequisite retrieval and CRM PRs | Proposed |
+| CH-00: approve model/contracts and reconcile current dev | Azeez; Hayyun domain review; Neo Jia Wen CRM review | This plan, ADR-0066, parent plan, account/client contracts | `task/event-driven-alerts/current-holdings-plan`; prerequisite retrieval and CRM PRs | Approved by Azeez (relayed 2026-10-30) |
 | CH-01: private CRM account/client context | Neo Jia Wen, proposed pending owner coordination | account/client controller/service/repository/security tests; accounts/clients OpenAPI | Owning CRM feature's `task/*/alert-directory`; CH-00 | Implemented for account-service only (see section 12); awaiting Neo Jia Wen's review |
-| CH-02: current holdings schema, API and audit | Hayyun | alert domain/repository/API/security, forward Flyway migration, schema and OpenAPI | `task/event-driven-alerts/current-holdings`; CH-00/01 | Planned |
-| CH-03: DB providers, full-account exposure, snapshot detail and current-owner routing | Azeez with required Hayyun review | holdings/ingestion/processing/repository/API authorization and integration tests | Same alert task; CH-02 and retrieval fixes | Planned |
-| CH-04: existing account-page holdings editor | Hayyun | existing frontend client/account and alert views, API adapter and tests | Alert task after API contract; coordinate frontend owner | Planned |
-| CH-04b: one agent-event briefing with affected-client drill-down and event actions | Hayyun; Azeez reviews shared briefing/retrieval boundary | agent-event read/decision API, mapping to client evidence, grouped alert frontend, contracts/audit and tests | After grouped contract agreement and current retrieval integration; no implementation in this planning branch | Planned |
+| CH-02: current holdings schema, API and audit | Hayyun | alert domain/repository/API/security, forward Flyway migration, schema and OpenAPI | `task/event-driven-alerts/current-holdings`; CH-00/01 | Implemented and verified locally (section 12) |
+| CH-03: DB providers, full-account exposure, snapshot detail and current-owner routing | Azeez with required Hayyun review | holdings/ingestion/processing/repository/API authorization and integration tests | Same alert task; CH-02 and retrieval fixes | Implemented and verified locally (section 12) |
+| CH-04: existing account-page holdings editor | Hayyun | existing frontend client/account and alert views, API adapter and tests | Alert task after API contract; coordinate frontend owner | Implemented and verified locally (section 12) |
+| CH-04b: one agent-event briefing with affected-client drill-down and event actions | Hayyun; Azeez reviews shared briefing/retrieval boundary | agent-event read/decision API, mapping to client evidence, grouped alert frontend, contracts/audit and tests | After grouped contract agreement and current retrieval integration; implemented on the alert task branch | Implemented and verified locally (section 12) |
 | CH-05: Terraform wiring, validation and developer handoff | Receiving infrastructure developer (record named owner before editing); Azeez application coordination; Neo Jia Wen infrastructure review | CRM/alert-worker Terraform, service configuration, runbooks, cost/evaluation evidence; detailed handoff below | `task/event-driven-alerts/current-holdings-infra` from updated feature; CH-01..04/04b configuration contracts | Implemented and validated locally (see section 12); no named infrastructure developer yet; not applied to AWS |
 
 All tasks last synchronized on 2026-10-29. Execute sequentially unless owners

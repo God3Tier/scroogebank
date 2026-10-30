@@ -427,6 +427,165 @@ class CurrentHoldingsIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT portfolio_revision FROM holding_snapshot LIMIT 1", Long.class)).isOne();
     }
 
+    @Test
+    void aFullAuditBacklogRefusesTheWriteAndLeavesNothingBehind() {
+        for (int i = 0; i < 100; i++) {
+            outbox.save(new bank.alert.domain.AuditOutbox(UUID.randomUUID(), "alert.test-backlog", 1, "{}", NOW));
+        }
+        outbox.flush();
+
+        assertThatThrownBy(() -> put(ACCOUNT_1, "key-86000001", 0, position("SYN-SGX-001", "10", "1.0")))
+                .isInstanceOf(bank.alert.service.AuditUnavailableException.class);
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM current_portfolio", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM current_position", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM portfolio_write_request", Long.class)).isZero();
+    }
+
+    private static final UUID ACCOUNT_3 = UUID.fromString("a0000000-0000-4000-8000-000000000004");
+
+    private void secondAccountForClient1() {
+        crm.accounts.put(ACCOUNT_3, new AccountContext(ACCOUNT_3, CLIENT_1, "INVESTMENT", "ACTIVE", "SGD", null));
+    }
+
+    @Test
+    void sameInstrumentInTwoAccountsOfOneClientGivesOneAlertForTheHigherScoringAccount() {
+        secondAccountForClient1();
+        put(ACCOUNT_1, "key-80000001", 0, position("SYN-SGX-001", "30", "1.0"), position("SYN-SGX-002", "70", "1.0"));
+        put(ACCOUNT_3, "key-80000002", 0, position("SYN-SGX-001", "80", "1.0"), position("SYN-SGX-002", "20", "1.0"));
+
+        AlertGenerationOutcome outcome = generate("agent-a");
+
+        assertThat(outcome.alertsCreated()).isOne(); // existing cardinality: one alert per client/event/instrument
+        assertThat(alertList.findVisibleDetail(outcome.alertIds().getFirst(), "agent-a", false)).hasValueSatisfying(detail -> {
+            assertThat(detail.accountRef()).isEqualTo(ACCOUNT_3.toString());
+            assertThat(detail.portfolioPercentage()).isEqualByComparingTo("80.0000"); // not 30 + 80
+        });
+        // two accounts of one client are one affected client on the event card
+        assertThat(eventQueries.list("agent-a", false, 25).items().getFirst().affectedClientCount()).isOne();
+    }
+
+    @Test
+    void equalAccountScoresAreBrokenByTheLowerAccountId() {
+        secondAccountForClient1();
+        put(ACCOUNT_3, "key-81000001", 0, position("SYN-SGX-001", "50", "1.0"), position("SYN-SGX-002", "50", "1.0"));
+        put(ACCOUNT_1, "key-81000002", 0, position("SYN-SGX-001", "50", "1.0"), position("SYN-SGX-002", "50", "1.0"));
+
+        AlertGenerationOutcome outcome = generate("agent-a");
+
+        assertThat(outcome.alertsCreated()).isOne();
+        assertThat(alertList.findVisibleDetail(outcome.alertIds().getFirst(), "agent-a", false).orElseThrow().accountRef())
+                .isEqualTo(ACCOUNT_1.toString());
+    }
+
+    @Test
+    void fiveClientsOfOneAgentMakeOneCardAndAnotherAgentSeesOnlyItsOwn() {
+        put(ACCOUNT_1, "key-82000001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
+        put(ACCOUNT_2, "key-82000002", 0, position("SYN-SGX-001", "80", "1.0"), position("SYN-SGX-002", "20", "1.0"));
+        for (int i = 3; i <= 5; i++) addClientHolding(i, "agent-a", "key-8200000" + i);
+        for (int i = 6; i <= 7; i++) addClientHolding(i, "agent-b", "key-8200000" + i);
+
+        assertThat(generate("agent-a").alertsCreated()).isEqualTo(5);
+        assertThat(generate("agent-b").alertsCreated()).isEqualTo(2);
+
+        var aCards = eventQueries.list("agent-a", false, 25).items();
+        assertThat(aCards).hasSize(1);
+        assertThat(aCards.getFirst().affectedClientCount()).isEqualTo(5);
+        var bCards = eventQueries.list("agent-b", false, 25).items();
+        assertThat(bCards).hasSize(1);
+        assertThat(bCards.getFirst().affectedClientCount()).isEqualTo(2);
+        assertThat(aCards.getFirst().summary()).isEqualTo(bCards.getFirst().summary()); // one shared briefing
+        var aClients = eventQueries.detail(aCards.getFirst().eventId(), "agent-a").clients();
+        var bClients = eventQueries.detail(bCards.getFirst().eventId(), "agent-b").clients();
+        assertThat(aClients).hasSize(5);
+        assertThat(aClients).extracting(c -> c.alertId()).doesNotContainAnyElementsOf(
+                bClients.stream().map(c -> c.alertId()).toList());
+    }
+
+    @Test
+    void aClientAffectedAfterAnInformIsNotTreatedAsInformed() {
+        put(ACCOUNT_1, "key-83000001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
+        put(ACCOUNT_2, "key-83000002", 0, position("SYN-SGX-001", "80", "1.0"), position("SYN-SGX-002", "20", "1.0"));
+        generate("agent-a");
+        UUID eventId = eventQueries.list("agent-a", false, 25).items().getFirst().eventId();
+        var informed = eventQueries.detail(eventId, "agent-a").clients().getFirst();
+        eventActions.apply(eventId, "agent-a", "action-key-9001", UUID.randomUUID(), new ActionRequest(
+                AlertDecisionType.INFORM_CLIENT, null, List.of(new ActionMember(informed.alertId(), informed.version()))));
+
+        addClientHolding(3, "agent-a", "key-83000003"); // newly holds the instrument
+        generate("agent-a");
+
+        var clients = eventQueries.detail(eventId, "agent-a").clients();
+        assertThat(clients).hasSize(3);
+        assertThat(alerts.findById(informed.alertId()).orElseThrow().getStatus()).isEqualTo(AlertStatus.INFORMED);
+        assertThat(clients).filteredOn(c -> !c.alertId().equals(informed.alertId())).allSatisfy(c ->
+                assertThat(alerts.findById(c.alertId()).orElseThrow().getStatus()).isEqualTo(AlertStatus.NEW));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM agent_event_action_member", Long.class)).isOne();
+    }
+
+    @Test
+    void anOldCursorCannotRetrieveAlertsOfAReassignedClient() {
+        put(ACCOUNT_1, "key-84000001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
+        put(ACCOUNT_2, "key-84000002", 0, position("SYN-SGX-001", "80", "1.0"), position("SYN-SGX-002", "20", "1.0"));
+        generate("agent-a");
+        var firstPage = alertList.findVisible("agent-a", false, null, null, null, null, 1);
+        assertThat(firstPage).hasSize(1);
+        var cursor = firstPage.getFirst();
+
+        crm.owners.put(CLIENT_1, "agent-b");
+        crm.owners.put(CLIENT_2, "agent-b");
+        ownership.refresh();
+
+        assertThat(alertList.findVisible("agent-a", false, null, null, cursor.createdAt(), cursor.id(), 10)).isEmpty();
+        assertThat(alertList.findVisible("agent-a", false, null, null, null, null, 10)).isEmpty();
+        assertThat(alertList.findVisible("agent-b", false, null, null, null, null, 10)).hasSize(2);
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void twoConcurrentReplacementsOnTheSameRevisionLeaveExactlyOneWinner() throws Exception {
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+            List<java.util.concurrent.Future<HttpStatus>> results = new java.util.ArrayList<>();
+            for (int writer = 0; writer < 2; writer++) {
+                String key = "key-8500000" + writer;
+                String quantity = writer == 0 ? "10" : "20";
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return statusOf(() -> put(ACCOUNT_1, key, 0, position("SYN-SGX-001", quantity, "1.0")));
+                }));
+            }
+            start.countDown();
+            List<HttpStatus> statuses = new java.util.ArrayList<>();
+            for (var result : results) statuses.add(result.get(30, java.util.concurrent.TimeUnit.SECONDS));
+
+            assertThat(statuses).containsExactlyInAnyOrder(HttpStatus.OK, HttpStatus.CONFLICT);
+            assertThat(jdbc.queryForObject("SELECT revision FROM current_portfolio WHERE account_id = ?", Long.class,
+                    ACCOUNT_1)).isOne();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM current_position WHERE account_id = ?", Long.class,
+                    ACCOUNT_1)).isOne();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_outbox WHERE event_type LIKE 'alert.portfolio%'",
+                    Long.class)).isOne(); // the loser wrote nothing
+        } finally {
+            pool.shutdownNow();
+            jdbc.update("DELETE FROM current_position");
+            jdbc.update("DELETE FROM portfolio_write_request");
+            jdbc.update("DELETE FROM current_portfolio");
+            jdbc.update("DELETE FROM audit_outbox");
+        }
+    }
+
+    /** A further client with its own investment account and a 70/30 portfolio, owned by the given agent. */
+    private void addClientHolding(int number, String agent, String key) {
+        UUID client = UUID.fromString(String.format("c0000000-0000-4000-8000-%012d", number));
+        UUID account = UUID.fromString(String.format("a0000000-0000-4000-8000-%012d", 100 + number));
+        crm.accounts.put(account, new AccountContext(account, client, "INVESTMENT", "ACTIVE", "SGD", null));
+        crm.owners.put(client, agent);
+        portfolios.replace(account, agent, "user-token", key, UUID.randomUUID(), new PortfolioReplaceRequest(0, "manual-entry",
+                List.of(position("SYN-SGX-001", "70", "1.0"), position("SYN-SGX-002", "30", "1.0"))));
+    }
+
     private HttpStatus statusOf(Runnable action) {
         try {
             action.run();

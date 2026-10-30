@@ -443,3 +443,24 @@ run "rejects_an_unknown_holdings_mode" {
 
   expect_failures = [var.alert_holdings_mode]
 }
+
+run "alert_routes_are_public_and_directory_routes_are_not" {
+  command = plan
+
+  assert {
+    condition     = contains(flatten(values(module.event_alert_service.listener_rule_paths)), "/api/alerts/*") && contains(flatten(values(module.event_alert_service.listener_rule_paths)), "/api/alert-portfolios") && contains(flatten(values(module.event_alert_service.listener_rule_paths)), "/api/alert-portfolios/*")
+    error_message = "The alert API receives the existing /api/alerts routes and the holdings /api/alert-portfolios routes."
+  }
+  assert {
+    condition     = contains(flatten(values(module.account_service.listener_rule_paths)), "/internal/alerts/accounts/*") && contains(flatten(values(module.account_service.listener_rule_paths)), "/internal/accounts/*") && contains(flatten(values(module.account_service.listener_rule_paths)), "/api/accounts/*")
+    error_message = "account-service keeps the import's and the user-facing routes and gains the alert directory route."
+  }
+  assert {
+    condition     = aws_apigatewayv2_route.api.route_key == "ANY /api/{proxy+}" && aws_apigatewayv2_route.api.authorization_type == "JWT"
+    error_message = "API Gateway forwards only authenticated /api/* requests; it has no /internal/* route."
+  }
+  assert {
+    condition     = !anytrue([for paths in values(module.event_alert_service.listener_rule_paths) : anytrue([for p in paths : startswith(p, "/internal")])])
+    error_message = "The alert API's public rules never include /internal paths."
+  }
+}
