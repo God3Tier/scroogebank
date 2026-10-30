@@ -1,7 +1,7 @@
 # CRM-linked current holdings for event-driven alerts
 
 Status: Approved by Azeez (relayed by Hayyun, 2026-10-30). CH-01 to CH-05 are implemented and verified locally on
-`task/event-driven-alerts/current-holdings`; nothing has been applied to AWS and the branch awaits review. See sections 12 and 12.1.
+`task/event-driven-alerts/current-holdings`; nothing has been applied to AWS. Draft PR [#165](https://github.com/cs301-itsa/project-2026-27t1-g3-t6/pull/165) awaits review and CI. See sections 12 and 12.1.
 Owner: Azeez. Domain/API/migration reviewer: Hayyun.
 CRM ownership/security reviewer: Neo Jia Wen (coordination required before shared-service edits).
 Last verified: 2026-10-30, Asia/Singapore (implementation re-checked against sections 5 to 11 the same day).
@@ -539,8 +539,10 @@ Deviations from this plan, on purpose:
    default trust store, which trusts the ALB's public certificate.
 
 **Not done, and why. Do these next:**
-1. **Review and merge**: Azeez, Hayyun and Neo Jia Wen review the branch; then PR to `feat/event-driven-alerts`.
-   Neo Jia Wen reviews the account-service route and the Cognito/ALB Terraform.
+1. **Review and merge**: Draft PR [#165](https://github.com/cs301-itsa/project-2026-27t1-g3-t6/pull/165)
+   targets `feat/event-driven-alerts`. Azeez, Hayyun and Neo Jia Wen review it; Neo Jia Wen reviews the
+   account-service route and the Cognito/ALB Terraform. The branch includes a previous `dev` merge, so the
+   feature branch needs synchronizing through review before the PR diff is holdings-only and ready for focused review.
 2. **Run against real AWS and a real Cognito pool.** Nothing here was applied. Applying the CRM stack with
    `alert_holdings_mode = "database"`, populating nothing by hand (the secret is created by Terraform), and
    checking an agent can record and read holdings needs separate authorization (section 11).
@@ -597,7 +599,7 @@ The PostgreSQL integration tests assert deterministic alert and briefing output,
 including complete-account 10/100 exposure, grouping, current-owner visibility,
 selected-client actions and immutable prior evidence. A running live-provider
 briefing remains unverified without an enabled model. Required owner reviews,
-PR/CI, and AWS validation remain open; the latter is outside this local rerun.
+PR #165 CI, and AWS validation remain open; the latter is outside this local rerun.
 
 ### 12.3 Local follow-up on the event briefing (2026-10-30)
 
