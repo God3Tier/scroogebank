@@ -23,6 +23,7 @@ const ISSUER = `https://${HOST}/ap-southeast-1_E2E`
 const STUB = 'http://127.0.0.1:9099'
 const ACCOUNT_SVC = 'http://127.0.0.1:18083'
 const API = 'http://127.0.0.1:18080'
+const DB_PORT = process.env.ALERT_E2E_DB_PORT || '55432'
 const CLIENT_SVC = 'http://127.0.0.1:18084'
 const CLIENT = 'c0000000-0000-4000-8000-000000000001'
 const INVEST = 'a0000000-0000-4000-8000-000000000001'
@@ -96,7 +97,7 @@ function javaTlsOptions() {
 function startJar(mode) {
   const env = {
     ...process.env, ALERT_MODE: mode, SERVER_PORT: '18080',
-    EVENT_ALERT_DB_URL: 'jdbc:postgresql://localhost:55432/event_alert', EVENT_ALERT_DB_USERNAME: 'event_alert', EVENT_ALERT_DB_PASSWORD: 'e2e',
+    EVENT_ALERT_DB_URL: `jdbc:postgresql://localhost:${DB_PORT}/event_alert`, EVENT_ALERT_DB_USERNAME: 'event_alert', EVENT_ALERT_DB_PASSWORD: 'e2e',
     COGNITO_ISSUER_URI: ISSUER, JAVA_TOOL_OPTIONS: mode === 'API' ? javaTlsOptions() : '', COGNITO_APP_CLIENT_ID: 'local-app-client', ALERT_HOLDINGS_MODE: 'database',
     ALERT_CRM_ACCOUNT_DIRECTORY_URL: `${ACCOUNT_SVC}/internal/alerts/accounts/lookup`,
     ALERT_CRM_TOKEN_ENDPOINT: `${STUB}/token`, ALERT_CRM_CLIENT_ID: 'alert-directory',
@@ -130,7 +131,7 @@ try {
   docker('network', 'create', NET)
 
   docker('run', '-d', '--name', 'e2e-account-pg', '--network', NET, '-e', 'POSTGRES_USER=postgres', '-e', 'POSTGRES_PASSWORD=postgres', '-e', 'POSTGRES_DB=accounts', 'postgres:16')
-  docker('run', '-d', '--name', 'e2e-alert-pg', '-e', 'POSTGRES_USER=event_alert', '-e', 'POSTGRES_PASSWORD=e2e', '-e', 'POSTGRES_DB=event_alert', '-p', '55432:5432', 'postgres:16-alpine')
+  docker('run', '-d', '--name', 'e2e-alert-pg', '-e', 'POSTGRES_USER=event_alert', '-e', 'POSTGRES_PASSWORD=e2e', '-e', 'POSTGRES_DB=event_alert', '-p', `${DB_PORT}:5432`, 'postgres:16-alpine')
   check('PostgreSQL for account-service starts', await waitFor(async () => acctSql('select 1') === '1', 40))
   execFileSync('docker', ['exec', '-i', 'e2e-account-pg', 'psql', '-U', 'postgres', '-d', 'accounts'], { input: fs.readFileSync(path.join(root, 'services/account-service/data/V1_init.sql')), stdio: ['pipe', 'ignore', 'ignore'] })
 

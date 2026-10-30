@@ -3,7 +3,7 @@
 //
 //   mvn -pl services/event-alert-service -DskipTests package
 //   docker run -d --name alert-e2e-pg -e POSTGRES_USER=event_alert -e POSTGRES_PASSWORD=e2e \
-//     -e POSTGRES_DB=event_alert -p 55432:5432 postgres:16-alpine
+//     -e POSTGRES_DB=event_alert -p 55432:5432 postgres:16-alpine  # or set ALERT_E2E_DB_PORT
 //   node scripts/local-crm-stub/e2e.mjs
 import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
@@ -13,6 +13,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const jar = path.join(root, 'services/event-alert-service/target/event-alert-service.jar')
 const STUB = 'http://127.0.0.1:9099'
 const API = 'http://127.0.0.1:18080'
+const DB_PORT = process.env.ALERT_E2E_DB_PORT || '55432'
 const CLIENT = 'c0000000-0000-4000-8000-000000000001'
 const ACCOUNT = 'a0000000-0000-4000-8000-000000000001'
 const SAVINGS = 'a0000000-0000-4000-8000-000000000002'
@@ -20,7 +21,7 @@ const SAVINGS = 'a0000000-0000-4000-8000-000000000002'
 const env = (mode) => ({
   ...process.env,
   ALERT_MODE: mode, SERVER_PORT: '18080', MANAGEMENT_SERVER_PORT: '',
-  EVENT_ALERT_DB_URL: 'jdbc:postgresql://localhost:55432/event_alert',
+  EVENT_ALERT_DB_URL: `jdbc:postgresql://localhost:${DB_PORT}/event_alert`,
   EVENT_ALERT_DB_USERNAME: 'event_alert', EVENT_ALERT_DB_PASSWORD: 'e2e',
   COGNITO_ISSUER_URI: STUB, COGNITO_APP_CLIENT_ID: 'local-app-client',
   ALERT_HOLDINGS_MODE: 'database',

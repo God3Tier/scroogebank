@@ -8,10 +8,13 @@ artifact supports one explicit mode at a time:
 
 The default runtime is offline and deterministic. It contains no provider
 credentials and makes no outbound provider calls unless an adapter and its
-independent enable switch are explicitly configured. Synthetic holdings are loaded
-from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
-Creating a CRM user or inserting a database holding does not automatically change
-this snapshot; live CRM holdings synchronization is not implemented by this MVP.
+independent enable switch are explicitly configured. The default fixture mode
+loads synthetic holdings from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
+With `ALERT_HOLDINGS_MODE=database`, agents record current holdings for CRM
+investment accounts through the portfolio API; the worker reads those records
+without changing the fixture or rebuilding the image. See
+`docs/feature-plans/event-driven-alerts-current-holdings_plan.md` for the
+authorization, rollout and verification gates.
 
 The ingestion core is provider-neutral and outbound-disabled by default with
 `ALERT_INGESTION_ENABLED=false`. It builds at most four single-issuer public-market

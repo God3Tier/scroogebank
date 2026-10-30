@@ -1623,3 +1623,21 @@ retry exhaustion and refusal to retry after the last available reservation.
   client data or AWS resources were used.
 - Verification: SFTP `make test` passed, including SQLBoiler regeneration,
   producer tests, receiver tests, and OpenAPI response/route checks.
+
+## 2026-10-30 — Current alert holdings local verification
+
+- Human requester: name not supplied in this session; feature owner Azeez and
+  required reviewers remain as recorded in the holdings plan.
+- Tool: Codex (OpenAI).
+- Use: independently rerun local Java, frontend, Go, real-process and mocked
+  Terraform checks for current CRM-linked holdings; make the local PostgreSQL
+  port configurable in the four end-to-end scripts; correct stale status notes.
+- Files affected: `scripts/local-crm-stub/`, the alert service README, the
+  current-holdings plan, ADR-0066 status addendum and this log.
+- Data: synthetic project data. A real Tavily test key was loaded at runtime
+  from an ignored local `.env`; its value was not printed, copied or committed.
+  No AWS call was made.
+- Verification: 242 alert service tests, 261 frontend tests, both relevant Go
+  suites, 19 + 26 + 15 real-process assertions, and 12 + 8 mocked Terraform
+  tests passed. The bounded Tavily run succeeded but accepted no source and
+  created no alert with the model disabled. Human review and PR/CI remain.

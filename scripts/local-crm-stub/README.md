@@ -1,8 +1,8 @@
 # Local CRM stub and database-mode check
 
-A stand-in for the CRM directory routes and Cognito, so the alert service can be tried in
-`ALERT_HOLDINGS_MODE=database` before the real CRM routes exist (CH-01). Synthetic data
-only; developer machines only. It does **not** replace the real-CRM test the plan asks for.
+A stand-in for the CRM directory and Cognito, so the alert service can be tried in
+`ALERT_HOLDINGS_MODE=database`. Synthetic data only; developer machines only.
+Use the real-service checks below to verify the CRM integration.
 
 ```sh
 mvn -pl services/event-alert-service -DskipTests package
@@ -11,6 +11,10 @@ docker run -d --name alert-e2e-pg -e POSTGRES_USER=event_alert -e POSTGRES_PASSW
 node scripts/local-crm-stub/e2e.mjs                               # needs ports 9099 and 18080 free
 docker rm -f alert-e2e-pg
 ```
+
+If port 55432 is unavailable, set `ALERT_E2E_DB_PORT` to a free port and use
+that port in the `docker run -p` mapping (for example, `5438:5432`). The three
+real-service scripts below read the same variable and start their own database.
 
 `e2e.mjs` starts the stub and the packaged jar, then checks 19 things: sign-in and roles,
 record/replay/stale/unknown-instrument/savings-account refusals, restart persistence,
@@ -22,7 +26,7 @@ It cannot create alerts: that needs a search provider and a model, which stay of
 `e2e-real-account.mjs` runs the **real account-service** (built from its Dockerfile, with its own PostgreSQL and
 schema) and only fakes Cognito: the stub serves keys and mints tokens over HTTPS under the `cognito-idp` host name
 the Go service requires, using a throw-away certificate made with OpenSSL. It needs Docker, Node, OpenSSL and
-free ports 9099, 18080, 18083 and 55432.
+free ports 9099, 18080, 18083 and the selected alert database port.
 
 ```sh
 node scripts/local-crm-stub/e2e-real-account.mjs

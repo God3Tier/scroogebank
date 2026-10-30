@@ -1,6 +1,6 @@
 # ADR-0066: CRM-linked current holdings for agent alerts
 
-- Status: Approved by Azeez (relayed by Hayyun, 2026-10-30); implemented except the CRM directory routes (CH-01) and Terraform (CH-05)
+- Status: Approved by Azeez (relayed by Hayyun, 2026-10-30); implemented locally, awaiting required reviews and merge
 - Decision date/time: 2026-10-29 22:45 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewers: Hayyun (holdings/domain/API); Neo Jia Wen (CRM ownership/security)
@@ -137,3 +137,14 @@ and Docker/Java/Go/UI/contract/Terraform checks.
   (`exposure.accountRef`). A test captures the real Tavily request and the model requests built from private
   portfolios and checks for private values.
 - **Not covered here:** a live AWS run.
+
+## Local verification addendum (2026-10-30)
+
+CH-01's account-service directory route and CH-05's Terraform wiring were
+implemented after the earlier status note. The alert service, frontend, both
+relevant Go services, real-process local CRM flows, and mocked Terraform tests
+passed on the task branch. A real Tavily search also succeeded with a maintained
+CRM holding; its one returned result was rejected by the relevance gate, and
+with the model disabled it created no alert. Required human reviews, PR/CI and
+AWS validation remain open. This addendum records verification, not a new
+architecture decision.

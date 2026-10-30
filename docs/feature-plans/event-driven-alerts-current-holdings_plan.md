@@ -566,3 +566,35 @@ Deviations from this plan, on purpose:
    request for client, account, agent, quantity and valuation values).
 6. **Small gaps:** the agent-event list has no paging beyond `limit`. Alert detail now names the account that
    produced the score (`exposure.accountRef`, in `docs/api/openapi.yaml`); the frontend does not display it yet.
+
+### 12.2 Independent local rerun (2026-10-30)
+
+On `task/event-driven-alerts/current-holdings`, Codex reran the following with
+synthetic data and no AWS access:
+
+- Alert service: `mvn -B -pl services/event-alert-service -am test` — 242 passed, 0 failed.
+- Frontend: `npm ci --no-audit --no-fund`, `npx vitest run` — 261 passed;
+  `npx eslint src` and `npx vite build` passed.
+- account-service and client-profile-management-service: generated ignored ORM
+  code and mocks, then ran each service's Docker Compose `go test ./... -cover`;
+  both passed. The client suite used LocalStack for its encryption/document tests.
+- Terraform: `fmt -check -recursive`, `validate` and mocked `test` passed in both
+  `stacks/crm` (12 tests) and `stacks/alert-worker` (8 tests). No plan or apply
+  against AWS was run.
+- Real-process checks: `e2e.mjs` (19), `e2e-real-account.mjs` (26) and
+  `e2e-reassignment.mjs` (15) all passed. Windows reserved the scripts' default
+  PostgreSQL port, so `ALERT_E2E_DB_PORT=5438` was used. These checks cover
+  current portfolio output, revision and audit evidence, authorization, restart
+  persistence, and reassignment through the real client and account services.
+- `e2e-live-generation.mjs`: a bounded Tavily search succeeded using the ignored
+  local key. One result was rejected by the relevance gate; accepted sources,
+  events, alerts and snapshots were all zero. The worker reported
+  `skipped=MODEL_DISABLED`. This proves the maintained holding drives a live
+  search, but does **not** prove a live generated briefing. The key was not
+  printed or committed.
+
+The PostgreSQL integration tests assert deterministic alert and briefing output,
+including complete-account 10/100 exposure, grouping, current-owner visibility,
+selected-client actions and immutable prior evidence. A running live-provider
+briefing remains unverified without an enabled model. Required owner reviews,
+PR/CI, and AWS validation remain open; the latter is outside this local rerun.

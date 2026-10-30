@@ -33,6 +33,7 @@ a decision it governs.
 - [ADR-0046](ADR-0046-human-deploy-access-mfa-role.md) — Operators deploy as the hand-made role `crm-infra-admin` (administrator, MFA required, 4-hour sessions), assumed from IAM users in `crm-deployers` whose keys can reach nothing else; Identity Center is impossible in this member account, and Terraform cannot hold a role that its teardowns would destroy.
 - [ADR-0048](ADR-0048-alert-worker-terraform-stack.md) — The alert worker is a scheduled ECS task in its own `stacks/alert-worker`, which reads the CRM stack's `alerts_worker_inputs` output, runs every four hours only while the stack is running and ingestion is on, and alarms on a non-zero exit; its AgentCore-specific decisions are superseded by ADR-0050.
 - [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) — Use Tavily directly from the worker with restrictive domains/dates/result bounds and a Secrets Manager key because the Tokyo AgentCore Gateway and native Bedrock Web Search are blocked by an organization SCP; amends ADR-0009 and ADR-0048.
+- [ADR-0066](ADR-0066-crm-linked-current-alert-holdings.md) — Approved CRM-linked current holdings and current-agent authorization for grouped event briefings, complete-account exposure, immutable snapshots and no fixture fallback; implemented locally, awaiting reviews and merge.
 - [ADR-0051](ADR-0051-client-health-explicit-activity-classification.md) — Client Health requires an explicit CustomerInitiated/Automated/Unknown transaction classification so activity baselines exclude non-customer activity without inspecting descriptions.
 - [ADR-0052](ADR-0052-client-health-versioned-signal-rules.md) — Client Health ruleset v1 deterministically detects recurring-credit interruption, 50%+ customer-activity decline, and two-period material net outflow with versioned thresholds and no pseudo-confidence score.
 - [ADR-0053](ADR-0053-client-health-run-orchestration-and-task-admission.md) — Client Health SF04 owns deterministic leased analysis and success-only watermarks, while SF05 atomically owns active-task admission, 30-day severity-worsening cooldown and a 20-new-task daily Agent cap.
@@ -66,7 +67,6 @@ assigns replacement identifiers.
 
 ## Proposed decisions
 
-- [ADR-0066](ADR-0066-crm-linked-current-alert-holdings.md) - Proposed CRM-linked database holdings and current-agent authorization supporting one agent-event briefing with affected-client evidence, complete-account exposure, immutable snapshots and no fixture fallback.
 - [ADR-0065](ADR-0065-client-health-matched-transaction-history.md) — Proposed private Client Health transaction history route; scoped Cognito client-credentials authentication, all-client `[from,to)` reads, global keyset pagination, matched-only fields, validated source fingerprints, and synthetic signal/control cases.
 
 Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](../architecture/system-overview.md). Numbering starts at 0017 because feature branches already use 0001–0016.
