@@ -1641,3 +1641,18 @@ retry exhaustion and refusal to retry after the last available reservation.
   suites, 19 + 26 + 15 real-process assertions, and 12 + 8 mocked Terraform
   tests passed. The bounded Tavily run succeeded but accepted no source and
   created no alert with the model disabled. Human review and PR/CI remain.
+
+## 2026-10-30 — Current alert holdings event briefing follow-up
+
+- Human requester: name not supplied in this session; Azeez remains feature owner.
+- Tool: Codex (OpenAI).
+- Use: add grouped event cursor paging and a load-more control; show the scoring
+  account on affected-client drill-down; update synthetic tests and API/plan docs.
+- Data: repository content and synthetic fixtures only. No credential, client
+  data, AWS call, or infrastructure apply was used for these changes.
+- Human verification required: review the task PR and CRM/security changes;
+  independently label historical retrieval events, review commercial-source
+  terms, verify Tavily dashboard credits, and validate against deployed AWS.
+- Verification: 243 alert-service tests, 18 focused PostgreSQL cases after a
+  final assertion, 262 frontend tests, ESLint and production build passed.
+  No Terraform files changed; earlier mocked Terraform checks remain valid.

@@ -12,6 +12,7 @@ import bank.alert.event.AgentEventModels.EventPage;
 import bank.alert.event.AgentEventModels.MemberOutcome;
 import bank.alert.event.AgentEventModels.MemberResult;
 import bank.alert.service.AlertNotFoundException;
+import bank.alert.service.AlertQueryService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,8 +44,14 @@ public class AgentEventQueryService {
 
     @Transactional
     public EventPage list(String agentSubject, boolean onlyOpen, int limit) {
+        return list(agentSubject, onlyOpen, null, limit);
+    }
+
+    @Transactional
+    public EventPage list(String agentSubject, boolean onlyOpen, String encodedCursor, int limit) {
         ownership.refresh();
-        String sql = """
+        AlertQueryService.Cursor cursor = AlertQueryService.decodeCursor(encodedCursor);
+        StringBuilder sql = new StringBuilder("""
                 SELECT pe.id AS event_id, sr.title, sr.canonical_url, sr.source_domain,
                        sr.published_at, sr.retrieved_at,
                        COUNT(DISTINCT a.client_ref) AS client_count,
@@ -61,10 +69,27 @@ public class AgentEventQueryService {
                   LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
                  WHERE %s = ?
                  GROUP BY pe.id, sr.title, sr.canonical_url, sr.source_domain, sr.published_at, sr.retrieved_at
-                """.formatted(OWNER)
-                + (onlyOpen ? " HAVING COUNT(*) FILTER (WHERE a.status IN ('NEW', 'MONITORING')) > 0" : "")
-                + " ORDER BY MAX(a.created_at) DESC, pe.id DESC LIMIT ?";
-        return new EventPage(jdbc.query(sql, (rs, n) -> card(rs), agentSubject, limit));
+                """.formatted(OWNER));
+        List<Object> args = new ArrayList<>();
+        args.add(agentSubject);
+        if (onlyOpen) sql.append(" HAVING COUNT(*) FILTER (WHERE a.status IN ('NEW', 'MONITORING')) > 0");
+        if (cursor != null) {
+            sql.append(onlyOpen ? " AND " : " HAVING ");
+            sql.append("(MAX(a.created_at) < ? OR (MAX(a.created_at) = ? AND pe.id < ?))");
+            args.add(Timestamp.from(cursor.createdAt()));
+            args.add(Timestamp.from(cursor.createdAt()));
+            args.add(cursor.id());
+        }
+        sql.append(" ORDER BY MAX(a.created_at) DESC, pe.id DESC LIMIT ?");
+        args.add(limit + 1);
+        List<EventCard> rows = new ArrayList<>(jdbc.query(sql.toString(), (rs, n) -> card(rs), args.toArray()));
+        String nextCursor = null;
+        if (rows.size() > limit) {
+            rows.remove(rows.size() - 1);
+            EventCard last = rows.getLast();
+            nextCursor = AlertQueryService.encodeCursor(last.latestAlertAt(), last.eventId());
+        }
+        return new EventPage(rows, nextCursor);
     }
 
     @Transactional
@@ -93,7 +118,7 @@ public class AgentEventQueryService {
 
         List<AffectedClient> clients = jdbc.query("""
                 SELECT a.id, a.client_ref, a.instrument_id, a.status, a.score, a.version,
-                       hs.value_sgd,
+                       hs.value_sgd, hs.account_ref,
                        ROUND(hs.value_sgd * 100 / NULLIF((
                            SELECT SUM(h2.value_sgd) FROM holding_snapshot h2
                             WHERE (hs.portfolio_snapshot_id IS NOT NULL
@@ -108,7 +133,8 @@ public class AgentEventQueryService {
                  WHERE a.public_event_id = ? AND %s = ?
                  ORDER BY a.score DESC, a.client_ref, a.instrument_id
                 """.formatted(OWNER), (rs, n) -> new AffectedClient(
-                rs.getObject("id", UUID.class), rs.getString("client_ref"), rs.getString("instrument_id"),
+                rs.getObject("id", UUID.class), rs.getString("client_ref"), rs.getString("account_ref"),
+                rs.getString("instrument_id"),
                 AlertStatus.valueOf(rs.getString("status")), rs.getBigDecimal("score"),
                 rs.getBigDecimal("pct"),
                 rs.getBigDecimal("value_sgd").setScale(2, RoundingMode.HALF_UP).toPlainString(),

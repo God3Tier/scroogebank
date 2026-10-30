@@ -83,13 +83,13 @@ public class AlertQueryService {
                 row.briefing(), latestDecision);
     }
 
-    static String encodeCursor(Instant createdAt, UUID id) {
+    public static String encodeCursor(Instant createdAt, UUID id) {
         String value = createdAt + "|" + id;
         return Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
-    static Cursor decodeCursor(String encoded) {
+    public static Cursor decodeCursor(String encoded) {
         if (encoded == null || encoded.isBlank()) {
             return null;
         }
@@ -106,6 +106,6 @@ public class AlertQueryService {
         }
     }
 
-    record Cursor(Instant createdAt, UUID id) {
+    public record Cursor(Instant createdAt, UUID id) {
     }
 }

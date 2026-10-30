@@ -257,6 +257,7 @@ paths:
           in: query
           schema: {type: boolean, default: false}
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: Event cards.
@@ -547,18 +548,20 @@ components:
     EventPage:
       type: object
       additionalProperties: false
-      required: [items]
+      required: [items, nextCursor]
       properties:
         items:
           type: array
           items: {$ref: '#/components/schemas/EventCard'}
+        nextCursor: {type: string, nullable: true, maxLength: 512}
     AffectedClient:
       type: object
       additionalProperties: false
-      required: [alertId, clientRef, instrumentId, status, score, portfolioPercentage, amountSgd, version]
+      required: [alertId, clientRef, accountRef, instrumentId, status, score, portfolioPercentage, amountSgd, version]
       properties:
         alertId: {type: string, format: uuid}
         clientRef: {type: string}
+        accountRef: {type: string, description: Account whose holding produced this alert's score}
         instrumentId: {type: string}
         status: {$ref: '#/components/schemas/AlertStatus'}
         score: {type: number}

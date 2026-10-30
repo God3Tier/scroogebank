@@ -33,7 +33,7 @@ public final class AgentEventModels {
             Instant latestAlertAt) {
     }
 
-    public record EventPage(List<EventCard> items) {
+    public record EventPage(List<EventCard> items, String nextCursor) {
         public EventPage {
             items = List.copyOf(items);
         }
@@ -43,6 +43,7 @@ public final class AgentEventModels {
     public record AffectedClient(
             UUID alertId,
             String clientRef,
+            String accountRef,
             String instrumentId,
             AlertStatus status,
             BigDecimal score,

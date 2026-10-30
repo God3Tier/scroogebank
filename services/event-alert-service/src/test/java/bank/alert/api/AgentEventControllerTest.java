@@ -48,10 +48,14 @@ class AgentEventControllerTest {
 
     @Test
     void listsOnlyForTheAuthenticatedAgent() throws Exception {
-        when(queries.list("agent-a", true, 25)).thenReturn(new EventPage(List.of()));
+        when(queries.list("agent-a", true, null, 25)).thenReturn(new EventPage(List.of(), null));
 
         mockMvc.perform(get("/api/alerts/events").param("onlyOpen", "true").with(user("agent-a").roles("AGENT")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray());
+        when(queries.list("agent-a", false, "opaque-page", 25)).thenReturn(new EventPage(List.of(), null));
+        mockMvc.perform(get("/api/alerts/events").param("cursor", "opaque-page")
+                        .with(user("agent-a").roles("AGENT"))).andExpect(status().isOk());
+        verify(queries).list("agent-a", false, "opaque-page", 25);
         mockMvc.perform(get("/api/alerts/events").with(user("admin-1").roles("ADMIN")))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/alerts/events")).andExpect(status().isUnauthorized());

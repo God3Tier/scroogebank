@@ -94,8 +94,8 @@ bodies and idempotency match the alert routes above.
 |---|---|---|---|
 | GET | `/api/alert-portfolios/{accountId}` | the client's current agent; admin read-only | Complete recorded portfolio and `revision`. 404 when nothing was recorded or the account is not visible (indistinguishable). An explicitly recorded empty portfolio returns `positions: []` with its revision. |
 | PUT | `/api/alert-portfolios/{accountId}` | the client's current agent | Atomic complete replacement. Body `{expectedRevision, sourceLabel, positions[<=100]}`; each position `{instrumentId, quantity, unitPrice, valuationCurrency, fxToSgd, valuedAt}`. `Idempotency-Key` required. The client and agent are never taken from the body. |
-| GET | `/api/alerts/events?onlyOpen&limit` | agent | One card per public event: shared summary, evidence, `affectedClientCount`, `openClientCount`. |
-| GET | `/api/alerts/events/{eventId}` | agent | The card, the agent's affected clients (alert ID, client, instrument, score, share of portfolio, status, version) and the latest action. |
+| GET | `/api/alerts/events?onlyOpen&limit&cursor` | agent | One card per public event: shared summary, evidence, `affectedClientCount`, `openClientCount`. Returns an opaque `nextCursor` for the next page. Each page rechecks current client ownership. |
+| GET | `/api/alerts/events/{eventId}` | agent | The card, the agent's affected clients (alert ID, client, scoring account, instrument, score, share of portfolio, status, version) and the latest action. |
 | POST | `/api/alerts/events/{eventId}/actions` | agent | `{decision: INFORM_CLIENT\|MONITOR\|DISMISS, note, members[1..200]:{alertId, expectedVersion}}` with `Idempotency-Key`. Applies only to the listed clients and returns a per-member outcome. |
 
 PUT refusals: 409 stale `expectedRevision`, key reuse with a different body, or a

@@ -85,7 +85,7 @@ function EventDetailPanel({ eventId, onChanged }) {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th /><th>Client</th><th>Holding</th><th className="num">Share of portfolio</th><th>Status</th></tr>
+            <tr><th /><th>Client</th><th>Scoring account</th><th>Holding</th><th className="num">Share of portfolio</th><th>Status</th></tr>
           </thead>
           <tbody>
             {detail.clients.map((client) => {
@@ -98,6 +98,7 @@ function EventDetailPanel({ eventId, onChanged }) {
                       onChange={(e) => setSelected((s) => ({ ...s, [client.alertId]: e.target.checked }))} />
                   </td>
                   <td className="mono">{client.clientRef.slice(0, 8)}</td>
+                  <td className="mono" title={client.accountRef}>{client.accountRef?.slice(0, 8) || '—'}</td>
                   <td>{client.instrumentId}</td>
                   <td className="num">{client.portfolioPercentage == null ? '—' : `${Number(client.portfolioPercentage).toFixed(1)}%`}</td>
                   <td>{STATUS_LABELS[client.status] || client.status}</td>
@@ -140,7 +141,7 @@ function EventDetailPanel({ eventId, onChanged }) {
 }
 
 function EventBriefings() {
-  const [state, setState] = useState({ loading: true, error: '', items: [] })
+  const [state, setState] = useState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
   const [openId, setOpenId] = useState(null)
   const [onlyOpen, setOnlyOpen] = useState(true)
 
@@ -149,18 +150,38 @@ function EventBriefings() {
   useEffect(() => {
     let current = true
     listEvents({ onlyOpen }).then(
-      (page) => { if (current) setState({ loading: false, error: '', items: page.items }) },
-      (e) => { if (current) setState({ loading: false, error: problemText(e), items: [] }) },
+      (page) => { if (current) setState({ loading: false, error: '', items: page.items, nextCursor: page.nextCursor, loadingMore: false }) },
+      (e) => { if (current) setState({ loading: false, error: problemText(e), items: [], nextCursor: null, loadingMore: false }) },
     )
     return () => { current = false }
   }, [onlyOpen, reloadKey])
+
+  async function loadMore() {
+    if (!state.nextCursor || state.loadingMore) return
+    const cursor = state.nextCursor
+    setState((current) => ({ ...current, loadingMore: true, error: '' }))
+    try {
+      const page = await listEvents({ onlyOpen, cursor })
+      setState((current) => current.nextCursor === cursor
+        ? { ...current, items: [...current.items, ...page.items], nextCursor: page.nextCursor, loadingMore: false }
+        : current)
+    } catch (e) {
+      setState((current) => current.nextCursor === cursor
+        ? { ...current, error: problemText(e), loadingMore: false }
+        : current)
+    }
+  }
 
   return (
     <section className="event-briefings" aria-labelledby="event-briefings-title">
       <div className="event-briefings__head">
         <h2 id="event-briefings-title">Events that may affect your clients</h2>
         <label>
-          <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
+          <input type="checkbox" checked={onlyOpen} onChange={(e) => {
+            setOnlyOpen(e.target.checked)
+            setState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
+            setOpenId(null)
+          }} />
           Only events needing a decision
         </label>
       </div>
@@ -193,6 +214,11 @@ function EventBriefings() {
           </li>
         ))}
       </ul>
+      {!state.loading && state.nextCursor && (
+        <button type="button" onClick={loadMore} disabled={state.loadingMore}>
+          {state.loadingMore ? 'Loading…' : 'Load more events'}
+        </button>
+      )}
     </section>
   )
 }

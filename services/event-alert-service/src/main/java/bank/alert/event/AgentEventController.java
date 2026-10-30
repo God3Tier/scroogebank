@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -43,8 +44,9 @@ public class AgentEventController {
     public EventPage list(
             @RequestParam(defaultValue = "false") boolean onlyOpen,
             @RequestParam(defaultValue = "25") @Min(1) @Max(100) int limit,
+            @RequestParam(required = false) @Size(max = 512) String cursor,
             Authentication authentication) {
-        return queries.list(authentication.getName(), onlyOpen, limit);
+        return queries.list(authentication.getName(), onlyOpen, cursor, limit);
     }
 
     @GetMapping("/{eventId}")

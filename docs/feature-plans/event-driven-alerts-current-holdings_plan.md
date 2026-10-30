@@ -564,8 +564,8 @@ Deviations from this plan, on purpose:
    test `aggregateGaugesDescribeTheBookWithoutIdentifiers`); and the captured-request privacy check
    (`OutboundPrivacyTest` drives the real Tavily client and classifier/briefing generator and searches every
    request for client, account, agent, quantity and valuation values).
-6. **Small gaps:** the agent-event list has no paging beyond `limit`. Alert detail now names the account that
-   produced the score (`exposure.accountRef`, in `docs/api/openapi.yaml`); the frontend does not display it yet.
+6. **Small gaps: closed locally (2026-10-30).** The agent-event list now returns a keyset `nextCursor`, and the
+   frontend loads further cards. Event drill-down names the account whose holding produced each alert's score.
 
 ### 12.2 Independent local rerun (2026-10-30)
 
@@ -598,3 +598,27 @@ including complete-account 10/100 exposure, grouping, current-owner visibility,
 selected-client actions and immutable prior evidence. A running live-provider
 briefing remains unverified without an enabled model. Required owner reviews,
 PR/CI, and AWS validation remain open; the latter is outside this local rerun.
+
+### 12.3 Local follow-up on the event briefing (2026-10-30)
+
+The event list now uses the same opaque timestamp/UUID cursor format as the
+per-alert list. The server rechecks current CRM ownership on every page and
+returns `nextCursor` only when more event cards exist. The UI appends pages and
+shows the scoring account on affected-client drill-down; the API contract and
+synthetic regression tests cover these fields. No Terraform resource changed.
+
+Verification: the full alert-service suite passed (243 tests), followed by all
+18 `CurrentHoldingsIntegrationTest` cases after adding an open-only cursor
+assertion. The frontend passed 262 tests with two workers and a 15-second test
+timeout, plus ESLint and the production build. The default high-concurrency
+Vitest run had two unrelated five-second paging-test timeouts (260 passed);
+both passed in the bounded rerun. Terraform, Go and real-process evidence in
+section 12.2 remains applicable because those paths were not changed.
+
+The retrospective Tavily benchmark in
+[`tavily-global-portfolio-benchmark-2026-10-29.md`](../testing/tavily-global-portfolio-benchmark-2026-10-29.md)
+met the numerical ADR-0051 thresholds on eight previously labelled events,
+but the reference set came from the earlier investigation. Independent human
+labels, commercial-source terms approval, and provider-dashboard credit
+confirmation remain production gates. A further unlabelled live search would
+not close those gates. No AWS call or infrastructure apply was made here.

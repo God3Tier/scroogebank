@@ -340,6 +340,8 @@ class CurrentHoldingsIntegrationTest {
         EventDetail detail = eventQueries.detail(cards.getFirst().eventId(), "agent-a");
         assertThat(detail.clients()).hasSize(2);
         assertThat(detail.clients()).extracting(c -> c.portfolioPercentage().intValue()).containsExactlyInAnyOrder(90, 80);
+        assertThat(detail.clients()).extracting(c -> c.accountRef())
+                .containsExactlyInAnyOrder(ACCOUNT_1.toString(), ACCOUNT_2.toString());
 
         // client 2 is reassigned to agent-b through the CRM
         crm.owners.put(CLIENT_2, "agent-b");
@@ -503,6 +505,29 @@ class CurrentHoldingsIntegrationTest {
     }
 
     @Test
+    void eventPagesUseAStableCursorAndRecheckCurrentOwnership() {
+        put(ACCOUNT_1, "key-82500001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
+        generate("agent-a", 2);
+        generate("agent-a", 3);
+
+        var first = eventQueries.list("agent-a", false, null, 1);
+        assertThat(first.items()).hasSize(1);
+        assertThat(first.nextCursor()).isNotBlank();
+        var second = eventQueries.list("agent-a", false, first.nextCursor(), 1);
+        assertThat(second.items()).hasSize(1);
+        assertThat(second.items().getFirst().eventId()).isNotEqualTo(first.items().getFirst().eventId());
+        assertThat(second.nextCursor()).isNull();
+        assertThat(eventQueries.list("agent-a", true, first.nextCursor(), 1).items())
+                .extracting(card -> card.eventId()).containsExactly(second.items().getFirst().eventId());
+        assertThatThrownBy(() -> eventQueries.list("agent-a", false, "bad-cursor", 1))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        crm.owners.put(CLIENT_1, "agent-b");
+        assertThat(eventQueries.list("agent-a", false, first.nextCursor(), 1).items()).isEmpty();
+        assertThat(eventQueries.list("agent-b", false, null, 10).items()).hasSize(2);
+    }
+
+    @Test
     void aClientAffectedAfterAnInformIsNotTreatedAsInformed() {
         put(ACCOUNT_1, "key-83000001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
         put(ACCOUNT_2, "key-83000002", 0, position("SYN-SGX-001", "80", "1.0"), position("SYN-SGX-002", "20", "1.0"));
@@ -596,15 +621,19 @@ class CurrentHoldingsIntegrationTest {
     }
 
     private AlertGenerationOutcome generate(String agent) {
+        return generate(agent, 2);
+    }
+
+    private AlertGenerationOutcome generate(String agent, int sourceNumber) {
         jdbc.update("""
                 INSERT INTO search_run (id, window_from, window_to, status, created_at)
                 VALUES ('70000000-0000-4000-8000-000000000001', '2026-10-29T20:00:00Z', '2026-10-30T00:00:00Z',
                         'SUCCEEDED', '2026-10-30T00:00:00Z') ON CONFLICT (id) DO NOTHING
                 """);
-        SourceResult source = new SourceResult(UUID.fromString("70000000-0000-4000-8000-000000000002"),
-                UUID.fromString("70000000-0000-4000-8000-000000000001"), "fixture-result-1",
-                "https://example.invalid/synthetic-earnings",
-                "c".repeat(64), "Synthetic issuer earnings update", "example.invalid",
+        SourceResult source = new SourceResult(UUID.fromString(String.format("70000000-0000-4000-8000-%012d", sourceNumber)),
+                UUID.fromString("70000000-0000-4000-8000-000000000001"), "fixture-result-" + sourceNumber,
+                "https://example.invalid/synthetic-earnings-" + sourceNumber,
+                String.valueOf(sourceNumber).repeat(64), "Synthetic issuer earnings update", "example.invalid",
                 Instant.parse("2026-10-30T00:00:00Z"), NOW, "d".repeat(64), Instant.parse("2027-01-28T00:00:00Z"));
         if (sourceResults.findById(source.getId()).isEmpty()) sourceResults.saveAndFlush(source);
         EventClassification classification = new EventClassification("Synthetic earnings event",
