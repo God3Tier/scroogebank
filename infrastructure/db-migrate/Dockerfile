@@ -20,6 +20,8 @@ FROM flyway/flyway:11.7.2-alpine
 ENV FLYWAY_SQL_MIGRATION_SEPARATOR=_ \
     FLYWAY_CONNECT_RETRIES=10
 
+# Dockerfile.dockerignore sends only the directories it lists, so a directory
+# copied here must also be listed there, or the build fails with "not found".
 COPY services/client-profile-management-service/data/ /flyway/sql/clients/
 COPY services/account-service/data/ /flyway/sql/accounts/
 COPY services/sftp/receiver/data/ /flyway/sql/transactions/

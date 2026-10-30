@@ -7,6 +7,7 @@
 !services/user-service/src/main/resources/db/migration/
 !services/event-alert-service/src/main/resources/db/migration/
 !services/engagement-service/src/main/resources/db/migration/
+!services/client-health-monitor-service/src/main/resources/db/migration/
 !infrastructure/db-migrate/app-login/
 !infrastructure/db-migrate/transactions/
 !infrastructure/db-migrate/audit/

@@ -82,6 +82,44 @@ override_resource {
   values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read" }
 }
 
+# Known values for what the Client Health checks compare: the audit queue's
+# URL, the alarm topic, the machine client's ID, and the API and ALB IDs in the
+# dashboard body, which a plan also leaves unknown.
+override_resource {
+  target          = aws_sqs_queue.audit
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:ap-southeast-1:123456789012:crm-sg-prod-audit-insert"
+    url = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+  }
+}
+override_resource {
+  target          = aws_sns_topic.alarms
+  override_during = plan
+  values          = { arn = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms" }
+}
+override_resource {
+  target          = aws_cognito_user_pool_client.client_health_read
+  override_during = plan
+  values          = { id = "clienthealthreadexample" }
+}
+override_resource {
+  target          = aws_apigatewayv2_api.this
+  override_during = plan
+  values = {
+    id            = "a1b2c3d4e5"
+    execution_arn = "arn:aws:execute-api:ap-southeast-1:123456789012:a1b2c3d4e5"
+  }
+}
+override_resource {
+  target          = aws_lb.internal
+  override_during = plan
+  values = {
+    arn        = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:loadbalancer/app/crm-sg-prod-internal/0123456789abcdef"
+    arn_suffix = "app/crm-sg-prod-internal/0123456789abcdef"
+  }
+}
+
 variables {
   environment             = "prod"
   root_admin_email        = "root.admin@example.test"
@@ -105,6 +143,13 @@ run "prod" {
       aws_vpc_security_group_ingress_rule.this["db_health-from-db_console-5432"].from_port == 5432
     )
     error_message = "Client Health gets its own database, application login secret and narrowly scoped database ingress."
+  }
+  assert {
+    condition = (
+      contains(keys(aws_vpc_security_group_ingress_rule.this), "alb-from-client_health-${local.alb_port}") &&
+      !contains(keys(aws_vpc_security_group_ingress_rule.this), "transaction-from-client_health-${local.ports.transaction}")
+    )
+    error_message = "Client Health reaches transaction-service only through the ALB (ADR-0019 decision 4), with no direct ingress."
   }
   assert {
     condition     = alltrue([for db in module.db : db.backup_retention_days == 7 && db.multi_az == false && db.max_allocated_storage == 100])
@@ -236,7 +281,7 @@ run "prod" {
       aws_cloudwatch_metric_alarm.client_health_watermark_stale.threshold == 97200 &&
       aws_cloudwatch_metric_alarm.client_health_audit_oldest.threshold == 900 &&
       aws_cloudwatch_metric_alarm.client_health_assignment_unavailable.dimensions["outcome"] == "unavailable" &&
-      strcontains(aws_cloudwatch_metric_alarm.client_health_analysis_failures.metric_query[0].expression, "outcome=\"failed\"") &&
+      anytrue([for q in aws_cloudwatch_metric_alarm.client_health_analysis_failures.metric_query : strcontains(q.expression, "outcome=\"failed\"")]) &&
       strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "Client Health analysis") &&
       strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "client_health_audit_backlog")
     )

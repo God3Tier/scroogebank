@@ -19,25 +19,25 @@ locals {
   }
 
   security_groups = {
-    vpc_link     = "API Gateway VPC Link interfaces"
-    alb          = "Internal ALB"
-    user         = "user-service tasks"
-    client       = "client-service tasks"
-    account      = "account-service tasks"
-    auditor      = "auditor tasks"
-    chain_verify = "chain-verify tasks"
-    transaction  = "transaction-service tasks"
-    alerts       = "event-alert-service tasks"
+    vpc_link      = "API Gateway VPC Link interfaces"
+    alb           = "Internal ALB"
+    user          = "user-service tasks"
+    client        = "client-service tasks"
+    account       = "account-service tasks"
+    auditor       = "auditor tasks"
+    chain_verify  = "chain-verify tasks"
+    transaction   = "transaction-service tasks"
+    alerts        = "event-alert-service tasks"
     client_health = "Client Health Monitor tasks"
-    ingest       = "transaction-ingest Lambda"
-    db_console   = "One-off database console tasks (runbook)"
-    db_users     = "users-db"
-    db_clients   = "clients-db"
-    db_accounts  = "accounts-db"
-    db_trans     = "transactions-db"
-    db_audit     = "audit-db"
-    db_alerts    = "alerts-db"
-    db_health    = "health-db"
+    ingest        = "transaction-ingest Lambda"
+    db_console    = "One-off database console tasks (runbook)"
+    db_users      = "users-db"
+    db_clients    = "clients-db"
+    db_accounts   = "accounts-db"
+    db_trans      = "transactions-db"
+    db_audit      = "audit-db"
+    db_alerts     = "alerts-db"
+    db_health     = "health-db"
   }
 
   # to <- from on port
@@ -57,9 +57,9 @@ locals {
     { to = "auditor", from = "user", port = local.ports.auditor_grpc },
     # transaction-service checks each caller's token (ADR-0064); the
     # business-dashboard stack adds dashboard-service's rule. Client Health
-    # calls its separately scoped private history route directly.
+    # reaches its separately scoped private history route through the ALB,
+    # like the ingest Lambda (ADR-0019 decision 4).
     { to = "transaction", from = "alb", port = local.ports.transaction },
-    { to = "transaction", from = "client_health", port = local.ports.transaction },
     { to = "alerts", from = "alb", port = local.ports.alerts },
     { to = "client_health", from = "alb", port = local.ports.health },
 
