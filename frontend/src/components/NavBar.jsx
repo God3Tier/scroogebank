@@ -1,9 +1,29 @@
 import { useState } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 
 import { ADMIN, AGENT, inAnyGroup } from '../auth/roles.js'
 import { signOut } from '../auth/signOut.js'
+
+// The agent pages under /agent with a link of their own.
+const AGENT_PAGES = [
+  { to: '/agent/client-health', icon: 'monitor_heart', label: 'Client Health' },
+  { to: '/agent/calendar', icon: 'calendar_month', label: 'Calendar' },
+  { to: '/agent/drafts', icon: 'drafts', label: 'Follow-up Emails' },
+]
+
+// A home link is current on its own page and on the pages under it without a
+// link of their own, such as alerts; never alongside one of those links.
+function HomeLink({ to, others, children }) {
+  const { pathname } = useLocation()
+  const under = (path) => pathname === path || pathname.startsWith(`${path}/`)
+  const current = under(to) && !others.some(under)
+  return (
+    <Link to={to} className={current ? 'active' : undefined} aria-current={current ? 'page' : undefined}>
+      {children}
+    </Link>
+  )
+}
 
 // Links are shown for the signed-in user's role only.
 function NavBar() {
@@ -40,32 +60,38 @@ function NavBar() {
         )}
         {isAgent && (
           <>
-            <NavLink to="/agent">
+            <HomeLink to="/agent" others={AGENT_PAGES.map((page) => page.to)}>
               <span className="material-symbols-outlined" aria-hidden="true">support_agent</span>
-              Agent Dashboard
-            </NavLink>
-            <NavLink to="/agent/client-health">
-              <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
-              Client Health
-            </NavLink>
+              Agent Home
+            </HomeLink>
+            {AGENT_PAGES.map((page) => (
+              <NavLink key={page.to} to={page.to}>
+                <span className="material-symbols-outlined" aria-hidden="true">{page.icon}</span>
+                {page.label}
+              </NavLink>
+            ))}
           </>
         )}
         {isAdmin && (
           <>
             <NavLink to="/admin">
               <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
-              Admin Dashboard
+              Admin Home
+            </NavLink>
+            <NavLink to="/admin/client-health">
+              <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
+              Client Health
             </NavLink>
             <NavLink to="/insights/admin">
               <span className="material-symbols-outlined" aria-hidden="true">insights</span>
-              Admin Insights
+              Admin Dashboard
             </NavLink>
           </>
         )}
         {isAgent && (
           <NavLink to="/insights/agent">
             <span className="material-symbols-outlined" aria-hidden="true">monitoring</span>
-            Agent Insights
+            Agent Dashboard
           </NavLink>
         )}
       </nav>

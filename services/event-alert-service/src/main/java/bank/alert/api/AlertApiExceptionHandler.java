@@ -1,5 +1,7 @@
 package bank.alert.api;
 
+import bank.alert.crm.DirectoryUnavailableException;
+import bank.alert.portfolio.PortfolioApiException;
 import bank.alert.service.AlertMutationConflictException;
 import bank.alert.service.AlertNotFoundException;
 import bank.alert.service.AuditUnavailableException;
@@ -25,7 +27,8 @@ public class AlertApiExceptionHandler {
         return problem(HttpStatus.NOT_FOUND, "Alert not found", exception.getMessage());
     }
 
-    @ExceptionHandler({AlertMutationConflictException.class, InvalidAlertTransitionException.class})
+    @ExceptionHandler({AlertMutationConflictException.class, InvalidAlertTransitionException.class,
+            org.springframework.orm.ObjectOptimisticLockingFailureException.class})
     ProblemDetail conflict(RuntimeException exception) {
         return problem(HttpStatus.CONFLICT, "Alert mutation conflict", exception.getMessage());
     }
@@ -38,6 +41,19 @@ public class AlertApiExceptionHandler {
                         HttpStatus.SERVICE_UNAVAILABLE,
                         "Audit persistence unavailable",
                         exception.getMessage()));
+    }
+
+    @ExceptionHandler(PortfolioApiException.class)
+    ProblemDetail portfolio(PortfolioApiException exception) {
+        return problem(exception.status(), "Holdings request refused", exception.getMessage());
+    }
+
+    @ExceptionHandler(DirectoryUnavailableException.class)
+    ResponseEntity<ProblemDetail> directoryUnavailable(DirectoryUnavailableException exception) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", "5")
+                .body(problem(HttpStatus.SERVICE_UNAVAILABLE, "CRM directory unavailable",
+                        "client and account records cannot be verified right now"));
     }
 
     @ExceptionHandler({

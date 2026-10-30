@@ -118,6 +118,15 @@ public record RelationshipTask(
         return status == Status.OPEN || status == Status.IN_REVIEW;
     }
 
+    public RelationshipTask withAssignment(AssignmentSnapshot currentAssignment) {
+        Objects.requireNonNull(currentAssignment, "currentAssignment is required");
+        if (!clientId.equals(currentAssignment.clientId())) {
+            throw new IllegalArgumentException("assignment must belong to the task client");
+        }
+        return new RelationshipTask(taskId, clientId, currentAssignment, status, severity,
+                version, createdAt, updatedAt, evidence, history);
+    }
+
     private RelationshipTask transition(
             long expectedVersion, String agentSubject, String correlationId, Instant now,
             Status required, Status target, Action action, String dispositionCode, String note

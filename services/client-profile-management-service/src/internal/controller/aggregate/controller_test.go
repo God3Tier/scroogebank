@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"client-profile-management-service/src/internal/contract"
 	clienterrors "client-profile-management-service/src/internal/errors"
 	"client-profile-management-service/src/internal/models"
 	servicemock "client-profile-management-service/src/internal/service/aggregate"
@@ -31,11 +32,15 @@ func TestClientStats(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			svc := servicemock.NewMockService(t)
 			svc.On("ClientStats", mock.Anything, caller, "2026-09-01", "2026-09-30", "agent").
-				Return(models.ClientStats{CreatedInWindow: 4}, test.serviceErr).Once()
+				Return(models.ClientStats{
+					Total: 6, ByVerificationStatus: map[string]int64{"UNVERIFIED": 4, "VERIFIED": 2}, CreatedInWindow: 4,
+					DailyCreated: []models.DailyCount{{Date: "2026-09-02", Count: 4}},
+				}, test.serviceErr).Once()
 			req := httptest.NewRequest(http.MethodGet, "/aggregates/clients/stats?from=2026-09-01&to=2026-09-30&groupBy=agent", nil)
 			res := httptest.NewRecorder()
 
 			New(svc).ClientStats(res, req, caller)
+			contract.Check(t, "dashboard-aggregates.yaml", http.MethodGet, "/aggregates/clients/stats", res)
 
 			assert.Equal(t, test.wantStatus, res.Code)
 			assert.Equal(t, "application/json", res.Header().Get("Content-Type"))
@@ -61,11 +66,12 @@ func TestTeamComparison(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			svc := servicemock.NewMockService(t)
 			svc.On("TeamComparison", mock.Anything, caller, "30").
-				Return(models.TeamComparison{Days: 30, ClientsOnboarded: 2, CohortSize: 3}, test.serviceErr).Once()
+				Return(models.TeamComparison{Days: 30, From: "2026-09-01", To: "2026-09-30", ClientsOnboarded: 2, CohortSize: 3}, test.serviceErr).Once()
 			req := httptest.NewRequest(http.MethodGet, "/aggregates/clients/team-comparison?days=30", nil)
 			res := httptest.NewRecorder()
 
 			New(svc).TeamComparison(res, req, caller)
+			contract.Check(t, "dashboard-aggregates.yaml", http.MethodGet, "/aggregates/clients/team-comparison", res)
 
 			assert.Equal(t, test.wantStatus, res.Code)
 			if test.wantBody != "" {
@@ -84,6 +90,7 @@ func TestActionItems(t *testing.T) {
 	res := httptest.NewRecorder()
 
 	New(svc).ActionItems(res, req, caller)
+	contract.Check(t, "dashboard-aggregates.yaml", http.MethodGet, "/aggregates/clients/action-items", res)
 
 	assert.Equal(t, http.StatusOK, res.Code)
 	assert.JSONEq(t, `{"staleUnverified":[],"staleUnverifiedTotal":0}`, res.Body.String())

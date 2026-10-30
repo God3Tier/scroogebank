@@ -100,7 +100,7 @@ class ActivityServiceTest {
     }
 
     private static ActivityQuery anyActivity() {
-        return new ActivityQuery(null, null, null, 20, null);
+        return new ActivityQuery(null, null, null, null, 20, null);
     }
 
     @Test
@@ -116,13 +116,14 @@ class ActivityServiceTest {
                 .setNextPageToken("8")
                 .build());
 
-        ActivityPage page = service.list(new ActivityQuery("agent-sub", from, to, 1, "9"), "caller-token");
+        ActivityPage page = service.list(new ActivityQuery("agent-sub", "client-123", from, to, 1, "9"), "caller-token");
 
         assertThat(receivedHeaders.get().get(ActivityService.AUTHORIZATION))
                 .as("the caller's token is forwarded for the auditor to check")
                 .isEqualTo("Bearer caller-token");
         ListActivitiesRequest request = received.get();
         assertThat(request.getActorId()).isEqualTo("agent-sub");
+        assertThat(request.getClientId()).isEqualTo("client-123");
         assertThat(request.getFrom().getSeconds()).isEqualTo(from.getEpochSecond());
         assertThat(request.getTo().getSeconds()).isEqualTo(to.getEpochSecond());
         assertThat(request.getPageSize()).isEqualTo(1);

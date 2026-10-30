@@ -35,6 +35,18 @@ describe('describing client and account changes', () => {
     })
   })
 
+  it("describes each client a reassignment moved, without the agents' IDs", () => {
+    const entry = describeActivity(crm('UPDATE', 'POST', '/api/clients/reassignments', {
+      attribute_name: 'assigned_agent_id', client_id: CLIENT_ID, before_value: 'agent-sub-old', after_value: 'agent-sub-new',
+    }))
+    expect(entry).toMatchObject({
+      text: 'reassigned a client to another agent',
+      record: { label: 'Client', id: CLIENT_ID },
+      clientId: CLIENT_ID,
+      note: null,
+    })
+  })
+
   it('does not open a deleted client', () => {
     expect(describeActivity(crm('DELETE', 'DELETE', '/api/clients/:clientId', { client_id: CLIENT_ID }))).toMatchObject({
       text: 'deleted a client profile',
@@ -62,9 +74,20 @@ describe('describing client and account changes', () => {
     }))).toMatchObject({ text: 'uploaded an identity document', note: null, clientId: CLIENT_ID })
   })
 
-  it("names the account, not a client, when an account is closed", () => {
+  it("names the account, not a client, when an account is deleted", () => {
     expect(describeActivity(crm('DELETE', 'DELETE', '/api/accounts/:accountId', { client_id: 'account-0001' }))).toMatchObject({
-      text: 'closed an account',
+      text: 'deleted an account',
+      record: { label: 'Account', id: 'account-0001' },
+      clientId: null,
+    })
+  })
+
+  it("describes an account's status change with its values before and after", () => {
+    expect(describeActivity(crm('UPDATE', 'PATCH', '/api/accounts/:accountId', {
+      client_id: 'account-0001', attribute_name: 'status', before_value: 'PENDING', after_value: 'ACTIVE',
+    }))).toMatchObject({
+      text: "changed an account's status",
+      note: 'from Pending to Active',
       record: { label: 'Account', id: 'account-0001' },
       clientId: null,
     })
@@ -127,5 +150,40 @@ describe('the actor', () => {
   it('can filter on users but not on system work', () => {
     expect(isUserActor({ actorId: 'agent-sub-0001' })).toBe(true)
     expect(isUserActor({ actorId: 'system:root-admin-initializer' })).toBe(false)
+  })
+})
+
+// Payloads as engagement-service records them: IDs only, inside data.
+function engagement(action, data = {}) {
+  return {
+    sourceService: 'ENGAGEMENT',
+    action,
+    payload: { event_id: 'audit-1', event_version: 1, occurred_at: '2026-10-21T02:00:00Z', data },
+  }
+}
+
+describe('describing meetings and follow-up emails', () => {
+  it('describes a new meeting with a client and opens the client', () => {
+    expect(describeActivity(engagement('EVENT_CREATE', { calendarEventId: 'event-1', clientId: CLIENT_ID }))).toMatchObject({
+      text: 'scheduled a meeting',
+      tone: 'create',
+      record: { label: 'Client', id: CLIENT_ID },
+      clientId: CLIENT_ID,
+    })
+  })
+
+  it('describes a changed or cancelled meeting without a client', () => {
+    expect(describeActivity(engagement('EVENT_UPDATE', { calendarEventId: 'event-1', clientId: null }))).toMatchObject({
+      text: 'changed a meeting',
+      record: null,
+    })
+    expect(describeActivity(engagement('EVENT_CANCEL'))).toMatchObject({ text: 'cancelled a meeting', tone: 'remove' })
+  })
+
+  it('describes a sent follow-up email', () => {
+    expect(describeActivity(engagement('EMAIL_SEND', { draftId: 'draft-1', clientId: CLIENT_ID }))).toMatchObject({
+      text: 'sent a follow-up email',
+      clientId: CLIENT_ID,
+    })
   })
 })

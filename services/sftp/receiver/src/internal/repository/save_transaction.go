@@ -30,9 +30,10 @@ func saveTransaction(ctx context.Context, exec boil.ContextExecutor, transaction
 	_, err := exec.ExecContext(ctx, `
 		INSERT INTO transactions (
 			transaction_id, source_account_ref, transaction_type, amount, currency,
-			transaction_date, status, description, account_id, client_id, import_status
+			transaction_date, status, description, account_id, client_id, import_status,
+			activity_kind, source_fingerprint
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (transaction_id) DO UPDATE SET status = EXCLUDED.status
 		WHERE transactions.status = 'Pending' AND EXCLUDED.status <> 'Pending'`,
 		transaction.TransactionID,
@@ -46,10 +47,21 @@ func saveTransaction(ctx context.Context, exec boil.ContextExecutor, transaction
 		null.NewString(transaction.LinkedAccountID, transaction.LinkedAccountID != ""),
 		null.NewString(transaction.ClientID, transaction.ClientID != ""),
 		importStatus,
+		activityKind(transaction.ActivityKind),
+		null.NewString(transaction.SourceFingerprint, transaction.SourceFingerprint != ""),
 	)
 	if err != nil {
 		return fmt.Errorf("save transaction %q: %w", transaction.TransactionID, err)
 	}
 
 	return nil
+}
+
+func activityKind(value string) string {
+	switch value {
+	case "CustomerInitiated", "Automated":
+		return value
+	default:
+		return "Unknown"
+	}
 }

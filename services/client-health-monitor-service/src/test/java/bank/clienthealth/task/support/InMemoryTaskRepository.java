@@ -1,7 +1,9 @@
 package bank.clienthealth.task.support;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEvent;
 import bank.clienthealth.task.domain.RelationshipTask;
 import bank.clienthealth.task.port.TaskRepository;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -15,6 +17,8 @@ import java.util.function.Function;
 public final class InMemoryTaskRepository implements TaskRepository {
     private Map<String, RelationshipTask> tasks = new HashMap<>();
     private Map<String, ProcessedFinding> findings = new HashMap<>();
+    private Map<AgentDay, Integer> creationCounts = new HashMap<>();
+    private Map<String, RelationshipHealthAuditEvent> auditEvents = new HashMap<>();
     private int conflictsRemaining;
     private boolean failProcessedFindingSave;
 
@@ -26,9 +30,14 @@ public final class InMemoryTaskRepository implements TaskRepository {
         }
         Map<String, RelationshipTask> taskCopy = new HashMap<>(tasks);
         Map<String, ProcessedFinding> findingCopy = new HashMap<>(findings);
-        T result = work.apply(new FakeSession(taskCopy, findingCopy));
+        Map<AgentDay, Integer> creationCountCopy = new HashMap<>(creationCounts);
+        Map<String, RelationshipHealthAuditEvent> auditCopy = new HashMap<>(auditEvents);
+        T result = work.apply(new FakeSession(
+                taskCopy, findingCopy, creationCountCopy, auditCopy));
         tasks = taskCopy;
         findings = findingCopy;
+        creationCounts = creationCountCopy;
+        auditEvents = auditCopy;
         return result;
     }
 
@@ -38,19 +47,32 @@ public final class InMemoryTaskRepository implements TaskRepository {
 
     public synchronized int taskCount() { return tasks.size(); }
     public synchronized int processedFindingCount() { return findings.size(); }
+    public synchronized int auditEventCount() { return auditEvents.size(); }
+    public synchronized Collection<RelationshipHealthAuditEvent> auditEvents() {
+        return Set.copyOf(auditEvents.values());
+    }
+    public synchronized int creationCount(String agentSubject, LocalDate singaporeDate) {
+        return creationCounts.getOrDefault(new AgentDay(agentSubject, singaporeDate), 0);
+    }
     public synchronized void injectConflicts(int count) { conflictsRemaining = count; }
     public synchronized void failProcessedFindingSave(boolean fail) { failProcessedFindingSave = fail; }
 
     private final class FakeSession implements Session {
         private final Map<String, RelationshipTask> txTasks;
         private final Map<String, ProcessedFinding> txFindings;
+        private final Map<AgentDay, Integer> txCreationCounts;
+        private final Map<String, RelationshipHealthAuditEvent> txAuditEvents;
 
         private FakeSession(
                 Map<String, RelationshipTask> txTasks,
-                Map<String, ProcessedFinding> txFindings
+                Map<String, ProcessedFinding> txFindings,
+                Map<AgentDay, Integer> txCreationCounts,
+                Map<String, RelationshipHealthAuditEvent> txAuditEvents
         ) {
             this.txTasks = txTasks;
             this.txFindings = txFindings;
+            this.txCreationCounts = txCreationCounts;
+            this.txAuditEvents = txAuditEvents;
         }
 
         @Override
@@ -63,6 +85,14 @@ public final class InMemoryTaskRepository implements TaskRepository {
             return txTasks.values().stream()
                     .filter(task -> task.clientId().equals(clientId) && task.active())
                     .findFirst();
+        }
+
+        @Override
+        public Optional<RelationshipTask> findLatestClosedTask(String clientId) {
+            return txTasks.values().stream()
+                    .filter(task -> task.clientId().equals(clientId) && !task.active())
+                    .max(Comparator.comparing(RelationshipTask::updatedAt)
+                            .thenComparing(RelationshipTask::taskId));
         }
 
         @Override
@@ -96,6 +126,15 @@ public final class InMemoryTaskRepository implements TaskRepository {
         }
 
         @Override
+        public boolean tryReserveTaskCreation(String agentSubject, LocalDate singaporeDate, int limit) {
+            AgentDay key = new AgentDay(agentSubject, singaporeDate);
+            int current = txCreationCounts.getOrDefault(key, 0);
+            if (current >= limit) return false;
+            txCreationCounts.put(key, current + 1);
+            return true;
+        }
+
+        @Override
         public void saveTask(RelationshipTask task, long expectedVersion) {
             RelationshipTask stored = txTasks.get(task.taskId());
             if (expectedVersion == 0) {
@@ -119,5 +158,16 @@ public final class InMemoryTaskRepository implements TaskRepository {
             if (txFindings.containsKey(findingId)) throw new ConflictException("Finding already processed");
             txFindings.put(findingId, processedFinding);
         }
+
+        @Override
+        public void enqueueAudit(RelationshipHealthAuditEvent event) {
+            RelationshipHealthAuditEvent existing =
+                    txAuditEvents.putIfAbsent(event.eventId(), event);
+            if (existing != null && !existing.equals(event)) {
+                throw new ConflictException("Audit event ID reused with different content");
+            }
+        }
     }
+
+    private record AgentDay(String agentSubject, LocalDate singaporeDate) { }
 }

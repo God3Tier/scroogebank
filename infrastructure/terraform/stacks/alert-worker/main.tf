@@ -31,6 +31,12 @@ locals {
   # stack again after every CRM apply that changes it.
   schedule_on = local.crm.running && var.ingestion_enabled
 
+  # Holdings come from the same place as the API's (ADR-0066): the CRM stack decides, so the
+  # two cannot disagree. In database mode the worker needs the directory's HTTPS URL, token
+  # endpoint, app client and the client's secret; each is required and absent values stop the
+  # worker at start-up rather than falling back to fixture data.
+  database_holdings = local.crm.holdings_mode == "database"
+
   # The global inference profile the service pins (application.yml
   # alert.ai.model), and the foundation model behind it. A global profile can
   # route to any Region, so the model ARN is Region-wildcarded and tied to the
@@ -103,6 +109,7 @@ module "event_alert_worker" {
 
   environment = merge({
     ALERT_MODE                          = "WORKER"
+    ALERT_HOLDINGS_MODE                 = local.crm.holdings_mode
     EVENT_ALERT_DB_URL                  = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
     AWS_REGION                          = var.aws_region
     ALERT_INGESTION_ENABLED             = tostring(var.ingestion_enabled)
@@ -122,13 +129,25 @@ module "event_alert_worker" {
     # Keep the task definition explicit even though application.yml has the
     # same default, so a deployment cannot drift when application defaults move.
     !var.ai_enabled ? {} : { ALERT_AI_MODEL = local.bedrock_profile_id },
+    !local.database_holdings ? {} : {
+      ALERT_CRM_ACCOUNT_DIRECTORY_URL = local.crm.crm_account_directory_url
+      ALERT_CRM_TOKEN_ENDPOINT        = local.crm.crm_token_endpoint
+      ALERT_CRM_CLIENT_ID             = local.crm.crm_client_id
+      ALERT_CRM_SCOPE                 = local.crm.crm_scope
+    },
   )
-  secrets = {
-    EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"
-    EVENT_ALERT_DB_PASSWORD = "${local.crm.alerts_db_secret_arn}:password::"
-    ALERT_TAVILY_API_KEY    = aws_secretsmanager_secret.tavily.arn
-  }
-  secret_arns = [local.crm.alerts_db_secret_arn, aws_secretsmanager_secret.tavily.arn]
+  secrets = merge(
+    {
+      EVENT_ALERT_DB_USERNAME = "${local.crm.alerts_db_secret_arn}:username::"
+      EVENT_ALERT_DB_PASSWORD = "${local.crm.alerts_db_secret_arn}:password::"
+      ALERT_TAVILY_API_KEY    = aws_secretsmanager_secret.tavily.arn
+    },
+    !local.database_holdings ? {} : { ALERT_CRM_CLIENT_SECRET = "${local.crm.crm_client_secret_arn}:client_secret::" },
+  )
+  secret_arns = concat(
+    [local.crm.alerts_db_secret_arn, aws_secretsmanager_secret.tavily.arn],
+    local.database_holdings ? [local.crm.crm_client_secret_arn] : [],
+  )
 
   # Only what the switched-on capabilities need (least privilege). The keys
   # depend on variables only, so they are known at plan time.

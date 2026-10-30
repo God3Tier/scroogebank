@@ -18,7 +18,7 @@ export const DEFINITIONS = {
   bookedInitialDeposits: {
     term: 'Booked initial deposits',
     text: 'Sum of opening deposits for accounts opened in the window.',
-    caveat: 'Opening deposit only, not a current balance. Single currency (SGD).',
+    caveat: 'Opening deposit only, not a current balance. Shown per currency; never added across currencies.',
   },
   accountsPerClient: {
     term: 'Accounts per client',
@@ -36,7 +36,7 @@ export const DEFINITIONS = {
   transactionValue: {
     term: 'Transaction value',
     text: 'Sum of transaction amounts in the window.',
-    caveat: 'Unlabelled: transactions carry no currency column.',
+    caveat: 'Shown in its currency; not added up when transactions span more than one.',
   },
   ingestionFreshness: {
     term: 'Ingestion freshness',
@@ -71,3 +71,13 @@ export const SORT_OPTIONS = [
   { value: 'accountsOpened', label: 'Accounts opened' },
   { value: 'bookedInitialDeposits', label: 'Booked initial deposits' },
 ]
+
+export const DEPOSITS = 'bookedInitialDeposits'
+// dashboard-service ranks deposits in SGD unless told otherwise (dashboard-api.yaml).
+export const DEFAULT_CURRENCY = 'SGD'
+
+// The request parameters for a ranking. Deposits are ranked in one currency at
+// a time (ADR-0062); the other metrics take none.
+export function rankingParams(sort, currency) {
+  return sort === DEPOSITS ? { sort, currency } : { sort }
+}

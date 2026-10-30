@@ -1,0 +1,10 @@
+# CodeQL settings for the CI scans in .github/workflows/ci.yml (ADR-0028).
+
+query-filters:
+  # Every Java service is a stateless resource server: the frontend sends the
+  # Cognito access token in the Authorization header and no service sets a
+  # session cookie (ADR-0025). A cross-site request therefore carries no
+  # credentials, and disabling Spring's CSRF protection is correct. Remove
+  # this filter if a service ever authenticates with a cookie.
+  - exclude:
+      id: java/spring-disabled-csrf-protection

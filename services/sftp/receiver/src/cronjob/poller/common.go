@@ -4,10 +4,15 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"regexp"
 	"strings"
 
 	"receiver/src/internal/models"
 )
+
+var sourceFingerprintFormat = regexp.MustCompile(`^synthetic-[a-z0-9]+(-[a-z0-9]+)*-[a-f0-9]{12}$`)
+
+const maxSourceFingerprintLength = 64
 
 func envOrDefault(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
@@ -30,6 +35,9 @@ func normalizeTransaction(transaction *models.Transaction) error {
 	if transaction.Amount < 0 || math.IsNaN(transaction.Amount) || math.IsInf(transaction.Amount, 0) {
 		return fmt.Errorf("amount must be a finite non-negative number")
 	}
+	// Account currencies are upper case, and a Matched transaction's must
+	// equal its account's (ADR-0037).
+	transaction.Currency = strings.ToUpper(transaction.Currency)
 	if transaction.Currency != "" && len(transaction.Currency) != 3 {
 		return fmt.Errorf("currency must contain a three-character code")
 	}
@@ -54,6 +62,17 @@ func normalizeTransaction(transaction *models.Transaction) error {
 		transaction.Status = "Failed"
 	default:
 		return fmt.Errorf("unsupported transaction status %q", transaction.Status)
+	}
+	switch transaction.ActivityKind {
+	case "", "Unknown", "CustomerInitiated", "Automated":
+		if transaction.ActivityKind == "" {
+			transaction.ActivityKind = "Unknown"
+		}
+	default:
+		return fmt.Errorf("unsupported activity kind %q", transaction.ActivityKind)
+	}
+	if transaction.SourceFingerprint != "" && (len(transaction.SourceFingerprint) > maxSourceFingerprintLength || !sourceFingerprintFormat.MatchString(transaction.SourceFingerprint)) {
+		return fmt.Errorf("source fingerprint must use the synthetic source format and be at most %d characters", maxSourceFingerprintLength)
 	}
 	return nil
 }

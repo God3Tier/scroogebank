@@ -81,3 +81,17 @@ holdings fixture contains no real PII and spans SGX, NASDAQ, NYSE, LSE, and HKEX
 `official_domains` reference fields to `instrument` and seeds them for the
 synthetic global catalogue. They are public, governed query metadata only; no
 portfolio facts are stored in either field.
+
+`V10__current_holdings.sql` (ADR-0066) is additive. It adds `current_portfolio`
+(CRM `account_id` key, `client_id`, `revision`), `current_position` (positive
+quantity/price/FX, derived `value_sgd`, real `valued_at`), `portfolio_write_request`
+(per-actor idempotency), `portfolio_snapshot` (the group of positions scored
+together: account, revision, agent, total), `client_assignment` (refreshed copy of
+the current agent per CRM client; a null agent means no owner),
+`agent_event_action` and `agent_event_action_member`. It drops only the
+fixture-only foreign key from `holding_snapshot.client_ref` to
+`synthetic_portfolio` and adds nullable `portfolio_snapshot_id` and
+`portfolio_revision` to `holding_snapshot`. `synthetic_portfolio`, every legacy
+`holding_snapshot` and every alert are untouched; legacy detail keeps its original
+grouping (client, source version, valuation time), new detail uses the snapshot
+group. CRM IDs are references checked through the directory, never foreign keys.

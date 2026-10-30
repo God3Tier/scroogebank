@@ -51,6 +51,22 @@ func TestNormalizeTransaction(t *testing.T) {
 			input:   models.Transaction{TransactionID: "test-5", AccountID: "account-5", TransactionType: "CREDIT", Amount: -1, Currency: "SGD", TransferDate: testDate(), Status: "COMPLETED"},
 			wantErr: true,
 		},
+		{
+			name:     "accepts a valid source fingerprint",
+			input:    withSourceFingerprint(validTransaction("CREDIT", "COMPLETED"), "synthetic-employer-a1b2c3d4e5f6"),
+			wantType: "Deposit",
+			wantStat: "Completed",
+		},
+		{
+			name:    "rejects a malformed source fingerprint",
+			input:   withSourceFingerprint(validTransaction("CREDIT", "COMPLETED"), "synthetic-employer-001"),
+			wantErr: true,
+		},
+		{
+			name:    "rejects a source fingerprint longer than the contract",
+			input:   withSourceFingerprint(validTransaction("CREDIT", "COMPLETED"), "synthetic-"+strings.Repeat("a", 60)+"-a1b2c3d4e5f6"),
+			wantErr: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -66,6 +82,11 @@ func TestNormalizeTransaction(t *testing.T) {
 			assert.Equal(t, test.wantStat, transaction.Status)
 		})
 	}
+}
+
+func withSourceFingerprint(transaction models.Transaction, fingerprint string) models.Transaction {
+	transaction.SourceFingerprint = fingerprint
+	return transaction
 }
 
 // noSleep stands in for the wait between connection attempts.
@@ -102,22 +123,22 @@ func (s *fakeStore) SaveAuditEvent(_ context.Context, event models.AuditEvent) e
 }
 
 // fakeDirectory stands in for account-service: accounts maps account ID to
-// client ID.
+// the account's client and currency.
 type fakeDirectory struct {
-	accounts map[string]string
+	accounts map[string]models.Account
 	err      error
 	asked    [][]string
 }
 
-func (d *fakeDirectory) Lookup(_ context.Context, ids []string) (map[string]string, error) {
+func (d *fakeDirectory) Lookup(_ context.Context, ids []string) (map[string]models.Account, error) {
 	d.asked = append(d.asked, ids)
 	if d.err != nil {
 		return nil, d.err
 	}
-	found := make(map[string]string)
+	found := make(map[string]models.Account)
 	for _, id := range ids {
-		if clientID, ok := d.accounts[id]; ok {
-			found[id] = clientID
+		if account, ok := d.accounts[id]; ok {
+			found[id] = account
 		}
 	}
 	return found, nil

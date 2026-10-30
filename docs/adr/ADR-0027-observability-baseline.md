@@ -55,7 +55,7 @@ Logs must not contain client personal data (NFR 8).
    - `AUDIT_SEND_FAILED` (metric filter);
    - ingestion failure;
    - chain mismatch;
-   - AWS Budgets thresholds (50, 70, 85, 95 and 100% of USD 300, plus a Bedrock alert).
+   - AWS Budgets thresholds (50, 70, 85, 95 and 100% of USD 300, plus a Bedrock alert; superseded by [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) decision 7, if accepted: USD 200 at 10, 20, 40, 60, 80 and 100%, plus the Bedrock alert).
 5. **Security monitoring:** GuardDuty (core detection) and one CloudTrail management-events trail.
 6. **Alarm owners:** every alarm names an owner and a backup who subscribe to its SNS topic and follow a runbook. The owners are not yet assigned; the auditor alarms naturally belong to the auditor's feature owner.
 

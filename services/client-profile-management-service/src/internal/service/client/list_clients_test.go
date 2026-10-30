@@ -44,7 +44,7 @@ func TestListClients(t *testing.T) {
 			if test.callRepo {
 				repo.On("ListClients", ctx, test.wantOwner, test.page, test.size).Return(clients, test.total, test.repoErr).Once()
 			}
-			got, err := NewClientService(repo, nil).ListClients(ctx, test.caller, test.page, test.size)
+			got, err := NewClientService(repo, nil, nil).ListClients(ctx, test.caller, test.page, test.size)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return

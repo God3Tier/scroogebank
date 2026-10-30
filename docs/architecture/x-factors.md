@@ -65,18 +65,18 @@ Recorded in [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (A
 Admins see bank-wide and per-agent figures; agents see their own book and work queue. The pages ship inside the existing frontend; the figures come from `dashboard-service`.
 
 - The owning services serve the figures on private `/aggregates` routes, outside `/api`, scoped by the caller's token and audited once by the dashboard.
-- Transaction figures come from user-service, which scopes an agent's request to the accounts account-service says they own before asking transaction-service (today, the SFTP receiver).
+- Transaction figures come from transaction-service (today, the SFTP receiver's read API), which scopes an agent's request to the accounts account-service says they own ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)).
 
 | Decision | Chosen | Not chosen, and why |
 |---|---|---|
 | Topology | Stateless dashboard-service; each owning service computes its own aggregates (pushdown), fetched with the caller's JWT | Its own RDS read model: a costly extra instance and a second copy of client data to secure and erase. Event-sourced projection over a broker: infrastructure for its own sake. Composing in the browser: cross-service joins and failure handling in the frontend, untestable payloads, more round trips. Reading other services' databases: breaks data ownership. |
 | Access control | Forward the caller's JWT; each service scopes its own answer | A service credential for the dashboard: it could read more than the caller, and the ownership rule would be duplicated. |
-| Cache | In-process Caffeine per task, 3 minutes, keyed by caller | ElastiCache: a billable cluster for a small dataset. No cache: every refresh fans out to three services, and through user-service to a fourth. |
+| Cache | In-process Caffeine per task, 3 minutes, keyed by caller | ElastiCache: a billable cluster for a small dataset. No cache: every refresh fans out to four services. |
 | Audit | `DASHBOARD_VIEW` events sent straight to SQS, best-effort; cache hits still audited | An outbox: there is no database to hold one. Failing the request when auditing fails: auditing a read must not take the read down. |
 
 ## X-factor 3: Client Relationship Health Monitor
 
-Recorded in [ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) (Proposed).
+Recorded in [ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) (Accepted).
 
 Detects explainable changes in client banking activity and turns them into prioritised, auditable follow-up tasks for agents. The MVP has three deterministic signals: **recurring-credit interruption**, **transaction-activity decline** and **sustained net-outflow trend**; more will follow.
 
@@ -84,7 +84,7 @@ Detects explainable changes in client banking activity and turns them into prior
 - Bedrock only turns verified facts into readable wording. It receives signal type, percentage or banded changes, transaction counts, time-window lengths, expected cadence and days since an expected credit.
 - Bedrock **never** receives names, client IDs, account numbers, raw transactions, descriptions, exact balances, agent IDs or contact information.
 - If Bedrock fails or returns unsupported content, a deterministic template is used, so AI failure never stops task creation.
-- The analysis task reads matched activity from transaction-service and assignments from client-service through the internal ALB with a service token, because a standalone scheduled task cannot use Service Connect. The SFTP import now stores `account_id` and `client_id` on matched rows ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)), but the rest of the activity contract is still open ([open item 16](open-items.md#16-health-monitor-activity-contract)).
+- The analysis task reads matched activity from transaction-service under [ADR-0044](../adr/ADR-0044-client-health-transaction-intake-and-replay.md) and assignments from client-service through the internal ALB with scoped service tokens, because a standalone scheduled task cannot use Service Connect. The contract-faithful synthetic provider supports local work until the Feature 3 owners deliver the production replay endpoint and six-month history.
 
 | Decision | Chosen | Not chosen, and why |
 |---|---|---|

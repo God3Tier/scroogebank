@@ -1,0 +1,10 @@
+# Copy to staging.tfvars (git-ignored). See prod.tfvars.example.
+
+legal_entity = "sg"
+environment  = "staging"
+domain_name  = "itsag3t6.com"
+# sender_address = "synthetic.sender@example.test"   # instead of domain_name, without its hosted zone
+
+verified_recipients = [
+  "synthetic.agent@example.test",
+]

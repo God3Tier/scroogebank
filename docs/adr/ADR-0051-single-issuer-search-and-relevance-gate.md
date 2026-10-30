@@ -68,6 +68,22 @@ exchange/regulatory feeds or another provider.
 
 ## Validation
 
+### Requester direction, 2026-10-30
+
+The requester explicitly directed: "just use it but attach the sorce in the
+summaary as well" after discussion of the unverified publisher rights.
+For this task, that direction supersedes the empty commercial-domain
+configuration in decisions 2–3: Reuters, CNBC and FT are configured in the
+application and worker defaults, and the event summary displays a clickable
+source-domain citation. This records the requester's configuration decision;
+it does not assert a publisher licence, completed terms review, or approval
+by a named ADR reviewer. Azeez remains the accountable human owner.
+
+Scheduled ingestion and AI remain disabled by default. Retrieval quality,
+AWS/model verification, bounded excerpts and retention requirements still apply.
+
+### Existing evidence
+
 - Unit tests cover one-query-per-issuer construction and issuer/event filtering.
 - PostgreSQL migration tests verify aliases and official domains.
 - Rotation tests cover 12 instruments in three slots and 100 in 25 slots.

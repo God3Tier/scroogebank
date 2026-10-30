@@ -456,6 +456,31 @@ textarea:focus {
   transition: background-color 0.15s ease;
 }
 
+/* Reassigning an agent's clients opens under their row (ADR-0060). */
+.row-list > li:has(.reassign-form) {
+  flex-wrap: wrap;
+}
+
+.reassign-form {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--stack-sm);
+}
+
+.reassign-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.reassign-form .form-actions {
+  margin: 0;
+}
+
 .row-list > li:last-child {
   border-bottom: none;
 }
@@ -550,7 +575,8 @@ textarea:focus {
   color: var(--on-surface-variant);
 }
 
-.badge-completed {
+.badge-completed,
+.badge-active {
   background: rgba(0, 107, 94, 0.1);
   color: var(--secondary);
 }
@@ -663,6 +689,11 @@ textarea:focus {
   margin: 0;
 }
 
+/* Between the client page's cards, so it lines up with them. */
+.client-profile > .read-only-notice {
+  margin: 0 0 var(--stack-lg);
+}
+
 .client-header p {
   color: var(--on-surface-variant);
 }
@@ -680,13 +711,23 @@ textarea:focus {
 /* ---------- Client profile and verification (ADR-0041) ---------- */
 
 .back-row a {
+  display: inline-block;
+  font: 600 14px/20px var(--sans);
+  padding: 8px 16px;
+  border: 1px solid var(--primary-container);
+  border-radius: var(--radius);
   color: var(--primary-container);
-  font-weight: 600;
   text-decoration: none;
+  transition: background-color 0.2s ease;
 }
 
 .back-row a:hover {
-  text-decoration: underline;
+  background: var(--surface-container);
+}
+
+.back-row a:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
 }
 
 .client-header__text {
@@ -851,6 +892,46 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: var(--stack-sm);
+}
+
+/* After a verification: make the client's Pending accounts Active (ADR-0050). */
+.activation-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack-sm);
+  margin-top: var(--stack-md);
+}
+
+.activation-prompt .verify-actions {
+  gap: var(--stack-sm);
+}
+
+/* An account's status and, for an agent, the control to change it, between
+   the account's heading and its transactions. */
+.account-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--stack-sm) var(--stack-lg);
+  padding: var(--stack-md) var(--stack-lg);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.account-status-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--stack-sm);
+}
+
+.account-status-form select {
+  width: auto;
+  min-width: 160px;
+}
+
+.account-status .form-error {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .verify-done > p:first-child {
@@ -1117,11 +1198,52 @@ textarea:focus {
   background: var(--surface-lowest);
 }
 
-.activity-feed__more {
+/* The foot of a list: View all on a dashboard, the pager on the list's own page. */
+.list-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
+  gap: var(--stack-sm);
   padding: var(--stack-md);
   border-top: 1px solid var(--outline-variant);
+}
+
+.list-footer__link {
+  font: 600 14px/20px var(--sans);
+  padding: 8px 16px;
+  border: 1px solid var(--primary-container);
+  border-radius: var(--radius);
+  color: var(--primary-container);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.list-footer__link:hover {
+  background: var(--surface-container);
+}
+
+.list-footer__link:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+.main .pager button {
+  min-width: 40px;
+  padding: 4px 10px;
+  font-size: 16px;
+}
+
+.main .pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.pager__position {
+  min-width: 112px;
+  color: var(--on-surface-variant);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 640px) {
@@ -1702,6 +1824,22 @@ textarea:focus {
   font-size: 13px;
 }
 
+.health-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--stack-md);
+}
+
+.health-filters label,
+.health-action-note label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .health-workspace {
   display: grid;
   grid-template-columns: minmax(280px, 0.72fr) minmax(500px, 1.6fr);
@@ -1741,6 +1879,11 @@ textarea:focus {
 
 .health-task-list {
   border-top: 1px solid var(--outline-variant);
+}
+
+.main .health-load-more {
+  width: calc(100% - 2 * var(--stack-md));
+  margin: var(--stack-md);
 }
 
 .main .health-task {
@@ -2317,6 +2460,34 @@ textarea:focus {
 .health-score strong { font-size: 28px; line-height: 30px; }
 .health-score span { font-size: 10px; }
 
+.health-task-version {
+  min-width: 88px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid var(--on-primary-container);
+  border-radius: var(--radius-lg);
+  color: #fff;
+}
+
+.health-task-version strong {
+  font: 600 20px var(--mono);
+}
+
+.health-task-version span {
+  color: var(--on-primary-container);
+  font-size: 11px;
+}
+
+.health-explanation-source {
+  margin-top: var(--stack-sm);
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .health-summary {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
@@ -2473,6 +2644,23 @@ textarea:focus {
 .health-actions p {
   color: var(--on-surface-variant);
   font-size: 12px;
+}
+
+.health-action-note {
+  padding: var(--stack-lg);
+  border-bottom: 1px solid var(--outline-variant);
+  background: var(--surface);
+}
+
+.main .health-primary {
+  background: var(--secondary);
+  border-color: var(--secondary);
+  color: var(--on-secondary);
+}
+
+.main .health-primary:hover {
+  background: var(--secondary-hover);
+  border-color: var(--secondary-hover);
 }
 
 .health-actions button[type='submit'] {
@@ -2653,6 +2841,7 @@ textarea:focus {
   }
 
   .health-evidence-grid { grid-template-columns: 1fr; }
+  .health-filters { grid-template-columns: 1fr; }
 
   .alerts-workspace {
     grid-template-columns: 320px minmax(0, 1fr);
@@ -2782,3 +2971,19 @@ textarea:focus {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Holdings editor and event briefings (current-holdings feature) */
+.holdings-panel { padding: 0 1rem 1rem; }
+.holdings-editor { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+.holdings-editor input { width: 100%; min-width: 4rem; }
+.holdings-note { font-size: 0.85rem; opacity: 0.8; margin: 0; }
+.holdings-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.event-briefings { display: grid; gap: 1rem; }
+.event-briefings__head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.event-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.event-card { display: grid; gap: 0.5rem; }
+.event-card__meta { font-size: 0.85rem; opacity: 0.75; margin: 0; }
+.event-clients { display: grid; gap: 0.75rem; }
+.event-actions { display: flex; gap: 1rem; flex-wrap: wrap; border: 0; padding: 0; }
+.event-outcomes { margin: 0; padding-left: 1.25rem; }
+.client-alert-list { margin-top: 1.5rem; }

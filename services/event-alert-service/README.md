@@ -8,10 +8,13 @@ artifact supports one explicit mode at a time:
 
 The default runtime is offline and deterministic. It contains no provider
 credentials and makes no outbound provider calls unless an adapter and its
-independent enable switch are explicitly configured. Synthetic holdings are loaded
-from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
-Creating a CRM user or inserting a database holding does not automatically change
-this snapshot; live CRM holdings synchronization is not implemented by this MVP.
+independent enable switch are explicitly configured. The default fixture mode
+loads synthetic holdings from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
+With `ALERT_HOLDINGS_MODE=database`, agents record current holdings for CRM
+investment accounts through the portfolio API; the worker reads those records
+without changing the fixture or rebuilding the image. See
+`docs/feature-plans/event-driven-alerts-current-holdings_plan.md` for the
+authorization, rollout and verification gates.
 
 The ingestion core is provider-neutral and outbound-disabled by default with
 `ALERT_INGESTION_ENABLED=false`. It builds at most four single-issuer public-market
@@ -140,8 +143,9 @@ live-news adapter (ADR-0050). In AWS the key is injected from the worker-owned
 Secrets Manager secret; never commit or place it in Terraform. Requests use
 Tavily's restrictive domain mode and published-date filter. Each query combines
 that issuer's official domains with optional shared publishers from
-`ALERT_INGESTION_APPROVED_DOMAINS`; deployment keeps the shared list empty until
-ADR-0011's terms review is recorded. Results are
+`ALERT_INGESTION_APPROVED_DOMAINS`. Defaults now include Reuters, CNBC and FT
+at the requester's direction (ADR-0051's 2026-10-30 addendum); event summaries
+display source-domain links. Publisher rights remain unverified. Results are
 checked again for approved HTTPS domains, the exact UTC window, count and body
 size before persistence. With no key the search fails cleanly as
 `PROVIDER_NOT_CONFIGURED`.
@@ -229,6 +233,12 @@ docker stop event-alert-postgres
 Runtime database settings are supplied through `EVENT_ALERT_DB_URL`,
 `EVENT_ALERT_DB_USERNAME`, and `EVENT_ALERT_DB_PASSWORD`. Never commit real
 credentials. Flyway owns the schema and Hibernate validates it at startup.
+Locally and in tests, Spring Boot's Flyway applies `db/migration` on startup.
+In AWS, the task's `db-migrate` container applies the same files before the
+service starts, and the task definition sets `SPRING_FLYWAY_ENABLED=false`:
+the service connects as its own login, `event_alert_service`, which cannot
+change the schema ([ADR-0028](../../docs/adr/ADR-0028-cicd-migrations-terraform.md)
+decision 3). A worker deployed later must set the same.
 
 API mode also requires `COGNITO_ISSUER_URI` and `COGNITO_APP_CLIENT_ID`, and
 refuses to start without the app client ID. It accepts only Cognito access

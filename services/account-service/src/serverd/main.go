@@ -36,6 +36,11 @@ const clientLookupTimeout = 2 * time.Second
 // POST /internal/accounts/lookup: resource server crm-accounts, scope lookup.
 const lookupScope = "crm-accounts/lookup"
 
+// alertDirectoryScope is the scope the event-alert service's token needs for
+// POST /internal/alerts/accounts/lookup (ADR-0066). The import's token does
+// not carry it, and the alert service's token does not carry lookupScope.
+const alertDirectoryScope = "crm-accounts/alert-directory"
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -104,9 +109,11 @@ func run() error {
 	// App clients allowed to call /internal with a client-credentials token,
 	// such as the transaction import. Empty means no service may call.
 	serviceClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_SERVICE_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })
+	alertClientIDs := strings.FieldsFunc(os.Getenv("COGNITO_ALERT_DIRECTORY_CLIENT_IDS"), func(r rune) bool { return r == ',' || r == ' ' })
 	aggregates := aggregatecontroller.New(aggregateservice.New(aggregaterepository.New(db)))
 	routers.RegisterRoutes(router, account.NewAccountController(accountSvc), aggregates, db,
-		verifier.Middleware(), verifier.ServiceMiddleware(serviceClientIDs, lookupScope), auditLogger)
+		verifier.Middleware(), verifier.ServiceMiddleware(serviceClientIDs, lookupScope),
+		verifier.ServiceMiddleware(alertClientIDs, alertDirectoryScope), auditLogger)
 
 	server := &http.Server{
 		Addr:              envOrDefault("APP_ADDR", ":8083"),

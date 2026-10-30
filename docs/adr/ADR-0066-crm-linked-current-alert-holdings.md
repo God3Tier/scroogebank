@@ -1,6 +1,6 @@
 # ADR-0066: CRM-linked current holdings for agent alerts
 
-- Status: Proposed; design draft only, not approved or implemented
+- Status: Approved by Azeez (relayed by Hayyun, 2026-10-30); implemented locally, awaiting required reviews and merge
 - Decision date/time: 2026-10-29 22:45 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewers: Hayyun (holdings/domain/API); Neo Jia Wen (CRM ownership/security)
@@ -117,3 +117,34 @@ and Docker/Java/Go/UI/contract/Terraform checks.
 - [ADR-0037](ADR-0037-transactions-database-and-account-linking.md)
 - Current-dev ADR-0059/0060/0063: see the pinned branch evidence rather than
   assuming those files already exist on the older feature baseline.
+
+## Implementation addendum (2026-10-30)
+
+- **One CRM route.** The current agent is read from `accounts.owner_agent_id`, which ADR-0060 keeps equal to the
+  client's assigned agent in the same transaction as a reassignment. The alert service therefore calls only
+  `POST /internal/alerts/accounts/lookup` on account-service and no client-service route. Trade-off: no
+  cross-check against client-service; it relies on ADR-0060's invariant.
+- **Own scope.** `crm-accounts/alert-directory` with its own app client and allow-list, separate from the
+  transaction import's `crm-accounts/lookup`, so neither token opens the other's route.
+- **One holdings switch.** In Terraform, `alert_holdings_mode` is read by both the API and the worker. Database
+  mode needs the custom domain so the directory is reached over HTTPS.
+- **Writes use the agent's own token as well.** Besides the directory's owner check, a holdings write sends the
+  agent's access token to account-service's `GET /api/accounts/{id}` (the CRM's own scoped check). Both must agree,
+  otherwise the account is "not found"; an unreachable CRM is 503. This reuses the existing internal ALB rule.
+- **Routing audit and metrics.** `alert.routing-changed` is written transactionally when the ownership refresh
+  sees a client's agent change (fails closed if the outbox is full). Aggregate gauges and a directory-failure
+  counter carry no identifiers (operations runbook). Alert detail returns the account that produced the score
+  (`exposure.accountRef`). A test captures the real Tavily request and the model requests built from private
+  portfolios and checks for private values.
+- **Not covered here:** a live AWS run.
+
+## Local verification addendum (2026-10-30)
+
+CH-01's account-service directory route and CH-05's Terraform wiring were
+implemented after the earlier status note. The alert service, frontend, both
+relevant Go services, real-process local CRM flows, and mocked Terraform tests
+passed on the task branch. A real Tavily search also succeeded with a maintained
+CRM holding; its one returned result was rejected by the relevance gate, and
+with the model disabled it created no alert. Required human reviews, PR/CI and
+AWS validation remain open. This addendum records verification, not a new
+architecture decision.

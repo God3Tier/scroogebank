@@ -19,6 +19,10 @@ type Repository interface {
 	CreateDocument(ctx context.Context, document models.ClientDocument, content []byte) error
 	ListDocuments(ctx context.Context, clientID string) ([]models.ClientDocument, error)
 	GetDocument(ctx context.Context, clientID, documentID string) (models.ClientDocument, []byte, error)
+	// ReassignClients moves clients to another agent, calling moveAccounts
+	// while they are locked (ADR-0060).
+	ReassignClients(ctx context.Context, fromAgentID string, clientIDs []string, toAgentID string,
+		moveAccounts func(ctx context.Context, clientIDs []string) error) ([]models.Reassignment, error)
 }
 
 type clientRepository struct {

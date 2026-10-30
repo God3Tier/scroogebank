@@ -2,17 +2,22 @@
 
 Owns bank accounts. Split out of `client-profile-management-service`, which still owns clients, so each has its own database ([ADR-0017](../../docs/adr/ADR-0017-microservices-per-business-area.md), [ADR-0035](../../docs/adr/ADR-0035-account-ownership-across-services.md)). Written in Go because it was extracted from that service's existing account code.
 
+API contract: [`docs/api/accounts-api.yaml`](../../docs/api/accounts-api.yaml), and the `/aggregates` routes in [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). `make test` checks the controllers' responses and the router's routes against them ([ADR-0063](../../docs/adr/ADR-0063-openapi-contract-tests.md)).
+
 ## Endpoints
 
 | Method | Path | Who | Purpose |
 |---|---|---|---|
-| POST | `/api/accounts` | ADMIN/AGENT | Open an account for a client the caller may access. The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted |
+| POST | `/api/accounts` | AGENT | Open an account for one of the caller's clients. Admins get 403: they only read accounts (ADR-0059). The opening date is today's Singapore date (ADR-0038). 409 if the client already has an account of that type that is not deleted. For an unverified client an agent may open only a `PENDING` account; any other status is 403 (ADR-0050) |
 | GET | `/api/accounts?clientId={uuid}` | ADMIN/AGENT | List a client's accounts that are not deleted. Admins see all; agents see only accounts they own |
 | GET | `/api/accounts/{accountId}` | ADMIN/AGENT | Read an account. Agents: their own only |
-| DELETE | `/api/accounts/{accountId}` | ADMIN/AGENT | Soft-delete an account. Agents: their own only |
-| POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs. Used by the transaction import |
+| DELETE | `/api/accounts/{accountId}` | AGENT | Soft-delete one of the caller's accounts (others 404). Admins get 403 (ADR-0059) |
+| PATCH | `/api/accounts/{accountId}` | AGENT | Change the account's status, and nothing else: body `{"status": "ACTIVE"}`, any of `ACTIVE`, `INACTIVE`, `PENDING`, `CLOSED`, in any direction. Only the agent who owns the account (others 404), and only once its client is verified (403). Admins get 403: they do not manage client accounts. Answers `{"account_id", "status"}` with the new status in lower case, as `GET` returns it. Audited with the status before and after (ADR-0050) |
+| POST | `/internal/accounts/lookup` | Services only | Which of up to 500 account IDs exist (not deleted), with their client IDs and currencies. Used by the transaction import, which rejects a transaction not in its account's currency |
+| POST | `/internal/alerts/accounts/lookup` | Event-alert service only | Which of up to 200 distinct account IDs exist (not deleted), with client, type, status, currency and the owning agent (the client's current agent, ADR-0060). Needs the scope `crm-accounts/alert-directory` from an app client in `COGNITO_ALERT_DIRECTORY_CLIENT_IDS` (ADR-0066) |
 | GET | `/aggregates/accounts/stats?from&to[&groupBy=agent]` | ADMIN/AGENT | The business dashboard's account figures. Agents: their own accounts; per-agent rows for admins only |
-| GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. user-service scopes an agent's transaction figures by them |
+| GET | `/aggregates/accounts/ids` | ADMIN/AGENT | The IDs of the accounts the caller owns. transaction-service scopes an agent's transaction figures by them |
+| PUT | `/ownership/accounts` | ADMIN | Give every account of the clients, deleted ones included, to a new owner: body `{"client_ids": [...], "owner_agent_id": "<sub>"}` (1 to 1,000 UUIDs), answer `{"accounts": n}`. Only client-profile-management-service calls it, with the admin's token, while it reassigns those clients. Outside `/api`, so API Gateway never routes it; not audited here, as client-service audits each client moved (ADR-0060) |
 
 `GET /health` is public; all `/api` routes require a Cognito user **access token**.
 
@@ -20,13 +25,13 @@ Owns bank accounts. Split out of `client-profile-management-service`, which stil
 
 Request `{"ids": ["<uuid>", ...]}`; response `{"accounts": [{"id": "<uuid>", "client_id": "<uuid>"}]}`. IDs that are not UUIDs are ignored.
 
-`/aggregates` routes take the caller's user access token, forwarded by the dashboard or user-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed only when the window's accounts share one currency, otherwise 409 ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
+`/aggregates` routes take the caller's user access token, forwarded by the dashboard or transaction-service, and scope every figure by it. They sit outside `/api` so API Gateway never routes them, and are not audited here: the dashboard audits each view ([ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md)). Deleted accounts are never counted, and deposits are summed per currency, never across currencies, and each day's value is left out when the window's accounts span more than one ([ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0062](../../docs/adr/ADR-0062-dashboard-account-figures-per-currency.md)). Contract: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml).
 
 ## Deleting an account
 
 `DELETE /api/accounts/{accountId}` is a **soft delete** ([ADR-0036](../../docs/adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), as the requirements Q&A asks: it sets `deleted_at`, keeps the row, and leaves `status` as it was.
 
-**Deleted is not the same as closed.** `status = 'closed'` is a business state of an account that still exists: it is still listed and readable. A deleted account is treated as missing by every endpoint, for admins and agents alike: reads and a second delete return 404, and lists leave it out. Its transactions also return 404 through user-service, whose ownership check reads the account. Nothing restores a deleted account. A deleted account's type can be opened again for the same client.
+**Deleted is not the same as closed.** `status = 'closed'` is a business state of an account that still exists: it is still listed and readable. A deleted account is treated as missing by every endpoint, for admins and agents alike: reads and a second delete return 404, and lists leave it out. Its transactions also return 404 from transaction-service, whose ownership check reads the account. Nothing restores a deleted account. A deleted account's type can be opened again for the same client.
 
 Because the row is kept, imported transactions that refer to it are never orphaned.
 
@@ -36,18 +41,19 @@ Deleted rows are filtered by SQLBoiler's `add-soft-deletes` setting in `sqlboile
 
 The `accounts` table has no foreign key to `clients`, because clients live in another service's database. Two things replace it:
 
-- **Creating an account** calls `GET {CLIENT_SERVICE_BASE_URL}/api/clients/{client_id}` with the caller's own token. client-profile-management-service applies its ownership rule: admins see every client, and an agent asking about another agent's client gets 404.
+- **Creating an account** calls `GET {CLIENT_SERVICE_BASE_URL}/api/clients/{client_id}` with the caller's own token. client-profile-management-service applies its ownership rule: an agent asking about another agent's client gets 404. Admins are refused before this call, since they do not open accounts ([ADR-0059](../../docs/adr/ADR-0059-admins-read-only-on-client-data.md)).
 
   | client service answers | Response |
   |---|---|
-  | 200 | The account is created. The client's `created_by_agent_id` is stored as `owner_agent_id` |
+  | 200 | The account is created. The client's `assigned_agent_id` is stored as `owner_agent_id` |
+  | 200, but the client's `verification_status` is not `VERIFIED` (in any case) and the status is not `PENDING` | 403 `an unverified client's account can only be opened as pending`, and nothing is created ([ADR-0050](../../docs/adr/ADR-0050-accounts-pending-until-client-verified.md)) |
   | 404 | 404, and nothing is created |
   | Anything else, or no answer within 2 seconds | 503, and nothing is created |
 
-  Admins go through this check too: it is what proves the client exists. The owner is the client's owner, not the caller, so an admin opening an account does not become its owner.
-- **Reading or deleting an account** compares the caller's `sub` with the stored `owner_agent_id`. That is a local query, with no call to another service. Admins skip it; an agent who does not own the account gets 404, the same as for a missing one.
+  The owner stored is the client's owner as client-profile-management-service reports it, never a value from the request.
+- **Reading, deleting or changing an account** compares the caller's `sub` with the stored `owner_agent_id`. That is a local query, with no call to another service. Admins skip it when reading, and are refused with 403 before it on every write; an agent who does not own the account gets 404, the same as for a missing one.
 
-Copying the owner is correct because a client's owner never changes: nothing updates `created_by_agent_id`, and there is no reassignment feature. If one is added, the copies must be updated with it (ADR-0035).
+The copy stays correct when an admin reassigns a client: client-profile-management-service locks the clients, calls `PUT /ownership/accounts` here with the admin's token, and only then moves the clients ([ADR-0060](../../docs/adr/ADR-0060-client-reassignment.md)). If that call fails, nothing moves.
 
 client-profile-management-service calls the list endpoint before deleting a client, and refuses the delete while accounts remain. Deleted accounts are not listed, so they do not block it; closed accounts that are not deleted do.
 
@@ -57,7 +63,7 @@ client-profile-management-service calls the list endpoint before deleting a clie
 make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
-This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), loads `data/V1_init.sql`, and runs the API at `http://localhost:8083`. A database volume created before soft delete has no `accounts.deleted_at` column, and one created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged); run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
+This starts this service's own PostgreSQL on port 5436 (5434 is user-service's), applies `data/` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), and runs the API at `http://localhost:8083`. A database volume loaded before Flyway has no schema history, so `make run` stops and asks you to run `make db-reset`. A database volume created before soft delete has no `accounts.deleted_at` column, and one created before the audit outbox has no `audit_outbox` table, so no audit events are recorded (each attempt is logged); run `make db-reset` to recreate it. Account creation needs client-profile-management-service running at `CLIENT_SERVICE_BASE_URL` (default `http://localhost:8080`).
 
 For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transaction-ingest app client ID>` to the command above, run client-profile-management-service with its own `make run`, then start the receiver with `make -C ../sftp up`. Each service keeps its own database; the import links transactions to accounts through `/internal/accounts/lookup`.
 
@@ -74,9 +80,10 @@ For the SFTP transaction integration, add `COGNITO_SERVICE_CLIENT_IDS=<transacti
 |---|---|
 | `CLIENT_SERVICE_BASE_URL` | client-profile-management-service URL. Required; must be `https://` in production, because the caller's token is forwarded to it |
 | `COGNITO_ISSUER_URI`, `COGNITO_APP_CLIENT_ID`, `COGNITO_API_AUDIENCE` | Token validation, as in client-profile-management-service |
+| `COGNITO_ALERT_DIRECTORY_CLIENT_IDS` | Comma-separated app client allowed to call `/internal/alerts/accounts/lookup` (the event-alert service's). Empty: that route is refused for everyone |
 | `COGNITO_SERVICE_CLIENT_IDS` | Comma-separated Cognito app clients allowed to call `/internal` with a client-credentials token (the transaction import's). Empty: every `/internal` call is refused |
 | `AWS_REGION`, `AUDIT_QUEUE_URL`, `AWS_ENDPOINT_URL` | Auditor SQS queue |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`) |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`, `DB_SSLROOTCERT` | This service's own database (defaults `localhost:5436`, `accounts`). In AWS, `DB_USER` is the service's own login, `account_service`, which cannot change the schema ([Database logins](../../docs/database/migrations.md#database-logins)) |
 | `APP_ENV`, `APP_ADDR`, `APP_TLS_CERT_FILE`, `APP_TLS_KEY_FILE` | `local` or `production`; listen address (default `:8083`); TLS in production |
 
 ## Auditor SQS events

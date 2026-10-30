@@ -15,6 +15,7 @@ import (
 	"receiver/src/cronjob/accounts"
 	"receiver/src/cronjob/poller"
 	auditsqs "receiver/src/cronjob/sqs"
+	"receiver/src/internal/outbox"
 	"receiver/src/internal/repository"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -91,7 +92,7 @@ func run(once bool) error {
 				options.BaseEndpoint = aws.String(endpoint)
 			}
 		})
-		audit = append(audit, poller.Audit{Events: auditsqs.Events{}, Relay: auditsqs.NewRelay(db, client, queueURL)})
+		audit = append(audit, poller.Audit{Events: auditsqs.Events{}, Relay: outbox.NewRelay(db, client, queueURL, outbox.IngestTable)})
 		log.Printf("transaction audit events enabled for queue %s", queueURL)
 	} else {
 		log.Printf("transaction audit events disabled: AUDIT_QUEUE_URL is empty")

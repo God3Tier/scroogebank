@@ -2,16 +2,22 @@
 
 ## Plan metadata
 
-- Status: Draft; SF00 plan/contracts ready for first PR, later contract artifacts prepared locally but not integrated
+- Status: In progress; SF00-SF08, offline rule evaluation, and RH-SF10 API-backed Agent/Admin UI integration are merged; RH-SF09 metrics/health is implemented on its task branch; the transaction-history provider is merged from `dev` under proposed ADR-0065 and remains blocked on owner/security acceptance and end-to-end verification
 - Project feature: Feature 5
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
-- Current task branch: `task/client-health-monitor/sf00-foundation`
+- Current task branch: `task/client-health-monitor/metrics-health`
 - Source specification: CS301 Project v18.0
-- Last repository sync: 2026-09-29 against `origin/dev` at `048cfb0`
-- AI-assisted planning: Yes; Cursor
+- Last repository sync: 2026-10-27 from `origin/feat/client-health-monitor` at `555a69a` and `origin/dev` at `d9f4ed6`
+- AI-assisted planning: Yes; Cursor and OpenAI Codex
 
-This plan authorizes planning and contract work only. Runtime, compute, database, integration, Bedrock, and audit decisions remain proposed until accepted ADRs with human owners exist.
+ADR-0034 accepts the feature-wide Java/ECS, deterministic-rules, health-db,
+Bedrock-fallback, authorization, outbox and observability direction. ADR-0044
+accepts API-based transaction intake and replay for RH-SF01. Detailed assignment,
+provider, persistence and deployment contracts remain coordinated follow-up work.
+The transaction-history provider and Terraform now implement the reviewable
+ADR-0065 proposal, but that proposal is not accepted production architecture
+until the named owners and security/platform reviewers approve it.
 
 ## Problem statement
 
@@ -111,7 +117,8 @@ Detect that an established recurring external credit is missing beyond its expec
 
 - Call it an `income-like recurring credit`, not verified salary.
 - Require at least three prior observations.
-- Use configurable cadence, timing, amount-variation, and grace-period rules.
+- Under ADR-0052 use median cadence, at most 20% amount variation, and grace
+  equal to the larger of seven days or 25% of cadence.
 - Show why the stream was considered recurring.
 
 ### Transaction-activity decline
@@ -119,7 +126,10 @@ Detect that an established recurring external credit is missing beyond its expec
 Detect that recent completed customer-initiated activity is materially lower than the client's own baseline.
 
 - Compare the client with their own history, not demographic groups.
-- Exclude automatic/system entries when the source contract identifies them.
+- Count only explicit `CustomerInitiated` activity under ADR-0051; exclude
+  `Automated` and fail closed on `Unknown` rather than inferring from descriptions.
+- Require at least six baseline transactions and trigger at a 50% decline under
+  the versioned ADR-0052 severity bands.
 - Call it an activity decline or inactivity precursor, not official dormancy.
 - Suppress clients without sufficient baseline activity.
 
@@ -128,20 +138,26 @@ Detect that recent completed customer-initiated activity is materially lower tha
 Detect that completed withdrawals materially exceed deposits across multiple periods relative to the client's previous pattern.
 
 - Require persistence rather than one large withdrawal.
+- Require two consecutive 30-day periods at or below `-SGD 500` and combined
+  withdrawals at least 1.25 times deposits under ADR-0052.
 - Do not infer destination or client intent.
 - Do not describe the result as fraud, financial distress, or proven attrition.
 - Define an explicit multi-currency policy before enabling this rule.
 
-## Provisional history design
+## History and baseline design
 
 - Generate six months of synthetic transaction history.
-- Initial baseline candidate: previous 90 days.
-- Initial comparison candidate: latest 30 days.
+- At the daily 08:00 Asia/Singapore analysis cut-off, compare the previous
+  90-day baseline with the latest non-overlapping 30-day comparison window.
+- Preserve the full six-month window for recurring-credit grouping.
 - Require at least three observations for recurring-credit classification.
+- Analyse SGD only for the MVP and fail closed on mixed-currency windows.
 - Store rule version and exact input-window boundaries with each signal.
 - Keep windows, thresholds, cooldowns, severity, and caps in a versioned ruleset.
 
-These are project assumptions pending synthetic evaluation, not universal banking standards.
+The window semantics are accepted for RH-SF02. ADR-0052 accepts versioned V1
+thresholds and severity for labelled synthetic evaluation; they are project
+defaults, not universal banking standards.
 
 ## Combined task and suppression behaviour
 
@@ -149,11 +165,14 @@ These are project assumptions pending synthetic evaluation, not universal bankin
 - New evidence updates the active task instead of creating another.
 - Signal fingerprint includes client, account, signal type, rule version, and analysis window.
 - Permit at most one active occurrence for the same fingerprint.
-- Apply a configurable cooldown after completion/dismissal.
-- Permit a new task during cooldown only under an accepted worsening rule.
+- Apply a 30-day configurable cooldown after completion/dismissal under ADR-0053.
+- Permit a new task during cooldown only when highest severity strictly increases.
 - Require matched, complete data and minimum history.
 - Exclude Pending transactions from activity/net-flow calculations.
-- Apply a configurable daily task cap per agent.
+- Apply a 20-new-task daily cap per Agent/Singapore day; evidence attachment to
+  active tasks remains allowed.
+- SF04 owns run leases, deterministic IDs/fingerprints and success-only
+  watermarks; SF05 atomically owns assignment-aware cooldown/cap admission.
 
 ## Task lifecycle
 
@@ -223,7 +242,17 @@ Required from the transaction owner:
 - schema compatibility policy; and
 - no unmatched/rejected record presented as analysable.
 
-Current gap: merged SFTP import stores a source account reference but does not populate `client_id`, publish events, expose a read API, or provide historical replay.
+Current state: SFTP import resolves and stores `client_id` and `account_id` for
+matched rows. The merged transaction-service implementation provides the
+service-authenticated, date-bounded route accepted for the Client Health
+consumer by ADR-0044: all matched clients in a time window, global keyset
+pagination, explicit activity kind, and a nullable stable synthetic source
+fingerprint. Six-month deterministic producer history covers the three MVP
+signals and a healthy control. `make test` passes for endpoint authentication,
+pagination, and synthetic-history coverage. Provider acceptance under
+[ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md), the
+production Client Health HTTP/token adapter, and end-to-end verification remain
+outstanding.
 
 ### Client assignment
 
@@ -449,17 +478,15 @@ Kill switches:
 
 ## Required architecture decisions
 
-ADR numbering is temporarily deferred because the shared ADR index contains unresolved conflict markers and duplicate IDs.
+Decisions:
 
-Decisions still required:
-
-1. service/runtime/compute boundary;
-2. transaction integration and replay;
-3. client assignment and service authentication;
-4. task API/state/authorization and database topology;
-5. Bedrock Region/model/privacy/fallback/cost;
-6. Auditor SQS contract and transactional outbox; and
-7. observability, deployment, backup/rollback, and cost controls.
+1. service/runtime/compute boundary — accepted in ADR-0034;
+2. transaction integration and replay — accepted in ADR-0044;
+3. client assignment and service authentication — scoped service-token direction accepted in ADR-0034; assignment contract pending;
+4. task API/state/authorization and database topology — health-db and authorization direction accepted in ADR-0034; persistence details pending;
+5. Bedrock Region/model/privacy/fallback/cost — Singapore wording-only boundary and fallback accepted in ADR-0034; model limits pending;
+6. Auditor SQS contract and transactional outbox — atomic outbox direction accepted in ADR-0034; Auditor contract pending; and
+7. observability, deployment, backup/rollback, and cost controls — required controls accepted in ADR-0034; implementation/runbooks pending.
 
 ## Agent skills
 
@@ -471,17 +498,18 @@ Decisions still required:
 
 | ID | Subfeature | Primary owner | Expected components | Dependencies/conflict zones | Branch | Status | Last sync |
 |---|---|---|---|---|---|---|---|
-| RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Plan/contracts ready for PR 1; later PRs locally prepared | 2026-09-29 |
-| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | Transaction-owner contract; SF00 | `task/client-health-monitor/transaction-intake` | Planned | N/A |
-| RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; future migration ownership | `task/client-health-monitor/activity-projection` | Planned | N/A |
-| RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; shared fixtures | `task/client-health-monitor/signal-rules` | Planned | N/A |
-| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; frozen finding contract | `task/client-health-monitor/analysis-orchestration` | Planned | N/A |
-| RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; future migration ownership | `task/client-health-monitor/task-domain` | Planned | N/A |
-| RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | Planned | N/A |
-| RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Planned | N/A |
-| RH-SF08 | Audit outbox and adapter | TBD | outbox/publisher/auditor contract | Auditor owner; task transactions | TBD | Unassigned | N/A |
-| RH-SF09 | Metrics and health | TBD | metrics/health/dashboard/alarms | Hooks across SF01-SF08 | TBD | Unassigned | N/A |
-| RH-SF10 | CRM UI integration | TBD | task list/detail/actions/Admin view | Frontend/Azeez/Hayyun coordination | TBD | Unassigned | N/A |
+| RH-SF00 | Foundation and contract freeze | Garvit | Feature plan, contracts, Java records/port, JSON Schema and fixtures; ADR drafts later | Shared build/config; Swayam acknowledgement required | `task/client-health-monitor/sf00-foundation` | Implemented and merged | 2026-10-16 |
+| RH-SF01 | Transaction intake and historical replay | Garvit | `contract/transaction`, ingestion, replay, fixtures | ADR-0044; proposed ADR-0065 provider; SF00 | `task/client-health-monitor/transaction-intake` | Mock-backed consumer and provider route/history merged; production HTTP/token adapter, ADR-0065 acceptance, and Feature 3 E2E pending | 2026-10-27 |
+| RH-SF02 | Activity projection and baselines | Garvit | activity model/repository/service | SF01; ADR-0051; health-db migrations | `task/client-health-monitor/activity-projection` | Domain/baselines and V4 projection/coverage JDBC persistence complete and merged | 2026-10-26 |
+| RH-SF03 | Versioned signal rules | Garvit | rules config and three rules | SF02; ADR-0052; shared fixtures | `task/client-health-monitor/signal-rules` | V1 recurring-credit, activity-decline and sustained-net-outflow rules complete and merged; Java 25 CI pending | 2026-10-21 |
+| RH-SF03-EVAL | Offline labelled rule evaluation | Garvit | rule evaluation harness, labelled synthetic scenarios, evaluation evidence | RH-SF03; ADR-0052 | `task/client-health-monitor/rule-evaluation` | Complete and merged: six labelled positive/negative/boundary/sufficiency scenarios pass deterministically; synthetic-only limitations documented | 2026-10-22 |
+| RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; health-db migrations | `task/client-health-monitor/analysis-orchestration` | Deterministic orchestration and V4 durable run/lease/watermark JDBC persistence complete and merged | 2026-10-26 |
+| RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy | `task/client-health-monitor/task-persistence` | Domain, V1/V2 schema, suppression/admission rules, JDBC repository adapter and atomic SF08 task/finding/outbox writes implemented | 2026-10-23 |
+| RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API/runtime wiring, current-assignment reads/actions, opaque keyset pagination, bounded notes, Contract-B consumer and PostgreSQL/runtime integration suites implemented; client-profile Contract-B provider and Cognito provisioning remain pending | 2026-10-23 |
+| RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval | 2026-10-26 |
+| RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented and merged; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
+| RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented locally; Java 25 Docker CI and review by Garvit pending | 2026-10-27 |
+| RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented and merged against Contract D with deterministic API mocks; deployed API verification and owner review pending | 2026-10-27 |
 | RH-SF11 | Cloud deployment | TBD | compute/database/IAM/routes/secrets/alarms | Accepted ADRs/platform owner | TBD | Unassigned | N/A |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
 
@@ -528,7 +556,7 @@ The feature branch never merges directly into `main`.
 
 - [ ] Garvit and Swayam approve scope/non-scope.
 - [ ] SF00 contracts reviewed by Swayam.
-- [ ] Three rule thresholds and labelled scenarios agreed.
+- [x] Three V1 rule thresholds and labelled scenarios agreed in ADR-0052.
 - [ ] Transaction/replay, assignment, and Auditor contracts accepted by owners.
 - [ ] Required ADRs accepted with human owners.
 - [ ] Bedrock privacy/Region/cost controls accepted.
@@ -551,10 +579,10 @@ The feature branch never merges directly into `main`.
 
 ## Open questions
 
-1. Exact threshold/confidence/severity per signal.
-2. Daily task cap, cooldown, and worsening rule.
+1. V1 thresholds/severity are accepted in ADR-0052; deterministic rules expose no confidence percentage.
+2. Daily cap, cooldown, worsening and suppression ownership are accepted in ADR-0053.
 3. Completion/dismissal reason codes.
-4. Transaction event versus internal API.
+4. Transaction integration uses the internal pull/replay API accepted in ADR-0044; the provider implementation is merged under proposed ADR-0065, while cross-owner acceptance, the Client Health production adapter, and end-to-end verification remain pending.
 5. Assignment lookup versus assignment event.
 6. Lambda/ECS deployment shape and database connection strategy.
 7. Bedrock model/Region/retention/logging/cost caps.

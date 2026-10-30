@@ -56,6 +56,12 @@ public class HoldingSnapshot {
     @Column(name = "source_version", nullable = false, length = 50)
     private String sourceVersion;
 
+    @Column(name = "portfolio_snapshot_id")
+    private UUID portfolioSnapshotId;
+
+    @Column(name = "portfolio_revision")
+    private Long portfolioRevision;
+
     protected HoldingSnapshot() {
     }
 
@@ -78,6 +84,20 @@ public class HoldingSnapshot {
         this.sourceVersion = Objects.requireNonNull(sourceVersion);
     }
 
+    /** A position of a maintained CRM-linked portfolio, scored together with the rest of its snapshot group. */
+    public HoldingSnapshot(UUID id, String clientRef, String accountRef, String assignedAgentSubject,
+                           String instrumentId, BigDecimal quantity, BigDecimal unitPrice,
+                           String valuationCurrency, BigDecimal fxToSgd, BigDecimal valueSgd,
+                           Instant valuedAt, ValuationFreshness freshness, String sourceVersion,
+                           UUID portfolioSnapshotId, long portfolioRevision) {
+        this(id, clientRef, accountRef, assignedAgentSubject, instrumentId, quantity, unitPrice,
+                valuationCurrency, fxToSgd, valueSgd, valuedAt, freshness, sourceVersion);
+        this.portfolioSnapshotId = Objects.requireNonNull(portfolioSnapshotId);
+        this.portfolioRevision = portfolioRevision;
+    }
+
+    public UUID getPortfolioSnapshotId() { return portfolioSnapshotId; }
+    public Long getPortfolioRevision() { return portfolioRevision; }
     public UUID getId() { return id; }
     public String getClientRef() { return clientRef; }
     public String getAccountRef() { return accountRef; }

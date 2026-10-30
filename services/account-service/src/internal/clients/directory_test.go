@@ -14,19 +14,36 @@ import (
 
 const clientID = "00000000-0000-0000-0000-000000000201"
 
-func TestOwnerOf(t *testing.T) {
+func TestLookup(t *testing.T) {
+	profile := func(fields string) string { return `{"client_id":"` + clientID + `",` + fields + `}` }
 	tests := map[string]struct {
-		status    int
-		body      string
-		wantOwner string
-		wantErr   error
+		status  int
+		body    string
+		want    Client
+		wantErr error
 	}{
-		"returns the owning agent":           {status: http.StatusOK, body: `{"client_id":"` + clientID + `","created_by_agent_id":"agent-sub-1"}`, wantOwner: "agent-sub-1"},
+		"returns the owner of a verified client": {
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1","verification_status":"VERIFIED"`),
+			want: Client{OwnerAgentID: "agent-sub-1", Verified: true},
+		},
+		// Clients verified before ADR-0041 hold the status in lower case.
+		"accepts a lower-case verified status": {
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1","verification_status":"verified"`),
+			want: Client{OwnerAgentID: "agent-sub-1", Verified: true},
+		},
+		"reports an unverified client": {
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1","verification_status":"UNVERIFIED"`),
+			want: Client{OwnerAgentID: "agent-sub-1"},
+		},
+		"treats a missing status as unverified": {
+			status: http.StatusOK, body: profile(`"assigned_agent_id":"agent-sub-1"`),
+			want: Client{OwnerAgentID: "agent-sub-1"},
+		},
 		"maps a missing or foreign client":   {status: http.StatusNotFound, body: `client not found`, wantErr: accounterrors.ErrClientNotFound},
 		"fails closed on a server error":     {status: http.StatusInternalServerError, wantErr: accounterrors.ErrClientServiceUnavailable},
 		"fails closed on a rejected token":   {status: http.StatusUnauthorized, wantErr: accounterrors.ErrClientServiceUnavailable},
 		"fails closed on an unreadable body": {status: http.StatusOK, body: `{`, wantErr: accounterrors.ErrClientServiceUnavailable},
-		"fails closed without an owner":      {status: http.StatusOK, body: `{"client_id":"` + clientID + `"}`, wantErr: accounterrors.ErrClientServiceUnavailable},
+		"fails closed without an owner":      {status: http.StatusOK, body: profile(`"verification_status":"VERIFIED"`), wantErr: accounterrors.ErrClientServiceUnavailable},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -41,20 +58,20 @@ func TestOwnerOf(t *testing.T) {
 			}))
 			defer server.Close()
 
-			owner, err := NewHTTPDirectory(server.URL+"/", time.Second).OwnerOf(context.Background(), clientID, "Bearer caller-token")
+			client, err := NewHTTPDirectory(server.URL+"/", time.Second).Lookup(context.Background(), clientID, "Bearer caller-token")
 
 			if test.wantErr != nil {
 				require.ErrorIs(t, err, test.wantErr)
-				assert.Empty(t, owner)
+				assert.Equal(t, Client{}, client)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, test.wantOwner, owner)
+			assert.Equal(t, test.want, client)
 		})
 	}
 }
 
-func TestOwnerOfFailsClosedWhenTheClientServiceIsSlow(t *testing.T) {
+func TestLookupFailsClosedWhenTheClientServiceIsSlow(t *testing.T) {
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-release
@@ -62,17 +79,17 @@ func TestOwnerOfFailsClosedWhenTheClientServiceIsSlow(t *testing.T) {
 	defer server.Close()
 	defer close(release)
 
-	_, err := NewHTTPDirectory(server.URL, 50*time.Millisecond).OwnerOf(context.Background(), clientID, "Bearer caller-token")
+	_, err := NewHTTPDirectory(server.URL, 50*time.Millisecond).Lookup(context.Background(), clientID, "Bearer caller-token")
 
 	require.ErrorIs(t, err, accounterrors.ErrClientServiceUnavailable)
 }
 
-func TestOwnerOfFailsClosedWhenTheClientServiceIsDown(t *testing.T) {
+func TestLookupFailsClosedWhenTheClientServiceIsDown(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	url := server.URL
 	server.Close()
 
-	_, err := NewHTTPDirectory(url, time.Second).OwnerOf(context.Background(), clientID, "Bearer caller-token")
+	_, err := NewHTTPDirectory(url, time.Second).Lookup(context.Background(), clientID, "Bearer caller-token")
 
 	require.ErrorIs(t, err, accounterrors.ErrClientServiceUnavailable)
 }

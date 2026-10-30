@@ -1,6 +1,6 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
-  title: Scrooge CRM Event-Driven Alerts API
+  title: Scrooge CRM API
   version: 0.1.0
   description: >-
     Proposed MVP contract. Agents are restricted to assigned clients; admins have
@@ -11,6 +11,9 @@ security:
   - bearerAuth: []
 tags:
   - name: Alerts
+    description: Event-driven client alert review operations.
+  - name: Relationship Health
+    description: Proactive relationship-health task review operations.
 paths:
   /alerts:
     get:
@@ -105,6 +108,264 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /relationship-health/tasks:
+    get:
+      tags: [Relationship Health]
+      operationId: listRelationshipHealthTasks
+      summary: List relationship-health tasks visible to the authenticated actor
+      description: Agents receive only assigned tasks. Admins have read-only cross-Agent access.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskStatusFilter'
+        - $ref: '#/components/parameters/RelationshipTaskSeverityFilter'
+        - $ref: '#/components/parameters/AssignedAgentSubject'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ownership-scoped relationship-health tasks.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTaskPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /relationship-health/tasks/{taskId}:
+    get:
+      tags: [Relationship Health]
+      operationId: getRelationshipHealthTask
+      summary: Get a relationship-health task
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+      responses:
+        '200':
+          description: Ownership-scoped task detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /relationship-health/tasks/{taskId}/history:
+    get:
+      tags: [Relationship Health]
+      operationId: getRelationshipHealthTaskHistory
+      summary: Get immutable task status and evidence history
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+      responses:
+        '200':
+          description: Ownership-scoped task history.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTaskHistory'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /relationship-health/tasks/{taskId}/accept:
+    post:
+      tags: [Relationship Health]
+      operationId: acceptRelationshipHealthTask
+      summary: Accept an assigned OPEN task
+      description: Agent-only. Admin and dual Admin/Agent tokens are read-only.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+        - $ref: '#/components/parameters/RelationshipCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AcceptRelationshipTaskRequest'}
+      responses:
+        '200':
+          description: Updated IN_REVIEW task.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /relationship-health/tasks/{taskId}/complete:
+    post:
+      tags: [Relationship Health]
+      operationId: completeRelationshipHealthTask
+      summary: Complete an assigned IN_REVIEW task
+      description: Disposition codes and note bounds are enforced by the approved policy implementation.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+        - $ref: '#/components/parameters/RelationshipCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompleteRelationshipTaskRequest'}
+      responses:
+        '200':
+          description: Updated COMPLETED task.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /relationship-health/tasks/{taskId}/dismiss:
+    post:
+      tags: [Relationship Health]
+      operationId: dismissRelationshipHealthTask
+      summary: Dismiss an assigned OPEN or IN_REVIEW task
+      description: Disposition codes and note bounds are enforced by the approved policy implementation.
+      parameters:
+        - $ref: '#/components/parameters/RelationshipTaskId'
+        - $ref: '#/components/parameters/RelationshipCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DismissRelationshipTaskRequest'}
+      responses:
+        '200':
+          description: Updated DISMISSED task.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelationshipTask'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events:
+    get:
+      tags: [Alerts]
+      operationId: listAgentEvents
+      summary: One card per public event for the signed-in agent
+      description: >-
+        Groups the agent's per-client alerts by public event (ADR-0066). Only the signed-in
+        agent's current clients are counted; a client with two accounts counts once.
+      parameters:
+        - name: onlyOpen
+          in: query
+          schema: {type: boolean, default: false}
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Event cards.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}:
+    get:
+      tags: [Alerts]
+      operationId: getAgentEvent
+      summary: One event card with the agent's affected clients and latest action
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Event detail.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventDetail'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}/actions:
+    post:
+      tags: [Alerts]
+      operationId: recordAgentEventAction
+      summary: Inform, monitor or dismiss for an explicit set of the agent's clients
+      description: >-
+        Applies one choice to the listed clients only and records an outcome for each. Inform
+        records intent; it never contacts a client. Reusing an idempotency key with the same
+        body replays the stored result.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventActionRequest'}
+      responses:
+        '200':
+          description: Per-client outcomes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EventActionResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alert-portfolios/{accountId}:
+    get:
+      tags: [Alerts]
+      operationId: getAlertPortfolio
+      summary: The dummy holdings recorded for a CRM account
+      description: >-
+        Present only when ALERT_HOLDINGS_MODE=database (ADR-0066). The client's current agent,
+        or an admin (read-only). 404 when nothing was recorded or the account is not visible.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Recorded portfolio.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Portfolio'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [Alerts]
+      operationId: replaceAlertPortfolio
+      summary: Replace the complete recorded portfolio of a CRM account
+      description: >-
+        Bookkeeping only; it never places a trade. The client's current agent only. The client and
+        agent come from the CRM and the token, never from the body. 409: stale revision, reused
+        key with another body, or the account is not an active investment account. 422: unknown
+        or duplicate instrument, bad number, future valuedAt.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PortfolioReplaceRequest'}
+      responses:
+        '200':
+          description: Stored portfolio, or the stored result of an identical retry.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Portfolio'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/Unavailable'}
 components:
   securitySchemes:
     bearerAuth:
@@ -113,6 +374,16 @@ components:
       bearerFormat: JWT
       description: Cognito-issued JWT; subject and role are taken only from validated claims.
   parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     AlertId:
       name: alertId
       in: path
@@ -140,11 +411,42 @@ components:
     Cursor:
       name: cursor
       in: query
+      description: Opaque Base64URL keyset cursor returned by the preceding page; clients must not interpret it.
       schema: {type: string, maxLength: 512}
     Limit:
       name: limit
       in: query
       schema: {type: integer, minimum: 1, maximum: 100, default: 25}
+    RelationshipTaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    RelationshipCorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Bounded opaque trace identifier; the service generates a UUID when omitted.
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    RelationshipTaskStatusFilter:
+      name: status
+      in: query
+      schema:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/components/schemas/RelationshipTaskStatus'}
+    RelationshipTaskSeverityFilter:
+      name: severity
+      in: query
+      schema:
+        type: array
+        uniqueItems: true
+        items: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+    AssignedAgentSubject:
+      name: assignedAgentSubject
+      in: query
+      description: Admin-only optional assignment filter.
+      schema: {type: string, minLength: 1, maxLength: 128}
   responses:
     BadRequest:
       description: Invalid request.
@@ -167,7 +469,169 @@ components:
         Retry-After:
           schema: {type: integer, minimum: 1}
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    UnprocessableEntity:
+      description: Disposition code or note rejected by the configured policy.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    TooManyRequests:
+      description: Request rejected by an edge or service rate limit.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
   schemas:
+    PortfolioFreshness:
+      type: string
+      enum: [FRESH, STALE, EXPIRED, MISSING]
+    PortfolioPositionInput:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, quantity, unitPrice, valuationCurrency, fxToSgd, valuedAt]
+      properties:
+        instrumentId: {type: string, maxLength: 32}
+        quantity: {type: number}
+        unitPrice: {type: number}
+        valuationCurrency: {type: string, pattern: '^[A-Z]{3}$'}
+        fxToSgd: {type: number}
+        valuedAt: {type: string, format: date-time}
+    PortfolioReplaceRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, sourceLabel, positions]
+      properties:
+        expectedRevision: {type: integer, minimum: 0, description: 0 for the first save.}
+        sourceLabel: {type: string, minLength: 1, maxLength: 64}
+        positions:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PortfolioPositionInput'}
+    PortfolioPosition:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, ticker, issuerName, quantity, unitPrice, valuationCurrency, fxToSgd, valueSgd, valuedAt, freshness]
+      properties:
+        instrumentId: {type: string}
+        ticker: {type: string}
+        issuerName: {type: string}
+        quantity: {type: number}
+        unitPrice: {type: number}
+        valuationCurrency: {type: string}
+        fxToSgd: {type: number}
+        valueSgd: {type: number}
+        valuedAt: {type: string, format: date-time}
+        freshness: {$ref: '#/components/schemas/PortfolioFreshness'}
+    Portfolio:
+      type: object
+      additionalProperties: false
+      required: [accountId, clientId, revision, sourceLabel, updatedAt, totalSgd, positions]
+      properties:
+        accountId: {type: string, format: uuid}
+        clientId: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        sourceLabel: {type: string}
+        updatedAt: {type: string, format: date-time}
+        totalSgd: {type: number}
+        positions:
+          type: array
+          items: {$ref: '#/components/schemas/PortfolioPosition'}
+    EventCard:
+      type: object
+      additionalProperties: false
+      required: [eventId, headline, summary, aiGenerated, uncertainty, evidence, affectedClientCount, openClientCount, topScore, latestAlertAt]
+      properties:
+        eventId: {type: string, format: uuid}
+        headline: {type: string}
+        summary: {type: string, nullable: true}
+        aiGenerated: {type: boolean}
+        uncertainty: {type: string, nullable: true}
+        evidence: {$ref: '#/components/schemas/Evidence'}
+        affectedClientCount: {type: integer, minimum: 0}
+        openClientCount: {type: integer, minimum: 0}
+        topScore: {type: number}
+        latestAlertAt: {type: string, format: date-time}
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/EventCard'}
+        nextCursor: {type: string, nullable: true, maxLength: 512}
+    AffectedClient:
+      type: object
+      additionalProperties: false
+      required: [alertId, clientRef, accountRef, instrumentId, status, score, portfolioPercentage, amountSgd, version]
+      properties:
+        alertId: {type: string, format: uuid}
+        clientRef: {type: string}
+        accountRef: {type: string, description: Account whose holding produced this alert's score}
+        instrumentId: {type: string}
+        status: {$ref: '#/components/schemas/AlertStatus'}
+        score: {type: number}
+        portfolioPercentage: {type: number, nullable: true}
+        amountSgd: {type: string}
+        version: {type: integer, minimum: 0}
+    EventActionMember:
+      type: object
+      additionalProperties: false
+      required: [alertId, expectedVersion]
+      properties:
+        alertId: {type: string, format: uuid}
+        expectedVersion: {type: integer, minimum: 0}
+    EventActionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, members]
+      properties:
+        decision: {$ref: '#/components/schemas/Decision'}
+        note: {type: string, maxLength: 500, nullable: true}
+        members:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: {$ref: '#/components/schemas/EventActionMember'}
+    EventActionMemberResult:
+      type: object
+      additionalProperties: false
+      required: [alertId, outcome, previousStatus, newStatus]
+      properties:
+        alertId: {type: string, format: uuid}
+        outcome: {type: string, enum: [APPLIED, STALE_VERSION, INVALID_TRANSITION, NOT_AUTHORISED]}
+        previousStatus:
+          anyOf:
+            - {$ref: '#/components/schemas/AlertStatus'}
+            - {$ref: '#/components/schemas/NullValue'}
+        newStatus:
+          anyOf:
+            - {$ref: '#/components/schemas/AlertStatus'}
+            - {$ref: '#/components/schemas/NullValue'}
+    EventActionResult:
+      type: object
+      additionalProperties: false
+      required: [actionId, eventId, decision, recordedAt, members]
+      properties:
+        actionId: {type: string, format: uuid}
+        eventId: {type: string, format: uuid}
+        decision: {$ref: '#/components/schemas/Decision'}
+        recordedAt: {type: string, format: date-time}
+        members:
+          type: array
+          items: {$ref: '#/components/schemas/EventActionMemberResult'}
+    EventDetail:
+      type: object
+      additionalProperties: false
+      required: [card, clients, latestAction]
+      properties:
+        card: {$ref: '#/components/schemas/EventCard'}
+        clients:
+          type: array
+          items: {$ref: '#/components/schemas/AffectedClient'}
+        latestAction:
+          anyOf:
+            - {$ref: '#/components/schemas/EventActionResult'}
+            - {$ref: '#/components/schemas/NullValue'}
+    NullValue:
+      description: JSON null. OpenAPI 3.0 has no null type, so a nullable reference is anyOf the schema and this.
+      type: object
+      nullable: true
+      enum: [null]
     AlertStatus:
       type: string
       enum: [NEW, MONITORING, INFORMED, DISMISSED]
@@ -185,7 +649,7 @@ components:
         items:
           type: array
           items: {$ref: '#/components/schemas/AlertSummary'}
-        nextCursor: {type: [string, 'null']}
+        nextCursor: {type: string, nullable: true}
     AlertSummary:
       type: object
       additionalProperties: false
@@ -200,36 +664,45 @@ components:
         createdAt: {type: string, format: date-time}
         version: {type: integer, minimum: 0}
     AlertDetail:
-      unevaluatedProperties: false
-      allOf:
-        - $ref: '#/components/schemas/AlertSummary'
-        - type: object
-          required: [exposure, explanationFactors, evidence, briefing]
-          properties:
-            exposure: {$ref: '#/components/schemas/Exposure'}
-            explanationFactors:
-              type: array
-              minItems: 1
-              items: {$ref: '#/components/schemas/ExplanationFactor'}
-            evidence:
-              type: array
-              minItems: 1
-              items: {$ref: '#/components/schemas/Evidence'}
-            briefing:
-              description: Null only while an alert is awaiting its structured briefing.
-              oneOf:
-                - {$ref: '#/components/schemas/Briefing'}
-                - {type: 'null'}
-            latestDecision:
-              oneOf:
-                - {$ref: '#/components/schemas/DecisionRecord'}
-                - {type: 'null'}
+      # AlertSummary's properties and more. OpenAPI 3.0 cannot close an allOf
+      # to other properties, so they are repeated here.
+      type: object
+      additionalProperties: false
+      required: [id, clientRef, instrumentId, headline, status, score, createdAt, version, exposure, explanationFactors, evidence, briefing]
+      properties:
+        id: {type: string, format: uuid}
+        clientRef: {type: string, pattern: '^syn-client-[0-9]{3}$'}
+        instrumentId: {type: string, maxLength: 32}
+        headline: {type: string, maxLength: 300}
+        status: {$ref: '#/components/schemas/AlertStatus'}
+        score: {type: number, minimum: 0, maximum: 100}
+        createdAt: {type: string, format: date-time}
+        version: {type: integer, minimum: 0}
+        exposure: {$ref: '#/components/schemas/Exposure'}
+        explanationFactors:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/ExplanationFactor'}
+        evidence:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/Evidence'}
+        briefing:
+          description: Null only while an alert is awaiting its structured briefing.
+          anyOf:
+            - {$ref: '#/components/schemas/Briefing'}
+            - {$ref: '#/components/schemas/NullValue'}
+        latestDecision:
+          anyOf:
+            - {$ref: '#/components/schemas/DecisionRecord'}
+            - {$ref: '#/components/schemas/NullValue'}
     Exposure:
       type: object
       additionalProperties: false
-      required: [amountSgd, portfolioPercentage, valuationAsOf, freshness]
+      required: [amountSgd, portfolioPercentage, valuationAsOf, freshness, accountRef]
       properties:
         amountSgd: {type: string, pattern: '^[0-9]+\.[0-9]{2}$'}
+        accountRef: {type: string, maxLength: 128, description: The account whose holding produced this alert's score (the highest-scoring account when a client holds the instrument in several)}
         portfolioPercentage: {type: number, minimum: 0, maximum: 100}
         valuationAsOf: {type: string, format: date-time}
         freshness: {$ref: '#/components/schemas/ValuationFreshness'}
@@ -249,7 +722,7 @@ components:
         title: {type: string, maxLength: 300}
         url: {type: string, format: uri, maxLength: 2048}
         sourceDomain: {type: string, maxLength: 253}
-        publishedAt: {type: [string, 'null'], format: date-time}
+        publishedAt: {type: string, nullable: true, format: date-time}
         retrievedAt: {type: string, format: date-time}
     Briefing:
       type: object
@@ -257,10 +730,10 @@ components:
       required: [summary, aiGenerated, modelVersion, promptVersion]
       properties:
         summary: {type: string, maxLength: 1500}
-        aiGenerated: {type: boolean, const: true}
+        aiGenerated: {type: boolean, enum: [true]}
         modelVersion: {type: string, maxLength: 100}
         promptVersion: {type: string, maxLength: 50}
-        uncertainty: {type: [string, 'null'], maxLength: 500}
+        uncertainty: {type: string, nullable: true, maxLength: 500}
     DecisionRequest:
       type: object
       additionalProperties: false
@@ -268,7 +741,7 @@ components:
       properties:
         decision: {$ref: '#/components/schemas/Decision'}
         expectedVersion: {type: integer, minimum: 0}
-        note: {type: [string, 'null'], maxLength: 500}
+        note: {type: string, nullable: true, maxLength: 500}
     DecisionRecord:
       type: object
       additionalProperties: false
@@ -289,9 +762,10 @@ components:
       properties:
         rating: {type: string, enum: [USEFUL, NOT_USEFUL]}
         reasonCode:
-          type: [string, 'null']
+          type: string
+          nullable: true
           enum: [WRONG_INSTRUMENT, LOW_RELEVANCE, DUPLICATE, STALE, UNCLEAR, OTHER, null]
-        comment: {type: [string, 'null'], maxLength: 500}
+        comment: {type: string, nullable: true, maxLength: 500}
         expectedVersion: {type: integer, minimum: 0}
     FeedbackRecord:
       type: object
@@ -301,17 +775,126 @@ components:
         id: {type: string, format: uuid}
         alertId: {type: string, format: uuid}
         rating: {type: string, enum: [USEFUL, NOT_USEFUL]}
-        reasonCode: {type: [string, 'null']}
+        reasonCode: {type: string, nullable: true}
         actorSubject: {type: string, maxLength: 128}
         recordedAt: {type: string, format: date-time}
         alertVersion: {type: integer, minimum: 0}
+    RelationshipTaskStatus:
+      type: string
+      enum: [OPEN, IN_REVIEW, COMPLETED, DISMISSED]
+    RelationshipTaskSeverity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+    RelationshipTaskSignalType:
+      type: string
+      enum: [RECURRING_CREDIT_INTERRUPTION, TRANSACTION_ACTIVITY_DECLINE, SUSTAINED_NET_OUTFLOW]
+    RelationshipTaskPage:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, items]
+      properties:
+        schemaVersion: {type: string, enum: ['1']}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RelationshipTask'}
+        nextCursor: {type: string, nullable: true, maxLength: 512}
+    RelationshipTask:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, taskId, clientId, assignedAgentSubject, status, severity, evidence, version, createdAt, updatedAt]
+      properties:
+        schemaVersion: {type: string, enum: ['1']}
+        taskId: {type: string, minLength: 1, maxLength: 128}
+        clientId: {type: string, minLength: 1, maxLength: 128}
+        assignedAgentSubject: {type: string, minLength: 1, maxLength: 128}
+        status: {$ref: '#/components/schemas/RelationshipTaskStatus'}
+        severity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+        explanation: {$ref: '#/components/schemas/RelationshipTaskExplanation'}
+        evidence:
+          type: array
+          items: {$ref: '#/components/schemas/RelationshipTaskEvidence'}
+        version: {type: integer, minimum: 1}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    RelationshipTaskExplanation:
+      type: object
+      additionalProperties: false
+      required: [text, source, generatedAt]
+      properties:
+        text: {type: string, maxLength: 400}
+        source: {type: string, enum: [BEDROCK, TEMPLATE_FALLBACK]}
+        generatedAt: {type: string, format: date-time}
+    RelationshipTaskEvidence:
+      type: object
+      additionalProperties: false
+      required: [type, accountId, ruleVersion, severity]
+      properties:
+        type: {$ref: '#/components/schemas/RelationshipTaskSignalType'}
+        accountId: {type: string, minLength: 1, maxLength: 128}
+        ruleVersion: {type: string, minLength: 1, maxLength: 128}
+        severity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+    RelationshipTaskHistory:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, taskId, items]
+      properties:
+        schemaVersion: {type: string, enum: ['1']}
+        taskId: {type: string, minLength: 1, maxLength: 128}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/RelationshipTaskHistoryItem'}
+    RelationshipTaskHistoryItem:
+      type: object
+      additionalProperties: false
+      required: [taskVersion, action, actor, occurredAt, afterStatus, afterSeverity, evidenceAddedCount]
+      properties:
+        taskVersion: {type: integer, minimum: 1}
+        action: {type: string, enum: [CREATED, EVIDENCE_ADDED, ACCEPTED, COMPLETED, DISMISSED]}
+        actor: {type: string, minLength: 1, maxLength: 128}
+        occurredAt: {type: string, format: date-time}
+        beforeStatus:
+          anyOf:
+            - {$ref: '#/components/schemas/RelationshipTaskStatus'}
+            - {$ref: '#/components/schemas/NullValue'}
+        afterStatus: {$ref: '#/components/schemas/RelationshipTaskStatus'}
+        beforeSeverity:
+          anyOf:
+            - {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+            - {$ref: '#/components/schemas/NullValue'}
+        afterSeverity: {$ref: '#/components/schemas/RelationshipTaskSeverity'}
+        evidenceAddedCount: {type: integer, minimum: 0}
+        dispositionCode: {type: string, nullable: true, maxLength: 128}
+        note: {type: string, nullable: true, maxLength: 500}
+    AcceptRelationshipTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+    CompleteRelationshipTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, outcomeCode]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+        outcomeCode: {type: string, minLength: 1, maxLength: 128}
+        note: {type: string, nullable: true, maxLength: 500}
+    DismissRelationshipTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reasonCode]
+      properties:
+        expectedVersion: {type: integer, minimum: 1}
+        reasonCode: {type: string, minLength: 1, maxLength: 128}
+        note: {type: string, nullable: true, maxLength: 500}
     Problem:
       type: object
       additionalProperties: false
       required: [type, title, status, correlationId]
       properties:
         type: {type: string, format: uri-reference}
+        instance: {type: string, format: uri-reference}
         title: {type: string, maxLength: 200}
         status: {type: integer, minimum: 400, maximum: 599}
-        detail: {type: [string, 'null'], maxLength: 500}
+        detail: {type: string, nullable: true, maxLength: 500}
         correlationId: {type: string, format: uuid}

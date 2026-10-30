@@ -27,6 +27,20 @@ func TestRunUsesOnlyTheSyncedAccounts(t *testing.T) {
 	}
 }
 
+func TestRunUsesTheSyncedAccountsCurrency(t *testing.T) {
+	destDir := t.TempDir()
+	ids := filepath.Join(t.TempDir(), "account-ids")
+	writeFile(t, ids, syncedAccount+":USD\n")
+
+	run(destDir, accounts.Source{File: ids})
+
+	for _, row := range published(t, destDir) {
+		if row.Currency != "USD" && row.Currency != "Unsupported" {
+			t.Fatalf("transaction %s is in %q, want the account's USD", row.TransactionID, row.Currency)
+		}
+	}
+}
+
 func TestRunPublishesNothingWithoutSyncedAccounts(t *testing.T) {
 	destDir := t.TempDir()
 	ids := filepath.Join(t.TempDir(), "account-ids")

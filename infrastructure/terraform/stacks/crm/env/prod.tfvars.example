@@ -28,10 +28,12 @@ alarm_email      = "you@example.edu"
 # *.cloudfront.net address and the ALB listens on HTTP inside the VPC.
 domain_name = "itsag3t6.com"
 
-# dashboard-service's task role, from the business-dashboard stack (ADR-0047).
-# The name is fixed, so set it before that stack exists; it refuses to plan
-# until this list has it. Runbook step 3 writes this line with your account ID.
-extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task"]
+# dashboard-service's task role, from the business-dashboard stack (ADR-0047),
+# and engagement-service's, from the agent-engagement stack (ADR-0051). The
+# names are fixed, so set them before those stacks exist; each refuses to plan
+# until this list has its role. Runbook step 3 writes this line with your
+# account ID; keep it on one line, which that step replaces.
+extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task", "arn:aws:iam::123456789012:role/crm-sg-prod-engagement-service-task"]
 
 # Runbook step 9.3 writes these four lines once the sftp-server stack exists,
 # replacing older copies. Leave them out until then: the ingest Lambda needs

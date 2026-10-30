@@ -13,7 +13,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 | `users-db` | user-service | CRM users (Admin/Agent), linked to Cognito; `audit_outbox` |
 | `clients-db` | client-service | Client profiles, verification status with who verified and when, `deleted_at` for soft-deleted clients ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), and `client_documents`: one row per identity document ([ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md)) |
 | `accounts-db` | account-service | Bank accounts, each with `owner_agent_id`: the owning agent's Cognito `sub`, copied from client-service when the account is opened ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)), and `deleted_at` for soft-deleted accounts ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) |
-| `transactions-db` | transaction-service and transaction-ingest | Imported transactions and `audit_outbox`, the only outbox, because on `dev` the SFTP receiver is both transaction-service and transaction-ingest. Each transaction stores the `account_id` and `client_id` that account-service confirmed at import, with no foreign keys ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)) |
+| `transactions-db` | transaction-service and transaction-ingest | Imported transactions and `audit_outbox`, the only outbox, because on `dev` the SFTP receiver is both transaction-service and transaction-ingest. Each transaction stores the `account_id` and `client_id` that account-service confirmed at import, with no foreign keys ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)); activity kind and validated nullable source fingerprint support the proposed Client Health history API ([ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)) |
 | `audit-db` | auditor and chain-verify | The hash-chained `audit_log`, and the tamper-findings table (`corrupted_audit_log` on `dev`) |
 | `client-keys` (DynamoDB) | client-service | Per-client data keys, KMS-wrapped, one-to-one with client UUIDs. Email and phone blind indexes in clients-db use a separate shared KMS HMAC key ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)) |
 | `alerts-db` | event-alert-service (api and worker) | Holdings (synthetic for the MVP), instrument master, account sector exposures, public events, alerts, agent decisions, outbox |
@@ -30,6 +30,36 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 - **Dashboard indexes** ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)). The business dashboard's figures are computed in each owning database by date: `clients(created_at)`, `accounts(opening_date)` and `transactions(transaction_date)` are indexed for it. No tables or columns are added.
 - **No cache tier.** Database indexes, CloudFront caching of static files and in-process caching (Cognito signing keys, reference data) are enough at project scale. The spec asks for caching only "if needed" (NFR 1).
 - **Identity documents** (synthetic NRIC only) are uploaded through client-service, encrypted with the client's data key, and kept for audit in a private SSE-KMS S3 bucket ([ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md)). `client_documents` holds each document's ID, client, detected type, size, uploader and time, and whether it was a verification's evidence; never the file or its name. Uploading changes nothing else: the agent checks the documents and then verifies the client, which sets `verification_status`, `verified_by_agent_id`, `verified_at` and `verified_with_documents`. Documents are optional, so `verified_with_documents` is false for a verification without one.
+
+## Client Health task persistence
+
+`client-health-monitor-service` owns additive Flyway migrations under
+`services/client-health-monitor-service/src/main/resources/db/migration`.
+
+- V1 creates relationship tasks, immutable assignment snapshots, evidence,
+  status history, per-Agent/Singapore-day task-admission counts, and processed
+  finding outcomes. One partial unique index permits only one OPEN/IN_REVIEW
+  task per client. Processed findings persist created, attached, duplicate,
+  cooldown-suppressed and daily-cap-suppressed outcomes idempotently.
+- V2 tightens the accepted evidence contract: baseline/comparison windows are
+  non-empty and non-overlapping, signal type is one of the three ADR-0052
+  signals, fingerprints are lowercase SHA-256, and closed-task cooldown queries
+  use a client/update-time index.
+- V3 creates `relationship_health_audit_outbox` with deterministic SHA-256
+  event IDs, allowlisted relationship-health actions, JSON-object payloads,
+  bounded delivery failure categories, lease consistency, and ready/expired
+  lease indexes. Rows are deleted only after gateway acceptance.
+- V4 creates the minimum activity projection, complete replay-coverage windows,
+  and durable analysis-run state. It constrains transaction type/status/activity
+  classification, permits only service-safe source fingerprints, and persists
+  renewable leases, attempts, redacted failure categories, and success-only
+  watermarks.
+
+Task creation/evidence/transition/suppression paths now enqueue their redacted
+audit events through `TaskRepository.Session`; the JDBC adapter persists task
+state, processed finding and outbox row in one transaction under ADR-0020 and
+ADR-0053. JDBC adapters also persist the SF02 activity projection and SF04
+lease/watermark state. SQS/Auditor adapters remain follow-up work.
 
 ## Why one RDS instance per service: balancing cost and isolation
 

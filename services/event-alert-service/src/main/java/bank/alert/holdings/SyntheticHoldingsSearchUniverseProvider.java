@@ -8,6 +8,7 @@ import bank.alert.scoring.ExposureCalculator;
 import bank.alert.scoring.ExposureStatus;
 import bank.alert.operations.OperationalMetrics;
 import bank.alert.domain.HoldingSnapshot;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@ConditionalOnProperty(name = "alert.holdings.mode", havingValue = "fixture", matchIfMissing = true)
 @Component
 public class SyntheticHoldingsSearchUniverseProvider implements SearchUniverseProvider {
 

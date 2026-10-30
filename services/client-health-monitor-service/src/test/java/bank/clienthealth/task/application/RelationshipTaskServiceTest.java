@@ -3,6 +3,7 @@ package bank.clienthealth.task.application;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import bank.clienthealth.audit.RelationshipHealthAuditEvent.Action;
 import bank.clienthealth.contract.ClientHealthFinding;
 import bank.clienthealth.contract.ClientHealthFinding.AnalysisWindow;
 import bank.clienthealth.contract.ClientHealthFinding.PriorityInputs;
@@ -19,11 +20,16 @@ import bank.clienthealth.task.port.ClientAssignmentPort;
 import bank.clienthealth.task.support.InMemoryTaskRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import bank.clienthealth.metrics.MicrometerClientHealthMetrics;
+import bank.clienthealth.metrics.ClientHealthMetrics;
 
 class RelationshipTaskServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-29T10:00:00Z");
@@ -65,6 +71,33 @@ class RelationshipTaskServiceTest {
         assertEquals(RelationshipTask.Action.CREATED, task.history().getFirst().action());
         assertEquals(1, assignmentCalls.get());
         assertEquals(1, repository.taskCount());
+        assertEquals(2, repository.auditEventCount());
+        assertEquals(
+                java.util.Set.of(Action.SIGNAL_DETECTED, Action.TASK_CREATED),
+                repository.auditEvents().stream().map(event -> event.action())
+                        .collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    void recordsNewTaskOutcomesTransitionsConflictsAndDenialsOnlyOnce() {
+        var registry = new SimpleMeterRegistry();
+        var measured = service(assignmentPort, (code, note) -> { },
+                new MicrometerClientHealthMetrics(registry));
+        var finding = finding("finding-metric", Severity.MEDIUM, signal("a", Severity.MEDIUM));
+        String taskId = measured.upsertFinding(finding).taskId();
+        measured.upsertFinding(finding);
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> measured.accept(taskId, 1, "former-agent", "denied"));
+        measured.accept(taskId, 1, AGENT, "accepted");
+        assertThrows(RelationshipTask.OptimisticLockException.class,
+                () -> measured.complete(taskId, 1, AGENT, "stale", "VALID_COMPLETE", null));
+
+        assertEquals(1, registry.get("client_health_task_outcomes_total")
+                .tag("outcome", "created").counter().count());
+        assertEquals(1, registry.get("client_health_authorization_denied_total").counter().count());
+        assertEquals(1, registry.get("client_health_task_transition_total")
+                .tag("transition", "accept").counter().count());
+        assertEquals(1, registry.get("client_health_task_conflict_total").counter().count());
     }
 
     @Test
@@ -99,7 +132,7 @@ class RelationshipTaskServiceTest {
 
     @Test
     void deduplicatesFingerprintsAcrossClosedTasksAndPreservesHistory() {
-        var original = finding("finding-1", Severity.HIGH, signal("a", Severity.HIGH));
+        var original = finding("finding-1", Severity.LOW, signal("a", Severity.LOW));
         var originalResult = service.upsertFinding(original);
         String oldTaskId = originalResult.taskId();
         service.accept(oldTaskId, 1, AGENT, "accept-correlation");
@@ -107,9 +140,9 @@ class RelationshipTaskServiceTest {
         assertEquals(originalResult, service.upsertFinding(original));
 
         var duplicate = service.upsertFinding(
-                finding("finding-2", Severity.HIGH, signal("a", Severity.HIGH)));
+                finding("finding-2", Severity.LOW, signal("a", Severity.LOW)));
         var mixed = service.upsertFinding(finding("finding-3", Severity.HIGH,
-                signal("a", Severity.HIGH), signal("b", Severity.LOW)));
+                signal("a", Severity.LOW), signal("b", Severity.HIGH)));
         RelationshipTask oldTask = repository.task(oldTaskId).orElseThrow();
         RelationshipTask newTask = repository.task(mixed.taskId()).orElseThrow();
 
@@ -144,6 +177,27 @@ class RelationshipTaskServiceTest {
         assertEquals(Status.COMPLETED, completed.status());
         assertEquals(3, completed.version());
         assertEquals(3, completed.history().size());
+        assertEquals(4, repository.auditEventCount());
+    }
+
+    @Test
+    void formerAgentCannotMutateAndCurrentAgentCanAcceptReassignedTask() {
+        AtomicReference<String> currentAgent = new AtomicReference<>(AGENT);
+        RelationshipTaskService reassignmentAware = service(
+                clientId -> assignment(clientId, currentAgent.get(), true),
+                (code, note) -> { });
+        String taskId = reassignmentAware.upsertFinding(
+                finding("finding-reassigned", Severity.HIGH, signal("d", Severity.HIGH))).taskId();
+        currentAgent.set("new-agent");
+
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> reassignmentAware.accept(taskId, 1, AGENT, "former-agent"));
+        RelationshipTask accepted = reassignmentAware.accept(
+                taskId, 1, "new-agent", "current-agent");
+
+        assertEquals(Status.IN_REVIEW, accepted.status());
+        assertEquals("new-agent", accepted.assignment().agentSubject());
+        assertEquals(2, accepted.version());
     }
 
     @Test
@@ -154,7 +208,7 @@ class RelationshipTaskServiceTest {
                 openTask, 1, AGENT, "dismiss-open", "VALID_DISMISS", null);
 
         String reviewTask = service.upsertFinding(
-                finding("finding-review", Severity.LOW, signal("b", Severity.LOW))).taskId();
+                finding("finding-review", Severity.MEDIUM, signal("b", Severity.MEDIUM))).taskId();
         service.accept(reviewTask, 1, AGENT, "accept-review");
         RelationshipTask reviewDismissed = service.dismiss(
                 reviewTask, 2, AGENT, "dismiss-review", "VALID_DISMISS", "expected activity");
@@ -162,6 +216,49 @@ class RelationshipTaskServiceTest {
         assertEquals(Status.DISMISSED, openDismissed.status());
         assertEquals(Status.DISMISSED, reviewDismissed.status());
         assertEquals(3, reviewDismissed.version());
+    }
+
+    @Test
+    void suppressesDuringCooldownIdempotentlyAndAllowsHigherSeverity() {
+        String taskId = service.upsertFinding(
+                finding("finding-low", Severity.LOW, signal("a", Severity.LOW))).taskId();
+        service.accept(taskId, 1, AGENT, "accept-correlation");
+        service.complete(taskId, 2, AGENT, "complete-correlation", "VALID_COMPLETE", null);
+
+        var cooldownFinding = finding("finding-cooldown", Severity.LOW, signal("b", Severity.LOW));
+        var suppressed = service.upsertFinding(cooldownFinding);
+        var replay = service.upsertFinding(cooldownFinding);
+        var worsening = service.upsertFinding(
+                finding("finding-high", Severity.HIGH, signal("c", Severity.HIGH)));
+
+        assertEquals(Outcome.SUPPRESSED_COOLDOWN, suppressed.outcome());
+        assertEquals(suppressed, replay);
+        assertEquals(Outcome.CREATED, worsening.outcome());
+        assertEquals(2, repository.taskCount());
+        assertEquals(3, repository.processedFindingCount());
+        assertEquals(1, repository.auditEvents().stream()
+                .filter(event -> event.action() == Action.SIGNAL_SUPPRESSED).count());
+    }
+
+    @Test
+    void capsNewTasksPerAgentButStillAttachesEvidence() {
+        for (int index = 0; index < 20; index++) {
+            var result = service.upsertFinding(finding(
+                    "client-" + index, "finding-" + index,
+                    Severity.LOW, signal("a", Severity.LOW)));
+            assertEquals(Outcome.CREATED, result.outcome());
+        }
+
+        var capped = service.upsertFinding(finding(
+                "client-20", "finding-20", Severity.LOW, signal("a", Severity.LOW)));
+        var attachment = service.upsertFinding(finding(
+                "client-0", "finding-attachment", Severity.MEDIUM, signal("b", Severity.MEDIUM)));
+
+        assertEquals(Outcome.SUPPRESSED_DAILY_CAP, capped.outcome());
+        assertEquals(Outcome.EVIDENCE_ATTACHED, attachment.outcome());
+        assertEquals(20, repository.taskCount());
+        assertEquals(22, repository.processedFindingCount());
+        assertEquals(44, repository.auditEventCount());
     }
 
     @Test
@@ -188,6 +285,23 @@ class RelationshipTaskServiceTest {
     }
 
     @Test
+    void revalidatesCurrentAssignmentBeforeMutation() {
+        String taskId = service.upsertFinding(
+                finding("finding-1", Severity.LOW, signal("a", Severity.LOW))).taskId();
+        RelationshipTaskService reassigned = service(
+                clientId -> new AssignmentSnapshot(clientId, "new-agent", true, 2, NOW),
+                (code, note) -> { });
+
+        assertThrows(RelationshipTask.TaskAccessException.class,
+                () -> reassigned.accept(taskId, 1, AGENT, "former-agent"));
+        RelationshipTask accepted = reassigned.accept(taskId, 1, "new-agent", "current-agent");
+
+        assertEquals(Status.IN_REVIEW, accepted.status());
+        assertEquals("new-agent", accepted.assignment().agentSubject());
+        assertEquals(2, accepted.assignment().assignmentVersion());
+    }
+
+    @Test
     void rejectsFindingIdReuseWithDifferentContent() {
         service.upsertFinding(finding("same-id", Severity.LOW, signal("a", Severity.LOW)));
         assertThrows(RelationshipTaskService.IdempotencyConflictException.class,
@@ -202,16 +316,24 @@ class RelationshipTaskServiceTest {
 
         repository.failProcessedFindingSave(true);
         assertThrows(IllegalStateException.class,
-                () -> service.upsertFinding(finding("finding-fail", Severity.MEDIUM, signal("b", Severity.MEDIUM))));
+                () -> service.upsertFinding(finding(
+                        "client-fail", "finding-fail", Severity.MEDIUM, signal("b", Severity.MEDIUM))));
         RelationshipTask stored = repository.task(created.taskId()).orElseThrow();
         assertEquals(1, stored.version());
         assertEquals(1, stored.evidence().size());
         assertEquals(1, repository.processedFindingCount());
+        assertEquals(1, repository.creationCount(AGENT, LocalDate.of(2026, 9, 29)));
+        assertEquals(2, repository.auditEventCount());
     }
 
     private RelationshipTaskService service(ClientAssignmentPort assignments, bank.clienthealth.task.port.DispositionPolicy policy) {
+        return service(assignments, policy, ClientHealthMetrics.noOp());
+    }
+
+    private RelationshipTaskService service(ClientAssignmentPort assignments,
+            bank.clienthealth.task.port.DispositionPolicy policy, ClientHealthMetrics metrics) {
         return new RelationshipTaskService(repository, assignments, policy,
-                Clock.fixed(NOW, ZoneOffset.UTC), () -> "task-" + taskSequence.incrementAndGet());
+                Clock.fixed(NOW, ZoneOffset.UTC), () -> "task-" + taskSequence.incrementAndGet(), metrics);
     }
 
     private static AssignmentSnapshot assignment(String clientId, String agent, boolean active) {
@@ -222,9 +344,19 @@ class RelationshipTaskServiceTest {
     private static ClientHealthFinding finding(
             String findingId, Severity highest, SignalEvidence<? extends ClientHealthFinding.EvidenceDetails>... signals
     ) {
+        return finding(CLIENT, findingId, highest, signals);
+    }
+
+    @SafeVarargs
+    private static ClientHealthFinding finding(
+            String clientId,
+            String findingId,
+            Severity highest,
+            SignalEvidence<? extends ClientHealthFinding.EvidenceDetails>... signals
+    ) {
         Instant start = NOW.minusSeconds(120 * 86_400L);
         Instant end = NOW.minusSeconds(60);
-        return new ClientHealthFinding("1", findingId, CLIENT, "run-" + findingId,
+        return new ClientHealthFinding("1", findingId, clientId, "run-" + findingId,
                 "rules-v1", new AnalysisWindow(start, end), List.of(signals),
                 new PriorityInputs(highest, signals.length), "correlation-" + findingId, NOW);
     }

@@ -1,0 +1,60 @@
+package bank.alert.crm;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.time.Duration;
+
+/**
+ * {@code alert.crm.*}. Required only when {@code alert.holdings.mode=database}; the
+ * client-credentials identity here is a dedicated machine client that holds only the
+ * directory read scopes, never a user token.
+ */
+@ConfigurationProperties(prefix = "alert.crm")
+public record CrmDirectoryProperties(
+        String accountDirectoryUrl,
+        String tokenEndpoint,
+        String clientId,
+        String clientSecret,
+        String scope,
+        Duration timeout) {
+
+    public CrmDirectoryProperties {
+        if (timeout == null) timeout = Duration.ofSeconds(5);
+    }
+
+    /**
+     * account-service's user-facing account route, on the same host as the directory route (the
+     * internal ALB already forwards /api/accounts/* to it). Holdings writes send the agent's own
+     * token here so the CRM applies its own ownership check.
+     */
+    public String userAccountUrl() {
+        String marker = "/internal/alerts/accounts/lookup";
+        int at = accountDirectoryUrl.indexOf(marker);
+        String root = at >= 0 ? accountDirectoryUrl.substring(0, at)
+                : accountDirectoryUrl.substring(0, accountDirectoryUrl.lastIndexOf('/'));
+        return root + "/api/accounts/";
+    }
+
+    public void requireComplete() {
+        require(accountDirectoryUrl, "ALERT_CRM_ACCOUNT_DIRECTORY_URL");
+        require(tokenEndpoint, "ALERT_CRM_TOKEN_ENDPOINT");
+        require(clientId, "ALERT_CRM_CLIENT_ID");
+        require(clientSecret, "ALERT_CRM_CLIENT_SECRET");
+        require(scope, "ALERT_CRM_SCOPE");
+        for (String url : new String[] {accountDirectoryUrl, tokenEndpoint}) {
+            if (!url.startsWith("https://") && !isLoopbackHttp(url)) {
+                throw new IllegalStateException("CRM directory URLs must use HTTPS");
+            }
+        }
+    }
+
+    private static boolean isLoopbackHttp(String url) {
+        return url.startsWith("http://localhost") || url.startsWith("http://127.0.0.1");
+    }
+
+    private static void require(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(name + " is required when alert.holdings.mode=database");
+        }
+    }
+}

@@ -40,8 +40,13 @@ down:
 tools-build:
 	$(COMPOSE) --progress plain -f $(COMPOSE_FILE) --profile tools build go-tools
 
+## Start the transactions database and apply receiver/data/ with Flyway, as
+## transaction-service's db-migrate container does in AWS
+## (docs/database/migrations.md). Flyway records each file's checksum, so
+## editing an applied migration fails here, as it would there.
 db-up:
 	$(COMPOSE) -f $(COMPOSE_FILE) up -d --wait db
+	@$(COMPOSE) -f $(COMPOSE_FILE) run --rm --build db-migrate || { echo "If Flyway found a non-empty schema with no schema history table, the database was loaded before Flyway: run $(COMPOSE) rm -sf db, then docker volume rm sftp_postgres_data, then make db-up."; exit 1; }
 
 ## Generate the ORM from receiver/data/init.sql in a throwaway database, as make
 ## test does, so a local database with an older schema cannot make it stale. The
@@ -58,7 +63,7 @@ mocks: tools-build
 
 generate: sqlboiler mocks
 
-poller: tools-build
+poller: tools-build db-up
 	@test -n "$(SFTP_KEY_FILE)" || (echo "set SFTP_KEY_FILE to the path of the SFTP client private key" >&2; exit 1)
 	@test -f "$(SFTP_KEY_PATH)" || (echo "SFTP_KEY_FILE does not point to a readable key file: $(SFTP_KEY_PATH)" >&2; exit 1)
 	@test -n "$(SFTP_HOST_KEY_FINGERPRINT)" || (echo "set SFTP_HOST_KEY_FINGERPRINT to the server's SHA256 fingerprint" >&2; exit 1)
@@ -69,7 +74,7 @@ poller: tools-build
 		-e SFTP_HOST_KEY_FINGERPRINT="$(SFTP_HOST_KEY_FINGERPRINT)" \
 		go-tools go run ./src/cronjob
 
-poller-once: tools-build
+poller-once: tools-build db-up
 	@test -n "$(SFTP_KEY_FILE)" || (echo "set SFTP_KEY_FILE to the path of the SFTP client private key" >&2; exit 1)
 	@test -f "$(SFTP_KEY_PATH)" || (echo "SFTP_KEY_FILE does not point to a readable key file: $(SFTP_KEY_PATH)" >&2; exit 1)
 	@test -n "$(SFTP_HOST_KEY_FINGERPRINT)" || (echo "set SFTP_HOST_KEY_FINGERPRINT to the server's SHA256 fingerprint" >&2; exit 1)

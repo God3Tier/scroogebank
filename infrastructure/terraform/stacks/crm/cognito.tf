@@ -126,6 +126,14 @@ resource "aws_cognito_resource_server" "accounts" {
     scope_name        = "lookup"
     scope_description = "Look up accounts for the transaction import"
   }
+
+  # The event-alert service reads each account's client, type, status and current
+  # owner (ADR-0066). Its own scope keeps the transaction import's token out of
+  # that route, and the alert service's token out of the import's.
+  scope {
+    scope_name        = "alert-directory"
+    scope_description = "Read account ownership for the event-alert service"
+  }
 }
 
 resource "aws_cognito_user_pool_client" "transaction_ingest" {
@@ -153,5 +161,81 @@ resource "aws_secretsmanager_secret_version" "ingest_client" {
   secret_string = jsonencode({
     client_id     = aws_cognito_user_pool_client.transaction_ingest.id
     client_secret = aws_cognito_user_pool_client.transaction_ingest.client_secret
+  })
+}
+
+# The event-alert API and worker read account ownership with this machine identity
+# (ADR-0066). It holds only the alert-directory scope and no user groups. Its
+# secret is in Terraform state, which is encrypted and access-controlled
+# (docs/runbooks/deploy-aws.md); tasks read it from Secrets Manager, never from
+# plain environment variables.
+resource "aws_cognito_user_pool_client" "alert_directory" {
+  name         = "${local.name}-alert-directory"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["crm-accounts/alert-directory"]
+  supported_identity_providers         = ["COGNITO"]
+  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+
+  depends_on = [aws_cognito_resource_server.accounts]
+}
+
+resource "aws_secretsmanager_secret" "alert_directory" {
+  name                    = "${local.name}/cognito/alert-directory"
+  description             = "Event-alert service account-directory app client"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "alert_directory" {
+  secret_id = aws_secretsmanager_secret.alert_directory.id
+  secret_string = jsonencode({
+    client_id     = aws_cognito_user_pool_client.alert_directory.id
+    client_secret = aws_cognito_user_pool_client.alert_directory.client_secret
+    scope         = "crm-accounts/alert-directory"
+  })
+}
+
+# Client Health Monitor is a machine caller with read-only access to matched
+# transaction history. It receives no user groups and cannot write transactions.
+resource "aws_cognito_resource_server" "transactions" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  identifier   = "crm-transactions"
+  name         = "CRM transactions"
+
+  scope {
+    scope_name        = "read"
+    scope_description = "Read matched transaction history for Client Health Monitor"
+  }
+}
+
+resource "aws_cognito_user_pool_client" "client_health_read" {
+  name         = "${local.name}-client-health-read"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["crm-transactions/read"]
+  supported_identity_providers         = ["COGNITO"]
+  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+
+  depends_on = [aws_cognito_resource_server.transactions]
+}
+
+resource "aws_secretsmanager_secret" "client_health_read" {
+  name                    = "${local.name}/cognito/client-health-read"
+  description             = "Client Health Monitor transaction read app client"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "client_health_read" {
+  secret_id = aws_secretsmanager_secret.client_health_read.id
+  secret_string = jsonencode({
+    client_id     = aws_cognito_user_pool_client.client_health_read.id
+    client_secret = aws_cognito_user_pool_client.client_health_read.client_secret
+    scope         = "crm-transactions/read"
   })
 }

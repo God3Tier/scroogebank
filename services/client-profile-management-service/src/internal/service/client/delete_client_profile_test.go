@@ -48,7 +48,7 @@ func TestDeleteClientProfile(t *testing.T) {
 			if test.callRepo {
 				repo.On("DeleteClient", ctx, test.clientID).Return(test.repoErr).Once()
 			}
-			err := NewClientService(repo, directory).DeleteClientProfile(ctx, test.clientID, authorization)
+			err := NewClientService(repo, directory, nil).DeleteClientProfile(ctx, test.clientID, authorization)
 			if test.wantErr != nil {
 				assert.ErrorIs(t, err, test.wantErr)
 				return

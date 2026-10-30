@@ -41,6 +41,17 @@ variable "high_availability" {
   default     = false
 }
 
+variable "alert_holdings_mode" {
+  description = "Where the event-alert API and worker read holdings (ADR-0066): fixture (the bundled synthetic JSON) or database (portfolios agents record against CRM accounts). Both read this one value, so they cannot differ. database needs the custom domain: the account directory is reached over HTTPS and never over HTTP. Apply the application's database migrations before switching to database."
+  type        = string
+  default     = "fixture"
+
+  validation {
+    condition     = contains(["fixture", "database"], var.alert_holdings_mode)
+    error_message = "alert_holdings_mode must be fixture or database."
+  }
+}
+
 variable "running" {
   description = "false is the time between sessions (ADR-0029 stop model): every service scales to 0 tasks, the schedules pause and the NAT gateways are removed (their Elastic IPs stay). Stop and start the RDS instances with scripts/aws-session.sh."
   type        = bool
