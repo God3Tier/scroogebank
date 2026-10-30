@@ -25,8 +25,8 @@ resource "tls_self_signed_cert" "ca" {
 
 locals {
   # Services that serve TLS, and the names their callers use. The internal ALB
-  # does not check its targets' certificates, so event-alert-service, which
-  # only the ALB calls, has no Service Connect name and takes its own.
+  # does not check its targets' certificates, so services called only through
+  # the ALB have no Service Connect name and take their own.
   tls_services = {
     user        = [local.sc.user]
     client      = [local.sc.client]
@@ -34,6 +34,7 @@ locals {
     auditor     = [local.sc.auditor]
     transaction = [local.sc.transaction]
     alerts      = ["event-alert-service"]
+    health      = ["client-health-monitor-service"]
   }
 }
 

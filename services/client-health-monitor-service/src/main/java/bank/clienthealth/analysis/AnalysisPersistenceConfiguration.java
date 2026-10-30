@@ -4,6 +4,7 @@ import bank.clienthealth.activity.application.ActivityBaselineService;
 import bank.clienthealth.activity.application.ActivityProjectionService;
 import bank.clienthealth.activity.persistence.JdbcActivityProjectionRepository;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
+import bank.clienthealth.analysis.persistence.JdbcSuccessfulAnalysisWatermarkQuery;
 import bank.clienthealth.audit.JdbcAuditOutboxRepository;
 import java.util.UUID;
 import org.springframework.context.annotation.Bean;
@@ -14,6 +15,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration(proxyBeanMethods = false)
 public class AnalysisPersistenceConfiguration {
+    @Bean
+    JdbcSuccessfulAnalysisWatermarkQuery successfulAnalysisWatermarkQuery(
+            JdbcTemplate jdbc
+    ) {
+        return new JdbcSuccessfulAnalysisWatermarkQuery(jdbc);
+    }
+
     @Bean
     JdbcActivityProjectionRepository activityProjectionRepository(
             JdbcTemplate jdbc,

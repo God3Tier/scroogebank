@@ -46,6 +46,10 @@
             <artifactId>micrometer-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-cloudwatch2</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
@@ -107,6 +111,7 @@
     </dependencyManagement>
 
     <build>
+        <finalName>client-health-monitor-service</finalName>
         <testResources>
             <testResource>
                 <directory>../../docs/api/schemas</directory>

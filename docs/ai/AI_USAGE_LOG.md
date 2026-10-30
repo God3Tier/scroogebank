@@ -1,5 +1,116 @@
 # AI usage log
 
+## 2026-10-30 — Client Health RH-SF11E2 Cloud observability
+
+- Human owner: Garvit; platform/Terraform review and lower-environment
+  calibration remain required.
+- Tool: Cursor.
+- Use: enable one-minute Client Health CloudWatch publication with task-role
+  permission restricted to `Scrooge/ClientHealth`; add dashboard panels for
+  analysis freshness, audit/dependencies and task/AI outcomes; add SNS alarms
+  for failed/stale analysis, audit backlog, assignment unavailability,
+  authorization denials and AI validation/provider failures; extend mocked-plan
+  assertions; and synchronize monitoring/runbook/cost/feature documentation on
+  `task/client-health-monitor/cloud-observability`.
+- Human verification required: run Terraform formatting, validation and mocked
+  provider tests; inspect a saved lower-environment plan; calibrate thresholds
+  with synthetic load; confirm SNS subscriptions; trigger and record one test
+  notification; then verify dashboard metric names/dimensions after deployment.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` and IDE lint pass. A clean Java 24
+  compiler-override run completed 163 tests with no failures (137 passed and 26
+  Docker-dependent tests skipped). Terraform and Docker remain unavailable
+  locally, so no Terraform plan, alarm drill or live apply is claimed.
+
+## 2026-10-28 — Client Health RH-SF11D2 scheduled analysis deployment
+
+- Human owner: Garvit; platform/Terraform and live security review remain
+  required.
+- Tool: Cursor.
+- Use: define a shared Client Health Cognito machine client with exact
+  transaction-read and assignment-read scopes; wire the merged assignment
+  provider into the API service; add internal HTTPS ALB routes; define the
+  one-shot ANALYSIS ECS task, 08:00 Asia/Singapore EventBridge schedule, bounded
+  retry, least-privilege scheduler run/pass permissions and non-zero-exit SNS
+  failure event; and synchronize mocked-plan assertions and deployment/cost
+  documentation on `task/client-health-monitor/analysis-scheduler`.
+- Human verification required: run Terraform formatting, validation and mocked
+  provider tests; build the images; inspect the saved plan's IAM, secrets,
+  routes and schedule; then perform the real Cognito/provider replay/assignment
+  smoke checks and teardown in a lower environment. Bedrock remains disabled
+  and has no task-role permission.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` and IDE lint pass. A clean Java 24
+  compiler-override run completed 160 tests with no failures (134 passed and 26
+  Docker-dependent tests skipped). Terraform and Docker remain unavailable
+  locally, so no Terraform plan, image build or live apply is claimed.
+
+## 2026-10-28 — Client Health RH-SF11C API deployment definition
+
+- Human owner: Garvit; platform/Terraform review remains required.
+- Tool: Cursor.
+- Use: define the PR-ready Client Health API deployment in the shared CRM stack:
+  immutable ECR repository, 0.5-vCPU/1-GiB ECS API service, `health-db`
+  migration/login init container, HTTPS port 8087 certificate, readiness health
+  check, `/api/relationship-health/*` ALB routing, audit-outbox SQS permission,
+  mocked-plan assertions, and synchronized deployment/cost documentation on
+  `task/client-health-monitor/api-deployment`.
+- Human verification required: run Terraform formatting, validation and mocked
+  provider tests; build and inspect the application/db-migrate images; and
+  review the shared ALB, IAM, database and cost changes before merge. Assignment
+  provider/OAuth wiring and the scheduled ANALYSIS task remain RH-SF11D.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` and IDE lint pass. A clean Java 24
+  compiler-override run completed 160 tests with no failures (134 passed and 26
+  Docker-dependent tests skipped). Terraform and Docker remain unavailable
+  locally, so no Terraform plan, image build or live apply is claimed.
+
+## 2026-10-28 — Client Health production replay adapter hardening
+
+- Human owner: Garvit; transaction and security/platform acceptance of proposed
+  ADR-0065 remains required.
+- Tool: Cursor.
+- Use: review Swayam's merged transaction replay HTTP/service-token adapter,
+  require HTTPS for the provider and Cognito token endpoints, enforce the
+  provider's bounded synthetic source-fingerprint contract, add malformed-input
+  coverage, and add an ANALYSIS-mode application-context test proving the
+  production replay source, replay service, orchestrator and one-shot runner
+  wire together.
+- Human verification required: run the real Cognito/import/read integration
+  check through the internal ALB and confirm ADR-0065 with the transaction and
+  security/platform owners before production enablement.
+- Data: repository code and synthetic provider responses only. No credentials,
+  real client data, AWS calls or external services were used.
+- Verification: eight focused replay/wiring tests passed. A clean Java 24
+  compiler-override run completed 160 tests with no failures (134 passed and 26
+  Docker-dependent tests skipped). Lint and `git diff --check` passed.
+
+## 2026-10-28 — Client Health RH-SF11B health data plane
+
+- Human owner: Garvit; platform/Terraform review remains required.
+- Tool: Cursor.
+- Use: split RH-SF11 ownership with Swayam's runtime task, then add Client
+  Health's dedicated `health-db`, `client_health_service` least-privilege login,
+  database security-group rules, V1–V5 db-migrate packaging, mocked-plan
+  assertions, and synchronized migration/schema/cost/runbook documentation on
+  `task/client-health-monitor/health-data-plane`.
+- Human verification required: review the shared CRM Terraform and cost impact;
+  run Terraform formatting, validation and mocked-provider tests; build and
+  inspect the db-migrate image; and prove fresh/rerun migration and DML-without-
+  DDL privileges before merging. RH-SF11C must attach
+  `local.migrations["health"]` to the future Client Health ECS service.
+- Data: repository code, Terraform and synthetic test fixtures only. No
+  credentials, real client data, AWS calls or live resources were used.
+- Verification: `git diff --check` is clean after documentation whitespace
+  cleanup. After synchronizing SF11A, a clean Java 24 compiler-override run
+  completed 152 tests with no failures (126 passed and 26 Docker-dependent
+  tests skipped). Terraform, Docker Desktop and `psql` were unavailable
+  locally, so no Terraform plan, image build, PostgreSQL privilege check or
+  live apply is claimed.
+
 ## 2026-10-27 — Client Health and dev merge-conflict resolution
 
 - Human owner: Garvit.

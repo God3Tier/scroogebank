@@ -1,6 +1,7 @@
 # Data stores: one RDS for PostgreSQL instance per service (ADR-0023), the
 # client-keys DynamoDB table (ADR-0030) and the ID-documents bucket (ADR-0041).
-# health-db is added with the health monitor, which is not deployable yet.
+# health-db is migrated by the Client Health API task; its scheduled analysis
+# task is added separately by RH-SF11D.
 
 resource "aws_db_parameter_group" "postgres" {
   name   = "${local.name}-postgres17"
@@ -20,6 +21,7 @@ locals {
     transactions = { db_name = "transactions", sg = "db_trans" }
     audit        = { db_name = "audit", sg = "db_audit" }
     alerts       = { db_name = "alerts", sg = "db_alerts" }
+    health       = { db_name = "health", sg = "db_health" }
   }
 }
 
@@ -71,6 +73,7 @@ locals {
     transaction_service = { db = "transactions" }
     transaction_ingest  = { db = "transactions" }
     event_alert_service = { db = "alerts" }
+    client_health_service = { db = "health" }
   }
 }
 

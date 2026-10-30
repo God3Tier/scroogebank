@@ -15,6 +15,7 @@ locals {
     auditor_grpc = 50051
     transaction  = 8080
     alerts       = 8080
+    health       = 8087
   }
 
   security_groups = {
@@ -36,12 +37,14 @@ locals {
     db_trans     = "transactions-db"
     db_audit     = "audit-db"
     db_alerts    = "alerts-db"
+    db_health    = "health-db"
   }
 
   # to <- from on port
   sg_ingress = [
     { to = "alb", from = "vpc_link", port = local.alb_port },
     { to = "alb", from = "ingest", port = local.alb_port },
+    { to = "alb", from = "client_health", port = local.alb_port },
 
     { to = "user", from = "alb", port = local.ports.user },
     { to = "user", from = "client", port = local.ports.user }, # reassigning clients (ADR-0060)
@@ -58,6 +61,7 @@ locals {
     { to = "transaction", from = "alb", port = local.ports.transaction },
     { to = "transaction", from = "client_health", port = local.ports.transaction },
     { to = "alerts", from = "alb", port = local.ports.alerts },
+    { to = "client_health", from = "alb", port = local.ports.health },
 
     { to = "db_users", from = "user", port = 5432 },
     { to = "db_clients", from = "client", port = 5432 },
@@ -67,12 +71,14 @@ locals {
     { to = "db_audit", from = "auditor", port = 5432 },
     { to = "db_audit", from = "chain_verify", port = 5432 },
     { to = "db_alerts", from = "alerts", port = 5432 },
+    { to = "db_health", from = "client_health", port = 5432 },
     { to = "db_users", from = "db_console", port = 5432 },
     { to = "db_clients", from = "db_console", port = 5432 },
     { to = "db_accounts", from = "db_console", port = 5432 },
     { to = "db_trans", from = "db_console", port = 5432 },
     { to = "db_audit", from = "db_console", port = 5432 },
     { to = "db_alerts", from = "db_console", port = 5432 },
+    { to = "db_health", from = "db_console", port = 5432 },
   ]
 
   # Groups whose members reach AWS APIs, Cognito's keys and the SFTP server

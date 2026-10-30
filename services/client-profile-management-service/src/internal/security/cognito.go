@@ -30,10 +30,12 @@ type Principal struct {
 }
 
 type CognitoVerifier struct {
-	issuer   string
-	clientID string
-	audience string
-	client   *http.Client
+	issuer        string
+	clientID      string
+	audience      string
+	requiredScope string
+	serviceOnly   bool
+	client        *http.Client
 
 	mu     sync.RWMutex
 	keys   map[string]*rsa.PublicKey
@@ -53,6 +55,7 @@ type cognitoClaims struct {
 	Audience  string   `json:"aud"`
 	TokenUse  string   `json:"token_use"`
 	Groups    []string `json:"cognito:groups"`
+	Scope     string   `json:"scope"`
 	IssuedAt  int64    `json:"iat"`
 	NotBefore int64    `json:"nbf"`
 	Expires   int64    `json:"exp"`
@@ -72,6 +75,19 @@ type jwk struct {
 }
 
 func NewCognitoVerifier(issuer, clientID string) (*CognitoVerifier, error) {
+	return newCognitoVerifier(issuer, clientID, "", false)
+}
+
+// NewServiceCognitoVerifier accepts only a client-credentials token issued to
+// the configured machine client with exactly the configured scope.
+func NewServiceCognitoVerifier(issuer, clientID, requiredScope string) (*CognitoVerifier, error) {
+	if strings.TrimSpace(requiredScope) == "" {
+		return nil, errors.New("CLIENT_HEALTH_ASSIGNMENT_SCOPE is required")
+	}
+	return newCognitoVerifier(issuer, clientID, strings.TrimSpace(requiredScope), true)
+}
+
+func newCognitoVerifier(issuer, clientID, requiredScope string, serviceOnly bool) (*CognitoVerifier, error) {
 	issuer = strings.TrimRight(strings.TrimSpace(issuer), "/")
 	parsedIssuer, err := url.Parse(issuer)
 	if err != nil || parsedIssuer.Scheme != "https" ||
@@ -85,11 +101,13 @@ func NewCognitoVerifier(issuer, clientID string) (*CognitoVerifier, error) {
 	}
 
 	v := &CognitoVerifier{
-		issuer:   issuer,
-		clientID: strings.TrimSpace(clientID),
-		audience: strings.TrimSpace(os.Getenv("COGNITO_API_AUDIENCE")),
-		client:   &http.Client{Timeout: 5 * time.Second},
-		keys:     make(map[string]*rsa.PublicKey),
+		issuer:        issuer,
+		clientID:      strings.TrimSpace(clientID),
+		audience:      strings.TrimSpace(os.Getenv("COGNITO_API_AUDIENCE")),
+		requiredScope: requiredScope,
+		serviceOnly:   serviceOnly,
+		client:        &http.Client{Timeout: 5 * time.Second},
+		keys:          make(map[string]*rsa.PublicKey),
 	}
 	if err := v.refreshKeys(context.Background(), true); err != nil {
 		return nil, fmt.Errorf("load Cognito signing keys: %w", err)
@@ -127,7 +145,11 @@ func (v *CognitoVerifier) Verify(token string) (Principal, error) {
 	if err := decodeSegment(parts[1], &claims); err != nil {
 		return Principal{}, errors.New("malformed JWT claims")
 	}
-	now := time.Now().Unix()
+	return v.principal(claims, time.Now())
+}
+
+func (v *CognitoVerifier) principal(claims cognitoClaims, nowTime time.Time) (Principal, error) {
+	now := nowTime.Unix()
 	const clockSkew int64 = 30
 	if claims.Issuer != v.issuer || claims.ClientID != v.clientID ||
 		(claims.Audience != "" && (v.audience == "" || claims.Audience != v.audience)) || claims.TokenUse != "access" ||
@@ -148,6 +170,11 @@ func (v *CognitoVerifier) Verify(token string) (Principal, error) {
 			}
 		}
 	}
+	if v.serviceOnly {
+		if role != "" || strings.TrimSpace(claims.Scope) != v.requiredScope {
+			return Principal{}, errors.New("machine token has invalid groups or scope")
+		}
+	}
 	return Principal{Subject: claims.Subject, Role: role}, nil
 }
 
@@ -163,7 +190,7 @@ func (v *CognitoVerifier) Middleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access token"})
 			return
 		}
-		if principal.Role == "" {
+		if !v.serviceOnly && principal.Role == "" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "ADMIN or AGENT role required"})
 			return
 		}
@@ -171,6 +198,10 @@ func (v *CognitoVerifier) Middleware() gin.HandlerFunc {
 		// Expose the verified Cognito subject as the acting agent ID for CRM
 		// handlers and audit-event middleware. Never accept this value from the
 		// request body or an unverified header.
+		if v.serviceOnly {
+			c.Next()
+			return
+		}
 		c.Set("agent_id", principal.Subject)
 		// The controller consumes X-Agent-ID. Replace any caller-supplied value
 		// only after JWT verification so it cannot be used to impersonate another
