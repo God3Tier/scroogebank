@@ -72,7 +72,7 @@ public class InstrumentCoverageService {
 
     private List<String> select(List<String> sortedIds, Instant windowTo) {
         if (sortedIds.isEmpty()) return List.of();
-        int batchSize = properties.maxQueriesPerRun();
+        int batchSize = Math.max(1, properties.maxQueriesPerRun() / IssuerQueryBuilder.QUERIES_PER_INSTRUMENT);
         int batches = (sortedIds.size() + batchSize - 1) / batchSize;
         int batch = Math.floorMod(windowTo.getEpochSecond() / SLOT.toSeconds(), batches);
         int start = batch * batchSize;

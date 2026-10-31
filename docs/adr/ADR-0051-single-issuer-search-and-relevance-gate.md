@@ -92,3 +92,25 @@ AWS/model verification, bounded excerpts and retention requirements still apply.
   and earnings previews. The final four-issuer confirmation returned seven of
   seven manually actionable, issuer-correct results. Recall@10 remains unproven,
   so this is not production-enablement evidence.
+
+### Amendment, 2026-10-31: two focused searches per issuer
+
+Decision 1 sent one mixed query per issuer. A controlled experiment on
+2026-10-31 (`docs/testing/event-alert-tavily-search-experiment-2026-10-31.md`,
+`docs/testing/event-alert-retrieval-benchmark-and-rights-2026-10-31.md`) found
+that several focused searches with the unchanged strict gate found 2 of 4
+blind-labelled real events against 1 of 4, and 13 passing stories against 6, with
+the highest share of actionable stories (7 of 13). Loosening the gate added
+stories but no further events.
+
+Each issuer now gets two searches, one on results and one on corporate actions,
+each carrying the issuer name, ticker and aliases. The four-search run ceiling and
+the 720-credit monthly planning ceiling are unchanged, so a slot covers two
+instruments instead of four and a 12-instrument rotation takes about 24 hours
+rather than 12. The relevance gate in decision 4 is unchanged. The benchmark is a
+small indicative sample (4 events, 13 stories) and still does not meet the
+decision 6 targets, so production enablement is not claimed.
+
+Publisher rights: on 2026-10-31 Hayyun read the Reuters, CNBC and FT terms and
+judged use acceptable. No quoted terms are recorded and Azeez has not yet
+confirmed; this is not a licence or a named ADR review.

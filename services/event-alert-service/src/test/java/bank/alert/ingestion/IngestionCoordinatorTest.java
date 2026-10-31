@@ -10,6 +10,7 @@ import bank.alert.operations.ReservationResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -85,6 +86,20 @@ class IngestionCoordinatorTest {
     }
 
     @Test
+    void sendsTwoDifferentFocusedSearchesForEachCompanyAndReservesBoth() {
+        when(provider.search(any())).thenReturn(List.of());
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        ArgumentCaptor<PublicSearchRequest> requests = ArgumentCaptor.forClass(PublicSearchRequest.class);
+        verify(provider, times(2)).search(requests.capture());
+        assertThat(requests.getAllValues()).extracting(PublicSearchRequest::query)
+                .doesNotHaveDuplicates().allSatisfy(query -> assertThat(query).contains("Synthetic Issuer"));
+        verify(outboundControls).reserveSearches(2);
+        assertThat(outcome.searchAttempts()).isEqualTo(2);
+    }
+
+    @Test
     void releasesTheLockAfterASuccessfulRun() {
         when(sourceResults.existsByCanonicalUrlHash(any())).thenReturn(false);
         when(sourceResults.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -121,7 +136,7 @@ class IngestionCoordinatorTest {
         when(provider.search(any())).thenReturn(List.of(
                 result("r1", "https://www.sgx.com/news/1?utm_source=test"),
                 result("r2", "https://www.sgx.com/news/1"),
-                result("r3", "https://publisher.invalid/news/2")));
+                result("r3", "https://publisher.invalid/news/2")), List.of());
 
         IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
 
@@ -141,7 +156,7 @@ class IngestionCoordinatorTest {
                         "Apple earnings rise", Instant.parse("2026-09-28T03:00:00Z"), NOW, null),
                 new PublicSearchResult("r2", "https://www.sgx.com/news/2",
                         "Synthetic Issuer launches a product", Instant.parse("2026-09-28T03:00:00Z"), NOW, null),
-                result("r3", "https://www.sgx.com/news/3")));
+                result("r3", "https://www.sgx.com/news/3")), List.of());
 
         IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
 
@@ -161,13 +176,13 @@ class IngestionCoordinatorTest {
         assertThat(outcome.errorCode()).isEqualTo("TIMEOUT");
         verify(finalizer).fail(any(SearchRun.class), any(), any());
         verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
-        verify(outboundControls, times(3)).reserveSearches(1);
+        verify(outboundControls).reserveSearches(IssuerQueryBuilder.QUERIES_PER_INSTRUMENT);
+        verify(outboundControls, times(2)).reserveSearches(1);
     }
 
     @Test
     void stopsBeforeRetryingWhenTheMonthlyQuotaIsExhausted() {
-        when(outboundControls.reserveSearches(1)).thenReturn(
-                ReservationResult.allowed(0), ReservationResult.denied("SEARCH_QUOTA_REACHED", 0));
+        when(outboundControls.reserveSearches(1)).thenReturn(ReservationResult.denied("SEARCH_QUOTA_REACHED", 0));
         when(provider.search(any())).thenThrow(new SearchProviderException("TIMEOUT", true, "timeout"));
 
         IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
@@ -176,7 +191,7 @@ class IngestionCoordinatorTest {
         assertThat(outcome.errorCode()).isEqualTo("SEARCH_QUOTA_REACHED");
         assertThat(outcome.searchAttempts()).isOne();
         verify(provider).search(any());
-        verify(outboundControls, times(2)).reserveSearches(1);
+        verify(outboundControls).reserveSearches(1);
         verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
     }
 
