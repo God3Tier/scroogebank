@@ -7,6 +7,7 @@
 - AI-assisted draft: Yes — Codex
 - Related branch: `task/event-driven-alerts/contracts`
 - Supersedes: None
+- Superseded by: [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) in part (decision 3: the model is `global.amazon.nova-2-lite-v1:0` from the Singapore source Region, because Marketplace blocks Luna in the project account, and structured output comes through a forced tool; the public-data-only adapter, abstention and safety rules are unchanged)
 
 ## Context
 

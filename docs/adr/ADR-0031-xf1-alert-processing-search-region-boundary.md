@@ -1,4 +1,4 @@
-# ADR-0031: X-factor 1 alert processing: 4-hourly worker, Tokyo web search with public terms only, Singapore data boundary, own alerts-db
+# ADR-0031: X-factor 1 alert processing: 4-hourly worker, news search with public terms only, Singapore data boundary, own alerts-db
 
 - Status: Proposed
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
@@ -7,7 +7,7 @@
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: N/A (amended before acceptance on 2026-11-01 to follow accepted [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md): Tavily replaces the Tokyo web search, and the model is Nova 2 Lite through its global inference profile)
 
 ## Context
 
@@ -61,14 +61,14 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
    Admins can read alerts but not decide.
 2. **Data boundary:**
-   - only public terms go to **Bedrock AgentCore web search in Tokyo**, out through the NAT gateway: company names, tickers, sectors, event keywords, approved domains and date ranges;
-   - Tokyo never receives client or account IDs, agent assignments, holdings, quantities or values, portfolio percentages, the number or share of clients holding an instrument, or client-specific prompts;
-   - Tokyo returns a public event report.
+   - only public terms go to the **Tavily search API**, called directly over HTTPS through the NAT gateway with an API key from Secrets Manager ([ADR-0050](ADR-0050-event-search-provider-after-scp-block.md)): company names, tickers, sectors, event keywords, approved domains and date ranges;
+   - Tavily and the model never receive client or account IDs, agent assignments, holdings, quantities or values, portfolio percentages, the number or share of clients holding an instrument, or client-specific prompts;
+   - Tavily returns public news results, whose domain and date the worker checks again.
 3. **In Singapore**, the worker:
-   1. validates and de-duplicates the report;
+   1. validates and de-duplicates the results;
    2. matches holdings deterministically ([ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md));
    3. scores materiality;
-   4. writes one shared summary per event with **Bedrock in Singapore**, from the public event report only; each client's exposure and relevance come from steps 2 and 3, without the model;
+   4. has **Amazon Nova 2 Lite**, called from Singapore through its global inference profile, classify the public news and write one shared summary per event from public data only; AWS may process the request in any Region the profile covers. Each client's exposure and relevance come from steps 2 and 3, without the model;
    5. routes each alert to the assigned agent (`assignedAgentSubject`).
 
    Agent decisions and feedback are audited through the outbox.
@@ -81,15 +81,15 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
    - kill switches for search and model calls, whose state, the monthly counts and the estimated cost are kept in alerts-db so that every worker run and the API share them (see the amendment in ADR-0014);
    - one ingestion run at a time, enforced by a PostgreSQL advisory lock;
    - a separate Bedrock budget alert;
-   - a failed Tokyo search ends that run without inventing results.
-6. **Tokyo is an availability choice, not a requirement.** The search moves to Singapore if the capability becomes available there. Availability must be confirmed in the live AWS spike ([open item 14](../architecture/open-items.md#14-tokyo-web-search-availability)).
+   - a failed search ends that run without inventing results.
+6. **The search provider is replaceable.** Search sits behind one interface (`PublicSearchProvider`). Bedrock AgentCore web search in Tokyo was the first choice; an AWS Organization service control policy blocks it in the project account ([open item 14](../architecture/open-items.md#14-tokyo-web-search-availability), closed), so Tavily is used. An AWS-native search can replace it later without changing the rest of the pipeline.
 7. Dissemination to clients is outside the system: the agent decides and contacts the client.
 
 ## Rationale
 
 - Only public, non-client data crosses regions, which keeps the privacy argument simple.
 - Every 4 hours matches the feature owner's ADR-0006 and plan, and keeps news fresher; the extra searches still fit the 1,000-query monthly quota.
-- The model never receives client data, so the privacy boundary does not depend on where it runs. Bedrock in Singapore also keeps every model call in the stack's region; whether the branch's global-inference model is acceptable instead is [open item 4](../architecture/open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture).
+- The model never receives client data, so the privacy boundary does not depend on where it runs. No model the project account can invoke runs in-Region in Singapore, and Nova 2 Lite has only a global profile, so a global profile is used here; client-derived wording stays on an Asia-Pacific profile ([ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md)).
 - Its own database follows database-per-service.
 
 ## Consequences
@@ -104,20 +104,20 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
 
 - News can be up to about 4 hours old.
 - 50% more searches and model calls than running every 6 hours.
-- Depends on AgentCore availability in Tokyo.
+- Depends on a third-party search provider and its API key; model requests may be processed outside Singapore.
 - One more RDS instance (about USD 13–15/month single-AZ).
 - Conflicts with two of the feature owners' Proposed ADRs (ADR-0008, ADR-0010) until reconciled.
 
 ## Security & Privacy Impact
 
-- Cross-region traffic carries public terms only.
-- Domain allow-list enforced at the AgentCore target.
-- IAM-authorized invocation.
-- No CRM identifiers in prompts sent to Tokyo.
+- Traffic leaving Singapore carries public data only.
+- Domain allow-list sent in each Tavily request and enforced again by the worker.
+- The Tavily key is in Secrets Manager, readable only by the worker's task execution role; Bedrock access is limited to the pinned inference profile.
+- No CRM identifiers in search queries or model prompts.
 
 ## Cost Impact
 
-Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switches. Searches cost about USD 5.04/month at 720 searches. alerts-db adds about USD 13–15/month single-AZ.
+Bedrock usage is roughly USD 5–15/month with caps and kill switches. Searches are about 720 Tavily credits a month; their cost depends on the Tavily plan and is to be measured ([ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) cost impact). alerts-db adds about USD 13–15/month single-AZ.
 
 ## Operational Impact
 
@@ -130,7 +130,7 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 
 - A test that inspects every outbound search request and finds no client, account, holding, agent or count data.
 - A test that inspects every model request and finds only public event data.
-- A run with Tokyo unavailable ends cleanly with no fabricated alerts.
+- A run with the search provider unavailable ends cleanly with no fabricated alerts.
 - An agent sees only alerts for their own clients.
 
 ## References
@@ -138,6 +138,7 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 - [X-factor 1: event-driven market-news alerts](../architecture/x-factors.md#x-factor-1-event-driven-market-news-alerts)
 - [Numbered flows 11–11b](../architecture/data-flow.md#numbered-flows)
 - [Open items 4](../architecture/open-items.md#4-reconcile-the-x-factor-branch-adrs-with-the-target-architecture) and [14](../architecture/open-items.md#14-tokyo-web-search-availability)
+- [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) (Accepted): the search provider and the model
 - `feat/event-driven-alerts`: ADR-0006, ADR-0008, ADR-0009, ADR-0010 (Proposed, owner Azeez). Those files use numbers already taken on `dev` and will need renumbering when merged.
 
 ## Revision history
@@ -146,3 +147,4 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 - 2026-10-09: before acceptance, the schedule changed to every 4 hours to match branch ADR-0006, as decided by the decision owner. Searches rise from about 480 to about 720 a month (USD 3.36 to 5.04). The rest of the decision is unchanged.
 - 2026-10-12: before acceptance, decision 3 corrected to match `event-alert-service`, as decided by the decision owner: the model writes one shared summary from public data only, and each client's private context is computed without it. The proposed region is unchanged; open item 4 settles it.
 - 2026-10-20: before acceptance, decision 5 clarified to match `event-alert-service`, proposed by Hayyun for the decision owner's review: the kill-switch state and monthly counts live in alerts-db, not in process memory, and an advisory lock allows one ingestion run at a time. The region, schedule and data boundary are unchanged.
+- 2026-11-01: before acceptance, decisions 2, 3 and 6, the rationale, consequences, security, cost and validation changed to follow accepted ADR-0050, as asked by the decision owner: Tavily, called directly from Singapore, replaces Bedrock AgentCore web search in Tokyo, which an AWS Organization service control policy blocks; and the model is Amazon Nova 2 Lite through its global inference profile, called from Singapore, rather than Bedrock in Singapore. The schedule, storage and data boundary are unchanged.
