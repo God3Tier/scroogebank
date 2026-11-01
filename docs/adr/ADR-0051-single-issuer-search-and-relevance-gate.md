@@ -111,6 +111,11 @@ rather than 12. The relevance gate in decision 4 is unchanged. The benchmark is 
 small indicative sample (4 events, 13 stories) and still does not meet the
 decision 6 targets, so production enablement is not claimed.
 
-Publisher rights: on 2026-10-31 Hayyun read the Reuters, CNBC and FT terms and
-judged use acceptable. No quoted terms are recorded and Azeez has not yet
-confirmed; this is not a licence or a named ADR review.
+Publisher rights and enablement: on 2026-10-31 Hayyun read the Reuters, CNBC and
+FT terms and judged use acceptable. On 2026-11-01 Hayyun approved, under their
+own name, enabling scheduled ingestion and AI summaries once deployed, and reports
+that Azeez agrees. No quoted terms are recorded and no written confirmation from
+Azeez is on file; this is not a licence or a named ADR review. The code and
+Terraform defaults (`ingestion_enabled`, `ai_enabled`) stay `false`; enabling is a
+separate apply of the alert-worker stack. The decision 6 benchmark targets are
+still unmet and the benchmark labels have not been human-reviewed.
