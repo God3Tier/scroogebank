@@ -1,7 +1,7 @@
 {
   "fixtureVersion": "draft-screen-v1",
   "labelStatus": "SYNTHETIC",
-  "description": "Model outputs, written by hand, that the safety screen must accept or reject (ADR-0054 decision 4). The live Nova Micro evaluation (90% pass gate) uses its own run in AE-T11.",
+  "description": "Model outputs, written by hand, that the safety screen must accept or reject (ADR-0054 decision 4). The live Nova Lite evaluation (90% pass gate, ADR-0067) uses its own run in AE-T11.",
   "cases": [
     {
       "name": "holiday greeting, warm",

@@ -43,7 +43,7 @@ class BedrockDraftModelGatewayTest {
         assertThat(reply.outputTokens()).isEqualTo(80);
         ArgumentCaptor<ConverseRequest> request = ArgumentCaptor.forClass(ConverseRequest.class);
         verify(client).converse(request.capture());
-        assertThat(request.getValue().modelId()).isEqualTo("apac.amazon.nova-micro-v1:0");
+        assertThat(request.getValue().modelId()).isEqualTo("apac.amazon.nova-lite-v1:0");
         assertThat(request.getValue().inferenceConfig().temperature()).isEqualTo(0.3F);
         assertThat(request.getValue().inferenceConfig().maxTokens()).isEqualTo(600);
         assertThat(request.getValue().overrideConfiguration().orElseThrow().apiCallTimeout())
@@ -65,7 +65,7 @@ class BedrockDraftModelGatewayTest {
 
     @Test
     void globalProfilesAreRefused() {
-        assertThatThrownBy(() -> new AiProperties(true, null, "global.amazon.nova-micro-v1:0", null, null, null,
+        assertThatThrownBy(() -> new AiProperties(true, null, "global.amazon.nova-2-lite-v1:0", null, null, null,
                 null, null)).isInstanceOf(IllegalArgumentException.class);
     }
 }

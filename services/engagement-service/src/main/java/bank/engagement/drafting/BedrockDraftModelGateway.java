@@ -16,10 +16,10 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * Bedrock Runtime {@code Converse} in Singapore with Nova Micro's
- * Asia-Pacific inference profile (ADR-0054 decision 3). The reply is plain
- * text that the safety screen parses as JSON; structured output is not
- * relied on, because its support for this model is not confirmed.
+ * Bedrock Runtime {@code Converse} in Singapore with Nova Lite's
+ * Asia-Pacific inference profile (ADR-0067). The reply is plain text that
+ * the safety screen parses as JSON; Nova rejects Converse structured output
+ * ({@code outputConfig}), so it is not used.
  */
 public class BedrockDraftModelGateway implements DraftModelGateway {
 
