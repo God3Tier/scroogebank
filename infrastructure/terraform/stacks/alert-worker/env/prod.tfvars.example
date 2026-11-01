@@ -11,8 +11,9 @@ environment  = "prod"
 # env/prod.s3.tfbackend.
 state_bucket = "crm-tfstate-123456789012"
 
-# Both stay false until the Tavily secret is populated, the live search
-# benchmark has passed and the AI benchmark gates are met.
+# Hayyun approved enabling both on 2026-11-01 (ADR-0051). Set them to true in your
+# own prod.tfvars once the Tavily secret is populated; the template stays false so
+# a new environment never starts calling Tavily or Bedrock by accident.
 ingestion_enabled = false
 ai_enabled        = false
 
