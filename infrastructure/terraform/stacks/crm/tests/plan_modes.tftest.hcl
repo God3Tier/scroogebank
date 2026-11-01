@@ -270,6 +270,8 @@ run "prod" {
       join(",", module.client_health_analysis.container_names) == "client-health-analysis" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_MODE"] == "ANALYSIS" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_AI_MODEL_ID"] == "apac.amazon.nova-lite-v1:0" &&
+      !contains(keys(module.client_health_service.app_environment), "CLIENT_HEALTH_AI_MODEL_ID") &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "false" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED"] == "true" &&
       module.client_health_analysis.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE"] == "Scrooge/ClientHealth" &&
@@ -280,6 +282,18 @@ run "prod" {
       aws_cloudwatch_event_target.client_health_analysis_failed.arn == aws_sns_topic.alarms.arn
     )
     error_message = "The shared machine client has only the two read scopes, and no-domain analysis remains a non-service task that fails closed."
+  }
+  assert {
+    condition = toset(flatten([for st in data.aws_iam_policy_document.client_health_bedrock.statement : tolist(st.resources) if st.sid == "InvokeExplanationModel"])) == toset([
+      "arn:aws:bedrock:ap-southeast-1:123456789012:inference-profile/apac.amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-southeast-1::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-southeast-2::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-northeast-1::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-northeast-2::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-northeast-3::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-lite-v1:0",
+    ])
+    error_message = "Client Health may invoke only the Nova Lite Asia-Pacific profile and its model in the six regions ADR-0067 lists, nothing else."
   }
   assert {
     condition = (
@@ -596,4 +610,27 @@ run "alert_routes_are_public_and_directory_routes_are_not" {
     condition     = !anytrue([for paths in values(module.event_alert_service.listener_rule_paths) : anytrue([for p in paths : startswith(p, "/internal")])])
     error_message = "The alert API's public rules never include /internal paths."
   }
+}
+
+run "client_health_ai_switched_on" {
+  command = plan
+
+  variables {
+    client_health_ai_enabled = true
+  }
+
+  assert {
+    condition     = module.client_health_analysis.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "true" && module.client_health_service.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false"
+    error_message = "The switch turns wording on for the analysis task only; the API service never calls Bedrock (ADR-0067)."
+  }
+}
+
+run "rejects_a_global_client_health_profile" {
+  command = plan
+
+  variables {
+    client_health_bedrock_model_id = "global.amazon.nova-2-lite-v1:0"
+  }
+
+  expect_failures = [var.client_health_bedrock_model_id]
 }
