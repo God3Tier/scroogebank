@@ -1,6 +1,6 @@
 # ADR-0019: Edge entry: CloudFront → API Gateway HTTP API → VPC Link → internal ALB
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

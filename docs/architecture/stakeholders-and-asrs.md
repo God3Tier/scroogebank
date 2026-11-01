@@ -1,8 +1,9 @@
 # Stakeholders and Architecturally Significant Requirements
 
-> Status: Proposal/report draft. The solution view distinguishes the current
-> architecture baseline from the Event-Driven Client Alerts design that still
-> requires AWS validation and acceptance of its proposed ADRs.
+> Status: Accepted with the target architecture (2026-11-01). The solution view
+> covers the CRM baseline and the Event-Driven Client Alerts design; the alert
+> ADRs are accepted, and the live AWS evidence listed at the end is still to be
+> collected.
 
 ## Solution View
 

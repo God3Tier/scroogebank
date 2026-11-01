@@ -1,12 +1,12 @@
 # ADR-0062: Dashboard account figures per currency
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-24 20:00 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen; Joseph Yau (Feature 2 primary developer, whose account-service this changes; agreement pending)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `task/business-dashboard/per-currency-deposits`
 - Related issue/PR: TBD
-- Supersedes: [ADR-0038](ADR-0038-dashboard-metric-definitions.md) in part, on acceptance: the account-service refusal (HTTP 409) and the `mixed_currencies` panel in its currency rules, the single-currency premise that follows them, and "Booked initial deposits" as one sum
+- Supersedes: [ADR-0038](ADR-0038-dashboard-metric-definitions.md) in part: the account-service refusal (HTTP 409) and the `mixed_currencies` panel in its currency rules, the single-currency premise that follows them, and "Booked initial deposits" as one sum
 - Superseded by: N/A
 
 ## Context

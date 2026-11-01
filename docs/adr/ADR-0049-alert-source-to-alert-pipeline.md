@@ -1,13 +1,13 @@
 # ADR-0049: Source-to-alert pipeline, operator replay and worker metrics
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-20 (Asia/Singapore)
 - Decision owner(s): Hayyun (proposer). Azeez reviews as owner of search, AI and the scheduled worker; Neo Jia Wen reviews the matching and data-boundary parts (ADR-0031, ADR-0032)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `feat/event-driven-alerts`
 - Related issue/PR: TBD
 - Supersedes: N/A. Implements [ADR-0032](ADR-0032-xf1-instrument-master-deterministic-matching.md) decision 4 and answers gaps 1, 2, 5 and 6 in [the alert gaps](../feature-plans/event-driven-alerts_gaps.md)
-- Superseded by: N/A
+- Superseded by: [ADR-0066](ADR-0066-crm-linked-current-alert-holdings.md) in part (alerts route to the client's current agent from the CRM, and holdings are read through the CRM-linked contract)
 
 > **Provider amendment (2026-10-23):** ADR-0050 supersedes decision 6 for the
 > active deployment path. The inactive AgentCore runtime adapter was removed to

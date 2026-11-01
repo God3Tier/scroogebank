@@ -1,6 +1,6 @@
 # Target architecture: open items requiring team decisions
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.  
+> **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-20.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -16,7 +16,7 @@ The spec says audit logs are accessible only to administrators, while the UI moc
 
 Needed for the ACM certificate on the internal ALB, at about USD 13/year plus USD 0.50/month for the hosted zone.
 
-**Resolved (2026-10-20)** by [ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8 (Proposed). The domain is registered by hand in Route 53, outside Terraform ([runbook](../runbooks/deploy-aws.md#register-a-domain-once-per-account)). With `domain_name` set, the CRM stack serves the app at `sg.<domain>` and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's hosted zone. The project account's domain is `itsag3t6.com`, already registered there until July 2027; its hosted zone costs USD 0.50/month. A new `.com` would cost about USD 15/year, which AWS credits do not cover.
+**Resolved (2026-10-20)** by [ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8 (Accepted). The domain is registered by hand in Route 53, outside Terraform ([runbook](../runbooks/deploy-aws.md#register-a-domain-once-per-account)). With `domain_name` set, the CRM stack serves the app at `sg.<domain>` and puts the internal ALB on HTTPS, with ACM certificates validated in the domain's hosted zone. The project account's domain is `itsag3t6.com`, already registered there until July 2027; its hosted zone costs USD 0.50/month. A new `.com` would cost about USD 15/year, which AWS credits do not cover.
 
 ## 3. Admin-wide activity view in user-service
 
@@ -30,7 +30,7 @@ Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/A
 
 **Dashboard part settled (2026-10-14).** The first dashboard branch's ADR-0003 was not carried over: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) replaces it, and dashboard-service on `dev` sends `DASHBOARD_VIEW` events straight to the audit queue. Still open: the alerts ADR-0008 and ADR-0010 points (on `dev`, the alert service defaults to the global-inference model through Bedrock in us-east-1, with AI off by default) and the health-monitor deployment decisions.
 
-**Model and health-monitor parts settled (2026-11-01).** The model point of ADR-0010 is settled by accepted [ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md): the alert model is Nova 2 Lite through its global inference profile, called from Singapore, because it receives only public data; the service and the alert-worker stack now default to ap-southeast-1. The health monitor runs daily at 08:00 SGT ([ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md)) and words its findings with Nova Lite through its Asia-Pacific profile ([ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md)). Still open: ADR-0008 (Proposed) still describes a shared database cluster, while alerts-db deploys as its own instance as the target architecture says; and ADR-0010 and [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md), both Proposed, need their owners to accept them as amended by ADR-0050 or withdraw them.
+**Model and health-monitor parts settled (2026-11-01).** The model point of ADR-0010 is settled by accepted [ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md): the alert model is Nova 2 Lite through its global inference profile, called from Singapore, because it receives only public data; the service and the alert-worker stack now default to ap-southeast-1. The health monitor runs daily at 08:00 SGT ([ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md)) and words its findings with Nova Lite through its Asia-Pacific profile ([ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md)). **Resolved (2026-11-01).** Every alerts ADR was accepted: ADR-0008 with its topology superseded in part by [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md) decision 4 (alerts-db is its own instance), and ADR-0010 and ADR-0031 as amended by ADR-0050.
 
 ## 5. SFTP file format and schedule
 
@@ -49,7 +49,7 @@ File naming, CSV or JSON, header and field layout, and how often files are produ
 
 Confirm whether each service runs db-migrate as a separate task in staging and prod (as drawn), or migrates on startup ([Schema migrations (db-migrate)](../database/migrations.md#schema-migrations-db-migrate)).
 
-**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed), which chose neither. In AWS, the task of each service with a database runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. The container also gives the service its own login without schema rights. user-service and event-alert-service still migrate on startup locally and in their tests.
+**Resolved (2026-10-20)** by [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Accepted), which chose neither. In AWS, the task of each service with a database runs Flyway in a `db-migrate` init container, as its database's master user, and the app starts only after it succeeds. The container also gives the service its own login without schema rights. user-service and event-alert-service still migrate on startup locally and in their tests.
 
 ## 9. Client ID validation at import
 
@@ -99,7 +99,7 @@ Choose the approved security-master or market-data provider, and how reclassific
 
 ## 16. Health-monitor activity contract
 
-Transaction-service now has a proposed implementation for matched activity history: a scoped-token private read route across all clients, bounded time range/global keyset paging, restricted matched-only fields, validated source fingerprints, and deterministic six-month synthetic signal and healthy-control cases ([proposed ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)). The code, Terraform, generated SQLBoiler models, and automated tests are present locally; end-to-end verification, contract-owner review, and ADR acceptance remain open before the item can be considered resolved. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), imports link matched rows to `account_id` and `client_id`; unmatched rows have neither.
+Transaction-service now has a proposed implementation for matched activity history: a scoped-token private read route across all clients, bounded time range/global keyset paging, restricted matched-only fields, validated source fingerprints, and deterministic six-month synthetic signal and healthy-control cases ([ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)). **Resolved (2026-11-01)** by ADR-0065, accepted: the route, its Terraform and its tests are merged on `dev`. Only the end-to-end check in AWS remains, with the rest of Client Health's live evidence. Since [ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md), imports link matched rows to `account_id` and `client_id`; unmatched rows have neither.
 
 ## 17. Budget with the x-factors
 

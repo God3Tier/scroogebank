@@ -1,6 +1,6 @@
 # ADR-0023: One RDS PostgreSQL instance per service with a Multi-AZ standby, AWS Backup cross-region copy, no cache tier
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

@@ -1,6 +1,6 @@
 # Event-driven alerts database schema
 
-Status: Proposed; implementation requires accepted ADR-0005 through ADR-0014.
+Status: Accepted (2026-11-01) with ADR-0005 through ADR-0014; the current-portfolio tables follow ADR-0066.
 The alert service exclusively owns the `event_alert` database and Flyway history.
 
 ## Core relationships

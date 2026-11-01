@@ -1,6 +1,6 @@
 # ADR-0043: List endpoints for clients and for all transactions
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-16 11:15 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen; Joseph Yau (owner of the Feature 2 and Feature 3 code these endpoints are added to; agreement pending)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

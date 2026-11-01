@@ -1,13 +1,13 @@
 # ADR-0029: Environment lifecycle and cost controls
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) in part, if accepted (prod is destroyed at the end of every deployment; stopping is only a pause within one; budget alerts made by hand: USD 200 at 10, 20, 40, 60, 80 and 100%, and a Bedrock budget)
+- Superseded by: [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) in part (prod is destroyed at the end of every deployment; stopping is only a pause within one; budget alerts made by hand: USD 200 at 10, 20, 40, 60, 80 and 100%, and a Bedrock budget)
 
 ## Context
 

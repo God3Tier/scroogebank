@@ -1,6 +1,6 @@
 # ADR-0063: OpenAPI contract tests in each service's tests and CI
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-24 22:00 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen; the owners of the services whose contracts were written here should review them (account-service and client-profile-management-service: Feature 2; user-service: Feature 1; the SFTP receiver: Feature 3; the Auditor)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

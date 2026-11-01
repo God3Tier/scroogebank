@@ -1,6 +1,6 @@
 # ADR-0065: Client Health matched transaction history
 
-- Status: Proposed; human acceptance and Client Health/Platform review required
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Date: 2026-10-26 (Asia/Singapore)
 - Owner: Joseph Yau
 - Supersedes: None

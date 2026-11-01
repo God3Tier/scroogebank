@@ -1,12 +1,13 @@
 # ADR-0014: Alert observability, cost controls, and kill switches
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-09-27 01:54:06 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewer: Hayyun
 - AI-assisted draft: Yes — Codex
 - Related branch: `task/event-driven-alerts/contracts`
 - Supersedes: None
+- Superseded by: [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) in part (the search alarms, quota and kill switch apply to the Tavily search, not a Tokyo AgentCore Gateway)
 
 ## Context
 

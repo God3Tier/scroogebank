@@ -1,23 +1,24 @@
 # Database design (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-28.
+> **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-28.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
 ## Databases
 
-Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Proposed).
+Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Accepted).
 
 | Database | Owned by | Holds |
 |---|---|---|
 | `users-db` | user-service | CRM users (Admin/Agent), linked to Cognito; `audit_outbox` |
 | `clients-db` | client-service | Client profiles, verification status with who verified and when, `deleted_at` for soft-deleted clients ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)), and `client_documents`: one row per identity document ([ADR-0041](../adr/ADR-0041-client-identity-documents-and-manual-verification.md)) |
 | `accounts-db` | account-service | Bank accounts, each with `owner_agent_id`: the owning agent's Cognito `sub`, copied from client-service when the account is opened ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)), and `deleted_at` for soft-deleted accounts ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)) |
-| `transactions-db` | transaction-service and transaction-ingest | Imported transactions and `audit_outbox`, the only outbox, because on `dev` the SFTP receiver is both transaction-service and transaction-ingest. Each transaction stores the `account_id` and `client_id` that account-service confirmed at import, with no foreign keys ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)); activity kind and validated nullable source fingerprint support the proposed Client Health history API ([ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)) |
+| `transactions-db` | transaction-service and transaction-ingest | Imported transactions; `audit_outbox` for import events and `read_audit_outbox` for transaction-service's read events ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)). The two are one Go codebase, each with its own database login. Each transaction stores the `account_id` and `client_id` that account-service confirmed at import, with no foreign keys ([ADR-0037](../adr/ADR-0037-transactions-database-and-account-linking.md)); activity kind and validated nullable source fingerprint support the Client Health history route ([ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)) |
 | `audit-db` | auditor and chain-verify | The hash-chained `audit_log`, and the tamper-findings table (`corrupted_audit_log` on `dev`) |
 | `client-keys` (DynamoDB) | client-service | Per-client data keys, KMS-wrapped, one-to-one with client UUIDs. Email and phone blind indexes in clients-db use a separate shared KMS HMAC key ([ADR-0030](../adr/ADR-0030-client-data-envelope-encryption.md)) |
-| `alerts-db` | event-alert-service (api and worker) | Holdings (synthetic for the MVP), instrument master, account sector exposures, public events, alerts, agent decisions, outbox |
+| `alerts-db` | event-alert-service (api and worker) | Current portfolios agents record against CRM accounts, with revisions ([ADR-0066](../adr/ADR-0066-crm-linked-current-alert-holdings.md)), instrument master, account sector exposures, public events, alerts, agent decisions, outbox |
 | `health-db` | client-health-monitor-service (API and analysis task) | Activity projection, analysis runs and watermarks, signals and evidence, tasks and status history, explanation records, outbox |
+| `engagement-db` | engagement-service (Feature 7) | Calendar events, queued mail with leases, follow-up drafts stored with placeholders and linked to their Client Health task or alert, versioned Singapore public holidays, notification preferences, outbox. No e-mail bodies or recipient addresses after sending; a draft's text is cleared once it is sent or discarded ([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)). Single-AZ even in the high-availability week ([ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md)) |
 
 - **One RDS for PostgreSQL instance per service**, physically separate. Each service also keeps its **outbox table** in its own database. dashboard-service has no database ([X-factor 2: business dashboard](../architecture/x-factors.md#x-factor-2-business-dashboard)).
 - **Instance size:** `db.t4g.micro` (2 vCPU burstable, 1 GiB memory), gp3 storage with storage auto-scaling. Each instance serves only one service's tasks (about 1–6 tasks × a pool of 10 connections).
@@ -25,7 +26,7 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
 - **No cross-service data access.** A service's security group and credentials reach only its own instance. Cross-service data is fetched through the owning service's API. The accounts-to-clients foreign key in today's `V1_init.sql` cannot cross databases; it is replaced by an API check when accounts are created, and by client-service refusing to delete a client who still has open accounts. Both checks forward the caller's token and fail closed ([ADR-0035](../adr/ADR-0035-account-ownership-across-services.md)).
 - **Soft deletes in clients-db and accounts-db** ([ADR-0036](../adr/ADR-0036-soft-deletion-of-clients-and-accounts.md)). Deleting a client or account sets `deleted_at` and keeps the row; every API treats a deleted row as missing. "Open accounts" above means accounts that are not deleted, including accounts whose status is `closed`. Email, phone number and one-account-per-type are unique only among rows that are not deleted (partial unique indexes).
 - **Encryption:** KMS at rest; TLS required on every database connection (`rds.force_ssl`).
-- **Backups:** RDS automated backups with point-in-time recovery (RPO of minutes), plus a daily AWS Backup plan with a copy to ap-southeast-2 ([Why AWS Backup is included when RDS already has backups](#why-aws-backup-is-included-when-rds-already-has-backups)). The copy is not deployed, and may never be ([The cross-region copy is not deployed](#the-cross-region-copy-is-not-deployed)). The client-keys table has DynamoDB point-in-time recovery and is in the same AWS Backup plan: losing it would make all client data unreadable.
+- **Backups:** RDS automated backups with point-in-time recovery (RPO of minutes), plus a daily AWS Backup plan kept for 7 days in Singapore, which the design extends with a copy to ap-southeast-2 ([Why AWS Backup is included when RDS already has backups](#why-aws-backup-is-included-when-rds-already-has-backups)). The copy is not deployed, and may never be ([The cross-region copy is not deployed](#the-cross-region-copy-is-not-deployed)). The client-keys table has DynamoDB point-in-time recovery and is in the same AWS Backup plan: losing it would make all client data unreadable.
 - **Consistency model (NFR 4):** strong (ACID) inside one service's database; eventual for the audit log (seconds behind) and for data that crosses services, such as imported transactions (per ingestion run).
 - **Dashboard indexes** ([ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md)). The business dashboard's figures are computed in each owning database by date: `clients(created_at)`, `accounts(opening_date)` and `transactions(transaction_date)` are indexed for it. No tables or columns are added.
 - **No cache tier.** Database indexes, CloudFront caching of static files and in-process caching (Cognito signing keys, reference data) are enough at project scale. The spec asks for caching only "if needed" (NFR 1).
@@ -96,10 +97,10 @@ Three database layouts were compared. Prices are rough ap-southeast-1 figures in
 
 ## Why AWS Backup is included when RDS already has backups
 
-Each RDS instance has built-in automated backups with point-in-time recovery inside ap-southeast-1. AWS Backup is still chosen because it adds three things the spec asks for, across all seven databases at once:
+Each RDS instance has built-in automated backups with point-in-time recovery inside ap-southeast-1. AWS Backup is still chosen because it adds three things the spec asks for, across all the databases and the client-keys table at once:
 
 - **A cross-region copy** of each daily snapshot to a backup vault in ap-southeast-2 (not drawn; [Parts of the architecture not shown on the diagram](../architecture/system-overview.md#parts-of-the-architecture-not-shown-on-the-diagram)). The spec's Availability NFR says "Cross region if needed", and the Resiliency NFR recommends a 12-hour RTO and RPO. If ap-southeast-1 is unavailable, the stack is rebuilt in ap-southeast-2 with Terraform and restored from the copies.
-- **A backup and restore strategy defined in code** (NFR 2): one plan, selecting databases by tag, with schedule, retention and copy rules. A new service's database is covered as soon as it is tagged.
+- **A backup and restore strategy defined in code** (NFR 2): one plan, selecting databases by tag, with schedule and retention rules (7 days), and a copy rule once the account allows it. A new service's database is covered as soon as it is tagged.
 - **Protected backups:** Backup Vault Lock stops anyone deleting or shortening the retention of recovery points, which supports the tamper-resistance argument for audit data.
 
 Cost is small: roughly USD 1–3/month for snapshot storage and cross-region transfer at this size. If the team decides cross-region recovery is out of scope, AWS Backup can be removed and RDS point-in-time recovery used alone; the ADR must then state that recovery from a regional outage is not supported.

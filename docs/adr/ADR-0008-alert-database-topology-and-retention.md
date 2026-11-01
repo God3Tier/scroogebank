@@ -1,12 +1,13 @@
 # ADR-0008: Alert database topology, schema, and retention
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-09-27 01:54:06 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewer: Hayyun
 - AI-assisted draft: Yes — Codex
 - Related branch: `task/event-driven-alerts/contracts`
 - Supersedes: None
+- Superseded by: [ADR-0031](ADR-0031-xf1-alert-processing-search-region-boundary.md) in part (decision 4: alerts-db is its own RDS instance in every deployed environment, not a database on a shared cluster; backups follow the platform plan; the schema, migration and retention rules stand)
 
 ## Context
 

@@ -1,12 +1,12 @@
 # Database schema migrations (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-28.
+> **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-28.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
 ## Schema migrations (db-migrate)
 
-Recorded in [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Proposed).
+Recorded in [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md) decision 3 (Accepted).
 
 Terraform creates each RDS instance with an empty database, and each service owns its versioned migrations:
 
