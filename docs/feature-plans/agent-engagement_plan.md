@@ -64,7 +64,7 @@ The CRM records clients, accounts and transactions, but gives agents no help man
 6. A draft is sent only when the agent explicitly sends it, and only once. A second send returns 409.
 7. An agent cannot read or act on another agent's events or drafts by any ID, proven by tests.
 8. Every create, update, cancel, generate, send and discard produces an audit event that the auditor accepts.
-9. AI drafting is off unless enabled. The kill switch and the daily and monthly caps are enforced.
+9. AI drafting is off unless enabled; prod enables it (ADR-0067). The kill switch and the daily and monthly caps are enforced.
 10. Billable resources added: one ECS service, one `db.t4g.micro` RDS instance and one SES identity, nothing else. Cost stays within §14.
 
 ## 6. Architecture
@@ -85,7 +85,7 @@ One deployable service, with internal modules that each touch only their own tab
   - client-service `GET /api/clients/{clientId}` with the caller's token, over Service Connect, to check ownership and read the first name, country and email;
   - Cognito `ListUsers` filtered by `sub`, to find the agent's email address;
   - SES `SendEmail` (raw MIME);
-  - Bedrock Runtime `Converse` in Singapore, with Amazon Nova Micro's Asia-Pacific cross-region profile (ADR-0054);
+  - Bedrock Runtime `Converse` in Singapore, with Amazon Nova Lite's Asia-Pacific cross-region profile (ADR-0054, model per ADR-0067);
   - SQS `audit-insert`.
 - **Dispatcher:**
   - runs inside every task every 60 seconds (ADR-0051 decision 4);
@@ -217,7 +217,7 @@ Rough figures; verify in the AWS Pricing Calculator for ap-southeast-1.
 - **Levers:**
   - run the service only for test and demo slots;
   - put `engagement-db` on a shared x-factor RDS instance (budget.md fallback);
-  - keep AI drafting off outside demo runs.
+  - turn AI drafting off (`ai_enabled = false`); prod has it on since ADR-0067.
 - No Multi-AZ for this database, even in the high-availability week.
 
 ## 15. Security and privacy
@@ -228,7 +228,7 @@ Rough figures; verify in the AWS Pricing Calculator for ap-southeast-1.
   - a banded "time since last meeting" (`< 1 month`, `1–3 months`, `> 3 months`, `none`);
   - allowed placeholders (`{{client_first_name}}`, `{{agent_name}}`).
 
-  The service fills in placeholders after generation. The data rule mirrors ADR-0034. Unlike ADR-0034, the request may be processed in other Asia-Pacific regions through Nova Micro's geographic profile, never a global one (ADR-0054 decision 3).
+  The service fills in placeholders after generation. The data rule mirrors ADR-0034. Unlike ADR-0034, the request may be processed in other Asia-Pacific regions through Nova Lite's geographic profile, never a global one (ADR-0054 decision 3, model per ADR-0067).
 - **Safety screen on model output:**
   - must be valid JSON `{subject, body}` within length limits (120 and 1,500 characters);
   - only allowed placeholders;
@@ -267,7 +267,7 @@ Rough figures; verify in the AWS Pricing Calculator for ap-southeast-1.
   - the ECS service (`modules/ecs-service`, Service Connect to client-service);
   - the database (`modules/postgres`);
   - the ALB rule for `/api/engagement` and `/api/engagement/*`, priority 70 (the next free band after event-alert-service's 60), to port 8086;
-  - IAM: `ses:SendRawEmail` on the identity, `bedrock:InvokeModel` on the Nova Micro Asia-Pacific profile and its foundation-model ARNs in the profile's six regions (ADR-0054 Security), `cognito-idp:ListUsers` on the pool, `sqs:SendMessage` on `audit-insert` through `extra_audit_producer_role_arns`.
+  - IAM: `ses:SendRawEmail` on the identity, `bedrock:InvokeModel` on the Nova Lite Asia-Pacific profile and its foundation-model ARNs in the profile's six regions (ADR-0054 Security, ADR-0067), `cognito-idp:ListUsers` on the pool, `sqs:SendMessage` on `audit-insert` through `extra_audit_producer_role_arns`.
 - **Long-lived stack `stacks/mail-identity`** (ADR-0053 decision 2), applied once per environment and never destroyed by the session scripts. It holds the SES domain identity (`mail.sg.itsag3t6.com` for prod), the DKIM, MAIL FROM and DMARC records in the existing hosted zone, the configuration set, and the verified team inboxes used as demo recipients. `stacks/agent-engagement` reads them by name, so teardowns never force re-verification.
 - The CRM stack needs an output for this stack, like `dashboard_inputs`.
 - **Order:** `mail-identity` once (then confirm DKIM and click each inbox's verification email), then per session the CRM stack and then this stack. Add steps to `docs/runbooks/deploy-aws.md`.
@@ -291,7 +291,7 @@ Scale the service to zero or destroy the `agent-engagement` stack. No other serv
 
 ## 19. ADRs required before implementation
 
-All drafted and accepted 2026-10-21, owner Neo Jia Wen, and indexed under Accepted decisions in `docs/adr/README.md`. ADR-0054 records the Nova Micro profile ID `apac.amazon.nova-micro-v1:0` and its six destination regions.
+All drafted and accepted 2026-10-21, owner Neo Jia Wen, and indexed under Accepted decisions in `docs/adr/README.md`. ADR-0054 records the Nova Micro profile ID `apac.amazon.nova-micro-v1:0` and its six destination regions. ADR-0067 (2026-11-01) replaced the model with Nova Lite, `apac.amazon.nova-lite-v1:0`, over the same six regions, and turned AI on in prod.
 
 | ADR | Decision |
 |---|---|
@@ -319,7 +319,7 @@ Joseph Yau reviews anything touching Feature 2 contracts. The auditor owner revi
 | AE-T08b | Auditor `ENGAGEMENT` type, payload checks and activity-feed actions | Neo Jia Wen | Auditor owner (review) | `services/auditor/src/internal/models/service_type.go`, `activity_filter.go`, `src/serverd/queue/payload_unmarshalling.go`, their tests, `services/auditor/README.md` | `task/agent-engagement/auditor` | Auditor validation (shared) | Built; tests pass | 2026-10-21 |
 | AE-T09 | Frontend: calendar, event form, draft editor, home panel, preferences | Neo Jia Wen | Frontend owner (review) | `frontend/src/pages/AgentCalendar.jsx`, `AgentDrafts.jsx`, `AgentDashboard.jsx`, `frontend/src/components/engagement/`, `frontend/src/api/engagement.js`, `AppRouter.jsx`, `NavBar.jsx`, `components/activityText.js`, `vite.config.js` | `task/agent-engagement/frontend` | `AgentDashboard.jsx` and `AppRouter.jsx` are shared with BD-T12 | In progress | 2026-10-21 |
 | AE-T10 | Terraform stacks, SES identity, runbook | Neo Jia Wen | Platform | `infrastructure/terraform/stacks/agent-engagement/**`, `infrastructure/terraform/stacks/mail-identity/**`, CRM stack outputs (`engagement_inputs`), `scripts/aws-session.sh`, `docs/runbooks/deploy-aws.md`, `docs/cost/resource-register.md` | `task/agent-engagement/infrastructure` | CRM stack outputs (shared with ADR-0047 work) | In progress | 2026-10-21 |
-| AE-T11 | End-to-end checks, seed data, cost check, live Nova evaluation | Neo Jia Wen | — | all of the above | `feat/agent-engagement` | All four branches merged; verified SES inboxes; Cognito agent users | In progress: checks passed in a personal account in sender-address mode, Gmail and Outlook; the 24-case Nova evaluation and the project account (domain mode) remain ([record](../testing/agent-engagement-live-checks.md)) | 2026-10-22 |
+| AE-T11 | End-to-end checks, seed data, cost check, live Nova evaluation | Neo Jia Wen | — | all of the above | `feat/agent-engagement` | All four branches merged; verified SES inboxes; Cognito agent users | In progress: checks passed in a personal account in sender-address mode, Gmail and Outlook; the 24-case Nova evaluation (now against Nova Lite, ADR-0067) and the project account (domain mode) remain ([record](../testing/agent-engagement-live-checks.md)) | 2026-10-22 |
 
 Branches. The work is split by area, one task branch each, all from `feat/agent-engagement`, built in separate git worktrees. Each branch touches only its own files, so they merge without conflicts:
 
@@ -344,7 +344,7 @@ Merge path: `task/agent-engagement/<area>` → `feat/agent-engagement` → `dev`
 | # | Question | Owner | Blocks |
 |---|---|---|---|
 | Q1 | Does the team accept a fourth innovation feature, its cost (§14) and a demo slot? **Resolved 2026-10-21:** the team accepted it | Team | — |
-| Q2 | Which Bedrock model and region? **Resolved 2026-10-21:** Amazon Nova Micro through its Asia-Pacific geographic profile, called through Bedrock Runtime in Singapore (ADR-0054 decision 3). No small, current model runs in-region there. Profile ID `apac.amazon.nova-micro-v1:0` confirmed. Its destination regions (Singapore, Sydney, Tokyo, Seoul, Osaka, Mumbai) are recorded in ADR-0054; re-check them before the demo | Neo Jia Wen | — |
+| Q2 | Which Bedrock model and region? **Resolved 2026-10-21:** Amazon Nova Micro through its Asia-Pacific geographic profile, called through Bedrock Runtime in Singapore (ADR-0054 decision 3). No small, current model runs in-region there. Profile ID `apac.amazon.nova-micro-v1:0` confirmed. Its destination regions (Singapore, Sydney, Tokyo, Seoul, Osaka, Mumbai) are recorded in ADR-0054; re-check them before the demo. **Changed 2026-11-01:** Nova Lite, `apac.amazon.nova-lite-v1:0`, same six regions (ADR-0067) | Neo Jia Wen | — |
 | Q3 | Agent email from Cognito `ListUsers` by `sub` (no user-service change), or a new user-service `GET /api/users/me`? **Resolved 2026-10-21:** Cognito `ListUsers` by `sub`, as ADR-0053 decision 4 (accepted) | Neo Jia Wen | — |
 | Q4 | Should admins get read-only access to agents' calendars, or is the audit log enough? | Team | §10 |
 | Q5 | Which countries beyond Singapore need holiday data, given the client `country` values in the synthetic data? | Neo Jia Wen | AE-T05 |

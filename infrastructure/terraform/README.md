@@ -26,6 +26,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `domain_name` | A domain registered in Route 53 ([runbook](../../docs/runbooks/deploy-aws.md#register-a-domain-once-per-account)): the app at `sg.<domain>` and the internal ALB on HTTPS (ADR-0042 decision 8). Unset, the app keeps its `*.cloudfront.net` address and the ALB listens on HTTP inside the VPC. The project account's domain is `itsag3t6.com`; runbook step 3 sets it only in an account that has that domain's hosted zone, so other accounts deploy without one |
 | `deletion_protection` | Defaults to on for prod; apply with `false` before `terraform destroy` |
 | `enable_github_deploy_role` | The role a deploy workflow assumes; off while deployments are run by hand |
+| `client_health_ai_enabled` | Client Health's daily analysis words new explanations with Nova Lite's Asia-Pacific profile (ADR-0067); its task role may invoke only that profile and its model in six regions. Defaults to `false` (templates only); prod's tfvars sets `true` |
 
 ## What each stack deploys
 
@@ -102,11 +103,11 @@ engagement-service (ADR-0051) for one CRM stack, built like the business dashboa
 - engagement-db, a single-AZ `db.t4g.micro` built like the CRM's databases and tagged for backup in prod, and the service's own login;
 - its TLS certificate, self-signed, in a Secrets Manager secret;
 - its security groups, and a rule on the CRM's client group that lets it call client-service;
-- a task role that may send to the audit queue, send mail only as the identity through the configuration set from the `no-reply` address, call `cognito-idp:ListUsers` on the pool, and invoke Nova Micro's Asia-Pacific profile and its model in the six regions ADR-0054 lists;
+- a task role that may send to the audit queue, send mail only as the identity through the configuration set from the `no-reply` address, call `cognito-idp:ListUsers` on the pool, and invoke Nova Lite's Asia-Pacific profile and its model in the six regions ADR-0067 lists;
 - alarms on dispatcher lag (the service logs `mail_dispatch_lagging`), the holiday list (`holiday_coverage_short` or `holiday_sync_mismatch`, ADR-0057) and the SES bounce rate, to the CRM's alarm topic;
 - a policy on the CRM's GitHub deploy role, when that role exists.
 
-`ai_enabled` (default `false`) is the AI drafting kill switch, and `mail_enabled` turns SES sending off. Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. engagement-db is not paused by `running`; `scripts/aws-session.sh` stops and starts it with the CRM's databases. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`.
+`ai_enabled` (default `false`, `true` in prod per ADR-0067) is the AI drafting kill switch, and `mail_enabled` turns SES sending off. Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. engagement-db is not paused by `running`; `scripts/aws-session.sh` stops and starts it with the CRM's databases. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`.
 
 ### `stacks/sftp-server`
 

@@ -137,7 +137,7 @@ Spring configuration:
 | `client-health.assignment.oauth.client-secret` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET` | secret supplied outside Git |
 | `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | exact assignment-read scope, `crm-clients/assignment.read` in the CRM stack |
 | `client-health.ai.enabled` | `CLIENT_HEALTH_AI_ENABLED` | Bedrock kill switch; defaults to `false` |
-| `client-health.ai.model-id` | `CLIENT_HEALTH_AI_MODEL_ID` | approved model or inference-profile ID; required when enabled |
+| `client-health.ai.model-id` | `CLIENT_HEALTH_AI_MODEL_ID` | approved inference-profile ID, `apac.amazon.nova-lite-v1:0` in the CRM stack (ADR-0067); required when enabled |
 | `client-health.ai.timeout` | `CLIENT_HEALTH_AI_TIMEOUT` | per-call timeout; defaults to `5s` |
 | `client-health.ai.max-attempts` | `CLIENT_HEALTH_AI_MAX_ATTEMPTS` | bounded total attempts, from 1 to 2 |
 | `client-health.audit.publisher-enabled` | `CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED` | enable the SQS relay; defaults false |
@@ -222,9 +222,12 @@ implements the currently proposed Contract-B endpoint and provisions the scoped
 Cognito client. Blank or unreachable assignment configuration produces `503`
 without exposing or mutating a task. AWS still runs Flyway in the separate
 `db-migrate` container required by ADR-0028; application-start Flyway is for
-local development and tests only. Live Bedrock remains disabled until a model,
-token pricing, IAM permissions and environment rollout are approved. Prompts
-and generated wording are excluded from logs and audit payloads.
+local development and tests only. Only the ANALYSIS task calls Bedrock, with
+Nova Lite through its Asia-Pacific profile (ADR-0067). It asks for the
+explanation JSON as one forced tool, because Nova rejects Converse
+`outputConfig`. The CRM stack's `client_health_ai_enabled` is the kill switch:
+off by default and on in prod. Prompts and generated wording are excluded from
+logs and audit payloads.
 
 Contract documentation and fixtures:
 
