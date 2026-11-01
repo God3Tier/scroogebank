@@ -6,6 +6,8 @@ import bank.engagement.calendar.EventView;
 import bank.engagement.integration.clients.ClientNotFoundException;
 import bank.engagement.integration.clients.ClientRecord;
 import bank.engagement.integration.clients.ClientServiceUnavailableException;
+import bank.engagement.integration.sources.SourceNotFoundException;
+import bank.engagement.integration.sources.SourceUnavailableException;
 import bank.engagement.notifications.MailSendException;
 import bank.engagement.notifications.OutgoingMail;
 import bank.engagement.testsupport.PostgresIntegrationTest;
@@ -21,11 +23,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -261,21 +265,29 @@ class DraftApiTest extends PostgresIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SENT"))
                 .andExpect(jsonPath("$.sentAt").exists())
-                .andExpect(jsonPath("$.subject").value("Deepavali wishes, Synthetic"));
+                .andExpect(jsonPath("$.edited").value(true))
+                .andExpect(jsonPath("$.subject").doesNotExist())
+                .andExpect(jsonPath("$.bodyTemplate").doesNotExist());
 
         OutgoingMail mail = channel.sent().getFirst();
         assertThat(mail.to()).isEqualTo("synthetic.client@example.test");
         assertThat(mail.replyTo()).isEqualTo("synthetic.agent@example.test");
+        assertThat(mail.bcc()).isEqualTo("synthetic.agent@example.test");
         assertThat(mail.fromName()).isEqualTo("Synthetic Agent via Scrooge Bank");
         assertThat(mail.fromAddress()).isEqualTo("no-reply@mail.example.test");
         assertThat(mail.textBody()).isEqualTo("Dear Synthetic,\n\nHappy Deepavali!\n\nSynthetic Agent");
 
         send(created, 2, 409);
         assertThat(channel.sent()).hasSize(1);
-        assertThat(jdbc.queryForObject("SELECT body_template FROM email_drafts", String.class))
-                .contains("{{client_first_name}}").doesNotContain("Synthetic");
+        // The agent's copy is the Bcc; the draft keeps no text (ADR-0068 decision 4).
+        assertThat(jdbc.queryForMap("SELECT subject_template, body_template FROM email_drafts").values())
+                .containsOnlyNulls();
+        mvc.perform(get(path).with(Tokens.agent()))
+                .andExpect(jsonPath("$.status").value("SENT"))
+                .andExpect(jsonPath("$.body").doesNotExist());
         String audit = audits("engagement.email-send").getFirst();
-        assertThat(audit).contains("sesMessageId").doesNotContain("example.test").doesNotContain("Deepavali");
+        assertThat(audit).contains("sesMessageId").contains("\"edited\":true").contains("\"source\":\"AI\"")
+                .doesNotContain("example.test").doesNotContain("Deepavali");
         mvc.perform(delete(path).with(Tokens.agent())).andExpect(status().isConflict());
     }
 
@@ -351,8 +363,136 @@ class DraftApiTest extends PostgresIntegrationTest {
         mvc.perform(delete(path).with(Tokens.agent())).andExpect(status().isNoContent());
         send(created, 1, 409);
         mvc.perform(get("/api/engagement/drafts?status=DISCARDED").with(Tokens.agent()))
-                .andExpect(jsonPath("$.length()").value(1));
-        assertThat(audits("engagement.draft-discard")).hasSize(1);
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].bodyTemplate").doesNotExist());
+        assertThat(jdbc.queryForObject("SELECT body_template FROM email_drafts", String.class)).isNull();
+        assertThat(audits("engagement.draft-discard")).singleElement().asString()
+                .contains("\"reason\":\"agent\"");
+    }
+
+    @Test
+    void anUneditedDraftIsAuditedAsSentUnchanged() throws Exception {
+        JsonNode created = create(draft("CHECK_IN", "WARM", null));
+
+        send(created, 0, 200);
+
+        assertThat(audits("engagement.email-send")).singleElement().asString().contains("\"edited\":false")
+                .contains("\"purpose\":\"CHECK_IN\"");
+    }
+
+    private static String healthDraft(String taskId) {
+        return """
+                {"clientId":"%s","purpose":"HEALTH_CHECK_IN","tone":"FORMAL","healthTaskId":%s}
+                """.formatted(CLIENT, taskId == null ? "null" : "\"" + taskId + "\"");
+    }
+
+    private static String alertDraft(UUID alertId) {
+        return """
+                {"clientId":"%s","purpose":"ALERT_FOLLOW_UP","tone":"WARM","alertId":%s}
+                """.formatted(CLIENT, alertId == null ? "null" : "\"" + alertId + "\"");
+    }
+
+    private void expectCreate(String body, int expectedStatus, String message) throws Exception {
+        mvc.perform(post("/api/engagement/drafts").with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().is(expectedStatus))
+                .andExpect(jsonPath("$.message").value(message));
+    }
+
+    private ResultActions edit(String path, String subject, String body, int version) throws Exception {
+        return mvc.perform(put(path).with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("subject", subject, "body", body, "version", version))));
+    }
+
+    @Test
+    void aClientHealthFollowUpNeedsTheAgentsTaskForThisClient() throws Exception {
+        expectCreate(healthDraft(null), 400, "healthTaskId is required for HEALTH_CHECK_IN");
+        expectCreate("""
+                {"clientId":"%s","purpose":"CHECK_IN","tone":"FORMAL","healthTaskId":"task-000001"}
+                """.formatted(CLIENT), 400, "healthTaskId is only for HEALTH_CHECK_IN");
+
+        doThrow(new SourceNotFoundException()).when(sources).healthTaskClient("task-000001");
+        expectCreate(healthDraft("task-000001"), 400, "healthTaskId must be one of your Client Health tasks");
+        doReturn(UUID.randomUUID().toString()).when(sources).healthTaskClient("task-000001");
+        expectCreate(healthDraft("task-000001"), 400, "The Client Health task is not for this client");
+        doThrow(new SourceUnavailableException("down")).when(sources).healthTaskClient("task-000001");
+        expectCreate(healthDraft("task-000001"), 503, "Client Health is unavailable; nothing was saved");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM email_drafts", Integer.class)).isZero();
+
+        doReturn(CLIENT.toString()).when(sources).healthTaskClient("task-000001");
+        JsonNode created = create(healthDraft("task-000001"));
+
+        assertThat(created.get("healthTaskId").asText()).isEqualTo("task-000001");
+        assertThat(created.get("alertId").isNull()).isTrue();
+        assertThat(audits("engagement.draft-generate")).singleElement().asString()
+                .contains("\"healthTaskId\":\"task-000001\"");
+    }
+
+    @Test
+    void anAlertFollowUpNeedsTheAgentsAlertForThisClient() throws Exception {
+        UUID alert = UUID.fromString("50000000-0000-4000-8000-000000000001");
+        expectCreate(alertDraft(null), 400, "alertId is required for ALERT_FOLLOW_UP");
+
+        // An older alert's synthetic reference is never a CRM client.
+        doReturn("syn-client-001").when(sources).alertClient(alert);
+        expectCreate(alertDraft(alert), 400, "The alert is not for this client");
+        doThrow(new SourceNotFoundException()).when(sources).alertClient(alert);
+        expectCreate(alertDraft(alert), 400, "alertId must be one of your alerts");
+        doThrow(new SourceUnavailableException("down")).when(sources).alertClient(alert);
+        expectCreate(alertDraft(alert), 503, "Alerts are unavailable; nothing was saved");
+
+        doReturn(CLIENT.toString().toUpperCase()).when(sources).alertClient(alert);
+        assertThat(create(alertDraft(alert)).get("alertId").asText()).isEqualTo(alert.toString());
+    }
+
+    @Test
+    void theModelGetsTheDetailsSlotButNothingFromTheTask() throws Exception {
+        doReturn(CLIENT.toString()).when(sources).healthTaskClient("task-000001");
+        doReturn(new DraftModelGateway.ModelReply("""
+                {"subject":"Keeping in touch, {{client_first_name}}",
+                 "body":"Dear {{client_first_name}},\\n\\n{{agent_details}}\\n\\nKind regards,\\n{{agent_name}}"}
+                """, 300, 90)).when(model).invoke(anyString(), anyString());
+
+        JsonNode created = create(healthDraft("task-000001"));
+
+        assertThat(created.get("source").asText()).isEqualTo("AI");
+        assertThat(created.get("body").asText()).contains("[Add your details here]");
+        ArgumentCaptor<String> input = ArgumentCaptor.forClass(String.class);
+        verify(model).invoke(anyString(), input.capture());
+        assertThat(json.readTree(input.getValue()).get("placeholders").toString()).contains("{{agent_details}}");
+        assertThat(input.getValue()).doesNotContain("task-000001").doesNotContain(CLIENT.toString());
+    }
+
+    @Test
+    void anUntouchedDetailsSlotStopsTheSendUntilTheAgentFillsItIn() throws Exception {
+        doReturn(CLIENT.toString()).when(sources).healthTaskClient("task-000001");
+        JsonNode created = create(healthDraft("task-000001"));
+        String path = "/api/engagement/drafts/" + created.get("id").asText();
+        String subject = created.get("subject").asText();
+        String body = created.get("body").asText();
+        assertThat(created.get("source").asText()).isEqualTo("TEMPLATE");
+        assertThat(body).contains("[Add your details here]");
+
+        // Saved untouched, the slot is stored as its placeholder again, and nothing changes.
+        edit(path, subject, body, 0)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.edited").value(false))
+                .andExpect(jsonPath("$.version").value(0));
+        assertThat(jdbc.queryForObject("SELECT body_template FROM email_drafts", String.class))
+                .contains("{{agent_details}}");
+        mvc.perform(post(path + "/send").with(Tokens.agent()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":0}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.message").value("Replace [Add your details here] with your details, or delete it"));
+        assertThat(channel.sent()).isEmpty();
+
+        edit(path, subject, body.replace("[Add your details here]", "Your annual review is due."), 0)
+                .andExpect(jsonPath("$.edited").value(true))
+                .andExpect(jsonPath("$.version").value(1));
+        send(created, 1, 200);
+
+        assertThat(channel.sent().getFirst().textBody()).contains("Your annual review is due.")
+                .doesNotContain("[Add your details here]").doesNotContain("{{");
     }
 
     @Test

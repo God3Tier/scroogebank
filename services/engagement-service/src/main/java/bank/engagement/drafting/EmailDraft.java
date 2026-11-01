@@ -17,7 +17,9 @@ import java.util.UUID;
 /**
  * A follow-up draft. Subject and body keep their placeholders; the client's
  * name and address are filled in only for a preview or the send, and never
- * stored (ADR-0054 decision 6, ADR-0053 decision 7).
+ * stored (ADR-0054 decision 6, ADR-0053 decision 7). Sending or discarding
+ * clears them, so what the agent typed is kept only while the draft is open
+ * (ADR-0068 decision 4).
  */
 @Entity
 @Table(name = "email_drafts")
@@ -36,6 +38,12 @@ class EmailDraft {
     @Column(name = "event_id")
     private UUID eventId;
 
+    @Column(name = "health_task_id", length = 128)
+    private String healthTaskId;
+
+    @Column(name = "alert_id")
+    private UUID alertId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private DraftPurpose purpose;
@@ -44,11 +52,17 @@ class EmailDraft {
     @Column(nullable = false, length = 10)
     private DraftTone tone;
 
-    @Column(name = "subject_template", nullable = false, length = 120)
+    /** Null once the draft is sent or discarded. */
+    @Column(name = "subject_template", length = 120)
     private String subjectTemplate;
 
-    @Column(name = "body_template", nullable = false, length = 5000)
+    /** Null once the draft is sent or discarded. */
+    @Column(name = "body_template", length = 5000)
     private String bodyTemplate;
+
+    /** Whether the agent changed the generated text, for the send's audit event. */
+    @Column(nullable = false)
+    private boolean edited;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
@@ -86,14 +100,15 @@ class EmailDraft {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    EmailDraft(UUID id, String ownerAgentSub, UUID clientId, UUID eventId, DraftPurpose purpose, DraftTone tone,
-            GeneratedDraft generated, Instant now) {
+    EmailDraft(UUID id, String ownerAgentSub, DraftInput input, GeneratedDraft generated, Instant now) {
         this.id = Objects.requireNonNull(id);
         this.ownerAgentSub = Objects.requireNonNull(ownerAgentSub);
-        this.clientId = Objects.requireNonNull(clientId);
-        this.eventId = eventId;
-        this.purpose = Objects.requireNonNull(purpose);
-        this.tone = Objects.requireNonNull(tone);
+        this.clientId = Objects.requireNonNull(input.clientId());
+        this.eventId = input.eventId();
+        this.healthTaskId = input.healthTaskId();
+        this.alertId = input.alertId();
+        this.purpose = Objects.requireNonNull(input.purpose());
+        this.tone = Objects.requireNonNull(input.tone());
         this.subjectTemplate = generated.subject();
         this.bodyTemplate = generated.body();
         this.source = generated.source();
@@ -107,6 +122,9 @@ class EmailDraft {
     }
 
     void edit(String subject, String body, Instant now) {
+        if (!subject.equals(subjectTemplate) || !body.equals(bodyTemplate)) {
+            edited = true;
+        }
         subjectTemplate = subject;
         bodyTemplate = body;
         updatedAt = now;
@@ -114,6 +132,7 @@ class EmailDraft {
 
     void discard(Instant now) {
         status = DraftStatus.DISCARDED;
+        clearText();
         updatedAt = now;
     }
 
@@ -121,13 +140,25 @@ class EmailDraft {
         status = DraftStatus.SENT;
         sesMessageId = messageId;
         sentAt = now;
+        clearText();
         updatedAt = now;
     }
+
+    /** The agent keeps their copy through the Bcc; nothing they typed stays here. */
+    private void clearText() {
+        subjectTemplate = null;
+        bodyTemplate = null;
+    }
+
+    boolean hasText() { return subjectTemplate != null && bodyTemplate != null; }
 
     UUID getId() { return id; }
     String getOwnerAgentSub() { return ownerAgentSub; }
     UUID getClientId() { return clientId; }
     UUID getEventId() { return eventId; }
+    String getHealthTaskId() { return healthTaskId; }
+    UUID getAlertId() { return alertId; }
+    boolean isEdited() { return edited; }
     DraftPurpose getPurpose() { return purpose; }
     DraftTone getTone() { return tone; }
     String getSubjectTemplate() { return subjectTemplate; }

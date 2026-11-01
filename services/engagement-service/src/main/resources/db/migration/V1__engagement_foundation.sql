@@ -81,18 +81,24 @@ CREATE TABLE holidays (
 CREATE INDEX idx_holidays_country_date ON holidays (country_code, holiday_date);
 
 -- drafting: follow-up drafts. Subject and body hold placeholders, never the
--- client's name or address (ADR-0054 decision 6). SENDING is internal: it
+-- client's name or address (ADR-0054 decision 6), and are cleared when the
+-- draft is sent or discarded (ADR-0068 decision 4). SENDING is internal: it
 -- holds a draft while one send is in flight, so it is sent at most once.
+-- health_task_id and alert_id are what a follow-up came from (ADR-0068).
 CREATE TABLE email_drafts (
     id               UUID PRIMARY KEY,
     owner_agent_sub  VARCHAR(64)   NOT NULL,
     client_id        UUID          NOT NULL,
     event_id         UUID,
+    health_task_id   VARCHAR(128),
+    alert_id         UUID,
     purpose          VARCHAR(30)   NOT NULL
-        CHECK (purpose IN ('CHECK_IN', 'MEETING_FOLLOW_UP', 'HOLIDAY_GREETING', 'PRE_HOLIDAY_REVIEW')),
+        CHECK (purpose IN ('CHECK_IN', 'MEETING_FOLLOW_UP', 'HOLIDAY_GREETING', 'PRE_HOLIDAY_REVIEW',
+                           'HEALTH_CHECK_IN', 'ALERT_FOLLOW_UP')),
     tone             VARCHAR(10)   NOT NULL CHECK (tone IN ('FORMAL', 'WARM')),
-    subject_template VARCHAR(120)  NOT NULL,
-    body_template    VARCHAR(5000) NOT NULL,
+    subject_template VARCHAR(120),
+    body_template    VARCHAR(5000),
+    edited           BOOLEAN       NOT NULL DEFAULT false,
     source           VARCHAR(10)   NOT NULL CHECK (source IN ('AI', 'TEMPLATE')),
     source_reason    VARCHAR(40),
     model_id         VARCHAR(100),
@@ -103,7 +109,8 @@ CREATE TABLE email_drafts (
     sent_at          TIMESTAMPTZ,
     version          INTEGER       NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ   NOT NULL,
-    updated_at       TIMESTAMPTZ   NOT NULL
+    updated_at       TIMESTAMPTZ   NOT NULL,
+    CHECK (status IN ('SENT', 'DISCARDED') OR (subject_template IS NOT NULL AND body_template IS NOT NULL))
 );
 
 CREATE INDEX idx_email_drafts_owner_created ON email_drafts (owner_agent_sub, created_at DESC);

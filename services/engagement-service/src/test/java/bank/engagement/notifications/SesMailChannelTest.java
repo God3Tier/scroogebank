@@ -49,6 +49,28 @@ class SesMailChannelTest {
         assertThat(request.getValue().fromEmailAddress()).isEqualTo("CRM Calendar <no-reply@mail.example.test>");
         MimeMessage message = MimeMessageFactoryTest.parse(request.getValue().content().raw().data().asByteArray());
         assertThat(message.getSubject()).isEqualTo("Reminder");
+        assertThat(request.getValue().destination().toAddresses()).containsExactly("synthetic.agent@example.test");
+        assertThat(request.getValue().destination().bccAddresses()).isEmpty();
+    }
+
+    /** The agent's copy goes in the request's destination, never in a header the client sees (ADR-0068). */
+    @Test
+    void aBccIsNamedOnlyInTheDestination() throws Exception {
+        when(ses.sendEmail(any(SendEmailRequest.class))).thenReturn(SendEmailResponse.builder().messageId("ses-2").build());
+        OutgoingMail toClient = new OutgoingMail("Synthetic Agent via Scrooge Bank", "no-reply@mail.example.test",
+                "synthetic.client@example.test", "synthetic.agent@example.test", "synthetic.agent@example.test",
+                "Hello", "Text", "<p>Text</p>", null);
+
+        channel.send(toClient);
+
+        ArgumentCaptor<SendEmailRequest> request = ArgumentCaptor.forClass(SendEmailRequest.class);
+        verify(ses).sendEmail(request.capture());
+        assertThat(request.getValue().destination().toAddresses()).containsExactly("synthetic.client@example.test");
+        assertThat(request.getValue().destination().bccAddresses()).containsExactly("synthetic.agent@example.test");
+        MimeMessage message = MimeMessageFactoryTest.parse(request.getValue().content().raw().data().asByteArray());
+        assertThat(message.getHeader("Bcc")).isNull();
+        assertThat(new String(request.getValue().content().raw().data().asByteArray()))
+                .doesNotContainIgnoringCase("bcc:");
     }
 
     @Test

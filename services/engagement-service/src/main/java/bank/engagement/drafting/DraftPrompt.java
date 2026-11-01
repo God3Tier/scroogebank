@@ -18,13 +18,16 @@ import java.util.Map;
 @UtilityClass
 final class DraftPrompt {
 
-    static final String VERSION = "drafts-v1";
+    static final String VERSION = "drafts-v2";
 
     static final String SYSTEM = """
             You write short, polite emails from a relationship manager at a bank in Singapore to one of \
             their clients. Write in British English for readers in Singapore, in the requested tone.
             Address the client only as {{client_first_name}} and sign off only as {{agent_name}}. \
-            Never invent names. Use no other placeholders.
+            Never invent names. Use only the placeholders you are given.
+            If you are given {{agent_details}}, put it exactly once in the body, on a line of its own, \
+            where the relationship manager will add their own reason for writing. Do not guess or \
+            describe that reason yourself.
             Do not mention products, rates, interest, returns, yields, investments, prices, fees, offers, \
             promotions, loans, credit, funds, stocks, insurance, accounts, balances or transactions. \
             Do not include figures with a percent sign or currency, links, email addresses or phone numbers.
@@ -43,7 +46,10 @@ final class DraftPrompt {
                 .map(holiday -> Map.of("name", holiday.name(), "date", holiday.date().toString()))
                 .toList());
         input.put("timeSinceLastMeeting", recency.label());
-        input.put("placeholders", List.of(Placeholders.CLIENT_FIRST_NAME_TOKEN, Placeholders.AGENT_NAME_TOKEN));
+        input.put("placeholders", purpose.hasDetailsSlot()
+                ? List.of(Placeholders.CLIENT_FIRST_NAME_TOKEN, Placeholders.AGENT_NAME_TOKEN,
+                        Placeholders.AGENT_DETAILS_TOKEN)
+                : List.of(Placeholders.CLIENT_FIRST_NAME_TOKEN, Placeholders.AGENT_NAME_TOKEN));
         try {
             return mapper.writeValueAsString(input);
         } catch (JsonProcessingException ex) {

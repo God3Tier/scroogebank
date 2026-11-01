@@ -28,7 +28,9 @@ class DraftScreenEvaluationTest {
         assertThat(fixture.path("cases")).hasSizeGreaterThanOrEqualTo(10);
 
         for (JsonNode testCase : fixture.path("cases")) {
-            DraftSafetyScreen.Result result = screen.inspect(testCase.path("output").asText());
+            // A case names its purpose when the purpose changes the verdict (ADR-0068's details slot).
+            DraftPurpose purpose = DraftPurpose.valueOf(testCase.path("purpose").asText("CHECK_IN"));
+            DraftSafetyScreen.Result result = screen.inspect(testCase.path("output").asText(), purpose);
             String verdict = result.accepted() ? "accepted" : result.reason();
             assertThat(verdict).as(testCase.path("name").asText()).isEqualTo(testCase.path("expected").asText());
         }

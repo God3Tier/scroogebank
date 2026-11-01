@@ -57,7 +57,7 @@ class DraftGenerator {
         }
         usage.record(agentSub, today, reply.inputTokens(), reply.outputTokens());
 
-        DraftSafetyScreen.Result result = screen.inspect(reply.text());
+        DraftSafetyScreen.Result result = screen.inspect(reply.text(), purpose);
         if (!result.accepted()) {
             log.info("Draft output rejected by the safety screen: {} (blocklist {})", result.reason(),
                     DraftSafetyScreen.BLOCKLIST_VERSION);

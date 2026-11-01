@@ -44,8 +44,16 @@ public class SesMailChannel implements MailChannel {
         // ses:FromAddress condition is checked against it (ADR-0053 decision 9).
         // SES writes it over the raw message's From header, so it carries the
         // display name too.
+        // The recipients are named here, not left to the MIME headers, so a Bcc
+        // never appears in the message the client receives.
         SendEmailRequest.Builder request = SendEmailRequest.builder()
                 .fromEmailAddress(from(mail))
+                .destination(destination -> {
+                    destination.toAddresses(mail.to());
+                    if (mail.bcc() != null) {
+                        destination.bccAddresses(mail.bcc());
+                    }
+                })
                 .content(content -> content.raw(message -> message.data(SdkBytes.fromByteArray(raw))))
                 .overrideConfiguration(config -> config.apiCallTimeout(properties.sendTimeout()));
         if (properties.configurationSet() != null && !properties.configurationSet().isBlank()) {

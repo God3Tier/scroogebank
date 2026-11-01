@@ -23,7 +23,8 @@ class DraftSafetyScreenTest {
     @Test
     void acceptsAPlainDraftWithThePlaceholders() {
         DraftSafetyScreen.Result result = screen.inspect(json("Happy Deepavali, {{client_first_name}}",
-                "Dear {{client_first_name}},\\n\\nWishing you a bright Deepavali.\\n\\nKind regards,\\n{{agent_name}}"));
+                "Dear {{client_first_name}},\\n\\nWishing you a bright Deepavali.\\n\\nKind regards,\\n{{agent_name}}"),
+                DraftPurpose.HOLIDAY_GREETING);
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.subject()).isEqualTo("Happy Deepavali, {{client_first_name}}");
@@ -31,10 +32,27 @@ class DraftSafetyScreenTest {
     }
 
     @Test
+    void aFollowUpFromAnotherFeatureNeedsExactlyOneDetailsSlotInTheBody() {
+        String withSlot = json("Keeping in touch",
+                "Dear {{client_first_name}},\\n\\n{{agent_details}}\\n\\nKind regards,\\n{{agent_name}}");
+        String withoutSlot = json("Keeping in touch", "Dear {{client_first_name}},\\n\\n{{agent_name}}");
+        String twoSlots = json("Keeping in touch", "Dear {{client_first_name}}, {{agent_details}} {{agent_details}}");
+        String slotInSubject = json("About {{agent_details}}", "Dear {{client_first_name}}, {{agent_details}}");
+
+        for (DraftPurpose purpose : List.of(DraftPurpose.HEALTH_CHECK_IN, DraftPurpose.ALERT_FOLLOW_UP)) {
+            assertThat(screen.inspect(withSlot, purpose).accepted()).isTrue();
+            assertThat(screen.inspect(withoutSlot, purpose).reason()).isEqualTo("missing_details_slot");
+            assertThat(screen.inspect(twoSlots, purpose).reason()).isEqualTo("missing_details_slot");
+            assertThat(screen.inspect(slotInSubject, purpose).reason()).isEqualTo("unknown_placeholder");
+        }
+        assertThat(screen.inspect(withSlot, DraftPurpose.CHECK_IN).reason()).isEqualTo("unknown_placeholder");
+    }
+
+    @Test
     void acceptsJsonInsideAMarkdownFence() {
         String fenced = "```json\n" + json("Hello", "Hi {{client_first_name}}, all the best.") + "\n```";
 
-        assertThat(screen.inspect(fenced).accepted()).isTrue();
+        assertThat(screen.inspect(fenced, DraftPurpose.CHECK_IN).accepted()).isTrue();
     }
 
     @ParameterizedTest(name = "{0}")
@@ -58,7 +76,7 @@ class DraftSafetyScreenTest {
             "blocked_term|{\"subject\":\"Hi\",\"body\":\"Hi {{client_first_name}}, a special offer\"}",
     })
     void rejects(String reason, String output) {
-        DraftSafetyScreen.Result result = screen.inspect(output);
+        DraftSafetyScreen.Result result = screen.inspect(output, DraftPurpose.CHECK_IN);
 
         assertThat(result.accepted()).isFalse();
         assertThat(result.reason()).isEqualTo(reason);
@@ -66,10 +84,11 @@ class DraftSafetyScreenTest {
 
     @Test
     void rejectsEmptyAndOverlongOutput() {
-        assertThat(screen.inspect("").reason()).isEqualTo("empty_output");
-        assertThat(screen.inspect(json("x".repeat(121), "Hi {{client_first_name}}")).reason()).isEqualTo("length");
-        assertThat(screen.inspect(json("Hi", "Hi {{client_first_name}} " + "a".repeat(1_500))).reason())
+        assertThat(screen.inspect("", DraftPurpose.CHECK_IN).reason()).isEqualTo("empty_output");
+        assertThat(screen.inspect(json("x".repeat(121), "Hi {{client_first_name}}"), DraftPurpose.CHECK_IN).reason())
                 .isEqualTo("length");
+        assertThat(screen.inspect(json("Hi", "Hi {{client_first_name}} " + "a".repeat(1_500)), DraftPurpose.CHECK_IN)
+                .reason()).isEqualTo("length");
     }
 
     /** The fallback must itself be safe: every template passes the screen. */
@@ -84,7 +103,7 @@ class DraftSafetyScreenTest {
             for (DraftTone tone : DraftTone.values()) {
                 for (HolidayView holiday : holidays) {
                     DraftTemplates.Text text = DraftTemplates.render(purpose, tone, holiday);
-                    DraftSafetyScreen.Result result = screen.check(text.subject(), text.body());
+                    DraftSafetyScreen.Result result = screen.check(text.subject(), text.body(), purpose);
                     assertThat(result.accepted())
                             .as("%s %s %s: %s", purpose, tone, holiday.name(), result.reason())
                             .isTrue();

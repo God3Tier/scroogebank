@@ -24,3 +24,28 @@ POST /aggregates/transactions/stats api removed without deprecation
 # together. This scoped exception remains subject to the ADR's owner review.
 GET /aggregates/accounts/stats the `byAgent/items/bookedInitialDeposits` response's property pattern `^\d+\.\d{2}$` was removed for the status `200`
 GET /aggregates/accounts/stats the `byAgent/items/bookedInitialDeposits` response's property `type` changed from `string` to `object` for status `200`
+
+# Follow-up drafts from Client Health and event alerts, and keeping a draft's
+# text only while it is open (ADR-0068). The frontend is the only client of
+# these routes and ships in the same change: it offers the two new purposes and
+# shows a sent or discarded draft, whose templates are now null, without text.
+GET /api/engagement/drafts the response property `items/bodyTemplate` became nullable for the status `200`
+GET /api/engagement/drafts the response property `items/subjectTemplate` became nullable for the status `200`
+GET /api/engagement/drafts added the new `ALERT_FOLLOW_UP` enum value to the `items/purpose` response property for the response status `200`
+GET /api/engagement/drafts added the new `HEALTH_CHECK_IN` enum value to the `items/purpose` response property for the response status `200`
+POST /api/engagement/drafts the response property `bodyTemplate` became nullable for the status `201`
+POST /api/engagement/drafts the response property `subjectTemplate` became nullable for the status `201`
+POST /api/engagement/drafts added the new `ALERT_FOLLOW_UP` enum value to the `purpose` response property for the response status `201`
+POST /api/engagement/drafts added the new `HEALTH_CHECK_IN` enum value to the `purpose` response property for the response status `201`
+GET /api/engagement/drafts/{draftId} the response property `bodyTemplate` became nullable for the status `200`
+GET /api/engagement/drafts/{draftId} the response property `subjectTemplate` became nullable for the status `200`
+GET /api/engagement/drafts/{draftId} added the new `ALERT_FOLLOW_UP` enum value to the `purpose` response property for the response status `200`
+GET /api/engagement/drafts/{draftId} added the new `HEALTH_CHECK_IN` enum value to the `purpose` response property for the response status `200`
+PUT /api/engagement/drafts/{draftId} the response property `bodyTemplate` became nullable for the status `200`
+PUT /api/engagement/drafts/{draftId} the response property `subjectTemplate` became nullable for the status `200`
+PUT /api/engagement/drafts/{draftId} added the new `ALERT_FOLLOW_UP` enum value to the `purpose` response property for the response status `200`
+PUT /api/engagement/drafts/{draftId} added the new `HEALTH_CHECK_IN` enum value to the `purpose` response property for the response status `200`
+POST /api/engagement/drafts/{draftId}/send the response property `bodyTemplate` became nullable for the status `200`
+POST /api/engagement/drafts/{draftId}/send the response property `subjectTemplate` became nullable for the status `200`
+POST /api/engagement/drafts/{draftId}/send added the new `ALERT_FOLLOW_UP` enum value to the `purpose` response property for the response status `200`
+POST /api/engagement/drafts/{draftId}/send added the new `HEALTH_CHECK_IN` enum value to the `purpose` response property for the response status `200`
