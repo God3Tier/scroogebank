@@ -5,7 +5,9 @@ import {
   cancelEvent,
   createDraft,
   createEvent,
+  followUpLink,
   fromLocalInput,
+  isCrmClientId,
   listEvents,
   listHolidays,
   monthWindow,
@@ -67,10 +69,20 @@ describe('engagement API', () => {
     await updateDraft('draft-1', { subject: 'S', body: 'B', version: 2, status: 'SENT' })
     await sendDraft('draft-1', 3)
 
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ clientId: 'client-1', purpose: 'CHECK_IN', tone: 'WARM', eventId: null })
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      clientId: 'client-1', purpose: 'CHECK_IN', tone: 'WARM', eventId: null, healthTaskId: null, alertId: null,
+    })
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ subject: 'S', body: 'B', version: 2 })
     expect(fetchMock.mock.calls[2][0]).toBe('/api/engagement/drafts/draft-1/send')
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ version: 3 })
+  })
+
+  it('links a Client Health task or an alert to a filled-in follow-up', () => {
+    expect(followUpLink({ purpose: 'HEALTH_CHECK_IN', clientId: 'c-1', healthTaskId: 'task/1' }))
+      .toBe('/agent/drafts?purpose=HEALTH_CHECK_IN&clientId=c-1&healthTaskId=task%2F1')
+    expect(isCrmClientId('55555555-5555-4555-8555-555555555555')).toBe(true)
+    expect(isCrmClientId('syn-client-001')).toBe(false)
+    expect(isCrmClientId(null)).toBe(false)
   })
 
   it('reports the status and message of an error', async () => {

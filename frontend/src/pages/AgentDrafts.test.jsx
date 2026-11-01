@@ -52,8 +52,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderDrafts() {
-  return render(<MemoryRouter><AgentDrafts now={NOW} /></MemoryRouter>)
+function renderDrafts(path = '/agent/drafts') {
+  return render(<MemoryRouter initialEntries={[path]}><AgentDrafts now={NOW} /></MemoryRouter>)
 }
 
 async function openDraft() {
@@ -88,8 +88,56 @@ describe('AgentDrafts', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Write draft' }))
 
     expect(await screen.findByRole('heading', { name: 'Email to Synthetic Client' })).toBeInTheDocument()
-    expect(createDraft).toHaveBeenCalledWith({ clientId: 'client-1', purpose: 'HOLIDAY_GREETING', tone: 'WARM', eventId: null })
+    expect(createDraft).toHaveBeenCalledWith({
+      clientId: 'client-1', purpose: 'HOLIDAY_GREETING', tone: 'WARM', eventId: null, healthTaskId: null, alertId: null,
+    })
     expect(getDraft).toHaveBeenCalledWith('draft-1')
+  })
+
+  it('offers the follow-ups from Client Health and alerts only from their links', async () => {
+    renderDrafts()
+
+    const purposes = (await screen.findByLabelText('Purpose')).querySelectorAll('option')
+    expect([...purposes].map((option) => option.value)).not.toContain('HEALTH_CHECK_IN')
+    expect([...purposes].map((option) => option.value)).not.toContain('ALERT_FOLLOW_UP')
+  })
+
+  it('fills the form in from a Client Health task and sends the task with the request', async () => {
+    listDrafts.mockResolvedValueOnce([])
+    createDraft.mockResolvedValue({ ...AI_DRAFT, purpose: 'HEALTH_CHECK_IN', healthTaskId: 'task-1' })
+    renderDrafts('/agent/drafts?purpose=HEALTH_CHECK_IN&clientId=client-1&healthTaskId=task-1')
+
+    expect(await screen.findByText('From Client Health task task-1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Purpose')).toHaveValue('HEALTH_CHECK_IN')
+    fireEvent.click(screen.getByRole('button', { name: 'Write draft' }))
+
+    await vi.waitFor(() => expect(createDraft).toHaveBeenCalledWith({
+      clientId: 'client-1', purpose: 'HEALTH_CHECK_IN', tone: 'FORMAL', eventId: null, healthTaskId: 'task-1', alertId: null,
+    }))
+  })
+
+  it('asks the agent to replace the details slot and says what they add is theirs', async () => {
+    getDraft.mockResolvedValue({
+      ...AI_DRAFT,
+      purpose: 'ALERT_FOLLOW_UP',
+      body: 'Hi Synthetic,\n\n[Add your details here]\n\nSynthetic Agent',
+    })
+    await openDraft()
+
+    expect(screen.getByText(/Replace \[Add your details here\] with your reason/)).toBeInTheDocument()
+    expect(screen.getByText(/sent as written and is not checked/)).toBeInTheDocument()
+  })
+
+  it('shows a sent email without its text, which is not kept', async () => {
+    const sent = { ...AI_DRAFT, status: 'SENT', sentAt: '2026-10-21T02:05:00Z', subject: null, body: null,
+      subjectTemplate: null, bodyTemplate: null, edited: false }
+    listDrafts.mockResolvedValue([sent])
+    getDraft.mockResolvedValue(sent)
+    await openDraft()
+
+    expect(screen.getByText(/text isn't kept once an email is sent/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Body')).not.toBeInTheDocument()
+    expect(screen.queryByText(/could not be looked up/)).not.toBeInTheDocument()
   })
 
   it('needs a past meeting for a meeting follow-up', async () => {

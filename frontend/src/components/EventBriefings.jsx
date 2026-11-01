@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { followUpLink, isCrmClientId } from '../api/engagement.js'
 
 // "This happened; these clients may be affected." One card per public event with
 // one shared summary. The agent picks Inform, Monitor or Dismiss for the clients
-// they select. Inform records intent only: no message is sent to anyone.
+// they select. Inform records intent only: no message is sent to anyone. Once
+// it is planned, the agent can draft the email in Follow-up Emails, where the AI
+// sees nothing from the alert (ADR-0068).
 
 const ACTIONS = [
   { value: 'INFORM_CLIENT', label: 'Inform clients', help: 'Records that you plan to inform them. No message is sent.' },
@@ -85,7 +89,7 @@ function EventDetailPanel({ eventId, onChanged }) {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th /><th>Client</th><th>Scoring account</th><th>Holding</th><th className="num">Share of portfolio</th><th>Status</th></tr>
+            <tr><th /><th>Client</th><th>Scoring account</th><th>Holding</th><th className="num">Share of portfolio</th><th>Status</th><th>Follow-up</th></tr>
           </thead>
           <tbody>
             {detail.clients.map((client) => {
@@ -102,6 +106,15 @@ function EventDetailPanel({ eventId, onChanged }) {
                   <td>{client.instrumentId}</td>
                   <td className="num">{client.portfolioPercentage == null ? '—' : `${Number(client.portfolioPercentage).toFixed(1)}%`}</td>
                   <td>{STATUS_LABELS[client.status] || client.status}</td>
+                  <td>
+                    {client.status === 'INFORMED' && isCrmClientId(client.clientRef) ? (
+                      <Link className="follow-up-link follow-up-link--compact"
+                        aria-label={`Draft email to client ${client.clientRef.slice(0, 8)}`}
+                        to={followUpLink({ purpose: 'ALERT_FOLLOW_UP', clientId: client.clientRef, alertId: client.alertId })}>
+                        <span className="material-symbols-outlined" aria-hidden="true">mail</span> Draft email
+                      </Link>
+                    ) : '—'}
+                  </td>
                 </tr>
               )
             })}

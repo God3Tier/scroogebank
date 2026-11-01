@@ -46,8 +46,29 @@ export function getDraft(draftId) {
   return requestJson(`/api/engagement/drafts/${encodeURIComponent(draftId)}`)
 }
 
-export function createDraft({ clientId, purpose, tone, eventId }) {
-  return requestJson('/api/engagement/drafts', { method: 'POST', body: { clientId, purpose, tone, eventId: eventId || null } })
+export function createDraft({ clientId, purpose, tone, eventId, healthTaskId, alertId }) {
+  return requestJson('/api/engagement/drafts', {
+    method: 'POST',
+    body: { clientId, purpose, tone, eventId: eventId || null, healthTaskId: healthTaskId || null, alertId: alertId || null },
+  })
+}
+
+// The Follow-up Emails page, opened from a Client Health task or an alert
+// with the form filled in (ADR-0068). engagement-service checks that the task
+// or alert is the agent's and about this client.
+export function followUpLink({ purpose, clientId, healthTaskId, alertId }) {
+  const params = new URLSearchParams({ purpose, clientId })
+  if (healthTaskId) params.set('healthTaskId', healthTaskId)
+  if (alertId) params.set('alertId', alertId)
+  return `/agent/drafts?${params}`
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Alerts on CRM-linked holdings name the CRM client (ADR-0066); older ones
+// carry a synthetic reference that no draft can be for.
+export function isCrmClientId(value) {
+  return typeof value === 'string' && UUID_PATTERN.test(value)
 }
 
 // Plain text with the names written out; the service stores them as
@@ -138,7 +159,14 @@ export const PURPOSES = [
   { value: 'MEETING_FOLLOW_UP', label: 'Meeting follow-up' },
   { value: 'HOLIDAY_GREETING', label: 'Holiday greeting' },
   { value: 'PRE_HOLIDAY_REVIEW', label: 'Catch-up before a holiday' },
+  // Offered only when the page is opened from a task or an alert (ADR-0068).
+  { value: 'HEALTH_CHECK_IN', label: 'Client Health follow-up', source: 'healthTaskId' },
+  { value: 'ALERT_FOLLOW_UP', label: 'Alert follow-up', source: 'alertId' },
 ]
+
+// Shown where the agent adds their own details to a follow-up from another
+// feature; sending is refused until it is replaced or deleted (ADR-0068).
+export const DETAILS_PROMPT = '[Add your details here]'
 
 // Why a template was used instead of the model (Draft.sourceReason).
 export const SOURCE_REASONS = {

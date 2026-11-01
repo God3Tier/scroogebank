@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { listClients } from '../api/clients.js'
 import { Pager } from '../components/ListFooter.jsx'
 import { useArrayPages } from '../components/paging.js'
 import {
   createDraft,
+  DETAILS_PROMPT,
   discardDraft,
   formatWhen,
   getDraft,
@@ -42,7 +44,7 @@ function generateProblem(error) {
   // The service says which: a country without holiday data, or no holiday soon.
   if (error.status === 422) return error.message || "There is no public holiday in the next 30 days for this client's country. Choose another purpose."
   if (error.status === 400) return `Check the request: ${error.message}`
-  if (error.status === 503) return 'Client details are unavailable right now. Try again.'
+  if (error.status === 503) return error.message || 'Client details are unavailable right now. Try again.'
   return 'The draft could not be created. Try again.'
 }
 
@@ -78,11 +80,25 @@ function usePastMeetings(clientId, enabled, now) {
   return enabled && clientId ? meetings : []
 }
 
-function GenerateForm({ clients, now, onCreated }) {
-  const [values, setValues] = useState({ clientId: '', purpose: 'CHECK_IN', tone: 'FORMAL', eventId: '' })
+// A link from a Client Health task or an alert fills the form in: purpose,
+// client and the task or alert the follow-up comes from (ADR-0068).
+function linkedValues(params) {
+  const purpose = PURPOSES.find((option) => option.value === params.get('purpose'))
+  const source = purpose?.source
+  if (!source || !params.get(source) || !params.get('clientId')) return null
+  return { purpose: purpose.value, clientId: params.get('clientId'), [source]: params.get(source) }
+}
+
+function GenerateForm({ clients, now, linked, onCreated }) {
+  const [values, setValues] = useState(() => ({
+    clientId: '', purpose: 'CHECK_IN', tone: 'FORMAL', eventId: '', healthTaskId: '', alertId: '', ...linked,
+  }))
   const [state, setState] = useState({ saving: false, error: '' })
   const needsMeeting = values.purpose === 'MEETING_FOLLOW_UP'
   const meetings = usePastMeetings(values.clientId, needsMeeting, now)
+  // A follow-up from another feature is offered only for the task or alert it was opened from.
+  const purposes = PURPOSES.filter((purpose) => !purpose.source || values[purpose.source])
+  const source = PURPOSES.find((purpose) => purpose.value === values.purpose)?.source
 
   function setField(name) {
     return (e) => setValues((current) => ({ ...current, [name]: e.target.value, ...(name === 'clientId' ? { eventId: '' } : {}) }))
@@ -100,7 +116,12 @@ function GenerateForm({ clients, now, onCreated }) {
     }
     setState({ saving: true, error: '' })
     try {
-      const draft = await createDraft({ ...values, eventId: needsMeeting ? values.eventId : null })
+      const draft = await createDraft({
+        ...values,
+        eventId: needsMeeting ? values.eventId : null,
+        healthTaskId: source === 'healthTaskId' ? values.healthTaskId : null,
+        alertId: source === 'alertId' ? values.alertId : null,
+      })
       setState({ saving: false, error: '' })
       onCreated(draft)
     } catch (error) {
@@ -125,7 +146,7 @@ function GenerateForm({ clients, now, onCreated }) {
         </label>
         <label><span className="label--required">Purpose</span>
           <select value={values.purpose} onChange={setField('purpose')}>
-            {PURPOSES.map((purpose) => <option key={purpose.value} value={purpose.value}>{purpose.label}</option>)}
+            {purposes.map((purpose) => <option key={purpose.value} value={purpose.value}>{purpose.label}</option>)}
           </select>
         </label>
         <label><span className="label--required">Tone</span>
@@ -145,6 +166,16 @@ function GenerateForm({ clients, now, onCreated }) {
                 ))}
               </select>
             </label>
+          </div>
+        )}
+        {source && (
+          <div className="draft-generate__full draft-generate__context">
+            <span className="draft-generate__hint">
+              {source === 'healthTaskId' ? `From Client Health task ${values.healthTaskId}` : 'From an event alert'}
+            </span>
+            <p className="draft-generate__hint">
+              The AI writes a general note. You add the details where it says {DETAILS_PROMPT}.
+            </p>
           </div>
         )}
         <p className="draft-generate__full engagement-info engagement-info--privacy">
@@ -194,9 +225,12 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   }
 
   const editable = draft.status === 'DRAFT'
+  // A sent or discarded draft keeps no text (ADR-0068).
+  const closed = draft.status === 'SENT' || draft.status === 'DISCARDED'
   // Without the names (client-service or the agent's profile unavailable) the
   // text cannot be shown or saved without placeholders.
   const named = draft.subject != null && draft.body != null
+  const needsDetails = editable && named && `${values.subject}\n${values.body}`.includes(DETAILS_PROMPT)
   const changed = named && (values.subject !== draft.subject || values.body !== draft.body)
   const badge = STATUS_BADGES[draft.status]
 
@@ -283,8 +317,19 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
           <dd>the client&apos;s email on file</dd>
           <dt>Reply-To:</dt>
           <dd>your work email</dd>
+          <dt>Bcc:</dt>
+          <dd>you, as your copy</dd>
         </dl>
-        {named ? (
+        {closed ? (
+          <p className="engagement-hint" role="status">
+            <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+            <span>
+              {draft.status === 'SENT'
+                ? "The text isn't kept once an email is sent. Your copy is in your mailbox."
+                : "The text of a discarded email isn't kept."}
+            </span>
+          </p>
+        ) : named ? (
           <div className="stack-form">
             <label>Subject
               <input type="text" maxLength={120} value={values.subject} disabled={!editable || state.busy}
@@ -303,6 +348,18 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
           <p className="engagement-hint" role="status">
             <span className="material-symbols-outlined" aria-hidden="true">info</span>
             <span>The client&apos;s or your name could not be looked up, so this email cannot be shown right now. Try again later.</span>
+          </p>
+        )}
+        {needsDetails && (
+          <p className="engagement-hint" role="status">
+            <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
+            <span>Replace {DETAILS_PROMPT} with your reason for getting in touch, or delete it.</span>
+          </p>
+        )}
+        {editable && named && (
+          <p className="engagement-hint">
+            <span className="material-symbols-outlined" aria-hidden="true">person_check</span>
+            <span>Anything you add is sent as written and is not checked. You are responsible for it.</span>
           </p>
         )}
         {draft.status === 'SENT' && <p className="success-message" role="status">Sent {formatWhen(draft.sentAt)}.</p>}
@@ -339,6 +396,8 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
 function AgentDrafts({ now: fixedNow }) {
   // One instant per visit, so the past-meetings lookup does not repeat.
   const [now] = useState(() => fixedNow ?? new Date())
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [linked] = useState(() => linkedValues(searchParams))
   const [clients, setClients] = useState([])
   const [status, setStatus] = useState('DRAFT')
   const [list, setList] = useState({ loading: true, error: '', drafts: [] })
@@ -382,7 +441,11 @@ function AgentDrafts({ now: fixedNow }) {
 
       <div className="drafts-layout">
         <div className="drafts-layout__side">
-          <GenerateForm clients={clients} now={now} onCreated={(draft) => { setStatus('DRAFT'); pages.go(0); setOpenId(draft.id); setVersion((v) => v + 1) }} />
+          <GenerateForm clients={clients} now={now} linked={linked} onCreated={(draft) => {
+            // The link has done its job; a reload should not offer the same follow-up again.
+            if (linked) setSearchParams({}, { replace: true })
+            setStatus('DRAFT'); pages.go(0); setOpenId(draft.id); setVersion((v) => v + 1)
+          }} />
 
           <section className="card card-flush drafts-list" aria-labelledby="drafts-heading">
             <div className="drafts-list__header">

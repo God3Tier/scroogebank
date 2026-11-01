@@ -1432,3 +1432,31 @@
     padding-left: 70px;
   }
 }
+
+/* "Draft email" from a Client Health task or an alert (ADR-0068): a link that
+   opens Follow-up Emails, styled like the outlined buttons beside it. */
+.main .follow-up-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 14px/20px var(--sans);
+  padding: 8px 16px;
+  border: 1px solid var(--primary-container);
+  border-radius: var(--radius);
+  color: var(--primary-container);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.main .follow-up-link:hover {
+  background: var(--surface-container);
+}
+
+.main .follow-up-link .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.main .follow-up-link--compact {
+  padding: 4px 10px;
+  font-size: 13px;
+}
