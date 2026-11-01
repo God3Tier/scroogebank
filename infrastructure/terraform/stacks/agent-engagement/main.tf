@@ -47,6 +47,11 @@ locals {
   max_tasks = local.crm.max_tasks > 0 ? 2 : 0
 
   db_url = "jdbc:postgresql://${module.db.address}:5432/${module.db.db_name}"
+
+  # Client Health and alerts through the internal ALB (ADR-0068); null without
+  # a custom domain, or from a CRM state applied before ADR-0068, in which
+  # case those follow-ups fail closed with 503.
+  alb_https = try(local.crm.alb_https, null)
 }
 
 # ------------------------------------------------------------ mail identity
@@ -133,7 +138,18 @@ resource "aws_vpc_security_group_egress_rule" "anywhere" {
   security_group_id = aws_security_group.engagement.id
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
-  description       = "SES, Bedrock, Cognito and SQS through the NAT gateway, client-service and engagement-db"
+  description       = "SES, Bedrock, Cognito and SQS through the NAT gateway, client-service, the ALB and engagement-db"
+}
+
+# Client Health tasks and alerts, read with the agent's token (ADR-0068).
+resource "aws_vpc_security_group_ingress_rule" "to_alb" {
+  count                        = local.alb_https == null ? 0 : 1
+  security_group_id            = local.crm.alb_sg
+  referenced_security_group_id = aws_security_group.engagement.id
+  ip_protocol                  = "tcp"
+  from_port                    = local.alb_https.port
+  to_port                      = local.alb_https.port
+  description                  = "engagement to the internal ALB"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "to_client_service" {
@@ -314,6 +330,8 @@ module "engagement_service" {
     COGNITO_APP_CLIENT_ID              = local.crm.cognito_web_client_id
     COGNITO_USER_POOL_ID               = local.crm.cognito_user_pool_id
     CLIENT_SERVICE_BASE_URL            = local.crm.client.url
+    CLIENT_HEALTH_BASE_URL             = local.alb_https == null ? "" : local.alb_https.url
+    ALERT_SERVICE_BASE_URL             = local.alb_https == null ? "" : local.alb_https.url
     ENGAGEMENT_AUDIT_PUBLISHER_ENABLED = "true"
     AUDIT_QUEUE_URL                    = local.crm.audit_queue_url
     AWS_REGION                         = var.aws_region

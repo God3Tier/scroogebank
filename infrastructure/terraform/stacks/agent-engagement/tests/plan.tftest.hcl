@@ -53,6 +53,7 @@ override_data {
         }
         alb_sg                   = "sg-0a1b"
         client                   = { security_group = "sg-0client", port = 8080, url = "https://client-service:8080" }
+        alb_https                = { url = "https://alb.sg.itsag3t6.com", port = 443 }
         ca_pem                   = "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----"
         cognito_issuer           = "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_example"
         cognito_web_client_id    = "exampleclientid"
@@ -107,6 +108,14 @@ run "prod" {
   assert {
     condition     = aws_vpc_security_group_ingress_rule.to_client_service.security_group_id == "sg-0client" && aws_vpc_security_group_ingress_rule.to_client_service.from_port == 8080
     error_message = "The service may call client-service on its port."
+  }
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.to_alb[0].security_group_id == "sg-0a1b" && aws_vpc_security_group_ingress_rule.to_alb[0].from_port == 443
+    error_message = "With a custom domain, engagement-service may reach the internal ALB for Client Health and alerts (ADR-0068)."
+  }
+  assert {
+    condition     = module.engagement_service.app_environment.CLIENT_HEALTH_BASE_URL == "https://alb.sg.itsag3t6.com" && module.engagement_service.app_environment.ALERT_SERVICE_BASE_URL == "https://alb.sg.itsag3t6.com"
+    error_message = "Client Health and alerts are read through the internal ALB over HTTPS (ADR-0068)."
   }
   assert {
     condition     = aws_vpc_security_group_ingress_rule.db_from_engagement.from_port == 5432
@@ -254,6 +263,10 @@ run "stopped_crm_stops_the_tasks" {
   assert {
     condition     = length(aws_iam_role_policy.github_deploy) == 1 && aws_iam_role_policy.github_deploy[0].role == "crm-sg-prod-github-deploy"
     error_message = "The CRM stack's deploy role gets this image and these roles."
+  }
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.to_alb) == 0 && module.engagement_service.app_environment.CLIENT_HEALTH_BASE_URL == "" && module.engagement_service.app_environment.ALERT_SERVICE_BASE_URL == ""
+    error_message = "A CRM state without alb_https opens nothing, and the follow-ups from Client Health and alerts fail closed (ADR-0068)."
   }
 }
 
