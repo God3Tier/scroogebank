@@ -119,3 +119,15 @@ owner_agent_id}]}`; unknown and deleted accounts are omitted; `type` and `status
 read case-insensitively. `owner_agent_id` is the client's current agent: the CRM moves it with the client on
 reassignment (ADR-0060). The transaction import's token cannot call this route, and this token cannot call the
 import's.
+
+## Follow-up emails (engagement-service, ADR-0068)
+
+After an agent chooses Inform clients, the event briefing links each informed
+client whose `clientRef` is a CRM client ID to a follow-up email in
+engagement-service. engagement-service reads `GET /api/alerts/{alertId}`
+through the internal ALB with the agent's own token, to check that the alert
+is the agent's and its `clientRef` equals the email's client
+([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)).
+It reads `clientRef` only and treats 401, 403 and 404 as "not yours". The
+headline, holdings and briefing are never read, stored or sent to a model.
+Inform still sends nothing: the agent writes and sends the email themselves.

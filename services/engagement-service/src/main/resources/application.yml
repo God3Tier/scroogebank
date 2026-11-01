@@ -33,6 +33,17 @@ engagement:
     # lookup fails closed with 503.
     base-url: ${CLIENT_SERVICE_BASE_URL:}
     timeout: 5s
+  sources:
+    # What a follow-up came from (ADR-0068), read through the internal ALB
+    # with the agent's own token. Blank: that purpose fails closed with 503.
+    health-base-url: ${CLIENT_HEALTH_BASE_URL:}
+    alerts-base-url: ${ALERT_SERVICE_BASE_URL:}
+    timeout: 5s
+  drafts:
+    # An open draft not changed for this long is discarded and its text
+    # cleared by a daily job (ADR-0068).
+    expire-after: 14d
+    expiry-interval: 24h
   identity:
     # The CRM user pool, for agents' addresses and names (ADR-0053 decision 4).
     # Blank: no agent can be looked up, so no mail can be sent to agents.

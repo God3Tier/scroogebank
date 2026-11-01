@@ -9,19 +9,29 @@ import java.util.regex.Pattern;
 import lombok.experimental.UtilityClass;
 
 /**
- * The two placeholders drafts may hold (ADR-0054 decision 2). They are filled
+ * The placeholders drafts may hold (ADR-0054 decision 2). The names are filled
  * in after generation, so the model never sees who the client is, and marked
  * again when an agent saves, so stored drafts hold no names (ADR-0056).
+ *
+ * <p>{@code {{agent_details}}} marks where the agent adds their own details to
+ * a follow-up from another feature (ADR-0068 decision 2). It is shown as
+ * {@link #DETAILS_PROMPT} and marked back the same way, but never filled for
+ * sending, so an untouched slot stops the send.
  */
 @UtilityClass
 final class Placeholders {
 
     static final String CLIENT_FIRST_NAME = "client_first_name";
     static final String AGENT_NAME = "agent_name";
-    static final Set<String> ALLOWED = Set.of(CLIENT_FIRST_NAME, AGENT_NAME);
+    static final String AGENT_DETAILS = "agent_details";
+    static final Set<String> ALLOWED = Set.of(CLIENT_FIRST_NAME, AGENT_NAME, AGENT_DETAILS);
 
     static final String CLIENT_FIRST_NAME_TOKEN = "{{" + CLIENT_FIRST_NAME + "}}";
     static final String AGENT_NAME_TOKEN = "{{" + AGENT_NAME + "}}";
+    static final String AGENT_DETAILS_TOKEN = "{{" + AGENT_DETAILS + "}}";
+
+    /** What the agent sees, and replaces, where the details go. */
+    static final String DETAILS_PROMPT = "[Add your details here]";
 
     private static final Pattern TOKEN = Pattern.compile("\\{\\{\\s*([^{}]*?)\\s*}}");
 

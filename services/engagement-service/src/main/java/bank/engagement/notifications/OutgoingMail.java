@@ -7,6 +7,8 @@ import java.util.Objects;
  * the send and is never stored or logged (ADR-0053 decision 7).
  *
  * @param replyTo  nullable; the agent's address on client emails
+ * @param bcc      nullable; the agent's own copy of a client email, which is
+ *                 their record of it once the draft's text is cleared (ADR-0068)
  * @param calendar nullable; the iCalendar part of an invite (ADR-0052 decision 3)
  */
 public record OutgoingMail(
@@ -14,10 +16,17 @@ public record OutgoingMail(
         String fromAddress,
         String to,
         String replyTo,
+        String bcc,
         String subject,
         String textBody,
         String htmlBody,
         CalendarPart calendar) {
+
+    /** A message with no Bcc: invites, reminders. */
+    public OutgoingMail(String fromName, String fromAddress, String to, String replyTo, String subject,
+            String textBody, String htmlBody, CalendarPart calendar) {
+        this(fromName, fromAddress, to, replyTo, null, subject, textBody, htmlBody, calendar);
+    }
 
     public OutgoingMail {
         Objects.requireNonNull(fromAddress);

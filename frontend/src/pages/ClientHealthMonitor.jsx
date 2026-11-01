@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
+import { Link } from 'react-router-dom'
 
 import {
   acceptHealthTask,
@@ -9,6 +10,7 @@ import {
   getHealthTaskHistory,
   listHealthTasks,
 } from '../api/clientHealth.js'
+import { followUpLink } from '../api/engagement.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
 import StatCard from '../components/StatCard.jsx'
 
@@ -291,6 +293,13 @@ function ClientHealthMonitor() {
               <footer className="health-actions">
                 <p>Last updated {formatTime(detail.updatedAt)}</p>
                 <div>
+                  {/* A follow-up email in Follow-up Emails; the AI there never sees this task (ADR-0068). */}
+                  {!readOnly && ['OPEN', 'IN_REVIEW'].includes(detail.status) && (
+                    <Link className="follow-up-link"
+                      to={followUpLink({ purpose: 'HEALTH_CHECK_IN', clientId: detail.clientId, healthTaskId: detail.taskId })}>
+                      <span className="material-symbols-outlined" aria-hidden="true">mail</span> Draft email
+                    </Link>
+                  )}
                   {!readOnly && ['OPEN', 'IN_REVIEW'].includes(detail.status) && <button type="button" className="health-dismiss" disabled={acting} onClick={() => perform('dismiss')}>Dismiss</button>}
                   {!readOnly && detail.status === 'OPEN' && <button type="button" className="health-primary" disabled={acting} onClick={() => perform('accept')}>Accept task</button>}
                   {!readOnly && detail.status === 'IN_REVIEW' && <button type="button" className="health-primary" disabled={acting} onClick={() => perform('complete')}>Complete task</button>}

@@ -1,10 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render as renderInto, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
 import EventBriefings from './EventBriefings.jsx'
 
 vi.mock('../api/alertEvents.js', () => ({ listEvents: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn() }))
+
+// The briefings link to Follow-up Emails, so they need a router.
+const render = (ui) => renderInto(<MemoryRouter>{ui}</MemoryRouter>)
 
 // Synthetic data only.
 const CARD = {
@@ -85,5 +89,25 @@ describe('event briefings', () => {
 
     expect(screen.getByText('Apply to selected clients')).toBeDisabled()
     expect(screen.getByText(/No message is sent/)).toBeInTheDocument()
+  })
+
+  it('offers a follow-up email only for an informed client the CRM knows', async () => {
+    const crmClient = '55555555-5555-4555-8555-555555555555'
+    listEvents.mockResolvedValue({ items: [CARD] })
+    getEvent.mockResolvedValue({
+      ...DETAIL,
+      clients: [
+        { ...DETAIL.clients[0], alertId: '50000000-0000-4000-8000-000000000001', clientRef: crmClient, status: 'INFORMED' },
+        { ...DETAIL.clients[1], status: 'INFORMED' },
+      ],
+    })
+    render(<EventBriefings />)
+
+    fireEvent.click(await screen.findByText('Review affected clients'))
+
+    const links = await screen.findAllByRole('link', { name: /Draft email/ })
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveAttribute('href',
+      `/agent/drafts?purpose=ALERT_FOLLOW_UP&clientId=${crmClient}&alertId=50000000-0000-4000-8000-000000000001`)
   })
 })

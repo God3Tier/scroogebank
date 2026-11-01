@@ -69,6 +69,7 @@ assigns replacement identifiers.
 ## Proposed decisions
 
 - [ADR-0065](ADR-0065-client-health-matched-transaction-history.md) — Proposed private Client Health transaction history route; scoped Cognito client-credentials authentication, all-client `[from,to)` reads, global keyset pagination, matched-only fields, validated source fingerprints, and synthetic signal/control cases.
+- [ADR-0068](ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md) — Follow-up drafts from a Client Health task (`HEALTH_CHECK_IN`) or an alert (`ALERT_FOLLOW_UP`), each checked through its owning service with the agent's token, with generic AI input and an `{{agent_details}}` slot the agent must fill in before sending; the agent is responsible for what they add, and sends are audited with `edited`; a draft's text is cleared when it is sent or discarded, open drafts expire after 14 days, and the agent gets a Bcc copy (partly supersedes ADR-0054 decisions 2, 4 and 6). Accepted by its owner for engagement-service; awaiting the Client Health and alerts owners' acknowledgement of the links.
 
 Target-architecture ADRs, described in [`docs/architecture/system-overview.md`](../architecture/system-overview.md). Numbering starts at 0017 because feature branches already use 0001–0016.
 

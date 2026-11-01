@@ -14,7 +14,8 @@ public class LoggingMailChannel implements MailChannel {
     @Override
     public String send(OutgoingMail mail) {
         String messageId = "local-" + UUID.randomUUID();
-        log.info("Mail not sent (log provider): {} calendar={}", messageId, mail.calendar() != null);
+        log.info("Mail not sent (log provider): {} calendar={} bcc={}", messageId, mail.calendar() != null,
+                mail.bcc() != null);
         return messageId;
     }
 }

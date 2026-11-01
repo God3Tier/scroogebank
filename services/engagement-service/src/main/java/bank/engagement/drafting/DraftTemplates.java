@@ -14,7 +14,7 @@ import java.util.Locale;
 @UtilityClass
 final class DraftTemplates {
 
-    static final String VERSION = "templates-v1";
+    static final String VERSION = "templates-v2";
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH);
 
@@ -111,6 +111,54 @@ final class DraftTemplates {
 
                             Best wishes,
                             {{agent_name}}""".formatted(name, day));
+            // The two follow-ups from another feature: the agent writes the
+            // reason at the slot (ADR-0068 decision 2).
+            case HEALTH_CHECK_IN -> formal
+                    ? new Text("Keeping in touch, {{client_first_name}}", """
+                            Dear {{client_first_name}},
+
+                            I hope you are keeping well. I wanted to get in touch about the following:
+
+                            {{agent_details}}
+
+                            I would be glad to arrange a short conversation at a time that suits you.
+
+                            Kind regards,
+                            {{agent_name}}""")
+                    : new Text("Catching up, {{client_first_name}}", """
+                            Hi {{client_first_name}},
+
+                            I hope all is well with you! I wanted to reach out about something:
+
+                            {{agent_details}}
+
+                            Would you be up for a quick call or a coffee? Just let me know what suits you.
+
+                            Best wishes,
+                            {{agent_name}}""");
+            case ALERT_FOLLOW_UP -> formal
+                    ? new Text("Recent developments, {{client_first_name}}", """
+                            Dear {{client_first_name}},
+
+                            There have been some recent developments that you may wish to discuss:
+
+                            {{agent_details}}
+
+                            If it would be helpful, I would be happy to arrange a time to talk them through.
+
+                            Kind regards,
+                            {{agent_name}}""")
+                    : new Text("Something you may want to discuss, {{client_first_name}}", """
+                            Hi {{client_first_name}},
+
+                            Something has come up recently that I thought you might like to talk about:
+
+                            {{agent_details}}
+
+                            Happy to have a quick chat whenever suits you.
+
+                            Best wishes,
+                            {{agent_name}}""");
         };
     }
 }

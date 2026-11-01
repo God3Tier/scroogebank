@@ -97,5 +97,10 @@ Results: engagement-service 112 tests; frontend lint, 181 tests and build; mail-
 2. **Nova evaluation** ([ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md) Validation): 24 drafts, the 12 combinations of purpose, tone and holiday (8 for a Singapore client, 4 for a client without holiday data) twice each, split across two agents because of the 20-a-day cap. Pass: at least 22 AI-generated. Record each draft's purpose, tone, client, label and reason here.
 3. **Project account, domain mode:** mail-identity creates the `mail.sg.itsag3t6.com` identity and its records; check `dkim_status` is `SUCCESS`. SPF, DKIM and DMARC passing in Gmail and Outlook: done (see [Domain mode](#domain-mode-client-emails-filed-as-bulk-mail)). Deploy the per-agent sender, then send a client email to Gmail and Outlook.com again: it should come from the agent's name and land in Primary and the inbox, with DMARC still passing. If it still goes to Promotions or Junk, sending history and content are what remain. Verify the agents' and clients' inboxes again there (identities are per account), run the Bedrock `converse` check, and repeat a short smoke test.
 4. **Cost:** the session's cost against plan §14.
-5. **Q8:** decide whether the sandbox is enough for the demo. It worked here with every recipient verified.
-6. Tear down the personal account's stacks when finished.
+5. **Follow-ups from Client Health and alerts (ADR-0068)**, in domain mode, where the ALB is HTTPS:
+   - From an open Client Health task, Draft email opens the form filled in, and the draft has `[Add your details here]`. Send is refused until it is replaced. Once filled in and sent, the client gets the email and the agent gets the Bcc copy, with no Bcc header in the client's copy.
+   - From an event briefing, after Inform clients, Draft email works the same for a CRM-linked client. An older fixture alert has no link.
+   - The sent draft shows no text, and `email_drafts` holds none.
+   - Include these two purposes in the Nova Lite evaluation, and record how often the model kept the slot.
+6. **Q8:** decide whether the sandbox is enough for the demo. It worked here with every recipient verified.
+7. Tear down the personal account's stacks when finished.

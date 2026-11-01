@@ -3,6 +3,7 @@ package bank.engagement.testsupport;
 import bank.engagement.integration.clients.ClientDirectory;
 import bank.engagement.integration.identity.AgentDirectory;
 import bank.engagement.integration.identity.AgentProfile;
+import bank.engagement.integration.sources.FollowUpSources;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -28,8 +29,9 @@ import static org.mockito.Mockito.when;
  * {@code application.yml}, which would shadow the real one (the
  * dashboard-service convention). No Cognito pool is dialled: tests
  * authenticate with {@code SecurityMockMvcRequestPostProcessors.jwt()}.
- * Scheduling is off, so tests run the dispatcher themselves. client-service
- * and Cognito are mocked; mail goes to a {@link RecordingMailChannel}.
+ * Scheduling is off, so tests run the dispatcher themselves. client-service,
+ * Cognito, Client Health and the alerts are mocked; mail goes to a
+ * {@link RecordingMailChannel}.
  */
 @SpringBootTest(properties = {
         "COGNITO_ISSUER_URI=https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_test",
@@ -65,6 +67,9 @@ public abstract class PostgresIntegrationTest {
 
     @MockitoBean
     protected AgentDirectory agents;
+
+    @MockitoBean
+    protected FollowUpSources sources;
 
     @Autowired
     protected MockMvc mvc;

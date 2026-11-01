@@ -186,6 +186,11 @@ output "engagement_inputs" {
     # with the agent's token (ADR-0053 decision 5).
     client = { security_group = local.sg["client"], port = local.ports.client, url = "https://${local.sc.client}:${local.ports.client}" }
 
+    # It reads Client Health tasks and alerts through the internal ALB, with
+    # the agent's token (ADR-0068). Only over HTTPS, so only with a custom
+    # domain, as Client Health's own ALB calls; null otherwise.
+    alb_https = local.custom_domain ? { url = local.alb_base_url, port = local.alb_port } : null
+
     ca_pem                = local.ca_pem
     cognito_issuer        = local.cognito_issuer
     cognito_web_client_id = aws_cognito_user_pool_client.web.id

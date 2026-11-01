@@ -276,6 +276,12 @@ paths:
         data only (ADR-0054). When AI is disabled, over a cap, times out or
         fails the safety screen, a template draft is returned instead, still
         with 201; `source` and `sourceReason` say which.
+
+        `HEALTH_CHECK_IN` and `ALERT_FOLLOW_UP` name the Client Health task
+        or alert they came from. It is read with the caller's token and must
+        be theirs and about this client (ADR-0068); only its client is read,
+        and nothing from it reaches the model. Their text has a details slot
+        the agent fills in before sending.
       operationId: createDraft
       requestBody:
         required: true
@@ -303,7 +309,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Problem' }
-        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+        '503':
+          description: |
+            client-service could not answer, or, for a follow-up from another
+            feature, Client Health or event-alert-service could not. Nothing
+            was saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /api/engagement/drafts/{draftId}:
     parameters:
@@ -317,7 +330,8 @@ paths:
           description: |
             The draft. `subject` and `body` are present when client-service
             still returns the client and Cognito the agent's name; otherwise
-            they are null, and the draft cannot be edited until they are.
+            they are null, and the draft cannot be edited until they are. A
+            sent or discarded draft has no text left (ADR-0068).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Draft' }
@@ -332,8 +346,9 @@ paths:
         plain text with the names written out. Each whole-word, exact
         occurrence of the client's first name and of the agent's name is
         stored as its placeholder again (ADR-0056), so a later change of name
-        is used when the draft is sent. Needs client-service and Cognito;
-        without them nothing is saved.
+        is used when the draft is sent. An untouched `[Add your details here]`
+        is stored as its slot again (ADR-0068). Needs client-service and
+        Cognito; without them nothing is saved.
       operationId: updateDraft
       requestBody:
         required: true
@@ -368,7 +383,10 @@ paths:
     delete:
       tags: [drafts]
       summary: Discard a draft
-      description: Sets `status` to `DISCARDED`. A sent draft cannot be discarded (409).
+      description: |
+        Sets `status` to `DISCARDED` and clears the subject and body
+        (ADR-0068). A sent draft cannot be discarded (409). An open draft not
+        changed for 14 days is discarded the same way by a daily job.
       operationId: discardDraft
       responses:
         '204': { description: Discarded. }
@@ -386,8 +404,11 @@ paths:
       description: |
         Reads the client's email address and first name from client-service
         with the caller's token, fills in the placeholders and sends through
-        SES with `Reply-To` set to the agent (ADR-0053). The address and the
-        filled-in text are not stored. A draft is sent at most once.
+        SES with `Reply-To` set to the agent (ADR-0053) and a Bcc copy to the
+        agent. The address and the filled-in text are not stored, and the
+        draft's subject and body are cleared once SES accepts the message
+        (ADR-0068). Text the agent added is sent as written. A draft is sent
+        at most once.
       operationId: sendDraft
       requestBody:
         required: true
@@ -402,7 +423,7 @@ paths:
                   description: Must match the draft's current version, so the agent sends what they last saw.
       responses:
         '200':
-          description: Sent.
+          description: Sent. The subject, body and templates are null.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Draft' }
@@ -415,7 +436,9 @@ paths:
               schema: { $ref: '#/components/schemas/Problem' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422':
-          description: The subject or body is empty or still contains a placeholder that cannot be filled in.
+          description: |
+            The subject or body is empty, still contains a placeholder that
+            cannot be filled in, or still has the untouched details slot.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -646,7 +669,10 @@ components:
 
     DraftPurpose:
       type: string
-      enum: [CHECK_IN, MEETING_FOLLOW_UP, HOLIDAY_GREETING, PRE_HOLIDAY_REVIEW]
+      enum: [CHECK_IN, MEETING_FOLLOW_UP, HOLIDAY_GREETING, PRE_HOLIDAY_REVIEW, HEALTH_CHECK_IN, ALERT_FOLLOW_UP]
+      description: |
+        `HEALTH_CHECK_IN` and `ALERT_FOLLOW_UP` are follow-ups from Client
+        Health and event alerts (ADR-0068).
 
     DraftTone:
       type: string
@@ -670,6 +696,22 @@ components:
           description: |
             One of the caller's events with this client. Required for
             `MEETING_FOLLOW_UP`; must have ended.
+        healthTaskId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          nullable: true
+          description: |
+            The caller's Client Health task about this client. Required for
+            `HEALTH_CHECK_IN` and allowed only there.
+          example: task-000001
+        alertId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The caller's alert about this client, whose `clientRef` is this
+            client's ID. Required for `ALERT_FOLLOW_UP` and allowed only there.
 
     DraftUpdate:
       type: object
@@ -682,11 +724,20 @@ components:
 
     Draft:
       type: object
-      required: [id, clientId, purpose, tone, subjectTemplate, bodyTemplate, source, status, version, createdAt, updatedAt]
+      required: [id, clientId, purpose, tone, subjectTemplate, bodyTemplate, edited, source, status, version, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         clientId: { type: string, format: uuid }
         eventId: { type: string, format: uuid, nullable: true }
+        healthTaskId:
+          type: string
+          nullable: true
+          description: The Client Health task a `HEALTH_CHECK_IN` came from.
+        alertId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The alert an `ALERT_FOLLOW_UP` came from.
         purpose: { $ref: '#/components/schemas/DraftPurpose' }
         tone: { $ref: '#/components/schemas/DraftTone' }
         subject:
@@ -703,10 +754,17 @@ components:
           description: The body with the names filled in. Null as for `subject`.
         subjectTemplate:
           type: string
-          description: The stored form. May contain `{{client_first_name}}` and `{{agent_name}}`.
+          nullable: true
+          description: |
+            The stored form. May contain `{{client_first_name}}` and
+            `{{agent_name}}`; a follow-up's body may also contain
+            `{{agent_details}}`, shown as `[Add your details here]`. Null once
+            the draft is sent or discarded (ADR-0068).
           example: 'Season''s greetings, {{client_first_name}}'
         bodyTemplate:
           type: string
+          nullable: true
+          description: The stored body. Null as for `subjectTemplate`.
           example: |
             Dear {{client_first_name}},
 
@@ -725,6 +783,9 @@ components:
           nullable: true
           description: Why a template was used. Null when `source` is `AI`.
           enum: [ai_disabled, daily_cap_reached, monthly_quota_reached, model_timeout, model_error, screen_rejected, null]
+        edited:
+          type: boolean
+          description: Whether the agent changed the generated text. Also in the send's audit event.
         holiday:
           anyOf:
             - $ref: '#/components/schemas/Holiday'

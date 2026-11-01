@@ -56,9 +56,25 @@ class PlaceholdersTest {
         assertThat(Placeholders.mark("Hi {{agent}}", Map.of("agent_name", "agent"))).isEqualTo("Hi {{agent}}");
     }
 
+    /** Shown as the prompt and saved untouched, the slot goes back to its placeholder (ADR-0068). */
     @Test
-    void onlyTheTwoPlaceholdersAreAllowed() {
+    void anUntouchedDetailsSlotRoundTrips() {
+        Map<String, String> shown = Map.of("client_first_name", "Synthetic", "agent_name", "Synthetic Agent",
+                "agent_details", Placeholders.DETAILS_PROMPT);
+        String stored = "Dear {{client_first_name}},\n\n{{agent_details}}\n\n{{agent_name}}";
+
+        String filled = Placeholders.fill(stored, shown);
+
+        assertThat(filled).isEqualTo("Dear Synthetic,\n\n[Add your details here]\n\nSynthetic Agent");
+        assertThat(Placeholders.mark(filled, shown)).isEqualTo(stored);
+        assertThat(Placeholders.mark("Dear Synthetic,\n\nYour review is due.\n\nSynthetic Agent", shown))
+                .doesNotContain("{{agent_details}}");
+    }
+
+    @Test
+    void onlyTheThreePlaceholdersAreAllowed() {
         assertThat(Placeholders.onlyAllowed("Hi {{client_first_name}} from {{agent_name}}")).isTrue();
+        assertThat(Placeholders.onlyAllowed("Hi {{client_first_name}}, {{agent_details}}")).isTrue();
         assertThat(Placeholders.onlyAllowed("Hi {{client_last_name}}")).isFalse();
         assertThat(Placeholders.onlyAllowed("Hi }} there")).isFalse();
     }

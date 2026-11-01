@@ -99,6 +99,13 @@ describe('Client Health UI integration', () => {
     expect((await screen.findAllByText('In Review')).length).toBeGreaterThan(0)
   })
 
+  it('links an open task to a follow-up email for the agent', async () => {
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: /Draft email/ }))
+      .toHaveAttribute('href', '/agent/drafts?purpose=HEALTH_CHECK_IN&clientId=client-1&healthTaskId=task-1')
+  })
+
   it('makes the Admin view read-only and supports assignment filtering', async () => {
     useAuth.mockReturnValue({
       user: { profile: { sub: 'admin-1', 'cognito:groups': ['Admin'] } },
@@ -107,6 +114,7 @@ describe('Client Health UI integration', () => {
 
     expect((await screen.findAllByText(/Read-only oversight/)).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Accept task' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Draft email/ })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Assigned Agent subject'), {
       target: { value: 'agent-2' },
     })

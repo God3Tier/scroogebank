@@ -44,7 +44,7 @@ class DraftGeneratorTest {
         assertThat(draft.subject()).isEqualTo("Deepavali greetings, {{client_first_name}}");
         assertThat(draft.body()).contains("With Deepavali coming up on 8 November");
         assertThat(draft.holidayId()).isEqualTo(DEEPAVALI.id());
-        assertThat(draft.promptVersion()).isEqualTo("templates-v1");
+        assertThat(draft.promptVersion()).isEqualTo("templates-v2");
         assertThat(draft.modelId()).isNull();
         verifyNoInteractions(model, usage);
     }
