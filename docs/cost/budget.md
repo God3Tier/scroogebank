@@ -24,7 +24,7 @@ The diagram shows the full design; the demo-week-only parts are not marked on it
 | NAT gateway(s) + public IPv4 | ~45–50 (one) | ~90–100 (two) |
 | WAF | ~10 | same |
 | CloudWatch, SQS, API Gateway, CloudFront, Cognito, Lambda, KMS, Secrets, S3, DynamoDB, Backup, GuardDuty (core detection only, after the 30-day trial) and one CloudTrail trail | 23–37 | same |
-| Bedrock and AgentCore web search (usage-based, capped searches, kill switches) | 5–15 | same |
+| Bedrock and the Tavily news search (usage-based, capped searches, kill switches; Tavily's cost depends on its plan, ADR-0050) | 5–15 | same |
 | **Total** | **~570–660** | **~755–860** |
 
 **Budget reality:** running this design 24/7 would cost about twice the USD 300 limit in a single month. Staying inside the limit depends on the lifecycle above.

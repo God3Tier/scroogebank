@@ -7,8 +7,11 @@
 ## Solution View
 
 The CRM is deployed as a single-legal-entity workload in the AWS Singapore
-Region, across two Availability Zones. The only planned cross-region operation is
-the public-data-only web-search path from Singapore to Tokyo. Business users
+Region, across two Availability Zones. Two outbound calls carry data beyond
+Singapore, both public-data only: the alert worker's news search through the
+third-party Tavily API, and its model call through a global inference profile.
+The health monitor's wording requests carry banded facts through an Asia-Pacific
+inference profile, so they stay in Asia-Pacific. Business users
 authenticate to the application; they are not given AWS console credentials.
 
 ### AWS services and system components
@@ -22,8 +25,8 @@ authenticate to the application; they are not given AWS console credentials.
 | AWS Cloud Map | Provides private service discovery for API Gateway integrations and internal service endpoints. |
 | Amazon RDS for PostgreSQL | Stores service-owned CRM and alert data. Existing CRM services use isolated databases; the alert database topology must be confirmed before staging. Multi-AZ and encryption at rest are required for CRM records. |
 | Amazon EventBridge Scheduler | Starts the bounded Event-Driven Client Alerts worker on its approved schedule. |
-| Amazon Bedrock AgentCore Gateway with Web Search, Tokyo | Performs allowlisted searches for public regulatory, exchange and issuer news. It receives public terms only and never receives client or portfolio data. Availability and request behavior require live-spike validation. |
-| Amazon Bedrock model adapter | Classifies public events and produces a source-grounded, AI-labelled market briefing from public evidence only. Model invocation remains default-off until its safety and quality gates pass. |
+| Tavily search API (third party, outside AWS) | Performs allowlisted searches for public regulatory, exchange and issuer news, called directly from the alert worker with an API key from Secrets Manager. It receives public terms only and never receives client or portfolio data. It replaced the planned Amazon Bedrock AgentCore web search in Tokyo, which an AWS Organization service control policy blocks ([ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md)). |
+| Amazon Bedrock model adapter | Classifies public events and produces a source-grounded, AI-labelled market briefing from public evidence only, with Amazon Nova 2 Lite through its global inference profile, called from Singapore. Model invocation remains default-off until its safety and quality gates pass. |
 | Existing auditor and Kafka contract | Receives versioned, redacted audit events through the alert service's transactional outbox. No new alert-specific broker is introduced. The auditor's AWS hosting choice must remain aligned with the platform design. |
 | Amazon CloudWatch | Collects redacted logs, metrics, dashboards and alarms for API health, schedules, search/model usage, audit backlog and operational failures. |
 | AWS Key Management Service (AWS KMS) | Supplies encryption keys for supported data stores and service-managed encryption at rest. |
@@ -46,7 +49,7 @@ authenticate to the application; they are not given AWS console credentials.
   resources required by that service.
 - **CI/CD:** assumes a narrowly scoped deployment role through workload identity
   federation; it does not store permanent AWS keys.
-- **Tokyo search and global model inference:** receive public market information
+- **Tavily search and global model inference:** receive public market information
   only. Client identity, account, holding, exposure, agent, internal-note and
   audit data remain in Singapore.
 
@@ -65,7 +68,7 @@ only platform responsibilities receive AWS roles.
 | Compliance / Internal Auditor | Reviews evidence that privileged actions, data access and AI-assisted alerts are controlled and traceable. | Application or federated read-only audit role; read redacted, immutable audit events and approved operational reports. If AWS access is required, use a read-only IAM Identity Center role limited to CloudWatch/audit evidence, with no data mutation, secret retrieval or role-assumption administration. |
 | Platform / Cloud Administrator | Deploys, configures, monitors and recovers the AWS environments. This is separate from the CRM Admin business role. | MFA-protected IAM Identity Center platform role; least-privilege access to the approved ECS, API Gateway, CloudFront, Cognito, RDS, Cloud Map, EventBridge, CloudWatch, KMS, Secrets Manager and budget resources. Production changes should use controlled elevation and audit logging. No routine access to plaintext business data. In the team's account: the role `crm-infra-admin`, with administrator rights and MFA ([ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md)). |
 | Development and CI/CD Team | Builds, tests and promotes application and infrastructure changes through the repository workflow. | Developers use scoped non-production roles. CI/CD uses an OIDC-federated deployment role restricted by repository, branch/environment and resource tags. No long-lived AWS keys, direct production database access or permission to bypass protected promotion gates. |
-| Alert Scheduler and Worker | System actor that discovers public events, classifies them and produces candidate client alerts. | Dedicated ECS task role: read its approved configuration/secret, access only its alert database, emit approved metrics/logs, invoke the pinned Tokyo AgentCore target and approved Bedrock model, and publish the versioned auditor envelope. Explicit deny-by-omission for unrelated tools, databases and domains. |
+| Alert Scheduler and Worker | System actor that discovers public events, classifies them and produces candidate client alerts. | Dedicated ECS task role: read its approved configuration/secret, access only its alert database, emit approved metrics/logs, read the Tavily API key, invoke the pinned Bedrock inference profile, and publish the versioned auditor envelope. Explicit deny-by-omission for unrelated tools, databases and domains. |
 | External Transaction Provider | External synthetic system that supplies account transactions for Feature 3. | Narrow machine-to-machine permission to the approved ingestion contract only. It cannot query CRM users, clients, alerts, databases, secrets or AWS administration APIs. Requests must be authenticated, validated and auditable. |
 | Product Owner / UBS Reviewer | Confirms that workflows, controls and innovation value satisfy the business need and proposal criteria. | Demonstration/read-only access to synthetic dashboards and approved evidence. No AWS mutation permissions or access to secrets. |
 
@@ -239,7 +242,7 @@ combines three differentiating capabilities:
 | **Use Case Title** | Holdings-Aware Event-Driven Client Alert |
 | **Use Case ID** | UC-XF-01 |
 | **Description** | A scheduled worker discovers a public market event relevant to instruments sufficiently common in current client holdings, returns a public event report to Singapore, deterministically matches and scores affected portfolios, and sends an explainable alert only to the responsible Agent. |
-| **Actors** | Client/account and holdings systems, instrument master, EventBridge Scheduler, alert worker/API on ECS, AgentCore Web Search in Tokyo, Bedrock model adapter, RDS PostgreSQL, auditor, Agent, Admin, CloudWatch |
+| **Actors** | Client/account and holdings systems, instrument master, EventBridge Scheduler, alert worker/API on ECS, Tavily search API, Bedrock model adapter, RDS PostgreSQL, auditor, Agent, Admin, CloudWatch |
 | **Pre-conditions** | Synthetic/approved holdings and valuations contain stable instrument IDs; the Singapore instrument master contains active public classifications; the schedule and independent ingestion/model controls are enabled; domain, query, result, token, alert and budget limits are available; applicable ADRs and live AWS gates have been accepted. |
 | **Post-conditions** | A qualifying public event is stored once with provenance; affected clients receive reproducible, ownership-scoped candidate alerts; responsible Agents can review the public summary and client-specific explanation; Admins have read-only oversight; generation and decisions are audited without exporting private portfolio data. |
 
@@ -253,14 +256,13 @@ combines three differentiating capabilities:
    not used to guess the holding's category.
 3. EventBridge Scheduler starts a bounded alert-worker task in Singapore.
 4. The worker aggregates the approved holdings snapshot and selects instruments
-   that satisfy the configured minimum population controls. The current prototype
-   defaults are at least two clients and at least 5% of clients represented in
-   the snapshot.
+   that satisfy the configured minimum population controls. The current defaults
+   are at least two clients and at least 20% of clients with positions, or at
+   least 50% of one account's value.
 5. Singapore converts eligible instrument IDs into public ticker, issuer, sector
    and event terms. It sends only those public terms, approved domains, inclusive
-   UTC dates and a bounded result count to the pinned AgentCore Web Search target
-   in Tokyo.
-6. Tokyo searches allowlisted public sources and returns source metadata and
+   UTC dates and a bounded result count to the Tavily search API.
+6. Tavily searches allowlisted public sources and returns source metadata and
    snippets. It never receives client/account/agent identifiers, holdings,
    quantities, values, exposure, client counts or the selection rationale.
 7. The public-only model adapter classifies the event and produces a structured,
@@ -296,8 +298,8 @@ combines three differentiating capabilities:
   outbound search and send the reference-data issue for review; never ask the LLM
   to guess.
 - **No instrument satisfies the population controls:** record a successful
-  no-query run and make no Tokyo/model call.
-- **Tokyo timeout, invalid response or disallowed source:** fail only the affected
+  no-query run and make no search or model call.
+- **Search timeout, invalid response or disallowed source:** fail only the affected
   bounded search, preserve existing alerts and do not switch silently to an
   unapproved provider.
 - **Model timeout, refusal, unsafe content or invalid schema:** record abstention;
@@ -322,7 +324,7 @@ sequenceDiagram
     participant Holdings as Holdings + Instrument Master (SG)
     participant Schedule as EventBridge Scheduler
     participant Worker as Alert Worker (ECS, SG)
-    participant Search as AgentCore Web Search (Tokyo)
+    participant Search as Tavily search API
     participant AI as Public-only Model Adapter
     participant DB as Alert RDS (SG)
     participant Audit as Auditor
@@ -362,11 +364,11 @@ describing an intended control as deployed:
 - Transaction validation, idempotency and failure-path tests.
 - Database encryption/Multi-AZ and ECS multi-AZ infrastructure evidence.
 - Alert-service unit, PostgreSQL integration, frontend and auditor contract tests.
-- Live Singapore-to-Tokyo request inspection proving the public-only payload.
+- Live request inspection proving the public-only payload sent to Tavily and the model.
 - Source allowlist, timeout, abstention, replay, audit-outage and kill-switch tests.
 - CloudWatch dashboard/alarm screenshots using synthetic data.
 - Measured latency and cost evidence against the approved feature/project limits.
 - Human acceptance of proposed alert ADRs before promotion to `dev`.
 
-Do not present planned AgentCore, Bedrock, vector-similarity or staging behavior as
+Do not present planned Tavily search, Bedrock, vector-similarity or staging behavior as
 completed until the corresponding live evidence and approvals exist.
