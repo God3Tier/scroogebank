@@ -19,6 +19,8 @@ type AccountController interface {
 	// scope can only come from the verified token the router passes in.
 	ListAccounts(w http.ResponseWriter, r *http.Request, caller models.Caller)
 	LookupAccounts(w http.ResponseWriter, r *http.Request)
+	// LookupAlertAccounts is the event-alert service's own directory read (ADR-0066).
+	LookupAlertAccounts(w http.ResponseWriter, r *http.Request)
 	// SetOwner moves a reassigned client's accounts to its new agent
 	// (ADR-0060).
 	SetOwner(w http.ResponseWriter, r *http.Request)

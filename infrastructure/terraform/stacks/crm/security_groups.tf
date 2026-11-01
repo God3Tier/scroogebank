@@ -44,6 +44,7 @@ locals {
   sg_ingress = [
     { to = "alb", from = "vpc_link", port = local.alb_port },
     { to = "alb", from = "ingest", port = local.alb_port },
+    { to = "alb", from = "alerts", port = local.alb_port }, # account directory, API and worker (ADR-0066)
     { to = "alb", from = "client_health", port = local.alb_port },
 
     { to = "user", from = "alb", port = local.ports.user },

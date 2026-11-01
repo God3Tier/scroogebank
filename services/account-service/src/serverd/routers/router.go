@@ -27,7 +27,7 @@ import (
 	http.StatusServiceUnavailable = 503
 */
 
-func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, aggregates aggregatecontroller.Controller, db *sql.DB, authenticate, authenticateService, auditLogger gin.HandlerFunc) {
+func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, aggregates aggregatecontroller.Controller, db *sql.DB, authenticate, authenticateService, authenticateAlertDirectory, auditLogger gin.HandlerFunc) {
 	// The business dashboard's figures, and the account IDs user-service
 	// scopes an agent's transaction figures by, fetched with the caller's own
 	// user token. Outside /api, so API Gateway never routes them, and not
@@ -41,9 +41,12 @@ func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountContro
 	// Service-to-service routes take client-credentials tokens, never user
 	// tokens, and sit outside /api so API Gateway never routes them (ADR-0037).
 	// Not audited: a lookup changes nothing, and the import audits each file.
+	// Each route has its own service middleware, so the transaction import's
+	// token cannot read the alert directory and the alert service's token
+	// cannot look up accounts for an import (ADR-0066).
 	internal := router.Group("/internal")
-	internal.Use(authenticateService)
-	internal.POST("/accounts/lookup", adaptHandler(accounts.LookupAccounts, ""))
+	internal.POST("/accounts/lookup", authenticateService, adaptHandler(accounts.LookupAccounts, ""))
+	internal.POST("/alerts/accounts/lookup", authenticateAlertDirectory, adaptHandler(accounts.LookupAlertAccounts, ""))
 
 	// Moving a reassigned client's accounts to its new agent: called only by
 	// client-profile-management-service with the admin's own user token, while

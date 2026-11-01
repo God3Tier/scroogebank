@@ -10,6 +10,7 @@ import bank.alert.operations.ReservationResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
@@ -44,17 +46,87 @@ class IngestionCoordinatorTest {
     @Mock ProcessingWatermarkRepository watermarks;
     @Mock IngestionRunFinalizer finalizer;
     @Mock OutboundControlService outboundControls;
+    @Mock IngestionRunLock runLock;
+    @Mock IngestionRunLock.Hold lockHold;
 
     private IngestionCoordinator coordinator;
 
     @BeforeEach
     void setUp() {
         coordinator = coordinator(true);
-        lenient().when(watermarks.findById("agentcore-web-search-1.2.0")).thenReturn(Optional.empty());
+        lenient().when(watermarks.findById("tavily")).thenReturn(Optional.empty());
         lenient().when(searchRuns.findByWindowFromAndWindowTo(any(), any())).thenReturn(Optional.empty());
         lenient().when(searchRuns.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(outboundControls.reserveSearches(any(Integer.class)))
                 .thenReturn(ReservationResult.allowed(999));
+        lenient().when(runLock.tryAcquire()).thenReturn(Optional.of(lockHold));
+    }
+
+    @Test
+    void doesNotSearchWhenAnotherRunHoldsTheLock() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        verify(outboundControls, never()).reserveSearches(any(Integer.class));
+        verify(provider, never()).search(any());
+        verify(searchRuns, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void doesNotReplayWhileAnotherRunHoldsTheLock() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+
+        IngestionOutcome outcome = coordinator.replay(
+                NOW.minus(Duration.ofHours(2)), NOW.minus(Duration.ofHours(1)), CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        verify(provider, never()).search(any());
+    }
+
+    @Test
+    void sendsTwoDifferentFocusedSearchesForEachCompanyAndReservesBoth() {
+        when(provider.search(any())).thenReturn(List.of());
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        ArgumentCaptor<PublicSearchRequest> requests = ArgumentCaptor.forClass(PublicSearchRequest.class);
+        verify(provider, times(2)).search(requests.capture());
+        assertThat(requests.getAllValues()).extracting(PublicSearchRequest::query)
+                .doesNotHaveDuplicates().allSatisfy(query -> assertThat(query).contains("Synthetic Issuer"));
+        verify(outboundControls).reserveSearches(2);
+        assertThat(outcome.searchAttempts()).isEqualTo(2);
+    }
+
+    @Test
+    void releasesTheLockAfterASuccessfulRun() {
+        when(sourceResults.existsByCanonicalUrlHash(any())).thenReturn(false);
+        when(sourceResults.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(provider.search(any())).thenReturn(List.of(result("r1", "https://www.sgx.com/news/1")));
+
+        coordinator.run(NOW, CATALOGUE);
+
+        verify(lockHold).close();
+    }
+
+    @Test
+    void releasesTheLockWhenTheRunFails() {
+        when(provider.search(any())).thenThrow(new IllegalStateException("provider down"));
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.FAILED);
+        verify(lockHold).close();
+    }
+
+    @Test
+    void releasesTheLockWhenTheRunThrows() {
+        when(searchRuns.saveAndFlush(any())).thenThrow(new IllegalStateException("db down"));
+
+        assertThatThrownBy(() -> coordinator.run(NOW, CATALOGUE))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lockHold).close();
     }
 
     @Test
@@ -64,7 +136,7 @@ class IngestionCoordinatorTest {
         when(provider.search(any())).thenReturn(List.of(
                 result("r1", "https://www.sgx.com/news/1?utm_source=test"),
                 result("r2", "https://www.sgx.com/news/1"),
-                result("r3", "https://publisher.invalid/news/2")));
+                result("r3", "https://publisher.invalid/news/2")), List.of());
 
         IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
 
@@ -73,6 +145,24 @@ class IngestionCoordinatorTest {
         assertThat(outcome.duplicateResults()).isOne();
         assertThat(outcome.rejectedResults()).isOne();
         verify(finalizer).succeed(any(SearchRun.class), any(), any(), any(), any(Integer.class), any());
+    }
+
+    @Test
+    void rejectsCrossIssuerAndNonActionableResultsBeforePersistence() {
+        when(sourceResults.existsByCanonicalUrlHash(any())).thenReturn(false);
+        when(sourceResults.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(provider.search(any())).thenReturn(List.of(
+                new PublicSearchResult("r1", "https://www.sgx.com/news/1",
+                        "Apple earnings rise", Instant.parse("2026-09-28T03:00:00Z"), NOW, null),
+                new PublicSearchResult("r2", "https://www.sgx.com/news/2",
+                        "Synthetic Issuer launches a product", Instant.parse("2026-09-28T03:00:00Z"), NOW, null),
+                result("r3", "https://www.sgx.com/news/3")), List.of());
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.acceptedResults()).isOne();
+        assertThat(outcome.rejectedResults()).isEqualTo(2);
+        verify(sourceResults).saveAndFlush(any());
     }
 
     @Test
@@ -85,6 +175,23 @@ class IngestionCoordinatorTest {
         assertThat(outcome.searchAttempts()).isEqualTo(3);
         assertThat(outcome.errorCode()).isEqualTo("TIMEOUT");
         verify(finalizer).fail(any(SearchRun.class), any(), any());
+        verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
+        verify(outboundControls).reserveSearches(IssuerQueryBuilder.QUERIES_PER_INSTRUMENT);
+        verify(outboundControls, times(2)).reserveSearches(1);
+    }
+
+    @Test
+    void stopsBeforeRetryingWhenTheMonthlyQuotaIsExhausted() {
+        when(outboundControls.reserveSearches(1)).thenReturn(ReservationResult.denied("SEARCH_QUOTA_REACHED", 0));
+        when(provider.search(any())).thenThrow(new SearchProviderException("TIMEOUT", true, "timeout"));
+
+        IngestionOutcome outcome = coordinator.run(NOW, CATALOGUE);
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.FAILED);
+        assertThat(outcome.errorCode()).isEqualTo("SEARCH_QUOTA_REACHED");
+        assertThat(outcome.searchAttempts()).isOne();
+        verify(provider).search(any());
+        verify(outboundControls).reserveSearches(1);
         verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
     }
 
@@ -141,7 +248,7 @@ class IngestionCoordinatorTest {
 
         assertThat(outcome.status()).isEqualTo(IngestionStatus.SUCCEEDED);
         assertThat(outcome.acceptedResults()).isZero();
-        verify(finalizer).succeed(retry, "agentcore-web-search-1.2.0", NOW,
+        verify(finalizer).succeed(retry, "tavily", NOW,
                 Duration.ofMinutes(5), 2, NOW);
     }
 
@@ -185,16 +292,16 @@ class IngestionCoordinatorTest {
 
     private IngestionCoordinator coordinator(boolean enabled) {
         IngestionProperties properties = new IngestionProperties(enabled,
-                "agentcore-web-search-1.2.0", Duration.ofMinutes(5), Duration.ofHours(4),
-                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.05"), 2,
+                "tavily", Duration.ofMinutes(5), Duration.ofHours(4),
+                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
                 List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
-        return new IngestionCoordinator(properties, provider, new GroupedQueryBuilder(),
+        return new IngestionCoordinator(properties, provider, new IssuerQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,
-                watermarks, finalizer, outboundControls, Clock.fixed(NOW, ZoneOffset.UTC));
+                watermarks, finalizer, outboundControls, runLock, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private static PublicSearchResult result(String id, String url) {
-        return new PublicSearchResult(id, url, "Synthetic public announcement",
+        return new PublicSearchResult(id, url, "Synthetic Issuer earnings announcement",
                 Instant.parse("2026-09-28T03:00:00Z"), NOW, null);
     }
 }

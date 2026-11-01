@@ -1,5 +1,46 @@
 # AI usage log
 
+## 2026-10-31 - Real-AWS test of event-driven alerts, two fixes and focused searches
+
+- Human owner: Hayyun; Azeez and Neo Jia Wen review requested.
+- AI tool: Claude Code (Anthropic), with separate AI agents for blind event labelling, blind story judging and publisher-terms lookup.
+- Task/purpose: Deploy the event-alert stacks to AWS, test Cognito permissions, current holdings, client reassignment and the Tavily to Bedrock to alerts pipeline with no mocks, tear everything down, then compare four Tavily search setups and send two focused searches per issuer.
+- Files/components affected: `SafeBriefingGenerator` (accept a source URL as a citation), `SourceResultProcessor` (log reason codes), alert-worker stack (`SPRING_FLYWAY_ENABLED=false`), `IssuerQueryBuilder`, `InstrumentCoverageService`, their tests, ADR-0051 amendment, and the testing reports under `docs/testing/`.
+- Data/calls: dummy clients and holdings only; real AWS, Tavily and Bedrock calls; the Tavily key was supplied in chat and held only in Secrets Manager and an environment variable. Rotate it.
+- Verification: 22 of 22 permission checks and one end-to-end run on AWS; `mvn test` passes (246 tests); `terraform fmt`, `validate` and `test` pass for `stacks/crm` (12) and `stacks/alert-worker` (8) after merging `dev`.
+- Human verification required: the benchmark labels and judgements were made by AI agents and need a human spot check; the Reuters, CNBC and FT terms were read by Hayyun only, with no quoted text, and need Azeez's confirmation. The two-search change has not run against real Tavily or AWS, and no real 4-hour firing was observed.
+
+## 2026-10-30 - Add Terraform takeover instructions to the current-holdings plan
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Expand CH-05 for another developer with the reason for infrastructure changes, all-remote fetch/task-branch instructions, runtime configuration/security/routing requirements, tests and completion criteria.
+- Files/components affected: Existing current-holdings plan and this usage record only.
+- Verification: Documentation links/whitespace, documentation-only staged scope, remote target protection and fast-forward ancestry; no runtime suite rerun because no application or Terraform code changed.
+- Integration: User requested pushing the plan to feat/event-driven-alerts using the previously selected direct workflow; the warning that PR review and PR-only CI are skipped was repeated. Recheck and verify the remote SHA around a non-forced push.
+- Limits: CH-05 and the application tasks remain planned for the receiving developer. No AWS, model, Tavily, deployment or secret-file access; unrelated root plan.md and bootstrap changes are preserved.
+
+## 2026-10-30 - Clarify the agent-event workflow and prepare feature integration
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Record the feature owner's clarification that agents receive a shared event briefing with an affected-client list and choose what to do; prepare integration of existing retrieval work and planning documents into feat/event-driven-alerts before new implementation.
+- Files/components affected: Parent/current-holdings plans, proposed ADR-0066 and glossary; integration evidence follows the actual Git/CI result.
+- Verification: Check documentation consistency/links and combined branch ancestry, resolve documentation overlaps while preserving retrieval evidence, and run the relevant existing service/Terraform checks before integration. The event-grouping feature remains planned; no personalised-review or automatic-contact implementation is claimed.
+- Data/calls: Repository and GitHub workflow information only; no private project records or secrets in prompts and no AWS, model or paid news calls.
+
+- Integration method: The user explicitly selected direct merge and push to the unprotected `feat/event-driven-alerts` branch after the PR-review/PR-only-CI warning. The combined tree passed `mvn -B clean verify` (456 tests, zero failures/errors/skips), six mocked alert-worker Terraform tests, formatting/validation and documentation checks. Full evidence is in `docs/testing/event-alert-integration-2026-10-30.md`. No formal reviewer approval or implementation of the new grouped/holdings plan is claimed.
+
+## 2026-10-29 - Verify and plan CRM-linked current alert holdings
+
+- Team member: Azeez.
+- AI tool: Codex.
+- Task/purpose: Fetch all remote refs, verify whether any branch already maintains securities positions linked to CRM clients/accounts/current agents, and plan the missing integration.
+- Data: Repository source and Git refs only; 44 actual remote branches plus the symbolic default HEAD alias. No real client data, secret file, deployed database, AWS, model or Tavily call.
+- Files/components affected: Current-holdings feature subplan, proposed ADR-0066/index, glossary, parent-plan task record and pinned branch-audit evidence.
+- Verification: Static inspection of provider implementations, source loader, account schemas/lookup, current-dev reassignment/authorization decisions, snapshot/exposure flow and dashboard portfolio references. Documentation checks recorded with the planning commit; no new runtime behaviour or application test result is claimed.
+- Human verification required: Hayyun must review holdings/contracts/exposure and Neo Jia Wen the CRM ownership/private-scope changes before shared code changes. ADR-0066 remains proposed and all implementation tasks remain planned.
+
 ## 2026-10-30 — Client Health RH-SF11F deployment clean-up and local verification
 
 - Human owner: Neo Jia Wen; Client Health owners (Garvit, Swayam) and the
@@ -1060,6 +1101,146 @@
   regional privacy boundaries, and explicit separation of current MVP behavior
   from future vector-similarity work.
 
+## 2026-10-23 — Tavily live-news path and dependency vulnerability repair
+
+- Human owner: Azeez; Hayyun review remains required for shared domain and deployment evidence.
+- Tool: OpenAI Codex.
+- Use: reproduce npm security advisories; update Vite/Vitest to patched releases;
+  verify Tavily's official request/response contract; implement the bounded
+  `PublicSearchProvider`; add secret-only ECS/Terraform wiring; remove obsolete
+  AgentCore IAM; trace and synchronize the provider-to-alert flow, ADR, feature
+  plan, budget and runbook.
+- Human verification required: review/approve the diff; run a saved Terraform
+  plan in the lower environment; populate the Tavily secret outside Terraform;
+  review provider terms and billed-credit benchmark; run a real-result worker
+  pass and inspect alert/audit evidence before enabling the schedule.
+- Data: repository content, synthetic search terms and a fake local Tavily HTTP
+  server only. No API key, real client data, live provider query or AWS mutation
+  was used.
+- Verification: `npm audit` reports zero vulnerabilities; frontend tests
+  (116/116), ESLint and the production build pass. Before cleanup, all 170 Java
+  tests that do not require Docker passed; after removing the inactive AgentCore
+  adapter and its 13 tests, all 157 remaining non-Docker tests pass. Once Docker
+  became available, the full suite exposed 16 duplicate-key errors in four test
+  seed routines that repeated migration V6 data; the setup was made idempotent
+  and the clean rerun passes 189/189, including all PostgreSQL Testcontainers
+  tests. Terraform validation could not run because the Terraform CLI is not
+  installed. No live AWS/Tavily result, quality, latency, usage-credit or cost
+  evidence is claimed.
+
+## 2026-10-23 — Singapore Bedrock source and Nova 2 Lite production pin
+
+- Human owner: Azeez; Hayyun review remains required for the ADR and deployment change.
+- Tool: OpenAI Codex.
+- Use: replace the remaining Luna/us-east-1 application fallbacks with
+  `global.amazon.nova-2-lite-v1:0` and `ap-southeast-1`; remove the temporary
+  wording from the worker stack; add regression assertions; and synchronize the
+  ADR, feature plan, service README and operations runbook with the Tavily-based
+  architecture that no longer requires Tokyo.
+- Human verification required: review/approve the model and cross-region data
+  processing decision; install Terraform and run its offline tests plus a saved
+  lower-environment plan before apply; keep AI and ingestion disabled until the
+  existing benchmark gates pass.
+- Data: repository configuration and synthetic tests only. No AWS call, Tavily
+  call, API key, credential or real client data was used.
+- Verification: the focused Nova defaults, Bedrock gateway and Tavily adapter
+  tests pass (10/10); compilation and all non-container tests reached by the full
+  run passed. The full rerun could not complete because Docker Desktop's Linux
+  engine pipe was absent. The same worktree had passed the complete PostgreSQL
+  Testcontainers suite (189/189) earlier in the session before this configuration
+  change. `git diff --check` passes, no runtime Luna/us-east-1 fallback remains,
+  and Terraform validation remains unavailable because the CLI is not installed.
+
+# 2026-10-28 - Portfolio-aware search universe
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Implement the holdings commonality/concentration rules, deterministic bounded rotation, per-instrument coverage, Terraform configuration, tests, and documentation from `plan.md`.
+- Files/components affected: event-alert-service ingestion/holdings/config/migration/metrics, alert-worker Terraform, ADR-0016, feature plan, schema/runbook/cost records.
+- Verification: Local Terraform format/validate/test, Java 25 Maven tests with Docker/Testcontainers, and frontend regression checks; no AWS or live Tavily calls.
+- Human verification required: Hayyun domain review and normal PR/CI review before merge.
+
+# 2026-10-29 - Portfolio-aware search universe scale fixture
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Expand the deterministic search-universe tests to 100 synthetic clients and verify that 100 eligible instruments rotate completely through four bounded schedule slots.
+- Files/components affected: event-alert-service holdings and coverage tests; feature-plan evidence.
+- Verification: Focused tests and the clean event-alert-service Maven verification with Docker/Testcontainers; no AWS or live Tavily calls.
+- Human verification required: Review the synthetic distributions and PR results before merge.
+
+# 2026-10-29 - Global portfolio fixture and Tavily benchmark
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Build a persistent synthetic multi-market portfolio fixture and run a bounded real-key Tavily benchmark through the actual worker.
+- Files/components affected: Flyway seed, deterministic holdings generator/fixture, search-universe tests, schema/runbook/cost/benchmark records.
+- Data and calls: Synthetic opaque clients only; six Tavily basic-search calls. No AWS or model calls, and no secret was logged or committed.
+- Verification: Focused fixture/universe tests pass. Three worker passes verified domain/date/persistence/deduplication controls; usefulness failed at 1/12 eligible-instrument coverage and zero actionable expanded-pass events, so ingestion remains disabled.
+- Human verification required: Review the fixture distribution, provider dashboard credit evidence, and the proposed query/provider redesign before enablement.
+
+# 2026-10-29 - Retrieval-usability redesign
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Compare bounded Tavily query/source variants and implement single-issuer retrieval with governed aliases/domains and deterministic pre-persistence filtering.
+- Files/components affected: event-alert ingestion/coverage/domain model, Flyway V9, alert-worker Terraform, ADR-0051, source register, benchmark/runbook/cost records.
+- Data and calls: Synthetic public instrument terms only; 18 Tavily basic-search calls reporting one credit each. No AWS/model call, private portfolio fact or secret output.
+- Verification: Focused query/filter/coordinator/rotation tests, full PostgreSQL Testcontainers verification, Terraform checks and the labelled 12-issuer production benchmark are required before enablement.
+- Human verification required: Hayyun source/domain review, commercial-publisher terms approval, PR review and a passing production retrieval gate.
+
+# 2026-10-29 - Retrieval-usability implementation smoke test
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Exercise the implemented query and local relevance gate across the multi-market portfolio, remove observed snippet noise and earnings previews, and confirm the tightened output.
+- Files/components affected: issuer query/filter implementation and tests; ADR-0051; feature-plan, benchmark and cost evidence.
+- Data and calls: Synthetic public instrument terms only; 28 Tavily basic-search calls (two 12-issuer passes and one four-issuer confirmation). No AWS/model call, private portfolio fact or secret output.
+- Verification: The final confirmation returned seven of seven manually actionable, issuer-correct results with zero cross-issuer result. This does not measure Recall@10, so production ingestion remains disabled.
+- Human verification required: Curate an independent known-event set, review source terms, verify provider billing, and approve through the normal PR path.
+
+# 2026-10-29 - Retrieval-usability full repeat verification
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Repeat the complete repository, Terraform, live multi-market retrieval and packaged-worker checks and measure retrieval accuracy separately from downstream generation.
+- Files/components affected: Benchmark, cost and AI-usage evidence only; no production code changed.
+- Data and calls: Synthetic portfolio/public issuer terms only; 28 Tavily basic calls, including 12 calls whose local metrics were discarded after an evaluator error. No AWS/model call, private portfolio fact or secret output.
+- Verification: 449 Maven tests passed across six modules; six Terraform tests passed; the valid 12-issuer pass measured 7/8 Recall@10, 8/8 manually actionable precision, zero cross-issuer results and sub-30-second calls; the packaged worker applied Flyway V1-V9 and completed four live searches against disposable PostgreSQL.
+- Human verification required: Independently curate the historical reference set, review publisher terms, reconcile provider-dashboard credits, and complete PR/ADR review before enablement.
+
+# 2026-10-29 - Unseen-instrument and 30-user retrieval check
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Verify that portfolio selection and issuer retrieval generalize beyond the seeded tickers and users, then repair accuracy issues found by the live check.
+- Files/components affected: portfolio-universe/query/worker tests, relevance preview filter, ingestion YAML, service README, benchmark/cost/feature-plan evidence.
+- Data and calls: Synthetic users and public issuer terms only; 12 Tavily basic-search calls for Toyota, BHP, SAP and TSMC. No AWS/model call, private portfolio fact or secret output.
+- Verification: The 30-user test covered common, concentrated and below-threshold instruments; the live check found one completed TSMC profit event, rejected issuers with no qualifying event, and exposed an `expected to report` preview that is now blocked. Focused and full service verification are recorded with the change.
+- Human verification required: Review new-instrument metadata governance, publisher terms and provider-dashboard credits before enablement; this smoke test is not an independent recall set.
+
+# 2026-10-29 - Retrieval feature follow-up code review
+
+- Team member: Azeez
+- AI tool: Codex
+- Task/purpose: Continue verification and review the complete retrieval-to-matching path for new instruments and other users.
+- Files/components affected: deterministic instrument matcher, mixed-batch coverage calculation, regression and PostgreSQL integration tests, feature plan, runbook and benchmark evidence.
+- Verification: New tests first reproduced ignored issuer aliases and shortened initial lookbacks in mixed batches; both now pass with fixes. Corrected the previous live-call description to identify its approximate PowerShell query/filter rather than claim execution of the Java path. No further Tavily, AWS or model calls were made.
+- Human verification required: Review alias governance and the test evidence; independent retrieval labels and commercial-source terms remain prerequisites for enablement.
+
+The review also found that provider retries bypassed monthly search accounting.
+Each retry now reserves quota before the external call; regression tests cover
+retry exhaustion and refusal to retry after the last available reservation.
+
+# 2026-10-30 - Current holdings implementation
+
+- Team member: Hayyun
+- AI tool: Claude Code
+- Task/purpose: Implement the approved CRM-linked current-holdings plan (CH-02, CH-03, CH-04, CH-04b) on `feat/event-driven-alerts`.
+- Files/components affected: V10 migration, portfolio API, CRM directory client, database holdings and search-universe providers, full-portfolio per-instrument scoring, current-owner routing, agent-event briefing/action API, holdings editor and event briefing frontend, account-service alert-directory route, Terraform (crm and alert-worker stacks), local stub and end-to-end scripts, tests, contract/schema/runbook/cost docs.
+- Verification: event-alert-service (about 240 tests), frontend, account-service (Docker) and Terraform (mocked, no AWS) tests pass; real-process runs against the real account-service, the real client-service reassignment, and one live Tavily search run (key supplied by the user in the environment only, a few search credits, nothing stored). No AWS apply and no model calls; synthetic data only.
+- Later the same day: routing-change audit, aggregate holdings metrics, the selected account in alert detail, a captured-request privacy test, holdings writes checked with the agent's own forwarded token, and extra acceptance tests (two accounts per client, five-client card, concurrent replacements, audit backlog, 1,000-client cap).
+- Human verification required: Azeez and Hayyun to review; Neo Jia Wen to review the account-service route and the Cognito/ALB Terraform; a person with AWS access for any apply.
 ## 2026-10-16 — Client Health SF01 transaction intake decision
 
 - Human owner: Garvit; Feature 3 owners must review provider-side changes.
@@ -1592,3 +1773,72 @@
   client data or AWS resources were used.
 - Verification: SFTP `make test` passed, including SQLBoiler regeneration,
   producer tests, receiver tests, and OpenAPI response/route checks.
+
+## 2026-10-30 — Current alert holdings local verification
+
+- Human requester: name not supplied in this session; feature owner Azeez and
+  required reviewers remain as recorded in the holdings plan.
+- Tool: Codex (OpenAI).
+- Use: independently rerun local Java, frontend, Go, real-process and mocked
+  Terraform checks for current CRM-linked holdings; make the local PostgreSQL
+  port configurable in the four end-to-end scripts; correct stale status notes.
+- Files affected: `scripts/local-crm-stub/`, the alert service README, the
+  current-holdings plan, ADR-0066 status addendum and this log.
+- Data: synthetic project data. A real Tavily test key was loaded at runtime
+  from an ignored local `.env`; its value was not printed, copied or committed.
+  No AWS call was made.
+- Verification: 242 alert service tests, 261 frontend tests, both relevant Go
+  suites, 19 + 26 + 15 real-process assertions, and 12 + 8 mocked Terraform
+  tests passed. The bounded Tavily run succeeded but accepted no source and
+  created no alert with the model disabled. Human review and PR/CI remain.
+
+## 2026-10-30 — Current alert holdings event briefing follow-up
+
+- Human requester: name not supplied in this session; Azeez remains feature owner.
+- Tool: Codex (OpenAI).
+- Use: add grouped event cursor paging and a load-more control; show the scoring
+  account on affected-client drill-down; update synthetic tests and API/plan docs.
+- Data: repository content and synthetic fixtures only. No credential, client
+  data, AWS call, or infrastructure apply was used for these changes.
+- Human verification required: review the task PR and CRM/security changes;
+  independently label historical retrieval events, review commercial-source
+  terms, verify Tavily dashboard credits, and validate against deployed AWS.
+- Verification: 243 alert-service tests, 18 focused PostgreSQL cases after a
+  final assertion, 262 frontend tests, ESLint and production build passed.
+  No Terraform files changed; earlier mocked Terraform checks remain valid.
+
+## 2026-10-30 — Current holdings PR OpenAPI gate repair
+
+- Tool: Codex (OpenAI); requester asked to fix PR #165's failing contract job.
+- Cause: the inherited dev implementation changed per-agent booked deposits
+  from a single amount to a currency map, but the ADR-0063 exception register
+  omitted the two corresponding ADR-0062 compatibility errors.
+- Change: register only those exact operation/property errors with the joint
+  provider/consumer deployment requirement. ADR-0062 owner approval is still pending.
+- Verification: reproduced both errors with CI's pinned oasdiff v1.33.0 image;
+  the same comparison passed after the entries. No runtime code or AWS changed.
+
+## 2026-10-30 — Retrieval review evidence
+
+- Tool: Codex (OpenAI), using evaluate-rag guidance to distinguish retrospective
+  metrics, independent labels and deployment-source coverage.
+- Use: prepare a retrieval review packet, research official Tavily terms and
+  credit documentation, and perform one public-issuer basic search with usage
+  reporting. API-reported cost: one credit; wall time: 11.057 seconds.
+- Data: public issuer terms only; ignored key loaded at runtime without printing
+  it. No result content was retained and no AWS/model call was made.
+- Human approval remains required from Azeez/Hayyun for ADR-0051 and the source
+  register. Publisher terms could not be verified; commercial domains remain
+  disabled. No independent human labels or approval were fabricated.
+
+## 2026-10-30 — Requester-directed commercial sources and citations
+
+- Tool: Codex (OpenAI). Requester explicitly instructed use of commercial news
+  with the source attached to the summary after discussing unverified rights.
+- Change: configure Reuters/CNBC/FT defaults in the application and worker
+  Terraform/example; place the clickable source-domain citation alongside each
+  event summary. Record the direction in ADR-0051 and associated documentation.
+- Verification: 4 event UI tests, 4 Java query/privacy tests, Terraform fmt,
+  validate and 8 mocked worker tests passed. No AWS call or apply was made.
+- Publisher rights were not represented as verified; named human ADR reviewer
+  approval was not invented. Scheduled ingestion remains disabled by default.

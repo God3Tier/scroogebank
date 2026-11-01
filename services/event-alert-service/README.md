@@ -8,31 +8,44 @@ artifact supports one explicit mode at a time:
 
 The default runtime is offline and deterministic. It contains no provider
 credentials and makes no outbound provider calls unless an adapter and its
-independent enable switch are explicitly configured. Synthetic holdings are loaded
-from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
+independent enable switch are explicitly configured. The default fixture mode
+loads synthetic holdings from `src/main/resources/fixtures/holdings-snapshot.v1.json`.
+With `ALERT_HOLDINGS_MODE=database`, agents record current holdings for CRM
+investment accounts through the portfolio API; the worker reads those records
+without changing the fixture or rebuilding the image. See
+`docs/feature-plans/event-driven-alerts-current-holdings_plan.md` for the
+authorization, rollout and verification gates.
 
 The ingestion core is provider-neutral and outbound-disabled by default with
-`ALERT_INGESTION_ENABLED=false`. It builds at most four grouped public-market
+`ALERT_INGESTION_ENABLED=false`. It builds at most four single-issuer public-market
 queries from instruments held by enough distinct clients, requests at most ten
 results per query, applies a five-minute watermark
-overlap, retries retryable provider failures at most three times, validates the
-approved-domain boundary, canonicalizes and deduplicates URLs, and advances the
+overlap, makes at most three attempts per query with monthly quota reserved for
+each attempt, validates the approved-domain boundary, canonicalizes and
+deduplicates URLs, and advances the
 watermark only after the complete run succeeds. Retrying a partially persisted
 failed window derives its final result count from durable rows, preserving
 idempotent replay accounting. Historical replay is restricted to `WORKER` mode,
 cannot extend into the future or exceed the configured lookback span, and never
-moves the scheduler watermark. The replay method remains an internal boundary
-until an authenticated, audited operator adapter is integrated. `IngestionJob`
-can run only in `WORKER` mode. Supplying the IAM-authenticated AgentCore Gateway client remains
-blocked on the approved infrastructure task; the application does not create or
-contact AWS resources by itself.
+moves the scheduler watermark. The replay is started by an operator as described
+below. `IngestionJob` can run only in `WORKER` mode. Tavily is the sole live-news
+adapter; without its key the worker fails closed and makes no outbound search.
 
 The holdings-derived search universe is calculated only in Singapore. The
-synthetic holdings fixture supplies stable instrument IDs; the `instrument`
-catalogue maps them deterministically to public ticker, issuer, and sector terms.
-By default an instrument must be represented by at least two distinct clients and
-5% of clients in the snapshot. Tokyo receives none of those counts or private
-holding facts. Unknown/inactive IDs and an empty eligible universe fail closed.
+global synthetic fixture supplies 20 opaque clients across 16 real public
+instruments on SGX, NASDAQ, NYSE, LSE, and HKEX, plus the legacy synthetic
+instrument used by downstream pipeline tests. The `instrument` catalogue maps
+stable IDs deterministically to public ticker, issuer, and sector terms. By
+default an instrument is eligible when it is held by at least two clients and
+20% of clients in the snapshot, or reaches 50% of one account's positive SGD
+value. Tavily receives none of those counts or private holding facts.
+Unknown/inactive IDs and an empty eligible universe fail closed.
+Each selected instrument contributes governed aliases and official domains.
+Results persist only when the title contains a controlled event phrase and
+names the issuer or an approved alias. A governed issuer/exchange domain may
+carry the issuer name in its excerpt when the event remains explicit in the
+title. Ticker-only, sector-only, product-only, cross-issuer and explicit
+event-preview results are rejected locally.
 
 The AI boundary is independently disabled by default with
 `ALERT_AI_ENABLED=false` and `ALERT_AI_PROVIDER=none`. The adapters accept public evidence only,
@@ -44,8 +57,10 @@ source-cited, uncertainty-bearing, and rejected when they contain advice
 language.
 
 An opt-in Bedrock Runtime implementation uses the Converse API with the pinned
-global Luna inference profile, AWS default credential chain, configured region,
-zero temperature, output-token cap, and per-request timeout. Enabling it requires
+`global.amazon.nova-2-lite-v1:0` inference profile from the Singapore source
+Region, AWS default credential chain, zero temperature, output-token cap, and
+per-request timeout. Global inference may process the request in another supported
+AWS Region. Enabling it requires
 both `ALERT_AI_PROVIDER=bedrock` and `ALERT_AI_ENABLED=true`; keep both disabled
 until ADR-0010 is accepted and the benchmark gates pass. The committed tests mock
 the SDK and make no AWS call. Never put credentials in repository configuration.
@@ -106,24 +121,59 @@ decision 1). EventBridge Scheduler is to start it as an ECS task every 4 hours.
   `DISABLED`, `CONTROL_BLOCKED`, `NO_QUERIES`, `ALREADY_RUNNING`,
   `ALREADY_SUCCEEDED` and `SUCCEEDED`.
 
-Not done yet (details, owners and suggested fixes in
-[`docs/feature-plans/event-driven-alerts_gaps.md`](../../docs/feature-plans/event-driven-alerts_gaps.md)):
+The monthly search and token quotas, the estimated-cost stop and an operator's
+disable are kept in alerts-db (`outbound_usage`, `outbound_control`), so the API
+and every worker run share them. Quota reservations are atomic, so two processes
+cannot take more than the quota. Each run also holds a PostgreSQL advisory lock
+for its whole duration; a run that cannot take it ends as `ALREADY_RUNNING`
+without searching or using quota, whether it is scheduled, manual or a replay.
 
-- A run stores search results only. Nothing turns them into alerts yet:
-  `SourceResultProcessor` (classification, briefing, alert generation) has no
-  caller.
-- There is no AgentCore client, so with `ALERT_INGESTION_ENABLED=true` every run
-  fails with `PROVIDER_NOT_CONFIGURED`.
-- The monthly search and token quotas, the estimated-cost stop and an operator's
-  disable are kept in memory. Each run is a new process, so it starts with the
-  counts at zero and nothing disabled; only the cap of 4 searches per run holds
-  across runs. Keep them in alerts-db before ingestion or the model is enabled
-  for the worker (see the operations runbook).
-- Two runs at once both search if their windows end at different times: the run
-  lease only covers the same window. Do not start a manual run while a scheduled
-  one is running.
-- Micrometer metrics are not exported from the short-lived worker. Until
-  CloudWatch is set up, the log line is the record of each run.
+After each window the worker runs a source-to-alert pipeline ([ADR-0049](../../docs/adr/ADR-0049-alert-source-to-alert-pipeline.md)).
+It takes the oldest stored sources not yet finished (at most
+`ALERT_PIPELINE_MAX_SOURCES_PER_RUN`, default 50), matches each to the
+instrument master by exact ticker, issuer name, approved issuer alias or sector name, classifies it once, and
+creates the alerts for every agent whose clients hold an affected instrument.
+Severity comes from a fixed table by event type. It does nothing while
+`ALERT_AI_ENABLED=false`, and a source the model cannot handle yet stays pending
+for the next run. The run exits 1 if a source errors. Its summary line is
+`worker pipeline examined=… processed=… no_match=… alerts_created=… deferred=… errors=…`.
+
+`ALERT_SEARCH_PROVIDER=tavily` and `ALERT_TAVILY_API_KEY` switch on the selected
+live-news adapter (ADR-0050). In AWS the key is injected from the worker-owned
+Secrets Manager secret; never commit or place it in Terraform. Requests use
+Tavily's restrictive domain mode and published-date filter. Each query combines
+that issuer's official domains with optional shared publishers from
+`ALERT_INGESTION_APPROVED_DOMAINS`. Defaults now include Reuters, CNBC and FT
+at the requester's direction (ADR-0051's 2026-10-30 addendum); event summaries
+display source-domain links. Publisher rights remain unverified. Results are
+checked again for approved HTTPS domains, the exact UTC window, count and body
+size before persistence. With no key the search fails cleanly as
+`PROVIDER_NOT_CONFIGURED`.
+
+The search code is not limited to the seeded tickers or exchanges. A new
+instrument becomes searchable when its active instrument-master row supplies a
+stable ID, ticker, legal issuer name, approved aliases and official domains and
+the holdings-derived thresholds select it. An unknown holding ID or an inactive
+row is deliberately skipped rather than searched with guessed metadata.
+
+An operator replays a past window by starting a one-off worker task with
+`ALERT_WORKER_REPLAY_FROM`, `ALERT_WORKER_REPLAY_TO`, `ALERT_WORKER_REPLAY_OPERATOR`
+and `ALERT_WORKER_REPLAY_CORRELATION_ID`. All four are required; the worker writes
+an `alert.replay-requested` audit event before it searches, and refuses if it
+cannot. A replay never moves the scheduler watermark.
+
+`ALERT_CLOUDWATCH_METRICS_ENABLED=true` exports the metrics to CloudWatch as the
+worker exits (namespace `ALERT_CLOUDWATCH_NAMESPACE`, default `CRM/EventAlerts`).
+It is off by default because every distinct metric and tag combination is billed.
+
+The 2026-10-29 local real-key repeat proved the worker/Tavily transport, date and
+domain checks, persistence, deduplication and single-issuer relevance gate. Its
+small retrospective set measured 7/8 Recall@10 and 8/8 manually actionable
+precision. A separate unseen-instrument check exercised Toyota, BHP, SAP and
+TSMC metadata and found one completed TSMC profit event while rejecting
+unrelated and preview results. Keep ingestion disabled: the labels were not
+independently curated, commercial-source terms and billed-credit evidence remain
+open. See the [benchmark report](../../docs/testing/tavily-global-portfolio-benchmark-2026-10-29.md).
 
 Infrastructure needs, for when it is built: an EventBridge Scheduler schedule
 every 4 hours that runs the task with `ALERT_MODE=WORKER` and the database
@@ -136,6 +186,48 @@ Docker must be running because repository tests use PostgreSQL Testcontainers.
 
 ```powershell
 mvn -B -pl services/event-alert-service -am verify
+```
+
+## Run a live Tavily pull locally
+
+Start a disposable PostgreSQL database (choose another host port if `5438` is
+already used):
+
+```powershell
+docker run --name event-alert-postgres --rm -d `
+  -e POSTGRES_DB=event_alert `
+  -e POSTGRES_USER=event_alert `
+  -e POSTGRES_PASSWORD=local-only `
+  -p 5438:5432 postgres:16-alpine
+```
+
+Set the worker environment in the same PowerShell session. Paste the key only
+into your local shell or an approved secret store; never write it to the repo.
+
+```powershell
+$env:ALERT_MODE = 'WORKER'
+$env:EVENT_ALERT_DB_URL = 'jdbc:postgresql://localhost:5438/event_alert'
+$env:EVENT_ALERT_DB_USERNAME = 'event_alert'
+$env:EVENT_ALERT_DB_PASSWORD = 'local-only'
+$env:ALERT_INGESTION_ENABLED = 'true'
+$env:ALERT_SEARCH_PROVIDER = 'tavily'
+$env:ALERT_TAVILY_API_KEY = '<your-tavily-key>'
+$env:ALERT_AI_ENABLED = 'false'
+$env:ALERT_AI_PROVIDER = 'none'
+mvn -B -f services/event-alert-service/pom.xml spring-boot:run
+```
+
+The worker runs one bounded window and exits. A successful pull logs
+`worker run status=SUCCEEDED`; it never logs the key, query text, titles, or
+URLs. With AI disabled, sources are stored but alert generation is deferred.
+Afterwards, clear the shell variables and stop the disposable database:
+
+```powershell
+'ALERT_MODE','EVENT_ALERT_DB_URL','EVENT_ALERT_DB_USERNAME',
+'EVENT_ALERT_DB_PASSWORD','ALERT_INGESTION_ENABLED','ALERT_SEARCH_PROVIDER',
+'ALERT_TAVILY_API_KEY','ALERT_AI_ENABLED','ALERT_AI_PROVIDER' |
+  ForEach-Object { Remove-Item "Env:$_" -ErrorAction SilentlyContinue }
+docker stop event-alert-postgres
 ```
 
 Runtime database settings are supplied through `EVENT_ALERT_DB_URL`,

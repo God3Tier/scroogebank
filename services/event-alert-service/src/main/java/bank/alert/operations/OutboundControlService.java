@@ -1,6 +1,7 @@
 package bank.alert.operations;
 
 import bank.alert.config.OperationalProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -8,84 +9,80 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
-import java.util.EnumMap;
-import java.util.Map;
+import java.util.Optional;
 
+/**
+ * Quotas, the monthly cost stop and operator disables for outbound search and
+ * model calls. The counts and disabled state live in an {@link OutboundControlStore}
+ * so the API and every run-once worker share them (ADR-0031 decision 5).
+ */
 @Service
 public class OutboundControlService {
     private final OperationalProperties properties;
     private final OperationalControlAuditSink auditSink;
     private final OperationalMetrics metrics;
     private final Clock clock;
-    private final Map<OutboundCapability, ControlReason> disabledReasons =
-            new EnumMap<>(OutboundCapability.class);
-    private YearMonth usageMonth;
-    private int searchQueries;
-    private long modelTokens;
-    private BigDecimal estimatedCostUsd = BigDecimal.ZERO;
+    private final OutboundControlStore store;
 
+    /** Single-process controls, for tests; the service uses the shared database store. */
     public OutboundControlService(OperationalProperties properties,
             OperationalControlAuditSink auditSink, OperationalMetrics metrics, Clock clock) {
+        this(properties, auditSink, metrics, clock, new InMemoryOutboundControlStore());
+    }
+
+    @Autowired
+    public OutboundControlService(OperationalProperties properties,
+            OperationalControlAuditSink auditSink, OperationalMetrics metrics, Clock clock,
+            OutboundControlStore store) {
         this.properties = properties;
         this.auditSink = auditSink;
         this.metrics = metrics;
         this.clock = clock;
-        this.usageMonth = currentMonth();
-        if (!properties.ingestionEnabled()) {
-            disabledReasons.put(OutboundCapability.INGESTION, ControlReason.CONFIG_DISABLED);
-        }
-        if (!properties.modelEnabled()) {
-            disabledReasons.put(OutboundCapability.MODEL, ControlReason.CONFIG_DISABLED);
-        }
+        this.store = store;
         metrics.usage(0, 0, BigDecimal.ZERO);
     }
 
     public synchronized ReservationResult reserveSearches(int requested) {
-        rollMonth();
         if (requested <= 0 || requested > properties.maxSearchesPerRun()) {
             return denied(OutboundCapability.INGESTION, "RUN_SEARCH_LIMIT", remainingSearches());
         }
-        if (disabledReasons.containsKey(OutboundCapability.INGESTION)) {
-            return denied(OutboundCapability.INGESTION, disabledCode(OutboundCapability.INGESTION),
-                    remainingSearches());
+        Optional<ControlReason> disabled = disabledReason(OutboundCapability.INGESTION);
+        if (disabled.isPresent()) {
+            return denied(OutboundCapability.INGESTION, disabled.get().name(), remainingSearches());
         }
-        if ((long) searchQueries + requested > properties.monthlySearchQuota()) {
+        if (!store.reserveSearches(currentMonth(), requested, properties.monthlySearchQuota())) {
             disableInternal(OutboundCapability.INGESTION, ControlReason.SEARCH_QUOTA_REACHED);
             return denied(OutboundCapability.INGESTION, "SEARCH_QUOTA_REACHED", remainingSearches());
         }
-        searchQueries += requested;
         updateUsageMetrics();
         metrics.reservation(OutboundCapability.INGESTION, "ALLOWED");
         return ReservationResult.allowed(remainingSearches());
     }
 
     public synchronized ReservationResult reserveModelTokens(int requested) {
-        rollMonth();
         if (requested <= 0 || requested > properties.maxModelTokensPerInvocation()) {
             return denied(OutboundCapability.MODEL, "INVOCATION_TOKEN_LIMIT", remainingModelTokens());
         }
-        if (disabledReasons.containsKey(OutboundCapability.MODEL)) {
-            return denied(OutboundCapability.MODEL, disabledCode(OutboundCapability.MODEL),
-                    remainingModelTokens());
+        Optional<ControlReason> disabled = disabledReason(OutboundCapability.MODEL);
+        if (disabled.isPresent()) {
+            return denied(OutboundCapability.MODEL, disabled.get().name(), remainingModelTokens());
         }
-        if (modelTokens + requested > properties.monthlyModelTokenQuota()) {
+        if (!store.reserveModelTokens(currentMonth(), requested, properties.monthlyModelTokenQuota())) {
             disableInternal(OutboundCapability.MODEL, ControlReason.MODEL_TOKEN_QUOTA_REACHED);
             return denied(OutboundCapability.MODEL, "MODEL_TOKEN_QUOTA_REACHED", remainingModelTokens());
         }
-        modelTokens += requested;
         updateUsageMetrics();
         metrics.reservation(OutboundCapability.MODEL, "ALLOWED");
         return ReservationResult.allowed(remainingModelTokens());
     }
 
     public synchronized void recordEstimatedCost(BigDecimal incrementalCostUsd) {
-        rollMonth();
         if (incrementalCostUsd == null || incrementalCostUsd.signum() < 0) {
             throw new IllegalArgumentException("incremental cost must be non-negative");
         }
-        estimatedCostUsd = estimatedCostUsd.add(incrementalCostUsd);
+        BigDecimal total = store.addEstimatedCost(currentMonth(), incrementalCostUsd);
         updateUsageMetrics();
-        if (estimatedCostUsd.compareTo(properties.monthlyBudgetUsd()) >= 0) {
+        if (total.compareTo(properties.monthlyBudgetUsd()) >= 0) {
             disableInternal(OutboundCapability.INGESTION, ControlReason.MONTHLY_BUDGET_REACHED);
             disableInternal(OutboundCapability.MODEL, ControlReason.MONTHLY_BUDGET_REACHED);
         }
@@ -97,31 +94,39 @@ public class OutboundControlService {
 
     public synchronized void reenable(OutboundCapability capability, String actorSubject,
             String correlationId) {
-        rollMonth();
         requireText(actorSubject, "actorSubject");
         requireText(correlationId, "correlationId");
         if (!configuredEnabled(capability)) {
             throw new IllegalStateException(capability + " is disabled by configuration");
         }
-        if (disabledReasons.get(capability) == ControlReason.MONTHLY_BUDGET_REACHED
-                && estimatedCostUsd.compareTo(properties.monthlyBudgetUsd()) >= 0) {
+        Optional<ControlReason> previous = store.disabledReason(capability);
+        if (previous.orElse(null) == ControlReason.MONTHLY_BUDGET_REACHED
+                && usage().estimatedCostUsd().compareTo(properties.monthlyBudgetUsd()) >= 0) {
             throw new IllegalStateException("monthly budget remains exhausted");
         }
         ControlAuditEvent event = new ControlAuditEvent(capability, "REENABLED",
-                actorSubject, correlationId, disabledReasons.get(capability), Instant.now(clock));
+                actorSubject, correlationId, previous.orElse(null), Instant.now(clock));
         auditSink.record(event);
-        disabledReasons.remove(capability);
+        store.clearDisabled(capability);
         metrics.reenabled(capability);
     }
 
     public synchronized ControlStatus status(OutboundCapability capability) {
-        ControlReason reason = disabledReasons.get(capability);
+        ControlReason reason = disabledReason(capability).orElse(null);
         return new ControlStatus(capability, reason == null, reason);
     }
 
     public synchronized OperationalUsageSnapshot usage() {
-        rollMonth();
-        return new OperationalUsageSnapshot(usageMonth, searchQueries, modelTokens, estimatedCostUsd);
+        return store.usage(currentMonth());
+    }
+
+    /**
+     * Reads the shared monthly usage into the gauges. The run-once worker calls this
+     * before its metrics are exported, so a run that reserved nothing still reports
+     * the stored month, not zero.
+     */
+    public synchronized void publishUsageMetrics() {
+        updateUsageMetrics();
     }
 
     private ReservationResult denied(OutboundCapability capability, String code, long remaining) {
@@ -130,12 +135,14 @@ public class OutboundControlService {
     }
 
     private void disableInternal(OutboundCapability capability, ControlReason reason) {
-        ControlReason previous = disabledReasons.put(capability, reason);
-        if (previous != reason) metrics.disabled(capability, reason);
+        Optional<ControlReason> previous = store.disable(capability, reason);
+        if (previous.orElse(null) != reason) metrics.disabled(capability, reason);
     }
 
-    private String disabledCode(OutboundCapability capability) {
-        return disabledReasons.get(capability).name();
+    /** Configuration always wins; otherwise the shared stored reason applies. */
+    private Optional<ControlReason> disabledReason(OutboundCapability capability) {
+        if (!configuredEnabled(capability)) return Optional.of(ControlReason.CONFIG_DISABLED);
+        return store.disabledReason(capability);
     }
 
     private boolean configuredEnabled(OutboundCapability capability) {
@@ -144,22 +151,11 @@ public class OutboundControlService {
     }
 
     private long remainingSearches() {
-        return Math.max(0, properties.monthlySearchQuota() - searchQueries);
+        return Math.max(0, properties.monthlySearchQuota() - usage().searchQueries());
     }
 
     private long remainingModelTokens() {
-        return Math.max(0, properties.monthlyModelTokenQuota() - modelTokens);
-    }
-
-    private void rollMonth() {
-        YearMonth now = currentMonth();
-        if (!now.equals(usageMonth)) {
-            usageMonth = now;
-            searchQueries = 0;
-            modelTokens = 0;
-            estimatedCostUsd = BigDecimal.ZERO;
-            updateUsageMetrics();
-        }
+        return Math.max(0, properties.monthlyModelTokenQuota() - usage().modelTokens());
     }
 
     private YearMonth currentMonth() {
@@ -167,7 +163,8 @@ public class OutboundControlService {
     }
 
     private void updateUsageMetrics() {
-        metrics.usage(searchQueries, modelTokens, estimatedCostUsd);
+        OperationalUsageSnapshot usage = usage();
+        metrics.usage(usage.searchQueries(), usage.modelTokens(), usage.estimatedCostUsd());
     }
 
     private static void requireText(String value, String field) {

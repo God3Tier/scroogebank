@@ -47,3 +47,11 @@ output "target_group_arn_suffix" {
   description = "ALB target group, for alarms."
   value       = var.load_balancer == null ? null : aws_lb_target_group.this[0].arn_suffix
 }
+
+output "listener_rule_paths" {
+  description = "Path patterns each load balancer rule forwards to this service, keyed by rule priority."
+  value = {
+    for priority, rule in aws_lb_listener_rule.this :
+    priority => flatten([for condition in rule.condition : [for pattern in condition.path_pattern : pattern.values]])
+  }
+}

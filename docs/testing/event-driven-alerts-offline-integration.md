@@ -8,6 +8,26 @@ Owner: Azeez
 
 Required reviewer: Hayyun
 
+## 2026-10-23 Tavily and dependency-security verification
+
+- The selected Tavily adapter is exercised against a local fake HTTPS-contract
+  server for bearer authentication, restrictive domain/date/result parameters,
+  exact local window/domain validation, excerpt cleanup, response-size caps and
+  safe provider error mapping.
+- The complete event-alert verification passes with Docker: 189 tests, including
+  all PostgreSQL 16 Testcontainers classes, the source-to-alert worker, Tavily
+  contract coverage, migrations, and Bedrock tool-use tests.
+- Frontend verification passes 116 tests, ESLint and the Vite production build.
+  `npm audit` reports zero known vulnerabilities after upgrading Vite to 8.3.3
+  and Vitest to 5.0.3.
+- The first Docker-backed run exposed 16 duplicate-key errors because four test
+  seed routines repeated the synthetic portfolios added by migration V6. Those
+  inserts are now idempotent and the clean rerun passes 189/189. Terraform
+  format/validate/test could not run because the Terraform CLI is not installed.
+  A real Tavily key,
+  provider call, AWS secret/task, latency/quality/credit benchmark and staging
+  source-to-alert proof remain explicit gates; no live evidence is claimed.
+
 ## Scope
 
 This evidence covers repository-local and Docker-backed behavior only. No AWS
@@ -75,5 +95,5 @@ frontend test suite.
 - Hayyun review and acceptance of the shared/domain/frontend work.
 - Human acceptance of proposed ADR-0005 through ADR-0015 as applicable.
 - Human review of the AI fixture labels and thresholds.
-- AWS-only IaC, IAM, AgentCore/Bedrock live evidence, cost/latency benchmark,
+- AWS-only IaC, IAM, Tavily/Bedrock live evidence, cost/latency benchmark,
   CloudWatch alarms, deployment, and staging recovery drills.

@@ -7,6 +7,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 | `bootstrap/` | Account-wide: the state bucket, CloudTrail, the GitHub OIDC provider (off) | Local, applied at the start of every deployment and destroyed at its end (ADR-0058) |
 | `stacks/crm/` | One legal entity's whole stack (ADR-0026): network, edge, API entry, Cognito, ECS services, databases, audit pipeline, alarms, backups | `crm/<entity>/<environment>.tfstate` |
 | `stacks/business-dashboard/` | dashboard-service (X-factor 2), inside one CRM stack's network and cluster; reads that stack's `dashboard_inputs` output (ADR-0047) | `business-dashboard/<entity>/<environment>.tfstate` |
+| `stacks/alert-worker/` | The event-alert worker (X-factor 1): a scheduled ECS task every four hours, its IAM and a failed-run alarm, inside one CRM stack's cluster; reads that stack's `alerts_worker_inputs` output (ADR-0048) | `alert-worker/<entity>/<environment>.tfstate` |
 | `stacks/mail-identity/` | The SES sending identity for agent engagement: domain identity, DKIM, MAIL FROM and DMARC records, configuration set and sandbox recipients. Created and destroyed with every deployment (ADR-0058) | `mail-identity/<entity>/<environment>.tfstate` |
 | `stacks/agent-engagement/` | engagement-service and engagement-db, inside one CRM stack's network and cluster; reads that stack's `engagement_inputs` output and the mail identity (ADR-0051) | `agent-engagement/<entity>/<environment>.tfstate` |
 | `stacks/sftp-server/` | The simulated core banking SFTP server, an external system with its own stack (ADR-0024) | `sftp-server/<environment>.tfstate` |
@@ -28,6 +29,7 @@ Infrastructure for the CRM's target architecture ([system overview](../../docs/a
 
 ## What each stack deploys
 
+The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `crm`, `business-dashboard`, `alert-worker`, `sftp-server`, then `crm` again with the SFTP server's address. Destroy `business-dashboard` and `alert-worker` before `crm`. Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
 The account must be on the AWS paid plan (ADR-0042 decision 3). Apply the stacks in this order: `bootstrap`, `mail-identity`, `crm`, `business-dashboard`, `agent-engagement`, `sftp-server`, then `crm` again with the SFTP server's address. Every deployment ends by destroying every stack (ADR-0058): `sftp-server`, `business-dashboard` and `agent-engagement` before `crm`, then `mail-identity`, then `bootstrap` ([runbook, Tear down](../../docs/runbooks/deploy-aws.md#tear-down)). Task owners are in the [infrastructure plan](../../docs/feature-plans/infrastructure_plan.md).
 
 ### `bootstrap`
@@ -70,6 +72,18 @@ dashboard-service, the business dashboard (ADR-0033), for one CRM stack (ADR-004
 
 Its tasks follow the CRM stack's `running`: apply this stack again after every CRM apply that changes it. The audit queue must allow its task role: put the ARN in the CRM stack's `extra_audit_producer_role_arns`. The plan fails until you do.
 
+### `stacks/alert-worker`
+
+The event-alert worker (X-factor 1, [ADR-0048](../../docs/adr/ADR-0048-alert-worker-terraform-stack.md)), inside the CRM stack's cluster, subnets and alerts security group:
+
+| Area | Deployed |
+|---|---|
+| Task | A scheduled ECS Fargate task (0.5 vCPU, 1 GB) from the event-alert-service image and tag the CRM stack deploys, started with `ALERT_MODE=WORKER`. No service, repository or database of its own |
+| Schedule | An EventBridge Scheduler schedule, every four hours in Singapore time, with a role that can only run that task. `ENABLED` only while the CRM stack's `running` is true **and** `ingestion_enabled` is true |
+| Alarm | An EventBridge rule: a non-zero exit publishes to the CRM stack's alarm topic |
+| IAM | Bedrock on the pinned inference profile only with `ai_enabled`; AgentCore `InvokeGateway` only with `ingestion_enabled` and `agentcore_gateway_arn` |
+
+`ingestion_enabled`, `ai_enabled` and `cloudwatch_metrics_enabled` default to false. The Tokyo AgentCore gateway is not created here: its resources wait for the live spike, and `agentcore_gateway_url` and `agentcore_gateway_arn` point the worker at one made by hand. The `replay_command` output starts a one-off replay task (ADR-0049). After a CRM apply that changes `running`, apply this stack again.
 ### `stacks/mail-identity`
 
 The SES identity agent engagement sends from (ADR-0053 decision 2). Apply it in every deployment, before `agent-engagement`, and destroy it after `crm` in the teardown (ADR-0058): each new identity needs DKIM verification again, and each sandbox recipient must click its verification email again. It contains:
@@ -124,10 +138,13 @@ To restore one, uncomment it, and for the DR vault the prod assertion in `stacks
 
 | Part | Waiting for |
 |---|---|
-| Alert worker, its 4-hourly schedule, AgentCore web search in Tokyo and Bedrock access | INF-06 (EDA-D1-02), blocked until the alerts ADRs are accepted |
+| Alert worker, its 4-hourly schedule, Tavily secret/internet egress and Bedrock Runtime access from Singapore | INF-06 (EDA-D1-02), implemented behind disabled-by-default switches; live benchmark and reviewed apply remain |
 | Client Health live deployment evidence | RH-SF11C/D2 define the API, `health-db`, scoped provider calls and daily ANALYSIS task; Terraform validation and tests, the image builds and the health migrations pass locally (RH-SF11F); the AWS apply and smoke evidence remain pending (RH-SF12) |
 | GitHub deploy role (`enable_github_deploy_role`) and deploy workflows. `.github/workflows/ci.yml` builds and tests every pull request, but nothing pushes images or applies Terraform | INF-09: deferred while deployments are run by hand |
 | SES e-mail for client verification | [Open item 19](../../docs/architecture/open-items.md#19-client-verification-request-feature-2): agents check ID documents by hand for now. SES itself is deployed for agent engagement (`stacks/mail-identity`) |
+
+
+**Current holdings (ADR-0066).** The CRM stack's `alert_holdings_mode` (`fixture` by default, or `database`) is the one switch for both the event-alert API and this worker: the worker reads it, and the directory URL, token endpoint, app client and scope, from `alerts_worker_inputs`, so the two cannot differ. Database mode needs `domain_name` (the directory is reached over HTTPS through the internal ALB, and the plan fails without it), reads the client secret from Secrets Manager (`<name>/cognito/alert-directory`, never an environment value) and adds `/internal/alerts/accounts/*` to the account-service ALB rule and `/api/alert-portfolios/*` to the alert API's. The `alert-directory` app client holds only the `crm-accounts/alert-directory` scope; the transaction import's client keeps only `crm-accounts/lookup`. The client secret is in Terraform state like the other app clients' secrets, so the state bucket's access controls apply. Ingestion and the model stay off by default. Apply the CRM stack, then the alert-worker stack, then switch `alert_holdings_mode` after the application's V10 migration has run.
 
 ## Checks
 

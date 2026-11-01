@@ -32,6 +32,9 @@ alert/public_event mutations 1--* audit_outbox
 | `alert_decision` | Immutable agent decision, actor subject, prior/new state, resulting alert version, note, idempotency key, and time. Unique actor/idempotency key. |
 | `alert_feedback` | Agent quality rating/reason/comment, actor, observed alert version, idempotency key, and time. Unique actor/idempotency key. |
 | `processing_watermark` | Last successful provider window with overlap and optimistic version. |
+| `instrument_search_coverage` | Last successful scheduled-search end and update time per active instrument; drives deterministic four-instrument rotation. Replays never update it. |
+| `outbound_usage` | Search count, model tokens and estimated cost per UTC month, shared by the API and every worker run. |
+| `outbound_control` | The disabled reason for each outbound capability (`INGESTION`, `MODEL`), if any. |
 | `audit_outbox` | Event ID/type/version, redacted JSON payload, attempt/lease state, acknowledgement, and created time. Unique event ID. |
 
 ## Data types and controls
@@ -64,3 +67,31 @@ destructive changes require expand/migrate/contract releases.
 instrument used by the fixture. It contains no client, account, holding, or agent
 data and must be replaced by an approved instrument-master integration before
 real holdings are introduced.
+
+`V7__instrument_search_coverage.sql` adds only the per-instrument coverage table.
+It starts empty, so every eligible instrument initially uses the normal four-hour
+lookback. Failed, quota-blocked and replay runs leave it unchanged.
+
+`V8__seed_global_synthetic_portfolios.sql` adds 15 real public instrument rows to
+the existing DBS reference, then upserts 20 opaque synthetic clients/accounts
+assigned round-robin to four synthetic agents. The matching deterministic
+holdings fixture contains no real PII and spans SGX, NASDAQ, NYSE, LSE, and HKEX.
+
+`V9__instrument_search_metadata.sql` adds JSON-array `search_aliases` and
+`official_domains` reference fields to `instrument` and seeds them for the
+synthetic global catalogue. They are public, governed query metadata only; no
+portfolio facts are stored in either field.
+
+`V10__current_holdings.sql` (ADR-0066) is additive. It adds `current_portfolio`
+(CRM `account_id` key, `client_id`, `revision`), `current_position` (positive
+quantity/price/FX, derived `value_sgd`, real `valued_at`), `portfolio_write_request`
+(per-actor idempotency), `portfolio_snapshot` (the group of positions scored
+together: account, revision, agent, total), `client_assignment` (refreshed copy of
+the current agent per CRM client; a null agent means no owner),
+`agent_event_action` and `agent_event_action_member`. It drops only the
+fixture-only foreign key from `holding_snapshot.client_ref` to
+`synthetic_portfolio` and adds nullable `portfolio_snapshot_id` and
+`portfolio_revision` to `holding_snapshot`. `synthetic_portfolio`, every legacy
+`holding_snapshot` and every alert are untouched; legacy detail keeps its original
+grouping (client, source version, valuation time), new detail uses the snapshot
+group. CRM IDs are references checked through the directory, never foreign keys.

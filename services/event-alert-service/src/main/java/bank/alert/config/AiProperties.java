@@ -11,7 +11,7 @@ public record AiProperties(boolean enabled, String model, String promptVersion,
         int maxAttempts, Duration timeout, BigDecimal minimumConfidence) {
 
     public AiProperties {
-        model = model == null || model.isBlank() ? "global.openai.gpt-5.6-luna" : model;
+        model = model == null || model.isBlank() ? "global.amazon.nova-2-lite-v1:0" : model;
         promptVersion = promptVersion == null || promptVersion.isBlank() ? "alert-public-v1" : promptVersion;
         maxInputCharacters = maxInputCharacters <= 0 ? 12_000 : Math.min(maxInputCharacters, 20_000);
         maxOutputCharacters = maxOutputCharacters <= 0 ? 8_000 : Math.min(maxOutputCharacters, 12_000);

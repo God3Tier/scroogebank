@@ -11,8 +11,8 @@
 | Proposed feature branch | `feat/event-driven-alerts` |
 | Canonical plan location | `docs/feature-plans/event-driven-alerts_plan.md` |
 | Current draft location | `docs/feature-plans/event-driven-alerts_plan.md` |
-| Last reviewed against repository | 2026-09-27 (Asia/Singapore) |
-| Repository baseline | `origin/feat/event-driven-alerts` at `095d949` |
+| Last reviewed against repository | 2026-10-28 (Asia/Singapore) |
+| Repository baseline | `origin/feat/event-driven-alerts` at merge commit `dedb306` |
 
 The feature charter and recommended MVP defaults were approved by Azeez on
 2026-09-24 and are recorded in ADR-0004. Substantial implementation must not start
@@ -21,6 +21,23 @@ accepted.
 
 Plan work is performed through `task/event-driven-alerts/plan` into
 `feat/event-driven-alerts`.
+
+### 2026-10-23 provider amendment
+
+ADR-0050 is accepted with Tavily as the live discovery provider. References
+below to the original Tokyo AgentCore candidate describe the historical design
+baseline and are superseded for the active path. The current flow is:
+
+```text
+EventBridge worker -> holdings-derived public terms -> Tavily news search
+  -> local domain/date/size validation -> source_result deduplication
+  -> deterministic instrument match -> Bedrock classification/briefing
+  -> deterministic exposure/materiality -> agent-scoped alerts -> audit outbox
+```
+
+The API key is injected from a worker-owned Secrets Manager secret. Ingestion
+remains default-off until a real-key lower-environment smoke test and the quality,
+latency and billed-credit benchmark are reviewed.
 
 ## 2. Repository Alignment and Known Gaps
 
@@ -76,6 +93,15 @@ advice, contact clients, execute trades, or change portfolios.
 
 ## 4. Proposed User Outcome
 
+**Feature-owner clarification (2026-10-30):** the primary agent view is one
+event briefing with a shared summary and an affected-client count/list, followed
+by the agent's Inform clients / Monitor / Dismiss choice. Client holdings and
+exposure support relevance and drill-down; they are not a requirement to generate
+one personalised investment review or primary card per client. Inform records
+intent, never an automatic communication. The grouped read/decision workflow is
+future work in the [current-holdings subplan](event-driven-alerts-current-holdings_plan.md);
+existing per-client evidence remains the implementation baseline until then.
+
 An authenticated agent can see a prioritized alert for a client they own, inspect
 the source and scoring factors, and choose one of:
 
@@ -92,10 +118,10 @@ AI-generated recommendation is auditable.
 ### 5.1 MVP Scope
 
 - Discover a small, approved set of public financial-news results on a schedule
-  through the Amazon Bedrock AgentCore Web Search connector in Tokyo, subject to
-  ADR approval and a retrieval benchmark.
-- Use connector version `1.2.0` or later with administrator and request-level
-  domain filters, inclusive publication-date filters, and bounded result counts.
+  through Tavily from the Singapore worker, subject to ADR-0050 and a live
+  retrieval benchmark.
+- Use restrictive domain filters, publication-date filters, bounded result
+  counts, and local response validation.
 - Deduplicate articles and retain source provenance.
 - Match explicit company, ticker, sector, or approved keyword references against
   a supported instrument catalogue.
@@ -121,8 +147,8 @@ AI-generated recommendation is auditable.
   unless an ADR and benchmark justify each addition after the MVP.
 - Native Bedrock `bedrock-mantle` Web Search, because it is not currently
   available in Tokyo or Singapore and would introduce a second search path.
-- A paid financial-news API unless AgentCore retrieval fails the agreed coverage,
-  relevance, reliability, or cost thresholds.
+- Any second paid financial-news API unless Tavily fails the agreed coverage,
+  relevance, reliability, or cost thresholds and a new ADR approves the change.
 - Cross-region disaster recovery or multi-legal-entity deployment beyond the
   repository's documented single-entity assumption.
 
@@ -138,7 +164,7 @@ Holdings-derived public search universe in Singapore
   - no private facts leave Singapore
           |
           v
-AgentCore Web Search 1.2.0 in Tokyo
+Tavily news search over HTTPS
   - approved domains only
   - since-last-run date window
   - public ticker/event terms only
@@ -190,7 +216,7 @@ Singapore scheduler/service
         |
         | public ticker, issuer, sector, event terms, date range
         v
-AgentCore Web Search — Tokyo (`ap-northeast-1`)
+Tavily search API
         |
         | title, URL, snippet, publication date
         v
@@ -212,27 +238,12 @@ reproduce search-result content.
 
 ### 6.2 Can the Entire Feature Run in Singapore?
 
-Not with the proposed managed search capability at the time of this review.
-AgentCore Gateway, Runtime, Identity, Observability, and other general AgentCore
-capabilities are available in Singapore, but the specific managed **Web Search
-Tool** connector is not. Its supported regions are currently N. Virginia, Ireland,
-and Tokyo.
-
-The proposed compromise is:
-
-- keep the CRM, alert service, scheduler, database, authentication, authorization,
-  portfolio matching, feedback, audit processing, and monitoring in Singapore;
-- place only the AgentCore Gateway Web Search connector in Tokyo;
-- send only public issuer/ticker/event terms to Tokyo;
-- return public titles, URLs, snippets, and publication dates to Singapore; and
-- perform every client-specific operation in Singapore after public-event
-  classification.
-
-If the team requires strict Singapore-only processing, it must reject AgentCore
-Web Search for now and evaluate a Singapore-hosted custom provider adapter (for
-example, an approved financial-news API called by the Singapore service). That
-alternative still requires a data-egress and licensing review because the external
-provider may process requests outside Singapore.
+The CRM, worker, database, matching, authorization, feedback, audit, and
+monitoring run in Singapore. Tavily is an external processor, so only public
+issuer/ticker/sector/event terms and the bounded date window may leave the
+Singapore application boundary. Provider processing location, terms, retention,
+and licensing must be accepted before live enablement; no private client or
+holdings facts may be sent.
 
 ### 6.3 AWS Services Used by the Proposed MVP
 
@@ -246,14 +257,14 @@ The prerequisite ADRs must confirm them before infrastructure is created.
 | Amazon ECS on Fargate | Singapore | Run the Java 25 alert API and scheduled worker | Prefer one image with API and worker entry points; autoscaling and task sizing require measurement |
 | Amazon ECR | Singapore | Store the alert-service container image | Lifecycle policy removes unneeded images |
 | Amazon EventBridge Scheduler | Singapore | Start bounded discovery runs | Proposed cadence: every four hours; invoke an ECS task with retry limits |
-| Amazon Bedrock AgentCore Gateway + Web Search Tool `1.2.0` | Tokyo | Search current public web sources | Four grouped searches/run, maximum ten results/search, enforced domain allowlist and date window |
+| Tavily HTTPS API | External provider | Search current public web sources | Four single-issuer searches/run, maximum ten results/search, restrictive per-issuer domains/date window, local issuer/event validation |
 | Amazon Bedrock GPT-5.6 Luna through `bedrock-runtime` | Invoked from Singapore using Global CRIS | Classify public events and generate constrained briefs | Provider adapter, structured validation, public content only, explicit token/output caps |
 | Amazon RDS for PostgreSQL | Singapore | Persist search metadata, structured events, alerts, decisions, and processing watermarks | Whether to provision a service-owned instance or use another approved topology is an ADR and cost gate |
-| AWS Secrets Manager | Singapore | Store configuration secrets if an approved fallback provider needs credentials | AgentCore uses IAM; never place secrets in source or task definitions |
-| AWS IAM | Singapore and Tokyo | Least-privilege service/task/Gateway permissions | Separate execution roles; scope AgentCore invocation to the approved Gateway/tool ARN |
-| AWS KMS-backed encryption | Singapore and Tokyo where supported | Encrypt RDS, secrets, logs, and service data | Reuse project key strategy; no feature-specific key without justification |
-| Amazon CloudWatch | Singapore and Tokyo | Logs, metrics, dashboards, alarms | Track schedule health, search count/cost, cross-region latency, model tokens, failures, and backlog |
-| AWS CloudTrail | Singapore and Tokyo | Control-plane and supported AgentCore invocation evidence | Enable only required data events and apply bounded retention to control cost |
+| AWS Secrets Manager | Singapore | Store the Tavily API key | Worker-owned secret; never place its value in source or Terraform variables |
+| AWS IAM | Singapore | Least-privilege execution and task permissions | Execution role may read only the worker's database and Tavily secrets |
+| AWS KMS-backed encryption | Singapore | Encrypt RDS, secrets, logs, and service data | Reuse project key strategy; no feature-specific key without justification |
+| Amazon CloudWatch | Singapore | Logs, metrics, dashboards, alarms | Track schedule health, search count/cost, provider latency, model tokens, failures, and backlog |
+| AWS CloudTrail | Singapore | Control-plane evidence | Enable only required data events and apply bounded retention to control cost |
 | AWS Budgets and Cost Anomaly Detection | Billing scope | Protect the USD 300 whole-project limit | Feature tags/metrics, search quota alarms, and model-spend alerts |
 
 The MVP does **not** require AgentCore Runtime/Harness, Bedrock Knowledge Bases,
@@ -266,27 +277,26 @@ is an application dependency rather than an alert-processing service choice.
 
 ### FR-1 — News Ingestion
 
-- Invoke AgentCore Web Search in Tokyo from a bounded Singapore scheduler. The
-  initial operating target is four grouped searches every four hours, not a query
+- Invoke Tavily from a bounded Singapore scheduler. The
+  initial operating target is four single-issuer searches every four hours, not a query
   per client or per instrument.
 - Derive the candidate instrument universe inside Singapore from distinct client
   holdings. An instrument must meet the configured minimum client count and
   client-share controls before its public terms become eligible for a query.
 - Never send the holdings-derived counts, shares, selection reason, client/account
-  identity, quantity, value, exposure, or agent assignment to Tokyo.
-- Pin the connector to version `1.2.0` or later.
+  identity, quantity, value, exposure, or agent assignment to Tavily.
 - Search only team-approved domains and public instrument/event terms. Configure a
-  gateway-level domain allowlist that callers cannot relax.
+  restrictive provider domain list and revalidate the domain locally.
 - Pass a request-level publication window from the last successful watermark to
   the current run. Apply a small overlap and deduplicate results to avoid missing
   boundary events.
-- Request no more than ten results per grouped search for the MVP.
+- Request no more than ten results per issuer search for the MVP.
 - Store source name, canonical URL, publication time, retrieval time, title,
   permitted content or excerpt, and a deduplication hash.
 - Respect source terms, licensing, retention requirements, and rate limits.
 - Preserve and display source URLs/citations wherever search-derived content is
   shown to an agent.
-- Do not bulk extract, store, or reproduce AgentCore search content or use it to
+- Do not bulk extract, store, or reproduce provider search content or use it to
   construct a competing search index.
 - Make ingestion idempotent.
 - Record processing status and retry count without exposing secrets.
@@ -407,8 +417,8 @@ Candidate names are `NewsArticleIngested`, `EventClassified`,
 EventBridge Scheduler invoking a bounded ECS batch task is the approved MVP trigger;
 no additional broker is introduced for alert processing. The existing auditor
 integration remains the audit path. Exact retry, idempotency, and audit-delivery
-contracts remain ADR-gated. AgentCore Web Search is the approved discovery
-provider candidate; native Bedrock Mantle Search is not part of the MVP.
+contracts remain ADR-gated. Tavily is the approved discovery provider under
+ADR-0050; AgentCore and native Bedrock Mantle Search are not runtime paths.
 
 ## 9. Proposed Data Model
 
@@ -443,8 +453,10 @@ deployed first to a lower environment, and include rollback or forward-fix notes
 - Internal ingestion/retry endpoints require a service role or explicit admin
   permission; they are not ordinary agent endpoints.
 - Separate public news/instrument metadata from private CRM records.
-- The Tokyo search request and global Luna request receive only public search
-  terms/results. They receive no client identity or raw CRM/portfolio data.
+- Tavily search and the global Nova 2 Lite classification request receive only
+  public search terms/results. They receive no client identity or raw
+  CRM/portfolio data. Bedrock Runtime is called from Singapore; its global
+  inference profile may process the request in another supported AWS Region.
 - Client/holding retrieval, exposure calculation, alert storage, authorization,
   feedback, and audit processing remain in the Singapore deployment.
 - The cross-region request path, encryption, IAM, CloudTrail coverage, data
@@ -480,7 +492,7 @@ and free of unnecessary article content and client data.
 | Failure | Required behavior |
 |---|---|
 | News source unavailable | Bounded retry with backoff; preserve last-success metric; alert operators after threshold |
-| Tokyo AgentCore endpoint unavailable from Singapore | Skip the discovery run, retain the watermark, alert operators, and retry within a bounded schedule; do not generate fabricated events |
+| Tavily unavailable or key missing | Skip/fail the discovery run, retain the watermark, alert operators, and retry within a bounded schedule; do not generate fabricated events |
 | Duplicate article | Idempotently reuse or ignore the existing record |
 | Classifier unavailable or timeout | Use an approved rule fallback or mark pending; never fabricate a result |
 | Invalid model output | Reject, record safe diagnostics, and retry only within a bounded policy |
@@ -497,7 +509,7 @@ backpressure must be decided with the chosen job/event architecture.
 
 Use correlation IDs from ingestion through feedback. Define dashboards and alarms
 for search queries by schedule/group, results returned, query quota remaining,
-Tokyo request latency/failures, results deduplicated/rejected/pending, end-to-end
+Tavily request latency/failures, results deduplicated/rejected/pending, end-to-end
 and per-stage latency, Luna calls/tokens/failures/cost, generation failures and
 retry/dead-letter depth, stale valuations, job freshness, and useful-alert,
 dismissal, and monitor rates on synthetic/evaluation data.
@@ -554,10 +566,10 @@ and backups, any event infrastructure, vector storage, model usage, logging,
 metrics, alarms, data transfer, retention, and testing.
 
 AgentCore Web Search is currently priced at USD 7 per 1,000 queries. The proposed
-MVP schedule is four grouped searches every four hours:
+MVP schedule is four single-issuer searches every four hours:
 
 ```text
-4 search groups × 6 runs/day × 30 days = 720 queries/month
+4 issuer searches × 6 runs/day × 30 days = 720 queries/month
 720 / 1,000 × USD 7 = USD 5.04/month
 ```
 
@@ -588,10 +600,10 @@ validation, and alternatives.
    service; any non-Java deployed runtime needs explicit justification.
 5. **Database topology and schemas** — ownership, RDS impact, retention, backup,
    migrations, and cross-service access.
-6. **Search, regional processing, and fallback** — approve AgentCore Web Search
-   `1.2.0` in Tokyo from the Singapore deployment; record domain/date filtering,
-   IAM, network path, latency, query quota, acceptable-use/storage limits, citation
-   requirements, outage behavior, and financial-API fallback criteria.
+6. **Search, processing, and fallback** — approve Tavily under ADR-0050; record
+   public-data boundaries, domain/date filtering, secret handling, network path,
+   latency, query quota, acceptable-use/storage limits, citation requirements,
+   and outage behavior.
 7. **AI provider/model and fallback** — evaluate Luna as the classifier/briefing
    model; explicitly accept or reject global cross-region processing and document
    data boundaries, thresholds, explainability, safety, latency, and cost.
@@ -623,8 +635,8 @@ shows material value beyond the MVP.
 
 ### Milestone 1 — Parallel Foundations
 
-- Azeez proves the Singapore-to-Tokyo AgentCore call, measures latency and
-  cost, and drafts the search/regional and AI ADRs.
+- Azeez benchmarks Tavily from the Singapore worker, measures latency and cost,
+  and maintains the search/provider and AI ADRs.
 - Hayyun freezes the event, holdings-read, alert, feedback, OpenAPI, and
   authorization contracts and builds the Java 25 service/database foundation.
 - Both developers agree on interfaces before implementation branches diverge.
@@ -684,8 +696,8 @@ final integration with Azeez collaborating.
 
 | Role | Primary ownership | Must not change without coordination |
 |---|---|---|
-| Azeez — Search/AI/Platform | AgentCore, Bedrock adapter, ingestion, deduplication, scheduled worker, AWS IaC, search/model evaluation, operational metrics | Domain/API contracts, DB migrations, frontend, authorization policy |
-| Hayyun — CRM/Domain/Experience | Domain model, migrations, holdings contract, exposure/scoring, REST API, authorization, auditor integration, dashboard, feedback, E2E integration | AgentCore/IAM/IaC, search adapter internals, model prompt/schema |
+| Azeez — Search/AI/Platform | Tavily, Bedrock adapter, ingestion, deduplication, scheduled worker, AWS IaC, search/model evaluation, operational metrics | Domain/API contracts, DB migrations, frontend, authorization policy |
+| Hayyun — CRM/Domain/Experience | Domain model, migrations, holdings contract, exposure/scoring, REST API, authorization, auditor integration, dashboard, feedback, E2E integration | Tavily secret/IAM/IaC, search adapter internals, model prompt/schema |
 
 The proposed service paths below are placeholders until the service-boundary ADR
 is accepted. Once accepted, record the actual paths in this table before coding.
@@ -697,20 +709,45 @@ is accepted. Once accepted, record the actual paths in this table before coding.
 | EDA-00 | Azeez, Hayyun | Confirm feature slot and Azeez as owner; approve canonical plan and create feature branch | Feature plan, ownership record | `task/event-driven-alerts/plan` | Team decision | Complete | 2026-09-24 |
 | EDA-D1-01 | Azeez | Singapore→Tokyo AgentCore spike with measured latency, sample filtered results, IAM notes, teardown, and actual cost | Spike code, architecture notes, AI/cost logs | `task/event-driven-alerts/search-spike` | EDA-00 | In Progress — harness/tests complete; live evidence pending valid AWS credentials | 2026-09-27 |
 | EDA-D2-01 | Hayyun; Azeez collaborating under feature-owner authorization | Freeze event, holdings-read, alert, feedback, authorization, and OpenAPI contracts with synthetic fixtures | `docs/api/`, `docs/database/`, proposed service contracts/test fixtures | `task/event-driven-alerts/contracts` | EDA-00 | In Progress — ADRs/contracts/fixtures drafted and Azeez-approved; Hayyun review pending | 2026-09-27 |
-| EDA-D1-02 | Azeez | Terraform/IaC for Tokyo Gateway/tool, IAM, Singapore scheduler/ECS worker, quotas, alarms, and cleanup; validated plan with no unapproved resources | `infrastructure/` paths confirmed by infra owner, cost register | `task/event-driven-alerts/search-infra` | EDA-D1-01, accepted ADRs | Blocked | 2026-09-24 |
+| EDA-D1-02 | Azeez | Terraform/IaC for the Singapore scheduler/ECS worker, Tavily secret, Bedrock IAM, quotas, alarms, and cleanup; validated plan with no unapproved resources | `infrastructure/` paths confirmed by infra owner, cost register | `task/event-driven-alerts/search-infra` | EDA-D1-01, accepted ADRs | In Progress — `stacks/alert-worker` now owns the empty Tavily secret, injects it through the ECS execution role, and has no AgentCore permission (ADR-0050); format/validate and a saved real-account plan/apply remain required | 2026-10-23 |
 | EDA-D2-02 | Hayyun; Azeez implementing under feature-owner authorization | Java 25 alert-service foundation, migrations, repositories, state machine, and deterministic fixture path; unit/migration tests pass | `services/event-alert-service/`, schema docs | `task/event-driven-alerts/service-foundation` | EDA-D2-01, DB ADR | In Progress — offline foundation and 7 local tests complete; Hayyun review and ADR acceptance pending | 2026-09-27 |
-| EDA-D1-03 | Azeez | Grouped-query builder, date watermark/overlap, URL deduplication, bounded retry, provider interface, and AgentCore adapter; contract/failure tests pass | Search/provider/ingestion/worker packages | `task/event-driven-alerts/ingestion` | EDA-D1-02, EDA-D2-01 | In Progress — all offline work is complete: the bounded public query universe is derived in Singapore from sufficiently common client holdings and deterministic instrument/sector reference data; provider contracts, watermark/lease persistence, URL governance/deduplication, bounded retries/replay, durable accounting, and operational reservations are integrated; the authenticated operator adapter requires an approved role contract and live AgentCore remains AWS-only | 2026-09-30 |
+| EDA-D1-03 | Azeez | Grouped-query builder, date watermark/overlap, URL deduplication, bounded retry, provider interface, and Tavily adapter; contract/failure tests pass | Search/provider/ingestion/worker packages | `task/event-driven-alerts/ingestion` | EDA-D1-02, EDA-D2-01 | In Progress — bounded Tavily adapter and contract tests pass. A six-call local real-key worker benchmark on 2026-10-29 proved transport/domain/date/persistence controls, but failed usefulness: the expanded pass represented 1/12 eligible instruments and 0 actionable taxonomy events. Ingestion remains disabled pending query/provider redesign and a passing benchmark | 2026-10-29 |
 | EDA-D2-03 | Hayyun; Azeez implementing under feature-owner authorization | Holdings adapter, deterministic exposure/scoring, reproducible rule versioning, and stale/missing valuation behavior; unit/contract tests pass | Domain/scoring/holdings packages, proposed ADR-0015 | `task/event-driven-alerts/scoring` | EDA-D2-01, EDA-D2-02 | In Progress — offline implementation and 21 service tests complete; Hayyun review and ADR acceptance pending | 2026-09-27 |
 | EDA-D1-04 | Azeez | Luna classifier/brief adapter with schema validation, prompt-injection defenses, public-data enforcement, token caps, rule fallback, and benchmark report | Classification/briefing packages, evaluation fixtures/report | `task/event-driven-alerts/ai` | EDA-D1-03, AI ADR | In Progress — offline safety/contracts, strict schemas/citations, deterministic fallback, default-off Bedrock adapter, provider telemetry, quality/safety reporting, and an 18-case machine-validated AI-draft fixture complete; human label review, live benchmark, and ADR acceptance pending | 2026-09-29 |
 | EDA-D2-04 | Hayyun; Azeez implementing under feature-owner authorization | Alert/decision APIs, own-client authorization, admin-policy implementation, audit events, OpenAPI updates, and authorization tests | API/security/audit packages, `docs/api/` | `task/event-driven-alerts/api` | EDA-D2-02, EDA-D2-03 | In Progress — offline scoped list/detail and decision/feedback APIs, JWT roles, cursor pagination, ownership checks, idempotency, audit outbox, and explicit audited previous/new decision states are implemented; the full 92-test Maven build passes against PostgreSQL 16; Hayyun review and ADR acceptance pending | 2026-09-30 |
 | EDA-D1-05 | Azeez | CloudWatch metrics/dashboard/alarms, cost counters, kill switches, provider-outage behavior, replay controls, and operations runbook | IaC observability, application metrics, `docs/runbooks/` | `task/event-driven-alerts/operations` | EDA-D1-02 through EDA-D1-04 | In Progress — all offline work is complete: default-off controls are wired into ingestion and AI, hard limits/metrics/replay/recovery are tested, and leased/idempotent publication to the existing auditor plus bounded retention are implemented; CloudWatch/IaC, billing and cloud drill evidence remain AWS-only, with ADR acceptance pending | 2026-09-30 |
 | EDA-D2-05 | Hayyun; Azeez implementing under feature-owner authorization | Dashboard alert list/detail, evidence/citations, explanation factors, feedback actions, loading/error/empty states, and UI tests | `frontend/` React/Vite application extended from `task/frontend-building` | EDA-D2-04, UI contract | In Progress — offline implementation is complete: agent/admin views, API/synthetic adapters, audited decision/feedback flows, terminal guards and responsive states; nine tests, lint, production build, and desktop/mobile browser visual inspection pass; Hayyun review remains pending | 2026-09-30 |
-| EDA-D2-06 | Hayyun; Azeez collaborates | Integrate both streams; E2E, security, migration, performance, failure/recovery, and staging tests; complete docs and demo evidence | Integration/E2E tests, CI, runbooks, feature plan | `task/event-driven-alerts/integration` | All D1/D2 tasks | In Progress — merged current `dev`; alert audit delivery now uses the auditor's SQS envelope and unique event ID contract with producer and consumer tests. Other actionable offline integration includes holdings-derived search, source-to-alert E2E, authorization, idempotency, audit lease/retry recovery, retention, frontend verification, and documentation; human review/ADR gates and AWS/staging evidence remain | 2026-10-01 |
+| EDA-D2-06 | Hayyun; Azeez collaborates | Integrate both streams; E2E, security, migration, performance, failure/recovery, and staging tests; complete docs and demo evidence | Integration/E2E tests, CI, runbooks, feature plan | `task/event-driven-alerts/integration` | All D1/D2 tasks | In Progress — source-to-alert, operator replay and worker metrics are integrated. The local real-key Tavily worker smoke test completed with synthetic global holdings, while AWS task/secret, model-enabled end-to-end, staging and a usefulness-passing retrieval benchmark remain | 2026-10-29 |
 | EDA-D2-07 | Azeez | Document the proposal/report Solution View, stakeholder IAM/application permissions, and three presentation-ready ASRs with sequence diagrams | `docs/architecture/stakeholders-and-asrs.md`, feature plan, AI usage log | `task/event-driven-alerts/asr-documentation` | EDA-D2-06 and current platform NFR notes | Complete — draft distinguishes deployed/current controls from proposed AWS and post-MVP vector work; human review remains required before report submission | 2026-09-30 |
-| EDA-D1-06 | Neo Jia Wen; Azeez reviews as scheduled-worker owner | Run-once worker and container image: in `WORKER` mode the service runs one ingestion window, starts no web server or timers, and exits with code 1 if the window failed; one non-root image for both modes; tests show each mode starts with the other off (ADR-0007) | `services/event-alert-service/` (`worker/`, `SchedulingConfiguration`, `Dockerfile`), service README, operations runbook | `task/event-driven-alerts/worker-runner` | EDA-D1-03 | In Progress — offline work complete: unit and Testcontainers tests pass, and the image was run in both modes locally; Azeez review pending. Found on the way: nothing turns source results into alerts in a worker run yet, and the monthly quota, budget stop and disables are in memory, so each run starts them again (all five gaps: [event-driven-alerts_gaps.md](event-driven-alerts_gaps.md)) | 2026-10-14 |
+| EDA-D1-06 | Neo Jia Wen; Azeez reviews as scheduled-worker owner | Run-once worker and container image: in `WORKER` mode the service runs one ingestion window, starts no web server or timers, and exits with code 1 if the window failed; one non-root image for both modes; tests show each mode starts with the other off (ADR-0007) | `services/event-alert-service/` (`worker/`, `SchedulingConfiguration`, `Dockerfile`), service README, operations runbook | `task/event-driven-alerts/worker-runner` | EDA-D1-03 | In Progress — offline work complete: unit and Testcontainers tests pass, and the image was run in both modes locally; Azeez review pending. Found on the way: nothing turns source results into alerts in a worker run yet, and the monthly quota, budget stop and disables were in memory (fixed 2026-10-20 on `task/event-driven-alerts/persist-controls`, as was overlapping runs; all five gaps: [event-driven-alerts_gaps.md](event-driven-alerts_gaps.md)) | 2026-10-14 |
 | EDA-SEC-01 | Neo Jia Wen; Azeez and Hayyun review as feature and API owners | API mode accepts only Cognito access tokens issued to the CRM app client (`token_use` `access`, `client_id` = `COGNITO_APP_CLIENT_ID`), as ADR-0005 and ADR-0025 require of every service; until now it checked the issuer only, so an ID token, which carries `cognito:groups`, was accepted. API mode refuses to start without `COGNITO_APP_CLIENT_ID`; the crm stack sets it | `services/event-alert-service/` (`security/SecurityConfiguration`, `security/CognitoAccessTokenValidator`, `application.yml`, tests), service README, `infrastructure/terraform/stacks/crm/services.tf` | `task/base-features/review-fixes` | ADR-0005, ADR-0025 | Implemented; `mvn verify` passes (123 tests); not run against Cognito | 2026-10-16 |
+| EDA-D1-08 | Azeez; Hayyun required domain reviewer | Portfolio-aware search universe: inclusive 20%/two-holder commonality OR 50% per-account concentration, deterministic 32-instrument rotation, per-instrument successful coverage, redacted aggregate metrics, Terraform configuration, migration and operational documentation | `services/event-alert-service/`, `infrastructure/terraform/stacks/alert-worker/`, ADR-0016, schema/runbook/cost/AI docs | `task/event-driven-alerts/search-universe-thresholds` | PR #144 merged as `dedb306`; ADR-0005, ADR-0014, ADR-0016, ADR-0048, ADR-0050 | Implemented — persistent 20-client/16-real-instrument global fixture, 100-client threshold/rotation test, Flyway/PostgreSQL integration and Terraform checks. The six-call live Tavily benchmark passed technical controls but failed usefulness, so production ingestion remains disabled. PR #163 and Hayyun review remain | 2026-10-29 |
+| EDA-D1-09 | Azeez; Hayyun required source/domain reviewer | Make retrieval usable with single-issuer queries, governed aliases/official domains, deterministic issuer/event filtering, four-instrument rotation and a production usefulness gate | Event-alert ingestion, instrument migration, ADR-0051, source register and benchmark evidence | `task/event-driven-alerts/retrieval-usability` | EDA-D1-08 / PR #163; ADR-0011, ADR-0016, ADR-0032, ADR-0050 | In Progress — implementation stacked on PR #163. Full repeat verification passed 449 Maven and six Terraform tests; the retrospective live set measured 7/8 Recall@10, 8/8 actionable precision and zero cross-issuer results. A 30-user/unseen-instrument check proved generic Toyota/BHP/SAP/TSMC onboarding, found one completed TSMC event and tightened preview/YAML controls. Production remains disabled pending independent labels, terms review and billed-credit confirmation | 2026-10-29 |
 
 ### 19.3 Execution Sequence for Two Developers
+
+**2026-10-30 integration update:** existing universe/retrieval changes and the
+agent-event clarification are combined for the user-authorized direct integration
+into `feat/event-driven-alerts`. The combined tree passed 456 Maven tests and
+six mocked Terraform tests; [integration evidence](../testing/event-alert-integration-2026-10-30.md)
+records the scope and PR/CI safeguards skipped. Earlier task rows retain their
+historical evidence; database holdings and grouped agent-event UX are still
+planned, and production/provider and human-review gates remain open.
+
+EDA-D1-09 follow-up review includes the downstream deterministic matcher and
+coverage service: approved issuer aliases must survive matching (`matcher-v2`),
+and a batch mixing new and returning instruments must preserve each member's
+lookback. Regression tests cover both; a PostgreSQL integration check verifies
+alias-only source fan-out to two holding users. The unseen-issuer live calls
+were exploratory queries, not an exact Java-path recall benchmark.
+
+Current-holdings integration is separately planned in
+[event-driven-alerts-current-holdings_plan.md](event-driven-alerts-current-holdings_plan.md).
+The all-remote audit confirms no maintained CRM-linked securities source.
+
+| ID | Owner | Deliverable and expected files | Branch | Dependencies | Status | Last sync |
+|---|---|---|---|---|---|---|
+| EDA-CH-00 | Azeez; Hayyun domain review; Neo Jia Wen CRM review | Verify holdings source across remote branches; draft current-holdings plan, ADR-0066, vocabulary and evidence | `task/event-driven-alerts/current-holdings-plan` | Existing holdings contracts; reviewed retrieval work and current-dev ownership APIs must land before implementation | Planning complete; proposed design awaiting owner review; no implementation | 2026-10-29 |
 
 ```text
 Both: EDA-00 and contract/interface agreement
@@ -768,9 +805,8 @@ Deployment follows `task/event-driven-alerts/*` → `feat/event-driven-alerts` �
 The MVP is acceptable only when all are demonstrated with synthetic data:
 
 1. An approved article is ingested exactly once with source provenance.
-2. The Singapore lower environment successfully invokes AgentCore Web Search
-   `1.2.0` in Tokyo using an enforced domain allowlist, inclusive date range, and
-   bounded result count.
+2. The Singapore lower environment successfully invokes Tavily using restrictive
+   domain filters, an inclusive date range, bounded results, and local validation.
 3. Request/log inspection proves that search and Luna receive public market data
    only; no client, agent, account, holding, exposure, internal-note, or audit data
    crosses the Singapore boundary.
@@ -783,10 +819,10 @@ The MVP is acceptable only when all are demonstrated with synthetic data:
 9. All three decisions persist with actor/time and never contact a client
    automatically.
 10. Generation and decisions produce queryable, tamper-resistant audit records.
-11. Tokyo endpoint failure, Luna timeout, invalid output, duplicate delivery,
+11. Tavily failure/missing key, Luna timeout, invalid output, duplicate delivery,
     stale valuation, and audit failure behave as documented and do not fabricate
     results.
-12. Metrics expose search count/quota/cost, cross-region latency, failure,
+12. Metrics expose search count/quota/cost, provider latency, failure,
     fallback, backlog, and model cost without PII.
 13. Required unit, contract, integration, authorization, security, E2E, migration,
     performance, and recovery evidence passes.
@@ -802,7 +838,7 @@ The MVP is acceptable only when all are demonstrated with synthetic data:
 | Feature and owner | Feature 4; Azeez is feature owner |
 | Delivery ownership | Azeez — Search/AI/Platform; Hayyun — CRM/Domain/Experience and final integration |
 | Holdings/valuation | Small synthetic dataset owned by the alert service; timestamped, currency-aware, no live market feed |
-| Search | AgentCore Web Search in Tokyo; public terms only, approved domains/dates, 1,000-query monthly quota and kill switch |
+| Search | Tavily from the Singapore worker; public terms only, approved domains/dates, 1,000-query monthly quota and kill switch |
 | AI model | GPT-5.6 Luna using global cross-region inference; public news only, no CRM/client/private data |
 | Initial sources | Regulators, exchanges, and official issuer investor-relations sites; commercial publishers require terms review |
 | Runtime | Separate Java 25 Spring Boot Maven module, subject to the detailed service-boundary ADR |
@@ -815,12 +851,13 @@ The MVP is acceptable only when all are demonstrated with synthetic data:
 
 These choices are recorded in ADR-0004. Detailed architecture, data, regional,
 model, source-governance, API, audit, and operational ADRs remain prerequisite
-gates. The AgentCore spike and contract-design tasks may start; production-shaped
-implementation remains blocked until their applicable ADRs and contracts are
-accepted.
+gates. The historical AgentCore spike is retained as decision evidence;
+production live enablement is blocked on the Tavily benchmark and applicable
+review gates.
 
 ## 23. Current AWS References
 
+- [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search)
 - [AgentCore Web Search Tool](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-web-search-tool.html)
 - [AgentCore regional availability](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-regions.html)
 - [AgentCore pricing](https://aws.amazon.com/bedrock/agentcore/pricing/)

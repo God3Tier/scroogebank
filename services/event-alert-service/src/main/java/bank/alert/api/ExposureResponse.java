@@ -9,5 +9,6 @@ public record ExposureResponse(
         String amountSgd,
         BigDecimal portfolioPercentage,
         Instant valuationAsOf,
-        ValuationFreshness freshness) {
+        ValuationFreshness freshness,
+        String accountRef) {
 }

@@ -13,7 +13,7 @@ public record HoldingsReadResult(
         List<UnavailableHolding> unavailable) {
 
     public HoldingsReadResult {
-        if (contractVersion != 1) {
+        if (contractVersion != 1 && contractVersion != 2) {
             throw new IllegalArgumentException("unsupported holdings contract version");
         }
         Objects.requireNonNull(asOf);

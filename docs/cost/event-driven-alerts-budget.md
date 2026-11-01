@@ -19,18 +19,57 @@ human can investigate before the feature consumes its full allocation.
 
 | Cost source | Planning quantity | Planning estimate | Evidence still required |
 |---|---:|---:|---|
-| AgentCore search | 720 searches/month | USD 5.04/month | Provider bill and current regional price |
+| Tavily basic news search | 720 credits/month (one credit/search per current API contract) | Unknown until account-plan benchmark | Tavily usage dashboard, invoice/plan terms and measured credits |
 | Bedrock model inference | Bounded by 200,000 tokens/month | Unknown | Selected model, measured input/output tokens, current price |
 | Scheduled ECS worker and EventBridge | Bounded scheduled runs | Unknown | Deployed task size, duration, schedule, and bill |
 | PostgreSQL, logs, metrics, alarms, data transfer | Shared/incremental usage | Unknown | Tagged resource inventory and billing evidence |
 
-The search estimate follows the approved feature plan's prototype rate. It is a
+The search quantity follows the approved feature plan's prototype rate. ADR-0050
+replaced AgentCore with Tavily; no dollar amount is approved until the owner
+records the account plan and a billed lower-environment benchmark. It is a
 planning assumption, not a billing claim.
+
+The portfolio-aware universe does not raise this ceiling: ADR-0051 permits at
+most four single-issuer searches per scheduled run. A 12-instrument universe
+therefore rotates over about 12 hours without losing its per-instrument window.
+
+On 2026-10-29 the local benchmark made six Tavily basic-search calls (three
+two-query worker passes) and no AWS or model calls. Under the documented basic
+contract this is six search credits; the adapter does not request a usage object,
+so account-dashboard billing evidence is still required. The benchmark failed
+the usefulness gate and does not authorize live ingestion.
+
+The 2026-10-29 query-design investigation made another 18 Tavily basic-search
+calls and no AWS/model calls. Tavily reported one credit for every call. These
+calls compared `news`/`finance`, exact-match, preferred-web and restricted
+official/vetted sources; they are design evidence, not a passing benchmark.
+
+The ADR-0051 implementation smoke test then made 28 basic-search calls: two
+12-issuer passes and a four-issuer confirmation. It made no AWS/model call.
+The calls established a 7/7 manually reviewed precision sample after local
+title and preview filtering, but billing-dashboard confirmation and an
+independent Recall@10 set are still required.
+
+The full repeat verification made a further 28 basic-search calls and no AWS or
+model calls: 12 calls from a discarded local-metric run, 12 calls from the valid
+12-issuer labelled pass, and four calls through the packaged worker. The valid
+pass measured 7/8 Recall@10 and 8/8 manually actionable precision. Tavily did not
+return a usage-credit field in these responses, so the provider dashboard remains
+the billing source of truth; the discarded calls must still be counted there.
+
+The unseen-instrument extensibility check made another 12 basic-search calls for
+Toyota, BHP, SAP and TSMC and no AWS or model calls. The API response again did
+not report usage credits, so all 12 must be reconciled in the Tavily dashboard.
 
 ## Enforced application controls
 
 - Ingestion and model access default to disabled.
-- Search use is limited to 4 reservations per run and 1,000 per UTC month.
+- Search selection is limited to four issuer queries per run and search attempts
+  consume a shared quota of 1,000 per UTC month.
+- Four issuer queries are selected per run; retries can add up to two attempts
+  per query. Each retry now reserves one additional search from the same shared
+  1,000-per-month quota before calling Tavily. Initial batch reservations are
+  conservative and are not refunded when a run fails before every query starts.
 - Model use is limited to 2,000 tokens per invocation and 200,000 per UTC month.
 - Reaching the USD 25 estimated monthly threshold disables ingestion and model
   access together.

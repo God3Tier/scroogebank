@@ -84,3 +84,38 @@ Canonical synthetic fixtures live in `tests/fixtures/event-driven-alerts/` and
 must be validated by producer and consumer tests. Changing a required field,
 meaning, enum removal, or type requires a new major version and both owners'
 approval. Adding an optional field is backward-compatible.
+
+## Current holdings and agent-event routes (ADR-0066)
+
+Present only when `ALERT_HOLDINGS_MODE=database`. Authentication, problem-detail
+bodies and idempotency match the alert routes above.
+
+| Method | Path | Who | Behaviour |
+|---|---|---|---|
+| GET | `/api/alert-portfolios/{accountId}` | the client's current agent; admin read-only | Complete recorded portfolio and `revision`. 404 when nothing was recorded or the account is not visible (indistinguishable). An explicitly recorded empty portfolio returns `positions: []` with its revision. |
+| PUT | `/api/alert-portfolios/{accountId}` | the client's current agent | Atomic complete replacement. Body `{expectedRevision, sourceLabel, positions[<=100]}`; each position `{instrumentId, quantity, unitPrice, valuationCurrency, fxToSgd, valuedAt}`. `Idempotency-Key` required. The client and agent are never taken from the body. |
+| GET | `/api/alerts/events?onlyOpen&limit&cursor` | agent | One card per public event: shared summary, evidence, `affectedClientCount`, `openClientCount`. Returns an opaque `nextCursor` for the next page. Each page rechecks current client ownership. |
+| GET | `/api/alerts/events/{eventId}` | agent | The card, the agent's affected clients (alert ID, client, scoring account, instrument, score, share of portfolio, status, version) and the latest action. |
+| POST | `/api/alerts/events/{eventId}/actions` | agent | `{decision: INFORM_CLIENT\|MONITOR\|DISMISS, note, members[1..200]:{alertId, expectedVersion}}` with `Idempotency-Key`. Applies only to the listed clients and returns a per-member outcome. |
+
+PUT refusals: 409 stale `expectedRevision`, key reuse with a different body, or a
+non-active/non-investment account; 422 unknown instrument, duplicate instrument,
+non-positive or over-precise number, future `valuedAt`, value out of range; 404
+account missing or not the caller's; 503 CRM unavailable or audit backlog full.
+
+Event action `outcome` is one of `APPLIED`, `STALE_VERSION`, `INVALID_TRANSITION`,
+`NOT_AUTHORISED`. A rejected member changes nothing; every outcome is stored in
+`agent_event_action_member` and one `alert.event-action-recorded` audit event
+(`clientContacted: false`) is written with the action. `INFORM_CLIENT` records
+intent only. Replaying the same key and body returns the stored result.
+
+### CRM directory contract (consumed; owned by account-service)
+
+The routes above are in `docs/api/openapi.yaml`, checked against the controllers by the contract tests (ADR-0063).
+The alert service reads the CRM through one private route, defined in `docs/api/accounts-api.yaml`:
+`POST /internal/alerts/accounts/lookup`, body `{"ids": [<=200 distinct UUIDs]}`, client-credentials token with only
+the scope `crm-accounts/alert-directory`. Response `{"items": [{id, client_id, type, status, currency,
+owner_agent_id}]}`; unknown and deleted accounts are omitted; `type` and `status` are as stored (lower case) and
+read case-insensitively. `owner_agent_id` is the client's current agent: the CRM moves it with the client on
+reassignment (ADR-0060). The transaction import's token cannot call this route, and this token cannot call the
+import's.

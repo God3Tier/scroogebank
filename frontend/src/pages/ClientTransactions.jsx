@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
+import HoldingsEditor from '../components/HoldingsEditor.jsx'
 import { ADMIN, homeFor, inAnyGroup } from '../auth/roles.js'
 import AccountTransactionTable from '../components/AccountTransactionTable.jsx'
 import { ViewAll } from '../components/ListFooter.jsx'
@@ -95,12 +96,23 @@ function AccountStatus({ account, mode, onChanged }) {
 // The account's newest ten transactions, and a link to all of them when there
 // are more.
 function AccountTransactions({ clientId, account, statusMode, onStatusChanged }) {
+    const [editingHoldings, setEditingHoldings] = useState(false)
+    // Agents record holdings on investment accounts; admins are read-only (ADR-0066).
+    const canRecordHoldings = statusMode !== 'view' && String(account.account_type).toUpperCase() === 'INVESTMENT'
     return (
         <section className="card card-flush">
             <h2>
                 {account.account_type} account <span className="mono" title={account.id}>{account.id.slice(0, 8)}</span>
             </h2>
             <AccountStatus account={account} mode={statusMode} onChanged={onStatusChanged} />
+            {canRecordHoldings && (
+                <div className="holdings-panel">
+                    <button type="button" aria-expanded={editingHoldings} onClick={() => setEditingHoldings(!editingHoldings)}>
+                        {editingHoldings ? 'Hide holdings' : 'Record holdings'}
+                    </button>
+                    {editingHoldings && <HoldingsEditor accountId={account.id} />}
+                </div>
+            )}
             {account.transactions.length === 0 ? (
                 <p className="empty-state">No transactions found.</p>
             ) : (

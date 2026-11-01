@@ -17,3 +17,10 @@ GET /api/activities the `content/items/payload` response's property `type` chang
 # serves GET /aggregates/transactions/stats itself, scoped by the caller's token
 # (ADR-0064).
 POST /aggregates/transactions/stats api removed without deprecation
+
+# The per-currency dashboard implementation inherited from dev replaces each
+# agent's single deposit amount with {currency: amount} (ADR-0062). Both the
+# account-service provider and dashboard consumer use the map; deploy them
+# together. This scoped exception remains subject to the ADR's owner review.
+GET /aggregates/accounts/stats the `byAgent/items/bookedInitialDeposits` response's property pattern `^\d+\.\d{2}$` was removed for the status `200`
+GET /aggregates/accounts/stats the `byAgent/items/bookedInitialDeposits` response's property `type` changed from `string` to `object` for status `200`

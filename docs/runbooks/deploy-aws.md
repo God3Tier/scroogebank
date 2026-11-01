@@ -369,6 +369,10 @@ over HTTP.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
+### 6.1 The alert worker (optional)
+
+The event-alert worker has its own stack, `stacks/alert-worker` ([ADR-0048](../adr/ADR-0048-alert-worker-terraform-stack.md)). It needs the CRM stack running and the images pushed, and it does nothing until ingestion is switched on. The steps are in the [event-alert operations runbook](event-driven-alerts-operations.md#deploy-the-worker).
+
 ## 7. Upload the frontend
 
 **In parallel:** steps 4 to 6, and steps 9.1 and 9.2. This step needs only the CRM stack's outputs, which exist from step 3's apply, even while the stack is stopped.
@@ -623,6 +627,12 @@ terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=e
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply   -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard destroy -var-file=env/prod.tfvars
+# only if you created the alert worker (6.1); it owns no data, so no extra apply is needed first
+terraform -chdir=infrastructure/terraform/stacks/alert-worker destroy -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
+```
+
+- **Destroy alert-worker and business-dashboard before crm.** The alert worker's task runs in the CRM's cluster and uses its security group and database secret.
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply   -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement destroy -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
@@ -717,3 +727,7 @@ The next deployment starts with a new user pool and empty databases, so `root_ad
 | `InvalidParameterValue` from `CreateSecurityGroup`: "valid descriptions are strings less than 256 characters from the following set" | A security group description holds a character EC2 refuses, such as an apostrophe. Remove it and apply again |
 | `Member must satisfy regular expression pattern: [\.\-_/#A-Za-z0-9]+` from an `aws logs` command in Git Bash | Git Bash turned the log group name, which starts with `/`, into a Windows path (`C:/Program Files/Git/aws/...`) before passing it to the AWS CLI. Put `MSYS_NO_PATHCONV=1` before the command |
 | Transaction reads return 502 | transaction-service is not running. Its log group (`/ecs/<stack>-transaction-service`) shows why; for a failed migration, see its `db-migrate/…` stream. An empty list, not an error, means nothing has been imported yet: turn on the ingest Lambda (step 9) |
+
+## Event-alert database holdings (ADR-0066)
+
+Off by default (`alert_holdings_mode = "fixture"`). To turn it on, in order: apply the CRM stack with the new account-service image (it serves `/internal/alerts/accounts/lookup`) and the event-alert-service image (its V10 migration runs through `db-migrate`); apply `stacks/alert-worker` so the worker reads the same mode; then set `alert_holdings_mode = "database"` and `domain_name`, and apply the CRM stack and then `stacks/alert-worker` again. Check an agent can record holdings on an investment account and read them back before enabling ingestion or the model, which stay separate approvals. To roll back, set `alert_holdings_mode = "fixture"` and apply both stacks; recorded portfolios and audit events are kept. Nothing in this section was applied to AWS from the repository; it was checked with `terraform validate` and mocked `terraform test` only.

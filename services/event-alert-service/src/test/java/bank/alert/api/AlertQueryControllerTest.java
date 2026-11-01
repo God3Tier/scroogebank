@@ -99,7 +99,7 @@ class AlertQueryControllerTest {
                 Instant.parse("2026-09-27T00:01:00Z"), 0L,
                 new ExposureResponse(
                         "2500.00", new BigDecimal("25.0000"),
-                        Instant.parse("2026-09-26T23:00:00Z"), ValuationFreshness.FRESH),
+                        Instant.parse("2026-09-26T23:00:00Z"), ValuationFreshness.FRESH, "syn-account-001"),
                 List.of(new ExplanationFactorResponse(
                         "EXPOSURE", new BigDecimal("35.00"), "Synthetic exposure factor")),
                 List.of(new EvidenceResponse(

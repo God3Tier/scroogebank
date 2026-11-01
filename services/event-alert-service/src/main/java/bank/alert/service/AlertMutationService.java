@@ -1,6 +1,7 @@
 package bank.alert.service;
 
 import bank.alert.api.DecisionRequest;
+import bank.alert.crm.CurrentOwnership;
 import bank.alert.api.FeedbackRequest;
 import bank.alert.domain.Alert;
 import bank.alert.domain.AlertDecision;
@@ -34,6 +35,7 @@ public class AlertMutationService {
     private final AlertFeedbackRepository feedbackRepository;
     private final AuditOutboxRepository outboxRepository;
     private final AlertStateMachine stateMachine;
+    private final CurrentOwnership currentOwnership;
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final int maxPendingAuditEvents;
@@ -44,6 +46,7 @@ public class AlertMutationService {
             AlertFeedbackRepository feedbackRepository,
             AuditOutboxRepository outboxRepository,
             AlertStateMachine stateMachine,
+            CurrentOwnership currentOwnership,
             ObjectMapper objectMapper,
             Clock clock,
             @Value("${alert.audit.max-pending:10000}") int maxPendingAuditEvents) {
@@ -52,6 +55,7 @@ public class AlertMutationService {
         this.feedbackRepository = feedbackRepository;
         this.outboxRepository = outboxRepository;
         this.stateMachine = stateMachine;
+        this.currentOwnership = currentOwnership;
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.maxPendingAuditEvents = maxPendingAuditEvents;
@@ -78,6 +82,7 @@ public class AlertMutationService {
         }
 
         ensureAuditCapacity();
+        currentOwnership.refresh();
         Alert alert = ownedAlert(alertId, actorSubject);
         requireVersion(alert, request.expectedVersion());
         AlertStatus previousStatus = alert.getStatus();
@@ -119,6 +124,7 @@ public class AlertMutationService {
         }
 
         ensureAuditCapacity();
+        currentOwnership.refresh();
         Alert alert = ownedAlert(alertId, actorSubject);
         requireVersion(alert, request.expectedVersion());
         Instant now = clock.instant();
@@ -131,7 +137,7 @@ public class AlertMutationService {
     }
 
     private Alert ownedAlert(UUID alertId, String actorSubject) {
-        return alertRepository.findByIdAndAssignedAgentSubject(alertId, actorSubject)
+        return alertRepository.findOwnedByCurrentAgent(alertId, actorSubject)
                 .orElseThrow(AlertNotFoundException::new);
     }
 

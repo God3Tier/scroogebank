@@ -11,6 +11,7 @@ import bank.alert.operations.ReservationResult;
 
 import java.time.Clock;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -105,7 +106,8 @@ public class SafeBriefingGenerator implements BriefingGenerator {
                     return outcome(BriefingStatus.ABSTAINED, null, "MODEL_ABSTAINED", attempt);
                 }
                 AgentBriefing briefing = new AgentBriefing(output.headline(), output.summary(),
-                        output.uncertainty(), output.sourceRefs(), output.suggestedReviewActions(), true,
+                        output.uncertainty(), referenceIds(output.sourceRefs(), input),
+                        output.suggestedReviewActions(), true,
                         properties.model(), properties.promptVersion(), clock.instant());
                 return outcome(BriefingStatus.GENERATED, briefing, null, attempt);
             } catch (AiProviderException exception) {
@@ -132,7 +134,11 @@ public class SafeBriefingGenerator implements BriefingGenerator {
                 || output.sourceRefs().isEmpty() || output.suggestedReviewActions() == null
                 || output.suggestedReviewActions().isEmpty()) return "INVALID_MODEL_SCHEMA";
         Set<String> supplied = new HashSet<>();
-        input.evidence().forEach(evidence -> supplied.add(evidence.referenceId()));
+        // A model may cite a supplied source by its URL as well as by its reference ID; both name the same source.
+        input.evidence().forEach(evidence -> {
+            supplied.add(evidence.referenceId());
+            supplied.add(evidence.canonicalUrl());
+        });
         if (!supplied.containsAll(output.sourceRefs())) return "MISSING_OR_UNKNOWN_CITATION";
         String combined = (output.headline() + " " + output.summary() + " "
                 + String.join(" ", output.suggestedReviewActions())).toLowerCase(Locale.ROOT);
@@ -140,6 +146,19 @@ public class SafeBriefingGenerator implements BriefingGenerator {
         if (output.suggestedReviewActions().stream().anyMatch(action -> action == null || action.isBlank()
                 || action.length() > 300)) return "INVALID_MODEL_SCHEMA";
         return null;
+    }
+
+    /** The reference IDs of the cited sources, in order and without repeats, whether the model cited IDs or URLs. */
+    private static List<String> referenceIds(List<String> refs, BriefingInput input) {
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+        for (String ref : refs) {
+            String id = ref;
+            for (PublicEvidence evidence : input.evidence()) {
+                if (evidence.canonicalUrl().equals(ref)) id = evidence.referenceId();
+            }
+            ids.add(id);
+        }
+        return List.copyOf(ids);
     }
 
     private static boolean blankOrTooLong(String value, int maximum) {

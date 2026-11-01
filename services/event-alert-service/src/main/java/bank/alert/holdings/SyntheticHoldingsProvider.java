@@ -4,6 +4,7 @@ import bank.alert.domain.HoldingSnapshot;
 import bank.alert.domain.ValuationFreshness;
 import bank.alert.fixture.SyntheticFixtureLoader;
 import bank.alert.fixture.SyntheticHoldingFixture;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@ConditionalOnProperty(name = "alert.holdings.mode", havingValue = "fixture", matchIfMissing = true)
 @Component
 public class SyntheticHoldingsProvider implements HoldingsProvider {
 
@@ -55,6 +57,17 @@ public class SyntheticHoldingsProvider implements HoldingsProvider {
                 .forEach(unavailable::add);
 
         return new HoldingsReadResult(1, request.asOf(), positions, unavailable);
+    }
+
+    @Override
+    public List<String> assignedAgentsHolding(Set<String> instrumentIds) {
+        return fixtureLoader.loadDefault().positions().stream()
+                .filter(position -> position.quantity().signum() > 0)
+                .filter(position -> instrumentIds.contains(position.instrumentId()))
+                .map(SyntheticHoldingFixture.Position::assignedAgentSubject)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     private static HoldingSnapshot toSnapshot(

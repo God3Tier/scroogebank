@@ -13,6 +13,16 @@ public class OperationalMetrics {
     private final AtomicLong monthlySearches = new AtomicLong();
     private final AtomicLong monthlyModelTokens = new AtomicLong();
     private final AtomicReference<Double> monthlyEstimatedCost = new AtomicReference<>(0.0);
+    private final AtomicLong eligibleInstruments = new AtomicLong();
+    private final AtomicLong selectedInstruments = new AtomicLong();
+    private final AtomicLong deferredInstruments = new AtomicLong();
+    private final AtomicLong commonSelections = new AtomicLong();
+    private final AtomicLong concentrationSelections = new AtomicLong();
+    private final AtomicLong oldestCoverageAgeSeconds = new AtomicLong();
+    private final AtomicLong maintainedPortfolios = new AtomicLong();
+    private final AtomicLong missingHoldings = new AtomicLong();
+    private final AtomicLong expiredValuations = new AtomicLong();
+    private final AtomicLong invalidCrmLinks = new AtomicLong();
 
     public OperationalMetrics(MeterRegistry registry) {
         this.registry = registry;
@@ -20,6 +30,16 @@ public class OperationalMetrics {
         registry.gauge("alert.outbound.monthly.model.tokens", monthlyModelTokens);
         registry.gauge("alert.outbound.monthly.estimated.cost.usd", monthlyEstimatedCost,
                 AtomicReference::get);
+        registry.gauge("alert.search.universe.eligible", eligibleInstruments);
+        registry.gauge("alert.search.batch.selected", selectedInstruments);
+        registry.gauge("alert.search.batch.deferred", deferredInstruments);
+        registry.gauge("alert.search.selection.common", commonSelections);
+        registry.gauge("alert.search.selection.concentration", concentrationSelections);
+        registry.gauge("alert.search.coverage.oldest.age.seconds", oldestCoverageAgeSeconds);
+        registry.gauge("alert.holdings.portfolios.maintained", maintainedPortfolios);
+        registry.gauge("alert.holdings.positions.missing", missingHoldings);
+        registry.gauge("alert.holdings.positions.expired", expiredValuations);
+        registry.gauge("alert.holdings.crm.links.invalid", invalidCrmLinks);
     }
 
     void reservation(OutboundCapability capability, String resultCode) {
@@ -43,6 +63,30 @@ public class OperationalMetrics {
         monthlySearches.set(searches);
         monthlyModelTokens.set(modelTokens);
         monthlyEstimatedCost.set(estimatedCostUsd.doubleValue());
+    }
+
+    public void searchUniverse(int eligible, int common, int concentration) {
+        eligibleInstruments.set(eligible);
+        commonSelections.set(common);
+        concentrationSelections.set(concentration);
+    }
+
+    public void searchBatch(int selected, int deferred, long oldestAgeSeconds) {
+        selectedInstruments.set(selected);
+        deferredInstruments.set(deferred);
+        oldestCoverageAgeSeconds.set(Math.max(0, oldestAgeSeconds));
+    }
+
+    /** Aggregate counts only, from the latest full read of the maintained portfolios. */
+    public void portfolios(int maintained, int missingPositions, int expiredPositions, int invalidLinks) {
+        maintainedPortfolios.set(maintained);
+        missingHoldings.set(missingPositions);
+        expiredValuations.set(expiredPositions);
+        invalidCrmLinks.set(invalidLinks);
+    }
+
+    public void directoryFailure() {
+        registry.counter("alert.holdings.crm.directory.failures").increment();
     }
 
     private static String safeCode(String code) {

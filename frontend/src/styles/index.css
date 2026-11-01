@@ -2971,3 +2971,19 @@ textarea:focus {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Holdings editor and event briefings (current-holdings feature) */
+.holdings-panel { padding: 0 1rem 1rem; }
+.holdings-editor { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+.holdings-editor input { width: 100%; min-width: 4rem; }
+.holdings-note { font-size: 0.85rem; opacity: 0.8; margin: 0; }
+.holdings-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.event-briefings { display: grid; gap: 1rem; }
+.event-briefings__head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.event-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.event-card { display: grid; gap: 0.5rem; }
+.event-card__meta { font-size: 0.85rem; opacity: 0.75; margin: 0; }
+.event-clients { display: grid; gap: 0.75rem; }
+.event-actions { display: flex; gap: 1rem; flex-wrap: wrap; border: 0; padding: 0; }
+.event-outcomes { margin: 0; padding-left: 1.25rem; }
+.client-alert-list { margin-top: 1.5rem; }

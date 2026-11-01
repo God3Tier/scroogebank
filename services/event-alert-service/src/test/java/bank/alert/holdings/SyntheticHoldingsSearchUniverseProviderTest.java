@@ -4,6 +4,9 @@ import bank.alert.config.IngestionProperties;
 import bank.alert.domain.ValuationFreshness;
 import bank.alert.fixture.SyntheticFixtureLoader;
 import bank.alert.fixture.SyntheticHoldingFixture;
+import bank.alert.scoring.ExposureCalculator;
+import bank.alert.operations.OperationalMetrics;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -14,38 +17,95 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SyntheticHoldingsSearchUniverseProviderTest {
 
     @Test
-    void selectsOnlyInstrumentsMeetingClientCountAndShareWithoutReturningPrivateFacts() {
-        SyntheticFixtureLoader fixtures = mock(SyntheticFixtureLoader.class);
-        when(fixtures.loadDefault()).thenReturn(new SyntheticHoldingFixture(1,
-                Instant.parse("2026-09-30T00:00:00Z"), List.of(
-                        position("client-1", "ELIGIBLE", "100.00"),
-                        position("client-2", "ELIGIBLE", "50.00"),
-                        position("client-3", "TOO-FEW-CLIENTS", "25.00"),
-                        position("client-4", "ZERO-VALUE", "0.00")), List.of()));
-        SyntheticHoldingsSearchUniverseProvider provider =
-                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties());
+    void selectsExpectedGlobalFixtureUniverse() {
+        OperationalMetrics metrics = mock(OperationalMetrics.class);
+        SyntheticHoldingsSearchUniverseProvider provider = new SyntheticHoldingsSearchUniverseProvider(
+                new SyntheticFixtureLoader(new ObjectMapper().findAndRegisterModules()), properties(),
+                new ExposureCalculator(), metrics);
 
-        assertThat(provider.eligibleInstrumentIds()).containsExactly("ELIGIBLE");
+        assertThat(provider.eligibleInstrumentIds()).containsExactly(
+                "HKEX-0700", "LSE-HSBA", "LSE-SHEL", "NASDAQ-AAPL", "NASDAQ-MSFT",
+                "NASDAQ-NVDA", "NYSE-JPM", "NYSE-V", "SGX-C6L", "SGX-D05", "SGX-O39", "SGX-Z74");
+        verify(metrics).searchUniverse(12, 10, 2);
+    }
+
+    @Test
+    void appliesThresholdsAcrossOneHundredClients() {
+        SyntheticFixtureLoader fixtures = mock(SyntheticFixtureLoader.class);
+        OperationalMetrics metrics = mock(OperationalMetrics.class);
+        List<SyntheticHoldingFixture.Position> positions = new java.util.ArrayList<>();
+        for (int client = 1; client <= 100; client++) {
+            positions.add(position("client-" + client, "account-" + client, "BASE", "100.00"));
+        }
+        for (int client = 1; client <= 20; client++) {
+            positions.add(position("client-" + client, "account-" + client, "COMMON-20", "1.00"));
+        }
+        for (int client = 1; client <= 19; client++) {
+            positions.add(position("client-" + client, "account-" + client, "BELOW-20", "1.00"));
+        }
+        positions.add(position("client-99", "account-99", "BELOW-50", "99.00"));
+        positions.add(position("client-100", "account-100", "AT-50", "100.00"));
+        when(fixtures.loadDefault()).thenReturn(new SyntheticHoldingFixture(1,
+                Instant.parse("2026-09-30T00:00:00Z"), positions, List.of()));
+        SyntheticHoldingsSearchUniverseProvider provider =
+                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(), new ExposureCalculator(),
+                        metrics);
+
+        assertThat(provider.eligibleInstrumentIds()).containsExactly("AT-50", "BASE", "COMMON-20");
+        verify(metrics).searchUniverse(3, 2, 2);
+    }
+
+    @Test
+    void derivesNewMultiMarketInstrumentsFromThirtyDifferentUsers() {
+        SyntheticFixtureLoader fixtures = mock(SyntheticFixtureLoader.class);
+        OperationalMetrics metrics = mock(OperationalMetrics.class);
+        List<SyntheticHoldingFixture.Position> positions = new java.util.ArrayList<>();
+        for (int client = 1; client <= 30; client++) {
+            positions.add(position("new-client-" + client, "new-account-" + client,
+                    "TSE-7203", "100.00"));
+        }
+        for (int client = 1; client <= 6; client++) {
+            positions.add(position("new-client-" + client, "new-account-" + client,
+                    "ASX-BHP", "10.00"));
+        }
+        for (int client = 1; client <= 5; client++) {
+            positions.add(position("new-client-" + client, "new-account-" + client,
+                    "XETRA-SAP", "10.00"));
+        }
+        positions.add(position("new-client-30", "concentrated-account", "NYSE-TSM", "60.00"));
+        positions.add(position("new-client-30", "concentrated-account", "TSE-7203", "40.00"));
+        when(fixtures.loadDefault()).thenReturn(new SyntheticHoldingFixture(1,
+                Instant.parse("2026-10-29T00:00:00Z"), positions, List.of()));
+
+        SyntheticHoldingsSearchUniverseProvider provider =
+                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(),
+                        new ExposureCalculator(), metrics);
+
+        assertThat(provider.eligibleInstrumentIds())
+                .containsExactly("ASX-BHP", "NYSE-TSM", "TSE-7203")
+                .doesNotContain("XETRA-SAP");
+        verify(metrics).searchUniverse(3, 2, 2);
     }
 
     private static SyntheticHoldingFixture.Position position(
-            String clientRef, String instrumentId, String valueSgd) {
+            String clientRef, String accountRef, String instrumentId, String valueSgd) {
         return new SyntheticHoldingFixture.Position(UUID.randomUUID(), clientRef,
-                "account-" + clientRef, "agent-1", instrumentId,
+                accountRef, "agent-1", instrumentId,
                 BigDecimal.ONE, new BigDecimal(valueSgd), "SGD", BigDecimal.ONE,
                 new BigDecimal(valueSgd), Instant.parse("2026-09-30T00:00:00Z"),
                 ValuationFreshness.FRESH, "test-v1");
     }
 
     private static IngestionProperties properties() {
-        return new IngestionProperties(false, "agentcore-web-search-1.2.0",
+        return new IngestionProperties(false, "tavily",
                 Duration.ofMinutes(5), Duration.ofHours(4), 4, 10, 3,
-                Duration.ofDays(90), new BigDecimal("0.40"), 2,
+                Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
                 List.of("sgx.com"), List.of("earnings"));
     }
 }

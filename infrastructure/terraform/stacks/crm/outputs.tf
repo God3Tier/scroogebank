@@ -234,7 +234,7 @@ output "engagement_inputs" {
 # schema (data.tf), so the worker sets SPRING_FLYWAY_ENABLED=false as the API
 # does; event-alert-service's db-migrate applies the migrations.
 output "alerts_worker_inputs" {
-  description = "What the alert worker's Terraform needs from this stack."
+  description = "What the alert-worker stack reads from this stack's state (ADR-0048). Renaming or removing a key here breaks that stack."
   value = {
     cluster_arn            = aws_ecs_cluster.this.arn
     subnet_ids             = local.app_subnet_ids
@@ -245,5 +245,25 @@ output "alerts_worker_inputs" {
     task_definition_family = module.event_alert_service.task_definition_family
     audit_queue_url        = aws_sqs_queue.audit.url
     alarm_topic_arn        = aws_sns_topic.alarms.arn
+
+    # Added for the alert-worker stack (ADR-0048). Existing keys are unchanged.
+    name_prefix         = local.name
+    region              = local.region
+    cluster_name        = aws_ecs_cluster.this.name
+    alerts_db_name      = module.db["alerts"].db_name
+    image               = local.image["event-alert-service"]
+    cpu_architecture    = var.cpu_architecture
+    use_spot            = local.use_fargate_spot
+    log_retention_days  = local.log_retention_days
+    running             = var.running
+    deletion_protection = local.deletion_protection
+
+    # Added for current holdings (ADR-0066). The worker uses the API's own values.
+    holdings_mode             = var.alert_holdings_mode
+    crm_account_directory_url = try(local.alert_holdings_environment["ALERT_CRM_ACCOUNT_DIRECTORY_URL"], "")
+    crm_token_endpoint        = try(local.alert_holdings_environment["ALERT_CRM_TOKEN_ENDPOINT"], "")
+    crm_client_id             = try(local.alert_holdings_environment["ALERT_CRM_CLIENT_ID"], "")
+    crm_scope                 = try(local.alert_holdings_environment["ALERT_CRM_SCOPE"], "")
+    crm_client_secret_arn     = local.alert_database_holdings ? aws_secretsmanager_secret.alert_directory.arn : ""
   }
 }

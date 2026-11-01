@@ -24,6 +24,19 @@ idp:
 
 alert:
   mode: ${ALERT_MODE:API}
+  holdings:
+    # fixture: bundled synthetic JSON (isolated demos and tests).
+    # database: maintained CRM-linked portfolios; API and worker must use the same mode.
+    mode: ${ALERT_HOLDINGS_MODE:fixture}
+  crm:
+    # Only read in database mode: the private account alert-directory route plus a dedicated
+    # client-credentials identity holding just the directory read scopes.
+    account-directory-url: ${ALERT_CRM_ACCOUNT_DIRECTORY_URL:}
+    token-endpoint: ${ALERT_CRM_TOKEN_ENDPOINT:}
+    client-id: ${ALERT_CRM_CLIENT_ID:}
+    client-secret: ${ALERT_CRM_CLIENT_SECRET:}
+    scope: ${ALERT_CRM_SCOPE:}
+    timeout: ${ALERT_CRM_TIMEOUT:5s}
   audit:
     max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
     publisher:
@@ -44,7 +57,7 @@ alert:
   ingestion:
     # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
     enabled: ${ALERT_INGESTION_ENABLED:false}
-    provider: agentcore-web-search-1.2.0
+    provider: ${ALERT_SEARCH_PROVIDER:tavily}
     overlap: 5m
     initial-lookback: 4h
     max-queries-per-run: 4
@@ -53,22 +66,52 @@ alert:
     retention: 90d
     # Select public search terms in Singapore from sufficiently common holdings.
     # Only public ticker/issuer/sector terms leave the private boundary.
-    minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.05}
+    minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.20}
     minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
-    approved-domains:
-      - mas.gov.sg
-      - sgx.com
+    minimum-account-concentration: ${ALERT_MINIMUM_ACCOUNT_CONCENTRATION:0.50}
+    tavily:
+      # Injected from Secrets Manager by the worker task. Empty keeps the
+      # application startable but every search fails closed.
+      api-key: ${ALERT_TAVILY_API_KEY:}
+      endpoint: https://api.tavily.com/search
+      timeout: 30s
+      max-response-bytes: 262144
+      # Shared publishers authorized by the requester on 2026-10-30; see ADR-0051.
+      # Every issuer also adds its official domains from the instrument master.
+      approved-domains: [reuters.com, cnbc.com, ft.com]
     event-terms:
       - earnings
-      - regulatory
+      - results
+      - financial results
+      - profit
+      - revenue
+      - guidance
+      - regulatory action
+      - investigation
+      - fine
+      - filing
+      - approval
       - merger
-      - credit
-      - leadership
+      - acquisition
+      - takeover
+      - divestment
+      - buyback
+      - credit rating
+      - downgrade
+      - upgrade
+      - default
+      - credit outlook
+      - appointment
+      - appointed
+      - appoints
+      - resignation
+      - resigned
+      - steps down
   ai:
     # Independent fail-closed switch; no model can be invoked by default.
     enabled: ${ALERT_AI_ENABLED:false}
     provider: ${ALERT_AI_PROVIDER:none}
-    model: global.openai.gpt-5.6-luna
+    model: global.amazon.nova-2-lite-v1:0
     prompt-version: alert-public-v1
     max-input-characters: 12000
     max-output-characters: 8000
@@ -77,7 +120,7 @@ alert:
     timeout: 20s
     minimum-confidence: 0.60
     bedrock:
-      region: ${ALERT_AI_BEDROCK_REGION:us-east-1}
+      region: ${ALERT_AI_BEDROCK_REGION:ap-southeast-1}
   operations:
     # Independent outbound controls remain fail-closed until explicitly enabled.
     ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
@@ -88,7 +131,27 @@ alert:
     max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
     monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}
 
+  pipeline:
+    # Sources turned into alerts per worker run; each can cost two model calls.
+    max-sources-per-run: ${ALERT_PIPELINE_MAX_SOURCES_PER_RUN:50}
+  metrics:
+    cloudwatch:
+      # Off by default: every distinct metric and tag combination is a billed
+      # custom metric. The worker exports its last values as it exits.
+      enabled: ${ALERT_CLOUDWATCH_METRICS_ENABLED:false}
+  worker:
+    # Set only on a one-off operator replay task (ADR-0049); all four are then required.
+    replay:
+      from: ${ALERT_WORKER_REPLAY_FROM:}
+      to: ${ALERT_WORKER_REPLAY_TO:}
+      operator: ${ALERT_WORKER_REPLAY_OPERATOR:}
+      correlation-id: ${ALERT_WORKER_REPLAY_CORRELATION_ID:}
+
 management:
+  cloudwatch:
+    metrics:
+      export:
+        namespace: ${ALERT_CLOUDWATCH_NAMESPACE:CRM/EventAlerts}
   endpoints:
     web:
       exposure:

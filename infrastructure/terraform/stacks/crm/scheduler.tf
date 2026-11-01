@@ -1,8 +1,8 @@
 # EventBridge Scheduler (ADR-0022, ADR-0024, ADR-0034): chain-verify and Client
 # Health daily, and transaction import every 5 minutes once its Lambda exists.
 # Schedules pause while the stack is stopped. Client Health also stays disabled
-# without the custom-domain HTTPS internal ALB. The alert worker's schedule
-# belongs to EDA-D1-02.
+# without the custom-domain HTTPS internal ALB. The alert worker's schedule is in
+# stacks/alert-worker (ADR-0048).
 
 data "aws_iam_policy_document" "scheduler_assume" {
   statement {

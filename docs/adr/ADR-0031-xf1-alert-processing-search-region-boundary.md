@@ -77,8 +77,9 @@ The feature's owners have Proposed ADRs on `feat/event-driven-alerts` (owner Aze
    - account sector exposures and public events;
    - alerts, decisions and the outbox.
 5. **Controls:**
-   - a search cap (the branch cap of 4 grouped searches per run, about 720 searches a month, within the 1,000-query monthly quota);
-   - kill switches for search and model calls;
+   - a search cap (4 rotating single-issuer searches per run under ADR-0051, about 720 searches a month, within the 1,000-query monthly quota);
+   - kill switches for search and model calls, whose state, the monthly counts and the estimated cost are kept in alerts-db so that every worker run and the API share them (see the amendment in ADR-0014);
+   - one ingestion run at a time, enforced by a PostgreSQL advisory lock;
    - a separate Bedrock budget alert;
    - a failed Tokyo search ends that run without inventing results.
 6. **Tokyo is an availability choice, not a requirement.** The search moves to Singapore if the capability becomes available there. Availability must be confirmed in the live AWS spike ([open item 14](../architecture/open-items.md#14-tokyo-web-search-availability)).
@@ -144,3 +145,4 @@ Bedrock and AgentCore usage is roughly USD 5–15/month with caps and kill switc
 - 2026-10-01 21:50 +08:00: proposed, with the worker every 6 hours.
 - 2026-10-09: before acceptance, the schedule changed to every 4 hours to match branch ADR-0006, as decided by the decision owner. Searches rise from about 480 to about 720 a month (USD 3.36 to 5.04). The rest of the decision is unchanged.
 - 2026-10-12: before acceptance, decision 3 corrected to match `event-alert-service`, as decided by the decision owner: the model writes one shared summary from public data only, and each client's private context is computed without it. The proposed region is unchanged; open item 4 settles it.
+- 2026-10-20: before acceptance, decision 5 clarified to match `event-alert-service`, proposed by Hayyun for the decision owner's review: the kill-switch state and monthly counts live in alerts-db, not in process memory, and an advisory lock allows one ingestion run at a time. The region, schedule and data boundary are unchanged.

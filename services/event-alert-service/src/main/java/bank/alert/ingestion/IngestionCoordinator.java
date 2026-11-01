@@ -16,8 +16,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class IngestionCoordinator {
@@ -26,7 +28,7 @@ public class IngestionCoordinator {
 
     private final IngestionProperties properties;
     private final PublicSearchProvider provider;
-    private final GroupedQueryBuilder queryBuilder;
+    private final IssuerQueryBuilder queryBuilder;
     private final BoundedRetryExecutor retryExecutor;
     private final PublicUrlCanonicalizer canonicalizer;
     private final SearchRunRepository searchRuns;
@@ -34,13 +36,15 @@ public class IngestionCoordinator {
     private final ProcessingWatermarkRepository watermarks;
     private final IngestionRunFinalizer finalizer;
     private final OutboundControlService outboundControls;
+    private final IngestionRunLock runLock;
     private final Clock clock;
 
     public IngestionCoordinator(IngestionProperties properties, PublicSearchProvider provider,
-            GroupedQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
+            IssuerQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
             PublicUrlCanonicalizer canonicalizer, SearchRunRepository searchRuns,
             SourceResultRepository sourceResults, ProcessingWatermarkRepository watermarks,
-            IngestionRunFinalizer finalizer, OutboundControlService outboundControls, Clock clock) {
+            IngestionRunFinalizer finalizer, OutboundControlService outboundControls,
+            IngestionRunLock runLock, Clock clock) {
         this.properties = properties;
         this.provider = provider;
         this.queryBuilder = queryBuilder;
@@ -51,6 +55,7 @@ public class IngestionCoordinator {
         this.watermarks = watermarks;
         this.finalizer = finalizer;
         this.outboundControls = outboundControls;
+        this.runLock = runLock;
         this.clock = clock;
     }
 
@@ -60,6 +65,12 @@ public class IngestionCoordinator {
                 .map(watermark -> watermark.getLastSuccessfulTo().minus(properties.overlap()))
                 .orElseGet(() -> scheduledWindowTo.minus(properties.initialLookback()));
         return execute(windowFrom, scheduledWindowTo, catalogue, true);
+    }
+
+    public IngestionOutcome run(Instant windowFrom, Instant windowTo,
+            List<InstrumentSearchTerms> catalogue) {
+        if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
+        return execute(windowFrom, windowTo, catalogue, true);
     }
 
     /** Reprocesses one historical bounded window without moving the scheduler watermark. */
@@ -75,7 +86,22 @@ public class IngestionCoordinator {
         if (!windowFrom.isBefore(windowTo)) {
             throw new IllegalArgumentException("ingestion window start must precede its end");
         }
-        List<String> queries = queryBuilder.build(catalogue, properties.maxQueriesPerRun());
+        // Windows that start at different times have different search_run rows, so
+        // only this lock keeps two runs, scheduled or manual, from both searching.
+        Optional<IngestionRunLock.Hold> hold = runLock.tryAcquire();
+        if (hold.isEmpty()) {
+            return new IngestionOutcome(IngestionStatus.ALREADY_RUNNING, null, windowFrom, windowTo,
+                    0, 0, 0, 0, null);
+        }
+        try (IngestionRunLock.Hold ignored = hold.get()) {
+            return executeLocked(windowFrom, windowTo, catalogue, advanceWatermark);
+        }
+    }
+
+    private IngestionOutcome executeLocked(Instant windowFrom, Instant windowTo,
+            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark) {
+        List<IssuerSearchQuery> queries = queryBuilder.build(
+                catalogue, properties.approvedDomains(), properties.maxQueriesPerRun());
         if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 
         Instant now = clock.instant();
@@ -111,23 +137,34 @@ public class IngestionCoordinator {
         int rejected = 0;
         Set<String> batchHashes = new HashSet<>();
 
-        for (String query : queries) {
+        for (IssuerSearchQuery query : queries) {
             RetryResult<List<PublicSearchResult>> response;
+            AtomicInteger queryAttempts = new AtomicInteger();
             try {
-                response = retryExecutor.execute(properties.maxAttempts(), () -> provider.search(
-                        new PublicSearchRequest(query, properties.approvedDomains(), windowFrom,
-                                windowTo, properties.maxResultsPerQuery())));
-                attempts += response.attempts();
-                run.recordSearchAttempts(response.attempts());
+                response = retryExecutor.execute(properties.maxAttempts(), () -> {
+                    // The first attempt was reserved with the batch; retries consume quota too.
+                    if (queryAttempts.get() > 0) {
+                        ReservationResult retryReservation = outboundControls.reserveSearches(1);
+                        if (!retryReservation.allowed()) {
+                            throw new SearchProviderException(retryReservation.code(), false,
+                                    "search retry blocked by outbound controls");
+                        }
+                    }
+                    queryAttempts.incrementAndGet();
+                    return provider.search(new PublicSearchRequest(query.query(), query.approvedDomains(),
+                            windowFrom, windowTo, properties.maxResultsPerQuery()));
+                });
+                attempts += queryAttempts.get();
+                run.recordSearchAttempts(queryAttempts.get());
             } catch (RetryExhaustedException exception) {
-                attempts += exception.attempts();
-                run.recordSearchAttempts(exception.attempts());
+                attempts += queryAttempts.get();
+                run.recordSearchAttempts(queryAttempts.get());
                 finalizer.fail(run, safeCode(exception.code()), clock.instant());
                 return outcome(IngestionStatus.FAILED, run, attempts, accepted, duplicates, rejected,
                         safeCode(exception.code()));
             } catch (RuntimeException exception) {
-                attempts++;
-                run.recordSearchAttempts(1);
+                attempts += queryAttempts.get();
+                run.recordSearchAttempts(queryAttempts.get());
                 finalizer.fail(run, "UNEXPECTED_PROVIDER_FAILURE", clock.instant());
                 return outcome(IngestionStatus.FAILED, run, attempts, accepted, duplicates, rejected,
                         "UNEXPECTED_PROVIDER_FAILURE");
@@ -140,13 +177,17 @@ public class IngestionCoordinator {
             }
 
             for (PublicSearchResult result : response.value()) {
+                if (!query.accepts(result)) {
+                    rejected++;
+                    continue;
+                }
                 if (!insideWindow(result.publishedAt(), windowFrom, windowTo)) {
                     rejected++;
                     continue;
                 }
                 CanonicalPublicUrl url;
                 try {
-                    url = canonicalizer.canonicalize(result.url(), properties.approvedDomains());
+                    url = canonicalizer.canonicalize(result.url(), query.approvedDomains());
                 } catch (IllegalArgumentException exception) {
                     rejected++;
                     continue;
@@ -158,7 +199,8 @@ public class IngestionCoordinator {
                 SourceResult source = new SourceResult(
                         UUID.randomUUID(), run.getId(), result.providerResultId(), url.value(), url.sha256(),
                         result.title(), url.host(), result.publishedAt(), result.retrievedAt(),
-                        result.contentHash(), result.retrievedAt().plus(properties.retention()));
+                        result.contentHash(), result.retrievedAt().plus(properties.retention()),
+                        result.snippet());
                 try {
                     sourceResults.saveAndFlush(source);
                     accepted++;

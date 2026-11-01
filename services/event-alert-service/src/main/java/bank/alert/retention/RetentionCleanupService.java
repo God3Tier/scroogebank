@@ -55,7 +55,8 @@ public class RetentionCleanupService {
                        canonical_url = 'urn:expired:' || s.id,
                        source_domain = 'expired.invalid',
                        published_at = NULL,
-                       content_hash = NULL
+                       content_hash = NULL,
+                       excerpt = NULL
                   FROM expired e
                  WHERE s.id = e.id
                 """, now, batchSize);
