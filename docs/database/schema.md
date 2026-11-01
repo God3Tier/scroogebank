@@ -1,6 +1,6 @@
 # Database design (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.  
+> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-28.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -54,12 +54,17 @@ Recorded in [ADR-0023](../adr/ADR-0023-rds-per-service-backup-no-cache.md) (Prop
   classification, permits only service-safe source fingerprints, and persists
   renewable leases, attempts, redacted failure categories, and success-only
   watermarks.
+- V5 creates versioned task explanations linked to tasks and processed findings.
+  It constrains evidence codes, requires the human-review disclaimer, permits a
+  model ID only for Bedrock wording, and indexes the latest explanation by task
+  version.
 
 Task creation/evidence/transition/suppression paths now enqueue their redacted
 audit events through `TaskRepository.Session`; the JDBC adapter persists task
 state, processed finding and outbox row in one transaction under ADR-0020 and
 ADR-0053. JDBC adapters also persist the SF02 activity projection and SF04
-lease/watermark state. SQS/Auditor adapters remain follow-up work.
+lease/watermark state. The SQS adapter is implemented; task-role IAM and the
+Auditor allowlist remain deployment follow-up work.
 
 ## Why one RDS instance per service: balancing cost and isolation
 

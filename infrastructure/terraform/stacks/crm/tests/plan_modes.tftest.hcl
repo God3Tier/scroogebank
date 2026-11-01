@@ -71,6 +71,54 @@ override_resource {
   override_during = plan
   values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/event_alert_service" }
 }
+override_resource {
+  target          = aws_secretsmanager_secret.app_login["client_health_service"]
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_health_service" }
+}
+override_resource {
+  target          = aws_secretsmanager_secret.client_health_read
+  override_during = plan
+  values          = { arn = "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read" }
+}
+
+# Known values for what the Client Health checks compare: the audit queue's
+# URL, the alarm topic, the machine client's ID, and the API and ALB IDs in the
+# dashboard body, which a plan also leaves unknown.
+override_resource {
+  target          = aws_sqs_queue.audit
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:ap-southeast-1:123456789012:crm-sg-prod-audit-insert"
+    url = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
+  }
+}
+override_resource {
+  target          = aws_sns_topic.alarms
+  override_during = plan
+  values          = { arn = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms" }
+}
+override_resource {
+  target          = aws_cognito_user_pool_client.client_health_read
+  override_during = plan
+  values          = { id = "clienthealthreadexample" }
+}
+override_resource {
+  target          = aws_apigatewayv2_api.this
+  override_during = plan
+  values = {
+    id            = "a1b2c3d4e5"
+    execution_arn = "arn:aws:execute-api:ap-southeast-1:123456789012:a1b2c3d4e5"
+  }
+}
+override_resource {
+  target          = aws_lb.internal
+  override_during = plan
+  values = {
+    arn        = "arn:aws:elasticloadbalancing:ap-southeast-1:123456789012:loadbalancer/app/crm-sg-prod-internal/0123456789abcdef"
+    arn_suffix = "app/crm-sg-prod-internal/0123456789abcdef"
+  }
+}
 
 variables {
   environment             = "prod"
@@ -89,8 +137,25 @@ run "prod" {
   command = plan
 
   assert {
-    condition     = length(module.db) == 6 && alltrue([for db in module.db : db.instance_class == "db.t4g.micro"])
-    error_message = "Prod: six micro RDS instances, one per service (ADR-0023)."
+    condition     = length(module.db) == 7 && alltrue([for db in module.db : db.instance_class == "db.t4g.micro"])
+    error_message = "Prod: seven micro RDS instances, one per database-owning service (ADR-0023)."
+  }
+  assert {
+    condition = (
+      module.db["health"].db_name == "health" &&
+      aws_secretsmanager_secret.app_login["client_health_service"].name == "${local.name}/db/health/client_health_service" &&
+      contains(keys(aws_security_group.this), "db_health") &&
+      aws_vpc_security_group_ingress_rule.this["db_health-from-client_health-5432"].from_port == 5432 &&
+      aws_vpc_security_group_ingress_rule.this["db_health-from-db_console-5432"].from_port == 5432
+    )
+    error_message = "Client Health gets its own database, application login secret and narrowly scoped database ingress."
+  }
+  assert {
+    condition = (
+      contains(keys(aws_vpc_security_group_ingress_rule.this), "alb-from-client_health-${local.alb_port}") &&
+      !contains(keys(aws_vpc_security_group_ingress_rule.this), "transaction-from-client_health-${local.ports.transaction}")
+    )
+    error_message = "Client Health reaches transaction-service only through the ALB (ADR-0019 decision 4), with no direct ingress."
   }
   assert {
     condition     = alltrue([for db in module.db : db.backup_retention_days == 7 && db.multi_az == false && db.max_allocated_storage == 100])
@@ -136,7 +201,7 @@ run "prod" {
     error_message = "Without domain_name: no certificates, the internal ALB on HTTP 80 and the default CloudFront name."
   }
   assert {
-    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,transaction,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service"
+    condition     = join(",", keys(aws_secretsmanager_secret.service_tls)) == "account,alerts,auditor,client,health,transaction,user" && join(",", tls_cert_request.service["alerts"].dns_names) == "event-alert-service" && join(",", tls_cert_request.service["health"].dns_names) == "client-health-monitor-service"
     error_message = "Every service behind the ALB in this stack, and the auditor, gets a project-CA certificate (INF-08)."
   }
   assert {
@@ -144,15 +209,16 @@ run "prod" {
     error_message = "dashboard-service calls user-service and transaction-service over HTTPS."
   }
   assert {
-    condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])
+    condition     = alltrue([for m in [module.user_service, module.client_service, module.account_service, module.transaction_service, module.auditor, module.event_alert_service, module.client_health_service] : join(",", m.container_names) == "tls-init,db-migrate,${m.service_name}"])
     error_message = "Every service with a database migrates it before starting (ADR-0028 decision 3)."
   }
   assert {
     condition = (
       local.migrations["users"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
       local.migrations["alerts"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
+      local.migrations["health"].environment["FLYWAY_SQL_MIGRATION_SEPARATOR"] == "__" &&
       length(local.migrations["clients"].environment) == 0 &&
-      alltrue([for m in [module.user_service, module.event_alert_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
+      alltrue([for m in [module.user_service, module.event_alert_service, module.client_health_service] : m.app_environment["SPRING_FLYWAY_ENABLED"] == "false"])
     )
     error_message = "db-migrate reads the Java services' V<n>__ file names, and their own Flyway is off in AWS."
   }
@@ -160,7 +226,7 @@ run "prod" {
     condition = (
       join(",", sort(keys(local.migrations["audit"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD,FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD,FLYWAY_USER" &&
       join(",", sort(keys(local.migrations["transactions"].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD,FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD,FLYWAY_USER" &&
-      alltrue([for db in ["users", "clients", "accounts", "alerts"] : join(",", sort(keys(local.migrations[db].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_APP_LOGIN,FLYWAY_PLACEHOLDERS_APP_PASSWORD,FLYWAY_USER"])
+      alltrue([for db in ["users", "clients", "accounts", "alerts", "health"] : join(",", sort(keys(local.migrations[db].secrets))) == "FLYWAY_PASSWORD,FLYWAY_PLACEHOLDERS_APP_LOGIN,FLYWAY_PLACEHOLDERS_APP_PASSWORD,FLYWAY_USER"])
     )
     error_message = "Each database's db-migrate gets the passwords of the logins it creates, and only those."
   }
@@ -177,8 +243,55 @@ run "prod" {
     error_message = "Each service connects with its own login, never its database's master user (ADR-0028 decision 3)."
   }
   assert {
-    condition     = contains(keys(aws_ecr_repository.this), "db-migrate")
-    error_message = "The db-migrate image has its own repository."
+    condition     = contains(keys(aws_ecr_repository.this), "db-migrate") && contains(keys(aws_ecr_repository.this), "client-health-monitor-service")
+    error_message = "The db-migrate and Client Health images have their own repositories."
+  }
+  assert {
+    condition = (
+      module.client_health_service.app_environment["CLIENT_HEALTH_MODE"] == "API" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "true" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_AUDIT_QUEUE_URL"] == aws_sqs_queue.audit.url &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED"] == "true" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE"] == "Scrooge/ClientHealth" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "" &&
+      module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE"] == "crm-clients/assignment.read" &&
+      startswith(module.client_health_service.app_secrets["SPRING_DATASOURCE_USERNAME"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/db/login/client_health_service:") &&
+      startswith(module.client_health_service.app_secrets["CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read:")
+    )
+    error_message = "Client Health API uses its database login, audit delivery and exact assignment scope, failing closed without ALB HTTPS."
+  }
+  assert {
+    condition = (
+      toset(aws_cognito_user_pool_client.client_health_read.allowed_oauth_scopes) == toset(["crm-clients/assignment.read", "crm-transactions/read"]) &&
+      module.client_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_CLIENT_ID"] == aws_cognito_user_pool_client.client_health_read.id &&
+      module.client_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_SCOPE"] == "crm-clients/assignment.read" &&
+      module.client_health_analysis.service_name == null &&
+      join(",", module.client_health_analysis.container_names) == "client-health-analysis" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_MODE"] == "ANALYSIS" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_AI_ENABLED"] == "false" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED"] == "false" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED"] == "true" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE"] == "Scrooge/ClientHealth" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_TRANSACTION_ENDPOINT"] == "" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "" &&
+      startswith(module.client_health_analysis.app_secrets["CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET"], "arn:aws:secretsmanager:ap-southeast-1:123456789012:secret:crm-sg-prod/cognito/client-health-read:") &&
+      aws_scheduler_schedule.client_health_analysis.state == "DISABLED" &&
+      aws_cloudwatch_event_target.client_health_analysis_failed.arn == aws_sns_topic.alarms.arn
+    )
+    error_message = "The shared machine client has only the two read scopes, and no-domain analysis remains a non-service task that fails closed."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.client_health_watermark_stale.namespace == "Scrooge/ClientHealth" &&
+      aws_cloudwatch_metric_alarm.client_health_watermark_stale.threshold == 97200 &&
+      aws_cloudwatch_metric_alarm.client_health_audit_oldest.threshold == 900 &&
+      aws_cloudwatch_metric_alarm.client_health_assignment_unavailable.dimensions["outcome"] == "unavailable" &&
+      anytrue([for q in aws_cloudwatch_metric_alarm.client_health_analysis_failures.metric_query : strcontains(q.expression, "outcome=\"failed\"")]) &&
+      strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "Client Health analysis") &&
+      strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "client_health_audit_backlog")
+    )
+    error_message = "Client Health metrics use the bounded namespace and drive freshness, dependency, audit and dashboard coverage."
   }
 }
 
@@ -222,6 +335,26 @@ run "custom_domain" {
     condition     = aws_lambda_function.ingest[0].environment[0].variables["ACCOUNT_SERVICE_BASE_URL"] == "https://alb.sg.example.com"
     error_message = "Custom domain: the ingest Lambda calls the ALB by the name on its certificate."
   }
+  assert {
+    condition = (
+      module.client_health_service.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "https://alb.sg.example.com" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_TRANSACTION_ENDPOINT"] == "https://alb.sg.example.com/internal/v1/transactions" &&
+      module.client_health_analysis.app_environment["CLIENT_HEALTH_ASSIGNMENT_BASE_URL"] == "https://alb.sg.example.com" &&
+      output.client_health_transaction_read.transaction_scope == "crm-transactions/read" &&
+      output.client_health_transaction_read.assignment_scope == "crm-clients/assignment.read"
+    )
+    error_message = "Custom domain: Client Health calls both internal providers through the verified HTTPS ALB."
+  }
+  assert {
+    condition = (
+      aws_scheduler_schedule.client_health_analysis.state == "ENABLED" &&
+      aws_scheduler_schedule.client_health_analysis.schedule_expression == "cron(0 8 * * ? *)" &&
+      aws_scheduler_schedule.client_health_analysis.schedule_expression_timezone == "Asia/Singapore" &&
+      aws_scheduler_schedule.client_health_analysis.target[0].retry_policy[0].maximum_retry_attempts == 1 &&
+      aws_scheduler_schedule.client_health_analysis.target[0].retry_policy[0].maximum_event_age_in_seconds == 3600
+    )
+    error_message = "Custom domain: Client Health analysis runs once at 08:00 SGT with one bounded retry."
+  }
 }
 
 run "high_availability_week" {
@@ -253,7 +386,7 @@ run "stopped_between_sessions" {
     error_message = "Stopped: every service scales to 0."
   }
   assert {
-    condition     = aws_scheduler_schedule.chain_verify.state == "DISABLED"
+    condition     = aws_scheduler_schedule.chain_verify.state == "DISABLED" && aws_scheduler_schedule.client_health_analysis.state == "DISABLED"
     error_message = "Stopped: schedules pause."
   }
   assert {

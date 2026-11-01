@@ -9,6 +9,7 @@ import bank.clienthealth.activity.application.ActivityProjectionService;
 import bank.clienthealth.activity.application.ActivityProjectionService.ProjectionConflictException;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository.LeaseConflictException;
+import bank.clienthealth.analysis.persistence.JdbcSuccessfulAnalysisWatermarkQuery;
 import bank.clienthealth.analysis.port.AnalysisRunPort.AcquisitionStatus;
 import bank.clienthealth.analysis.port.AnalysisRunPort.FailureCategory;
 import bank.clienthealth.audit.JdbcAuditOutboxRepository;
@@ -48,6 +49,7 @@ class ActivityRunPersistenceIntegrationTest {
     private JdbcTemplate jdbc;
     private JdbcActivityProjectionRepository activityRepository;
     private JdbcAnalysisRunRepository runRepository;
+    private JdbcSuccessfulAnalysisWatermarkQuery watermarkQuery;
 
     @BeforeEach
     void migrateAndClear() {
@@ -72,6 +74,7 @@ class ActivityRunPersistenceIntegrationTest {
         runRepository = new JdbcAnalysisRunRepository(
                 jdbc, transactions, () -> "run-lease-" + leaseSequence.incrementAndGet(),
                 auditOutbox);
+        watermarkQuery = new JdbcSuccessfulAnalysisWatermarkQuery(jdbc);
     }
 
     @Test
@@ -123,6 +126,7 @@ class ActivityRunPersistenceIntegrationTest {
         assertEquals(TO, jdbc.queryForObject(
                 "SELECT watermark FROM relationship_health_analysis_runs WHERE run_id = 'run-1'",
                 java.time.OffsetDateTime.class).toInstant());
+        assertEquals(TO, watermarkQuery.latestSuccessfulWatermark().orElseThrow());
         assertEquals(2, jdbc.queryForObject("""
                 SELECT count(*) FROM relationship_health_audit_outbox
                 WHERE action IN ('ANALYSIS_RUN_STARTED', 'ANALYSIS_RUN_COMPLETED')
@@ -131,8 +135,14 @@ class ActivityRunPersistenceIntegrationTest {
 
     @Test
     void expiredLeaseIsRecoveredWithFencingAndFailureLeavesNoWatermark() {
+        var completed = runRepository.acquire(
+                "run-complete", FROM, NOW.minusSeconds(60), Duration.ofMinutes(60));
+        runRepository.succeed(completed.lease(), FROM, NOW.minusSeconds(30));
         var first = runRepository.acquire(
                 "run-retry", TO, NOW, Duration.ofMinutes(1));
+        assertEquals(AcquisitionStatus.LEASE_HELD, runRepository.acquire(
+                "run-retry", TO, NOW.plusSeconds(1), Duration.ofMinutes(1)).status());
+        assertEquals(FROM, watermarkQuery.latestSuccessfulWatermark().orElseThrow());
         var recovered = runRepository.acquire(
                 "run-retry", TO, NOW.plus(Duration.ofMinutes(2)), Duration.ofMinutes(60));
 
@@ -155,7 +165,8 @@ class ActivityRunPersistenceIntegrationTest {
                 SELECT count(*) FROM relationship_health_analysis_runs
                 WHERE run_id = 'run-retry' AND watermark IS NOT NULL
                 """, Integer.class));
-        assertEquals(3, jdbc.queryForObject("""
+        assertEquals(FROM, watermarkQuery.latestSuccessfulWatermark().orElseThrow());
+        assertEquals(4, jdbc.queryForObject("""
                 SELECT count(*) FROM relationship_health_audit_outbox
                 WHERE action IN ('ANALYSIS_RUN_STARTED', 'ANALYSIS_RUN_FAILED')
                 """, Integer.class));

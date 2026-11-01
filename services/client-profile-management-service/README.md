@@ -9,7 +9,7 @@ API contract: [`docs/api/clients-api.yaml`](../../docs/api/clients-api.yaml), an
 The local service still verifies Cognito access tokens and records a CRM audit event for the Auditor's SQS queue after each protected endpoint completes. Provide the Cognito settings and Auditor queue configuration when starting it:
 
 ```sh
-make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
+make run COGNITO_ISSUER_URI=https://cognito-idp.<region>.amazonaws.com/<user-pool-id> COGNITO_APP_CLIENT_ID=<app-client-id> CLIENT_HEALTH_ASSIGNMENT_CLIENT_ID=<machine-client-id> AWS_REGION=<region> AUDIT_QUEUE_URL=<audit-insert-queue-url>
 ```
 
 The command starts PostgreSQL and a LocalStack container with the encryption keys (see [Client data encryption](#client-data-encryption)) and the identity documents bucket (see [Identity documents and verification](#identity-documents-and-verification)), applies `data/` with Flyway (`make migrate`, the image that db-migrate runs in AWS, [Schema migrations](../../docs/database/migrations.md)), and runs the API at `http://localhost:8080`. `GET /health` is public; all `/api` routes require a Cognito **access token**. Set `Authorization: Bearer <access-token>` in Bruno or your API client.
@@ -25,6 +25,8 @@ To stop PostgreSQL and other Compose dependencies while keeping the data volume,
 ## Cognito authorization
 
 Feature 1 provisions users in the shared Cognito user pool and assigns the `ADMIN` or `AGENT` group. This service validates the token's RS256 signature against the pool's JWKS, plus its issuer, app-client ID, expiration, and `token_use=access` claim. It rejects ID tokens and tokens without a supported group.
+
+Client Health resolves assignments through `GET /internal/v1/clients/{clientId}/assignment`. This route accepts only a machine access token issued to `CLIENT_HEALTH_ASSIGNMENT_CLIENT_ID` with exactly `CLIENT_HEALTH_ASSIGNMENT_SCOPE` (`crm-clients/assignment.read` in the CRM stack). Interactive Agent and Admin tokens cannot call it. It returns only the opaque assignment subject and revision metadata: 404 for a missing or deleted client, 410 for an inactive assignment, and 503 when storage is unavailable. Client Health never reads this service's database directly.
 
 The verified Cognito `sub` is the creator identity. Agents may read, update, verify, and delete only their own client profiles, and upload and view only their own clients' identity documents. Admins can read every client, its documents and each document, but change nothing: `POST /api/clients`, `PUT` and `DELETE /api/clients/{id}`, `POST /api/clients/{id}/verify` and `POST /api/clients/{id}/documents` return 403 `admins have read-only access to client data` to admins, before the ownership check ([ADR-0059](../../docs/adr/ADR-0059-admins-read-only-on-client-data.md)). The service ignores caller-supplied agent IDs and replaces the header from the authenticated subject before invoking the existing controller. The audit middleware takes the actor ID from that verified identity, not from request data.
 

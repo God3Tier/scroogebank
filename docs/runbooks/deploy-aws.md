@@ -13,7 +13,7 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 
 - **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for the scripts (step 5, 9.5 and the database console).
 - **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
-- **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the six the stack needs, and refuses its backup settings (ADR-0042).
+- **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the seven the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
 - **Cost.** A deployment bills from step 1 until its teardown. Prod costs about USD 360 a month left running at one task per service, and about USD 65 a month even when stopped ([Pausing a deployment](#pausing-a-deployment)), so tear it down when you are done rather than leaving it stopped (ADR-0042 "Cost Impact").
 
@@ -171,6 +171,7 @@ build() { docker build --platform linux/amd64 -t "crm/$1:$TAG" -f "$2" "$3"; }
 build user-service        services/user-service/Dockerfile        .
 build dashboard-service   services/dashboard-service/Dockerfile   .
 build event-alert-service services/event-alert-service/Dockerfile .
+build client-health-monitor-service services/client-health-monitor-service/Dockerfile .
 build engagement-service  services/engagement-service/Dockerfile  .
 build auditor             services/auditor/Dockerfile             .
 build client-service      services/client-profile-management-service/Dockerfile services/client-profile-management-service
@@ -179,7 +180,7 @@ build transaction-service services/sftp/receiver/Dockerfile       services/sftp/
 build db-migrate          infrastructure/db-migrate/Dockerfile    .
 ```
 
-`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's and engagement-service's migrations reach AWS only through it.
+`db-migrate` is Flyway with every service's database migrations, and the logins the services connect with. The task of each service with a database runs it before the service starts ([Schema migrations](../database/migrations.md)). Build it from the same commit as the other images: user-service's, event-alert-service's, engagement-service's and Client Health's migrations reach AWS only through it. Client Health reads `/flyway/sql/health` before its API container starts.
 
 ## 3. Create the CRM stack, stopped
 
@@ -327,7 +328,7 @@ repo() { printf '%s' "$REPOS" | python -c "import json,sys; print(json.load(sys.
 aws ecr get-login-password | docker login --username AWS --password-stdin "$(repo auditor | cut -d/ -f1)"
 
 push() { docker tag "crm/$1:$TAG" "$(repo "$1"):$TAG" && docker push "$(repo "$1"):$TAG"; }
-for s in user-service event-alert-service auditor client-service account-service transaction-service db-migrate; do push "$s"; done
+for s in user-service event-alert-service client-health-monitor-service auditor client-service account-service transaction-service db-migrate; do push "$s"; done
 ```
 
 In the same terminal, dashboard-service's image, once step 4 has applied:
@@ -356,7 +357,15 @@ terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-f
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars     # the same
 ```
 
-The databases need nothing by hand. Each service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate.
+The databases need nothing by hand. Each deployed service's task runs its `db-migrate` container first. It applies the database's migrations, then creates the service's own login, whose password stays in Secrets Manager ([Database logins](../database/migrations.md#database-logins)). No service connects as its database's master user. The ingest Lambda's login is created by transaction-service's db-migrate; the Client Health API task similarly migrates `health-db` and creates `client_health_service` before starting.
+
+Client Health deploys with AI disabled. In the project account's custom-domain
+mode, the API and scheduled task use one client-credentials client with the
+exact `crm-transactions/read` and `crm-clients/assignment.read` scopes. The
+analysis task runs at 08:00 Asia/Singapore with one bounded retry. Without the
+custom-domain HTTPS ALB, assignment URLs stay blank and the analysis schedule
+stays disabled, so the stack fails closed rather than sending service tokens
+over HTTP.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
@@ -384,7 +393,7 @@ cd -
    ```sh
    STACK=$(terraform -chdir=infrastructure/terraform/stacks/crm output -raw ecs_cluster)   # crm-<legal_entity>-<environment>
    aws ecs describe-services --cluster "$STACK" \
-     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service engagement-service \
+     --services user-service client-service account-service auditor transaction-service dashboard-service event-alert-service client-health-monitor-service engagement-service \
      --query 'services[].[serviceName,runningCount,desiredCount]' --output table
    ```
 
@@ -403,7 +412,8 @@ cd -
    4. **Cold start:** the `REPORT` line's `Init Duration` plus `Duration` should be well under Cognito's 5-second limit.
 
    Test with real sign-ins, not `aws lambda invoke` with the sample LOGIN or PASSWORD_RESET events: those would put a made-up user's login into the audit chain, and it cannot be removed. `confirm-sign-up.json` is safe to invoke, since the trigger ignores that event.
-5. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
+5. **Client Health:** confirm `client-health-monitor-service` is healthy, then open Client Health as an Agent and Admin. The Agent sees only currently assigned tasks and the Admin is read-only. In EventBridge Scheduler, `client-health-analysis` is enabled only with the custom domain and `running=true`; after its next 08:00 SGT run, its ECS task exits 0 and the analysis watermark advances. The CRM CloudWatch dashboard shows Client Health freshness, audit/dependency and task/AI panels. A non-zero task exit or a breached Client Health metric alarm publishes to the shared alarm SNS topic; RH-SF12 records a test notification before demo enablement.
+6. **Agent engagement:** as an agent whose Cognito address is a verified recipient, create a meeting in Calendar. Within about 2 minutes the invite reaches that mailbox and adds the meeting to the agent's calendar; moving or cancelling it updates or removes the entry. Follow-up Emails writes a template draft while `ai_enabled` is off.
 
 ## 9. The external SFTP server and the ingest Lambda
 

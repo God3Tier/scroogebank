@@ -8,6 +8,7 @@ import bank.clienthealth.activity.persistence.JdbcActivityProjectionRepository;
 import bank.clienthealth.analysis.persistence.JdbcAnalysisRunRepository;
 import bank.clienthealth.audit.AuditOutboxRelay;
 import bank.clienthealth.audit.JdbcAuditOutboxRepository;
+import bank.clienthealth.runtime.AnalysisRunner;
 import bank.clienthealth.task.api.RelationshipTaskActionController;
 import bank.clienthealth.task.api.RelationshipTaskQueryController;
 import bank.clienthealth.task.application.RelationshipTaskQueryService;
@@ -71,6 +72,7 @@ class TaskRuntimeConfigurationTest {
         assertThat(analysisRuns).isNotNull();
         assertThat(auditOutbox).isNotNull();
         assertThat(context.getBeansOfType(AuditOutboxRelay.class)).isEmpty();
+        assertThat(context.getBeansOfType(AnalysisRunner.class)).isEmpty();
     }
 
     @Test

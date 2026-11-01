@@ -211,6 +211,17 @@ resource "aws_cognito_resource_server" "transactions" {
   }
 }
 
+resource "aws_cognito_resource_server" "client_assignments" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  identifier   = "crm-clients"
+  name         = "CRM client assignments"
+
+  scope {
+    scope_name        = "assignment.read"
+    scope_description = "Read the current client assignment for Client Health"
+  }
+}
+
 resource "aws_cognito_user_pool_client" "client_health_read" {
   name         = "${local.name}-client-health-read"
   user_pool_id = aws_cognito_user_pool.this.id
@@ -218,11 +229,17 @@ resource "aws_cognito_user_pool_client" "client_health_read" {
   generate_secret                      = true
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["client_credentials"]
-  allowed_oauth_scopes                 = ["crm-transactions/read"]
-  supported_identity_providers         = ["COGNITO"]
-  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+  allowed_oauth_scopes = [
+    "crm-transactions/read",
+    "crm-clients/assignment.read",
+  ]
+  supported_identity_providers = ["COGNITO"]
+  explicit_auth_flows          = ["ALLOW_REFRESH_TOKEN_AUTH"]
 
-  depends_on = [aws_cognito_resource_server.transactions]
+  depends_on = [
+    aws_cognito_resource_server.transactions,
+    aws_cognito_resource_server.client_assignments,
+  ]
 }
 
 resource "aws_secretsmanager_secret" "client_health_read" {
@@ -234,8 +251,9 @@ resource "aws_secretsmanager_secret" "client_health_read" {
 resource "aws_secretsmanager_secret_version" "client_health_read" {
   secret_id = aws_secretsmanager_secret.client_health_read.id
   secret_string = jsonencode({
-    client_id     = aws_cognito_user_pool_client.client_health_read.id
-    client_secret = aws_cognito_user_pool_client.client_health_read.client_secret
-    scope         = "crm-transactions/read"
+    client_id        = aws_cognito_user_pool_client.client_health_read.id
+    client_secret    = aws_cognito_user_pool_client.client_health_read.client_secret
+    scope            = "crm-transactions/read"
+    assignment_scope = "crm-clients/assignment.read"
   })
 }

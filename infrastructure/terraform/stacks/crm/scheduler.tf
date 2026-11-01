@@ -1,6 +1,7 @@
-# EventBridge Scheduler (ADR-0022, ADR-0024): chain-verify daily, and the
-# transaction import every 5 minutes once its Lambda exists. Schedules pause
-# while the stack is stopped. The alert worker's schedule is in
+# EventBridge Scheduler (ADR-0022, ADR-0024, ADR-0034): chain-verify and Client
+# Health daily, and transaction import every 5 minutes once its Lambda exists.
+# Schedules pause while the stack is stopped. Client Health also stays disabled
+# without the custom-domain HTTPS internal ALB. The alert worker's schedule is in
 # stacks/alert-worker (ADR-0048).
 
 data "aws_iam_policy_document" "scheduler_assume" {
@@ -25,9 +26,12 @@ resource "aws_iam_role" "scheduler" {
 
 data "aws_iam_policy_document" "scheduler" {
   statement {
-    sid       = "StartChainVerify"
-    actions   = ["ecs:RunTask"]
-    resources = ["arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task-definition/${module.chain_verify.task_definition_family}:*"]
+    sid     = "StartScheduledTasks"
+    actions = ["ecs:RunTask"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task-definition/${module.chain_verify.task_definition_family}:*",
+      "arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task-definition/${module.client_health_analysis.task_definition_family}:*",
+    ]
     condition {
       test     = "ArnEquals"
       variable = "ecs:cluster"
@@ -36,9 +40,14 @@ data "aws_iam_policy_document" "scheduler" {
   }
 
   statement {
-    sid       = "PassChainVerifyRoles"
-    actions   = ["iam:PassRole"]
-    resources = [module.chain_verify.task_role_arn, module.chain_verify.execution_role_arn]
+    sid     = "PassScheduledTaskRoles"
+    actions = ["iam:PassRole"]
+    resources = [
+      module.chain_verify.task_role_arn,
+      module.chain_verify.execution_role_arn,
+      module.client_health_analysis.task_role_arn,
+      module.client_health_analysis.execution_role_arn,
+    ]
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
@@ -91,6 +100,40 @@ resource "aws_scheduler_schedule" "chain_verify" {
 
     retry_policy {
       maximum_retry_attempts = 2
+    }
+  }
+}
+
+resource "aws_scheduler_schedule" "client_health_analysis" {
+  name                         = "${local.name}-client-health-analysis"
+  description                  = "Daily deterministic Client Health analysis (ADR-0034)"
+  schedule_expression          = "cron(0 8 * * ? *)"
+  schedule_expression_timezone = "Asia/Singapore"
+  state                        = var.running && local.custom_domain ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.this.arn
+    role_arn = aws_iam_role.scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = module.client_health_analysis.task_definition_arn
+      launch_type         = "FARGATE"
+      task_count          = 1
+
+      network_configuration {
+        subnets          = local.app_subnet_ids
+        security_groups  = [local.sg["client_health"]]
+        assign_public_ip = false
+      }
+    }
+
+    retry_policy {
+      maximum_event_age_in_seconds = 3600
+      maximum_retry_attempts       = 1
     }
   }
 }

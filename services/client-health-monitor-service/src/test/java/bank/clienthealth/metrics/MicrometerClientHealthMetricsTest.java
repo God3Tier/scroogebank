@@ -8,8 +8,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class MicrometerClientHealthMetricsTest {
@@ -18,7 +18,8 @@ class MicrometerClientHealthMetricsTest {
         var registry = new SimpleMeterRegistry();
         Instant now = Instant.parse("2026-10-27T00:03:00Z");
         var metrics = new MicrometerClientHealthMetrics(
-                registry, Clock.fixed(now, ZoneOffset.UTC));
+                registry, Clock.fixed(now, ZoneOffset.UTC),
+                () -> Optional.of(now.minus(Duration.ofMinutes(3))));
 
         metrics.analysis(AnalysisOutcome.COMPLETED, FailureStage.NONE,
                 Duration.ofSeconds(2), now.minus(Duration.ofMinutes(3)));
@@ -46,22 +47,41 @@ class MicrometerClientHealthMetricsTest {
     }
 
     @Test
-    void watermarkAgeContinuesToIncreaseAfterFailedRuns() {
-        var registry = new SimpleMeterRegistry();
-        Clock clock = mock(Clock.class);
+    void persistedWatermarkSurvivesMetricsRestartAndFailedRuns() {
         Instant watermark = Instant.parse("2026-10-27T00:00:00Z");
-        when(clock.instant()).thenReturn(
-                watermark.plusSeconds(60), watermark.plusSeconds(300));
-        var metrics = new MicrometerClientHealthMetrics(registry, clock);
+        var persisted = new AtomicReference<>(Optional.of(watermark));
+        var firstRegistry = new SimpleMeterRegistry();
+        var firstMetrics = new MicrometerClientHealthMetrics(
+                firstRegistry, Clock.fixed(watermark.plusSeconds(60), ZoneOffset.UTC),
+                persisted::get);
 
-        metrics.analysis(AnalysisOutcome.COMPLETED, FailureStage.NONE,
-                Duration.ofSeconds(1), watermark);
-        assertThat(registry.get("client_health_analysis_watermark_age_seconds")
+        assertThat(firstRegistry.get("client_health_analysis_watermark_age_seconds")
                 .gauge().value()).isEqualTo(60);
 
-        metrics.analysis(AnalysisOutcome.FAILED, FailureStage.REPLAY,
+        var restartedRegistry = new SimpleMeterRegistry();
+        var restartedMetrics = new MicrometerClientHealthMetrics(
+                restartedRegistry, Clock.fixed(watermark.plusSeconds(300), ZoneOffset.UTC),
+                persisted::get);
+        restartedMetrics.analysis(AnalysisOutcome.FAILED, FailureStage.REPLAY,
                 Duration.ofSeconds(1), null);
-        assertThat(registry.get("client_health_analysis_watermark_age_seconds")
+        assertThat(restartedRegistry.get("client_health_analysis_watermark_age_seconds")
                 .gauge().value()).isEqualTo(300);
+    }
+
+    @Test
+    void unavailableDatabaseReturnsNanWithoutCachingAStaleWatermark() {
+        var registry = new SimpleMeterRegistry();
+        var available = new AtomicReference<>(true);
+        Instant watermark = Instant.parse("2026-10-27T00:00:00Z");
+        var metrics = new MicrometerClientHealthMetrics(
+                registry, Clock.fixed(watermark.plusSeconds(60), ZoneOffset.UTC), () -> {
+                    if (!available.get()) throw new IllegalStateException("database unavailable");
+                    return Optional.of(watermark);
+                });
+        var gauge = registry.get("client_health_analysis_watermark_age_seconds").gauge();
+
+        assertThat(gauge.value()).isEqualTo(60);
+        available.set(false);
+        assertThat(gauge.value()).isNaN();
     }
 }

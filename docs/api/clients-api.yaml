@@ -33,6 +33,29 @@ security:
   - bearerAuth: []
 
 paths:
+  /internal/v1/clients/{clientId}/assignment:
+    get:
+      tags: [clients]
+      summary: Resolve the active Agent assignment for Client Health
+      description: Machine-only endpoint for the configured Client Health Cognito client; it accepts no Agent identifier.
+      operationId: getClientAssignment
+      security:
+        - assignmentMachineAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Current active assignment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientAssignment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Client does not exist or is deleted. }
+        '410': { description: Client exists without an active assignment. }
+        '503': { description: Assignment storage is unavailable. }
   /api/clients:
     post:
       tags: [clients]
@@ -358,6 +381,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: A Cognito access token from the CRM app client, with the ADMIN or AGENT group.
+    assignmentMachineAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Client-credentials token from the configured Client Health app client with exactly the assignment-read scope.
 
   parameters:
     ClientId:
@@ -398,6 +426,17 @@ components:
           schema: { type: string }
 
   schemas:
+    ClientAssignment:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, clientId, assignedAgentSubject, active, assignmentVersion, updatedAt]
+      properties:
+        schemaVersion: { type: string, enum: ['1'] }
+        clientId: { type: string, format: uuid }
+        assignedAgentSubject: { type: string, minLength: 1, maxLength: 128 }
+        active: { type: boolean, enum: [true] }
+        assignmentVersion: { type: integer, format: int64, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
     Error:
       type: object
       required: [error]

@@ -1,7 +1,8 @@
 # The ECS services (system-overview "Components"). Settings follow each
 # service's README and configuration on dev; where the code and the target
-# design differ, ADR-0042 records it. The health monitor is not deployable yet,
-# and the alert worker and its Tokyo search belong to EDA-D1-02
+# design differ, ADR-0042 records it. The Client Health API and its daily
+# analysis task are deployed here. The alert worker and its Tokyo
+# search belong to EDA-D1-02
 # (docs/feature-plans/infrastructure_plan.md).
 
 locals {
@@ -43,8 +44,9 @@ locals {
   # applies its database's directory in the db-migrate image as the master
   # user, checking RDS's certificate, then creates the logins and sets their
   # passwords, before the service starts. Only db-migrate gets the master
-  # credentials. user-service's and event-alert-service's files are named for
-  # Spring Boot's Flyway, which applies them locally but is off here.
+  # credentials. user-service's, event-alert-service's and Client Health's
+  # files are named for Spring Boot's Flyway, which applies them locally but
+  # is off in AWS.
   migrations = {
     for db in keys(local.databases) : db => {
       image    = local.image["db-migrate"]
@@ -57,7 +59,7 @@ locals {
         },
         local.migration_placeholders[db],
       )
-      environment = contains(["users", "alerts"], db) ? { FLYWAY_SQL_MIGRATION_SEPARATOR = "__" } : {}
+      environment = contains(["users", "alerts", "health"], db) ? { FLYWAY_SQL_MIGRATION_SEPARATOR = "__" } : {}
     }
   }
 }
@@ -67,6 +69,19 @@ data "aws_iam_policy_document" "send_audit" {
     sid       = "SendAuditEvents"
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.audit.arn]
+  }
+}
+
+data "aws_iam_policy_document" "client_health_metrics" {
+  statement {
+    sid       = "PublishClientHealthMetrics"
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = ["Scrooge/ClientHealth"]
+    }
   }
 }
 
@@ -222,25 +237,27 @@ module "client_service" {
   port_name          = "https"
 
   environment = {
-    APP_ENV                  = "production"
-    APP_ADDR                 = ":${local.ports.client}"
-    APP_TLS_CERT_FILE        = "/tls/cert.pem"
-    APP_TLS_KEY_FILE         = "/tls/key.pem"
-    DB_HOST                  = module.db["clients"].address
-    DB_PORT                  = "5432"
-    DB_NAME                  = module.db["clients"].db_name
-    DB_SSLMODE               = "verify-full"
-    DB_SSLROOTCERT           = "/tls/rds-ca.pem"
-    ACCOUNT_SERVICE_BASE_URL = "https://${local.sc.account}:${local.ports.account}"
-    USER_SERVICE_BASE_URL    = "https://${local.sc.user}:${local.ports.user}" # reassigning clients (ADR-0060)
-    AWS_REGION               = local.region
-    AUDIT_QUEUE_URL          = aws_sqs_queue.audit.url
-    COGNITO_ISSUER_URI       = local.cognito_issuer
-    COGNITO_APP_CLIENT_ID    = aws_cognito_user_pool_client.web.id
-    CLIENT_KEYS_TABLE        = aws_dynamodb_table.client_keys.name
-    CLIENT_DATA_KEY_ID       = aws_kms_key.client_data.arn
-    CLIENT_INDEX_KEY_ID      = aws_kms_key.client_index.arn
-    CLIENT_DOCUMENTS_BUCKET  = aws_s3_bucket.documents.bucket
+    APP_ENV                            = "production"
+    APP_ADDR                           = ":${local.ports.client}"
+    APP_TLS_CERT_FILE                  = "/tls/cert.pem"
+    APP_TLS_KEY_FILE                   = "/tls/key.pem"
+    DB_HOST                            = module.db["clients"].address
+    DB_PORT                            = "5432"
+    DB_NAME                            = module.db["clients"].db_name
+    DB_SSLMODE                         = "verify-full"
+    DB_SSLROOTCERT                     = "/tls/rds-ca.pem"
+    ACCOUNT_SERVICE_BASE_URL           = "https://${local.sc.account}:${local.ports.account}"
+    USER_SERVICE_BASE_URL              = "https://${local.sc.user}:${local.ports.user}" # reassigning clients (ADR-0060)
+    AWS_REGION                         = local.region
+    AUDIT_QUEUE_URL                    = aws_sqs_queue.audit.url
+    COGNITO_ISSUER_URI                 = local.cognito_issuer
+    COGNITO_APP_CLIENT_ID              = aws_cognito_user_pool_client.web.id
+    CLIENT_HEALTH_ASSIGNMENT_CLIENT_ID = aws_cognito_user_pool_client.client_health_read.id
+    CLIENT_HEALTH_ASSIGNMENT_SCOPE     = "crm-clients/assignment.read"
+    CLIENT_KEYS_TABLE                  = aws_dynamodb_table.client_keys.name
+    CLIENT_DATA_KEY_ID                 = aws_kms_key.client_data.arn
+    CLIENT_INDEX_KEY_ID                = aws_kms_key.client_index.arn
+    CLIENT_DOCUMENTS_BUCKET            = aws_s3_bucket.documents.bucket
   }
   secrets = {
     DB_USER     = "${local.app_login_secret["client_service"]}:username::"
@@ -265,7 +282,10 @@ module "client_service" {
   load_balancer = merge(local.alb, {
     protocol          = "HTTPS"
     health_check_path = "/health"
-    rules             = [{ priority = 30, paths = ["/api/clients", "/api/clients/*"] }]
+    rules = [
+      { priority = 30, paths = ["/api/clients", "/api/clients/*"] },
+      { priority = 31, paths = ["/internal/v1/clients/*"] },
+    ]
   })
 
   min_tasks          = local.min_tasks
@@ -574,6 +594,7 @@ module "transaction_service" {
     health_check_path = "/health"
     rules = [
       { priority = 15, paths = ["/api/accounts/*/transactions", "/api/transactions"] },
+      { priority = 16, paths = ["/internal/v1/transactions"] },
     ]
   })
 
@@ -691,5 +712,152 @@ module "event_alert_service" {
     aws_ecs_cluster_capacity_providers.this,
     aws_secretsmanager_secret_version.service_tls,
     aws_secretsmanager_secret_version.app_login,
+  ]
+}
+
+# ------------------------------------------------ client-health-monitor-service
+# API mode. Assignment lookup uses the scoped machine client when the internal
+# ALB has HTTPS; without a custom domain it stays blank and fails closed.
+
+module "client_health_service" {
+  source = "../../modules/ecs-service"
+
+  name               = "client-health-monitor-service"
+  name_prefix        = local.name
+  cluster_arn        = aws_ecs_cluster.this.arn
+  cluster_name       = aws_ecs_cluster.this.name
+  subnet_ids         = local.app_subnet_ids
+  security_group_ids = [local.sg["client_health"]]
+  image              = local.image["client-health-monitor-service"]
+  cpu                = 512
+  memory             = 1024
+  cpu_architecture   = var.cpu_architecture
+  port               = local.ports.health
+  port_name          = "https"
+
+  environment = {
+    SPRING_DATASOURCE_URL                                = "jdbc:postgresql://${module.db["health"].address}:5432/${module.db["health"].db_name}?sslmode=require"
+    SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI = local.cognito_issuer
+    IDP_COGNITO_APP_CLIENT_ID                            = aws_cognito_user_pool_client.web.id
+    CLIENT_HEALTH_MODE                                   = "API"
+    CLIENT_HEALTH_AI_ENABLED                             = "false"
+    CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED                = "true"
+    CLIENT_HEALTH_AUDIT_QUEUE_URL                        = aws_sqs_queue.audit.url
+    CLIENT_HEALTH_AUDIT_REGION                           = local.region
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED             = "true"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE           = "Scrooge/ClientHealth"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION              = local.region
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP                = "1m"
+    CLIENT_HEALTH_ASSIGNMENT_BASE_URL                    = local.custom_domain ? local.alb_base_url : ""
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_TOKEN_URI             = local.cognito_token_url
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE                 = "crm-clients/assignment.read"
+    SPRING_FLYWAY_ENABLED                                = "false" # db-migrate applies its migrations
+  }
+  secrets = {
+    SPRING_DATASOURCE_USERNAME                   = "${local.app_login_secret["client_health_service"]}:username::"
+    SPRING_DATASOURCE_PASSWORD                   = "${local.app_login_secret["client_health_service"]}:password::"
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID     = "${aws_secretsmanager_secret.client_health_read.arn}:client_id::"
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET = "${aws_secretsmanager_secret.client_health_read.arn}:client_secret::"
+  }
+  # The master secret is for db-migrate only.
+  secret_arns = [
+    local.app_login_secret["client_health_service"],
+    local.db_master_secret["health"],
+    aws_secretsmanager_secret.client_health_read.arn,
+  ]
+  task_role_policies = {
+    audit   = data.aws_iam_policy_document.send_audit.json
+    metrics = data.aws_iam_policy_document.client_health_metrics.json
+  }
+  tls = {
+    mode            = "java"
+    ca_pem          = local.ca_pem
+    serves_tls      = true
+    cert_secret_arn = aws_secretsmanager_secret.service_tls["health"].arn
+  }
+  migrations = local.migrations["health"]
+
+  load_balancer = merge(local.alb, {
+    protocol          = "HTTPS"
+    health_check_path = "/actuator/health/readiness"
+    rules = [{
+      priority = 65
+      paths    = ["/api/relationship-health", "/api/relationship-health/*"]
+    }]
+  })
+
+  min_tasks          = local.min_tasks
+  max_tasks          = local.max_tasks
+  use_spot           = local.use_fargate_spot
+  log_retention_days = local.log_retention_days
+
+  depends_on = [
+    aws_ecs_cluster_capacity_providers.this,
+    aws_secretsmanager_secret_version.service_tls,
+    aws_secretsmanager_secret_version.app_login,
+    aws_secretsmanager_secret_version.client_health_read,
+  ]
+}
+
+# One-shot daily analysis task from the same image (ADR-0034). It has no
+# service, port or audit publisher: state and audit rows are committed to
+# health-db, and the API service relays the outbox.
+module "client_health_analysis" {
+  source = "../../modules/ecs-service"
+
+  name               = "client-health-analysis"
+  name_prefix        = local.name
+  create_service     = false
+  cluster_arn        = aws_ecs_cluster.this.arn
+  cluster_name       = aws_ecs_cluster.this.name
+  subnet_ids         = local.app_subnet_ids
+  security_group_ids = [local.sg["client_health"]]
+  image              = local.image["client-health-monitor-service"]
+  cpu                = 512
+  memory             = 1024
+  cpu_architecture   = var.cpu_architecture
+
+  environment = {
+    SPRING_DATASOURCE_URL                                = "jdbc:postgresql://${module.db["health"].address}:5432/${module.db["health"].db_name}?sslmode=require"
+    SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI = local.cognito_issuer
+    IDP_COGNITO_APP_CLIENT_ID                            = aws_cognito_user_pool_client.web.id
+    CLIENT_HEALTH_MODE                                   = "ANALYSIS"
+    CLIENT_HEALTH_ANALYSIS_LEASE_DURATION                = "60m"
+    CLIENT_HEALTH_AI_ENABLED                             = "false"
+    CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED                = "false"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED             = "true"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE           = "Scrooge/ClientHealth"
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION              = local.region
+    CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP                = "1m"
+    CLIENT_HEALTH_TRANSACTION_ENDPOINT                   = local.custom_domain ? "${local.alb_base_url}/internal/v1/transactions" : ""
+    CLIENT_HEALTH_TRANSACTION_TOKEN_URI                  = local.cognito_token_url
+    CLIENT_HEALTH_TRANSACTION_SCOPE                      = "crm-transactions/read"
+    CLIENT_HEALTH_ASSIGNMENT_BASE_URL                    = local.custom_domain ? local.alb_base_url : ""
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_TOKEN_URI             = local.cognito_token_url
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE                 = "crm-clients/assignment.read"
+    SPRING_FLYWAY_ENABLED                                = "false"
+  }
+  secrets = {
+    SPRING_DATASOURCE_USERNAME                   = "${local.app_login_secret["client_health_service"]}:username::"
+    SPRING_DATASOURCE_PASSWORD                   = "${local.app_login_secret["client_health_service"]}:password::"
+    CLIENT_HEALTH_TRANSACTION_CLIENT_ID          = "${aws_secretsmanager_secret.client_health_read.arn}:client_id::"
+    CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET      = "${aws_secretsmanager_secret.client_health_read.arn}:client_secret::"
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID     = "${aws_secretsmanager_secret.client_health_read.arn}:client_id::"
+    CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET = "${aws_secretsmanager_secret.client_health_read.arn}:client_secret::"
+  }
+  secret_arns = [
+    local.app_login_secret["client_health_service"],
+    aws_secretsmanager_secret.client_health_read.arn,
+  ]
+  task_role_policies = {
+    metrics = data.aws_iam_policy_document.client_health_metrics.json
+  }
+
+  log_retention_days = local.log_retention_days
+
+  depends_on = [
+    module.client_health_service,
+    aws_secretsmanager_secret_version.app_login,
+    aws_secretsmanager_secret_version.client_health_read,
   ]
 }

@@ -2,8 +2,11 @@ package queue
 
 import (
 	"auditor/src/internal/models"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -87,6 +90,36 @@ type ValidAuthenticationPayload struct {
 	TriggerSource string `json:"trigger_source"`
 	DateTime      string `json:"datetime"`
 }
+
+type relationshipHealthState struct {
+	Status      string `json:"status,omitempty"`
+	Severity    string `json:"severity,omitempty"`
+	TaskVersion *int64 `json:"task_version,omitempty"`
+}
+
+type relationshipHealthPayload struct {
+	SchemaVersion   string                   `json:"schema_version"`
+	EntityType      string                   `json:"entity_type"`
+	EntityID        string                   `json:"entity_id"`
+	OccurredAt      time.Time                `json:"occurred_at"`
+	CorrelationID   string                   `json:"correlation_id"`
+	ClientRef       string                   `json:"client_ref,omitempty"`
+	Before          *relationshipHealthState `json:"before,omitempty"`
+	After           *relationshipHealthState `json:"after,omitempty"`
+	DispositionCode string                   `json:"disposition_code,omitempty"`
+}
+
+var relationshipHealthActions = map[string]string{
+	"ANALYSIS_RUN_STARTED": "ANALYSIS_RUN", "ANALYSIS_RUN_COMPLETED": "ANALYSIS_RUN", "ANALYSIS_RUN_FAILED": "ANALYSIS_RUN",
+	"SIGNAL_DETECTED": "SIGNAL", "SIGNAL_SUPPRESSED": "FINDING",
+	"TASK_CREATED": "RELATIONSHIP_TASK", "TASK_EVIDENCE_ADDED": "RELATIONSHIP_TASK", "TASK_ACCEPTED": "RELATIONSHIP_TASK",
+	"TASK_COMPLETED": "RELATIONSHIP_TASK", "TASK_DISMISSED": "RELATIONSHIP_TASK",
+	"EXPLANATION_GENERATED": "EXPLANATION", "EXPLANATION_FALLBACK_USED": "EXPLANATION",
+	"OUTBOX_DELIVERY_RECOVERED": "OUTBOX",
+}
+
+var boundedOpaqueID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+var sha256Ref = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 // authenticationTriggers are the actions the Cognito triggers send, each with
 // the trigger source it must come from.
@@ -240,9 +273,45 @@ func validatePayload(envelope ValidEvent) error {
 	case models.EngagementServiceType:
 		return validateEngagementPayload(envelope)
 
+	case models.RelationshipHealthServiceType:
+		return validateRelationshipHealthPayload(envelope)
+
 	default:
 		return fmt.Errorf("unhandled source_service: %s", envelope.SourceService)
 	}
+}
+
+func validateRelationshipHealthPayload(envelope ValidEvent) error {
+	entityType, ok := relationshipHealthActions[envelope.Action]
+	if !ok || !sha256Ref.MatchString(envelope.EventID) || !boundedOpaqueID.MatchString(envelope.ActorID) {
+		return fmt.Errorf("invalid relationship-health action or actor")
+	}
+	var payload relationshipHealthPayload
+	decoder := json.NewDecoder(bytes.NewReader(envelope.Payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil {
+		return fmt.Errorf("invalid relationship-health payload: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("invalid relationship-health payload: trailing JSON")
+	}
+	if payload.SchemaVersion != "1" || payload.EntityType != entityType || payload.OccurredAt.IsZero() ||
+		!boundedOpaqueID.MatchString(payload.EntityID) || !boundedOpaqueID.MatchString(payload.CorrelationID) ||
+		(payload.ClientRef != "" && !sha256Ref.MatchString(payload.ClientRef)) ||
+		(payload.DispositionCode != "" && !boundedOpaqueID.MatchString(payload.DispositionCode)) {
+		return fmt.Errorf("invalid relationship-health metadata")
+	}
+	for _, state := range []*relationshipHealthState{payload.Before, payload.After} {
+		if state == nil {
+			continue
+		}
+		validStatus := state.Status == "" || state.Status == "OPEN" || state.Status == "IN_REVIEW" || state.Status == "COMPLETED" || state.Status == "DISMISSED"
+		validSeverity := state.Severity == "" || state.Severity == "LOW" || state.Severity == "MEDIUM" || state.Severity == "HIGH"
+		if !validStatus || !validSeverity || (state.TaskVersion != nil && *state.TaskVersion < 1) {
+			return fmt.Errorf("invalid relationship-health state")
+		}
+	}
+	return nil
 }
 
 func validateEventAlertPayload(envelope ValidEvent) error {

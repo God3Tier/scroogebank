@@ -33,15 +33,25 @@ Agent or correlation identifiers, raw URLs, exception messages, prompt/model
 content or other free-form values. New tag values require code review as a
 bounded enum.
 
-CloudWatch publication belongs to RH-SF11. That work should add alarms for:
+RH-SF11E publishes the API service's and scheduled task's metrics every minute
+to `Scrooge/ClientHealth`. Their task roles may call only
+`cloudwatch:PutMetricData` in that namespace. The shared CRM dashboard adds
+analysis freshness/duration, task outcomes, audit backlog, assignment failures,
+authorization denials and AI safety outcomes.
 
-- analysis failures and stale successful-analysis watermark;
-- aged or growing audit backlog;
-- sudden template-fallback or validation-rejection rate;
-- authorization-denial spikes; and
-- sustained assignment-dependency unavailability.
+SNS alarms notify the existing CRM alarm topic, with Garvit as primary and
+Swayam as backup:
 
-RH-SF11 must set thresholds from synthetic load evidence, connect notifications
-through the approved SNS path, and assign a named primary and backup operator.
-No CloudWatch registry, dashboard, alarm, SNS resource, credential or IAM change
-is part of RH-SF09.
+- any failed analysis run, plus the existing non-zero ECS task-exit event;
+- successful-analysis watermark age above 27 hours;
+- more than 100 pending Client Health audit events for 15 minutes, or an oldest
+  event age above 15 minutes;
+- at least three unavailable assignment lookups in a 15-minute window;
+- more than ten authorization denials in five minutes; and
+- any AI validation rejection or provider failure. Expected
+  `AI_DISABLED` template fallbacks do not alarm.
+
+Missing custom metrics are non-breaching so a stopped or not-yet-initialized
+stack does not page operators. RH-SF12 must calibrate these project defaults
+against synthetic lower-environment load before production/demo enablement and
+record an SNS delivery drill. No static AWS credential is used.

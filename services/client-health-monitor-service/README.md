@@ -135,7 +135,7 @@ Spring configuration:
 | `client-health.assignment.oauth.token-uri` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_TOKEN_URI` | Cognito token endpoint |
 | `client-health.assignment.oauth.client-id` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_ID` | health-service machine client |
 | `client-health.assignment.oauth.client-secret` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_CLIENT_SECRET` | secret supplied outside Git |
-| `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | assignment-read scope |
+| `client-health.assignment.oauth.scope` | `CLIENT_HEALTH_ASSIGNMENT_OAUTH_SCOPE` | exact assignment-read scope, `crm-clients/assignment.read` in the CRM stack |
 | `client-health.ai.enabled` | `CLIENT_HEALTH_AI_ENABLED` | Bedrock kill switch; defaults to `false` |
 | `client-health.ai.model-id` | `CLIENT_HEALTH_AI_MODEL_ID` | approved model or inference-profile ID; required when enabled |
 | `client-health.ai.timeout` | `CLIENT_HEALTH_AI_TIMEOUT` | per-call timeout; defaults to `5s` |
@@ -147,6 +147,45 @@ Spring configuration:
 | `client-health.audit.batch-size` | `CLIENT_HEALTH_AUDIT_BATCH_SIZE` | bounded relay batch, default 50 |
 | `client-health.audit.lease-seconds` | `CLIENT_HEALTH_AUDIT_LEASE_SECONDS` | delivery lease, default 60 seconds |
 | `client-health.audit.relay-delay-ms` | `CLIENT_HEALTH_AUDIT_RELAY_DELAY_MS` | scheduled relay delay, default 2000 ms |
+| `client-health.transaction-replay.endpoint` | `CLIENT_HEALTH_TRANSACTION_ENDPOINT` | full HTTPS internal `GET /internal/v1/transactions` endpoint |
+| `client-health.transaction-replay.token-uri` | `CLIENT_HEALTH_TRANSACTION_TOKEN_URI` | HTTPS Cognito client-credentials token endpoint |
+| `client-health.transaction-replay.client-id` | `CLIENT_HEALTH_TRANSACTION_CLIENT_ID` | scoped Client Health machine client |
+| `client-health.transaction-replay.client-secret` | `CLIENT_HEALTH_TRANSACTION_CLIENT_SECRET` | secret supplied outside Git |
+| `client-health.transaction-replay.scope` | `CLIENT_HEALTH_TRANSACTION_SCOPE` | must be exactly `crm-transactions/read` |
+| `client-health.transaction-replay.connect-timeout` | `CLIENT_HEALTH_TRANSACTION_CONNECT_TIMEOUT` | positive connection timeout, default `3s` |
+| `client-health.transaction-replay.read-timeout` | `CLIENT_HEALTH_TRANSACTION_READ_TIMEOUT` | positive response timeout, default `5s` |
+| `client-health.transaction-replay.page-size` | `CLIENT_HEALTH_TRANSACTION_PAGE_SIZE` | provider page size from 1 to 500, default 100 |
+| `client-health.transaction-replay.maximum-pages` | `CLIENT_HEALTH_TRANSACTION_MAXIMUM_PAGES` | complete-replay page bound, default 100 |
+| `client-health.transaction-replay.maximum-rows` | `CLIENT_HEALTH_TRANSACTION_MAXIMUM_ROWS` | complete-replay row bound, default 50000 |
+| `client-health.metrics.cloudwatch.enabled` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED` | publish Micrometer metrics to CloudWatch; defaults to `false` |
+| `client-health.metrics.cloudwatch.namespace` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE` | bounded CloudWatch namespace, default `Scrooge/ClientHealth` |
+| `client-health.metrics.cloudwatch.region` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_REGION` | publication region, default `ap-southeast-1` |
+| `client-health.metrics.cloudwatch.step` | `CLIENT_HEALTH_CLOUDWATCH_METRICS_STEP` | publication interval, default `1m` |
+
+## Runtime modes and container image
+
+The same application image supports two modes. `CLIENT_HEALTH_MODE=API` is the
+default and starts the authenticated API on port 8087. Setting
+`CLIENT_HEALTH_MODE=ANALYSIS` starts a non-web process, runs the analysis for
+the current `Asia/Singapore` calendar date, and then exits. A completed or
+already-completed run exits with code 0; a held lease or genuine failure exits
+non-zero. `CLIENT_HEALTH_ANALYSIS_LEASE_DURATION` controls the positive lease
+duration and defaults to `60m`.
+
+Build the Java 25 production image from the repository root:
+
+```sh
+docker build -f services/client-health-monitor-service/Dockerfile \
+  -t client-health-monitor-service .
+```
+
+The final image runs as the non-root `clienthealth` user and exposes port 8087.
+Database and Cognito values remain external configuration. Analysis mode
+requires every transaction-replay setting above. It obtains and caches a scoped
+Cognito token, follows every opaque cursor within the configured bounds, and
+fails the run without exposing partial data when any page is unavailable or
+invalid. Production enablement remains blocked until proposed ADR-0065 receives
+its required owner and security acceptance.
 
 ## Health and metrics
 
@@ -162,8 +201,14 @@ replay and client-assignment outages do not mark the read API unready because
 the feature has template, outbox or fail-closed behavior for those dependencies.
 
 The complete metric and bounded-tag catalogue is maintained in
-`docs/observability/monitoring-alerting.md`. The service currently provides a
-Micrometer registry only; RH-SF11 will connect it to CloudWatch.
+`docs/observability/monitoring-alerting.md`. The analysis-watermark age gauge
+queries the latest successful watermark from health-db whenever it is sampled,
+so an API restart does not reset it and database loss returns `NaN` instead of a
+stale value. The CloudWatch Micrometer registry uses the configured Singapore
+region and AWS default credential provider chain and is disabled by default.
+Enabling publication
+still requires Garvit's IAM and infrastructure configuration; no credential is
+stored in this service.
 
 With configuration supplied, run from the repository root:
 
@@ -194,17 +239,16 @@ Contract documentation and fixtures:
 
 ## Next implementation step
 
-Feature 3 owners must review ADR-0044 and provide the dedicated authenticated,
-date-bounded replay endpoint, stable synthetic source fingerprint, and six
-months of reproducible synthetic history. RH-SF01 then replaces the mock with
-the HTTP/service-token adapter and runs the same contract tests end to end,
-without reading another service's database.
+Transaction-service and the Client Health HTTP/service-token adapter implement
+the dedicated authenticated, date-bounded replay contract, stable synthetic
+source fingerprint and six-month reproducible history. Proposed ADR-0065 still
+requires transaction, Client Health and security/platform acceptance, followed
+by an end-to-end Cognito/import/read check before production enablement.
 
 Garvit's RH-SF01-SF04 stream and production SF02/SF04 persistence adapters are
-implemented. Remaining integration work includes the real Feature 3 replay
-adapter and Java 25 CI. The client-profile Contract-B provider and its scoped
-Cognito registration remain external prerequisites for live current-assignment
-authorization.
+implemented. Java 25 CI remains required. The client-profile Contract-B provider
+and its scoped Cognito registration remain external prerequisites for live
+current-assignment authorization.
 
 RH-SF08 production follow-up now needs the IAM/Terraform queue permission and
 environment wiring, the Auditor's reviewed `RELATIONSHIP_HEALTH_SERVICE`
