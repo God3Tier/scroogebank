@@ -82,9 +82,10 @@ The event-alert worker (X-factor 1, [ADR-0048](../../docs/adr/ADR-0048-alert-wor
 | Task | A scheduled ECS Fargate task (0.5 vCPU, 1 GB) from the event-alert-service image and tag the CRM stack deploys, started with `ALERT_MODE=WORKER`. No service, repository or database of its own |
 | Schedule | An EventBridge Scheduler schedule, every four hours in Singapore time, with a role that can only run that task. `ENABLED` only while the CRM stack's `running` is true **and** `ingestion_enabled` is true |
 | Alarm | An EventBridge rule: a non-zero exit publishes to the CRM stack's alarm topic |
-| IAM | Bedrock on the pinned inference profile only with `ai_enabled`; AgentCore `InvokeGateway` only with `ingestion_enabled` and `agentcore_gateway_arn` |
+| IAM | Bedrock on the pinned global inference profile (`global.amazon.nova-2-lite-v1:0`) only with `ai_enabled`; the task execution role reads only the alerts-db secret, the Tavily secret and, in database holdings mode, the CRM directory client's secret |
+| Secret | An empty Secrets Manager secret for the Tavily API key (`tavily_secret_arn` output); populate it out of band before turning `ingestion_enabled` on ([ADR-0050](../../docs/adr/ADR-0050-event-search-provider-after-scp-block.md)) |
 
-`ingestion_enabled`, `ai_enabled` and `cloudwatch_metrics_enabled` default to false. The Tokyo AgentCore gateway is not created here: its resources wait for the live spike, and `agentcore_gateway_url` and `agentcore_gateway_arn` point the worker at one made by hand. The `replay_command` output starts a one-off replay task (ADR-0049). After a CRM apply that changes `running`, apply this stack again.
+`ingestion_enabled`, `ai_enabled` and `cloudwatch_metrics_enabled` default to false. The worker calls the Tavily search API directly, through the NAT gateway; the Tokyo AgentCore gateway was dropped because an AWS Organization service control policy blocks it ([ADR-0050](../../docs/adr/ADR-0050-event-search-provider-after-scp-block.md)). The `replay_command` output starts a one-off replay task (ADR-0049). After a CRM apply that changes `running`, apply this stack again.
 ### `stacks/mail-identity`
 
 The SES identity agent engagement sends from (ADR-0053 decision 2). Apply it in every deployment, before `agent-engagement`, and destroy it after `crm` in the teardown (ADR-0058): each new identity needs DKIM verification again, and each sandbox recipient must click its verification email again. It contains:

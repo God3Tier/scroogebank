@@ -49,7 +49,7 @@ claimed.
 |---|---|---|---|
 | EventBridge schedule | Singapore | Planned | Schedule, tagged ARN, disable/delete proof |
 | ECS worker task/service | Singapore | Planned | Task sizing, duration, tagged ARN, stop/delete proof |
-| AgentCore search/index | Tokyo | Planned | Request count, tagged identifier, index cleanup proof |
+| Tavily search API key (replaces AgentCore search in Tokyo, ADR-0050) | Secrets Manager, Singapore; the API itself is outside AWS | Defined in `stacks/alert-worker`, not yet applied | Credit count from the Tavily dashboard, secret deletion proof |
 | Bedrock model invocation | Approved available region | Planned | Model ID, token totals, regional price, access disable proof |
 | PostgreSQL alert schema | Existing shared database | Partially implemented locally | Incremental storage/I/O and migration rollback evidence |
 | CloudWatch logs | Per deployed runtime | Planned | Retention, ingestion/storage volume, log-group cleanup proof |
