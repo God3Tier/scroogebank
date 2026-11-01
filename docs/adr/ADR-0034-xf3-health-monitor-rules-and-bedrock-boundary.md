@@ -8,7 +8,7 @@
 - Feature/branch: `task/client-health-monitor/transaction-intake`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md) in part (the Bedrock region choice and "in Singapore" in decision 4: Nova Lite through its Asia-Pacific profile, so facts may be processed in other Asia-Pacific regions; what may be sent is unchanged)
 
 ## Context
 
@@ -147,3 +147,4 @@ Bedrock wording calls are small and covered by the project AI budget with a kill
 
 - 2026-10-01: Neo Jia Wen drafted the target architecture for the midterm proposal.
 - 2026-10-21: Garvit reviewed and accepted the architecture, updated ownership, aligned transaction intake with ADR-0044, and added explicit run safety, rule/currency governance, authorization, AI validation/fallback, atomic audit delivery and observability controls.
+- 2026-11-01: the Bedrock region choice and "in Singapore" in decision 4 superseded by [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md), approved by Garvit: no model this account can invoke runs in-region, so explanations use Nova Lite through its Asia-Pacific profile. This record is otherwise unchanged.

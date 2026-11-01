@@ -35,6 +35,10 @@ domain_name = "itsag3t6.com"
 # account ID; keep it on one line, which that step replaces.
 extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task", "arn:aws:iam::123456789012:role/crm-sg-prod-engagement-service-task"]
 
+# Client Health words new explanations with Nova Lite (ADR-0067). This is the
+# kill switch (ADR-0034 decision 5): false makes every explanation a template.
+client_health_ai_enabled = true
+
 # Runbook step 9.3 writes these four lines once the sftp-server stack exists,
 # replacing older copies. Leave them out until then: the ingest Lambda needs
 # the SFTP server's address and host key, so the first apply cannot create it.

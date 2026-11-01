@@ -22,7 +22,10 @@ import software.amazon.awssdk.services.bedrockruntime.model.ConverseResponse;
 import software.amazon.awssdk.services.bedrockruntime.model.Message;
 import software.amazon.awssdk.services.bedrockruntime.model.ThrottlingException;
 import software.amazon.awssdk.services.bedrockruntime.model.TokenUsage;
+import software.amazon.awssdk.services.bedrockruntime.model.ToolUseBlock;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import software.amazon.awssdk.core.document.Document;
 
 class BedrockExplanationProviderTest {
     private static final String VALID = """
@@ -50,7 +53,11 @@ class BedrockExplanationProviderTest {
         assertThat(sent.getValue().modelId()).isEqualTo("model-test");
         assertThat(sent.getValue().inferenceConfig().maxTokens()).isEqualTo(256);
         assertThat(sent.getValue().inferenceConfig().temperature()).isZero();
-        assertThat(sent.getValue().outputConfig().textFormat().typeAsString()).isEqualTo("json_schema");
+        assertThat(sent.getValue().outputConfig()).isNull();
+        assertThat(sent.getValue().toolConfig().tools()).singleElement()
+                .satisfies(tool -> assertThat(tool.toolSpec().name()).isEqualTo(BedrockExplanationProvider.TOOL_NAME));
+        assertThat(sent.getValue().toolConfig().toolChoice().tool().name())
+                .isEqualTo(BedrockExplanationProvider.TOOL_NAME);
         assertThat(events).singleElement().satisfies(event -> {
             assertThat(event.type()).isEqualTo(ExplanationMetricsPort.Type.MODEL_CALL);
             assertThat(event.inputTokens()).isEqualTo(42);
@@ -129,9 +136,9 @@ class BedrockExplanationProviderTest {
     }
 
     @Test
-    void malformedModelOutputFallsBackWithoutRetry() {
+    void textWithoutTheForcedToolFallsBackWithoutRetry() {
         BedrockRuntimeClient client = Mockito.mock(BedrockRuntimeClient.class);
-        when(client.converse(any(ConverseRequest.class))).thenReturn(response("not-json"));
+        when(client.converse(any(ConverseRequest.class))).thenReturn(textResponse(VALID));
         List<ExplanationMetricsPort.Event> events = new ArrayList<>();
         var safe = new SafeExplanationProvider(properties(true), provider(client, events),
                 new TemplateExplanationProvider(), events::add);
@@ -141,6 +148,20 @@ class BedrockExplanationProviderTest {
         assertThat(events).extracting(ExplanationMetricsPort.Event::type)
                 .contains(ExplanationMetricsPort.Type.VALIDATION_REJECTION,
                         ExplanationMetricsPort.Type.FALLBACK);
+    }
+
+    @Test
+    void unsafeToolInputFallsBackWithoutRetry() {
+        BedrockRuntimeClient client = Mockito.mock(BedrockRuntimeClient.class);
+        when(client.converse(any(ConverseRequest.class))).thenReturn(response(
+                VALID.replace("changed during the recent period", "stopped 67 days ago")));
+        List<ExplanationMetricsPort.Event> events = new ArrayList<>();
+        var safe = new SafeExplanationProvider(properties(true), provider(client, events),
+                new TemplateExplanationProvider(), events::add);
+
+        assertThat(safe.explain(request).source()).isEqualTo(ExplanationResult.Source.TEMPLATE_FALLBACK);
+        verify(client).converse(any(ConverseRequest.class));
+        assertThat(events).extracting(ExplanationMetricsPort.Event::reason).contains("INVALID_OUTPUT");
     }
 
     private static BedrockExplanationProvider provider(BedrockRuntimeClient client,
@@ -155,12 +176,42 @@ class BedrockExplanationProviderTest {
                 Duration.ofSeconds(5), 2, 6000, 256, null, null);
     }
 
-    private static ConverseResponse response(String text) {
+    private static ConverseResponse response(String json) {
+        return converseResponse(ContentBlock.fromToolUse(ToolUseBlock.builder().toolUseId("tool-1")
+                .name(BedrockExplanationProvider.TOOL_NAME).input(document(json)).build()));
+    }
+
+    private static ConverseResponse textResponse(String text) {
+        return converseResponse(ContentBlock.fromText(text));
+    }
+
+    private static ConverseResponse converseResponse(ContentBlock content) {
         return ConverseResponse.builder()
-                .output(output -> output.message(Message.builder()
-                        .content(ContentBlock.fromText(text)).build()))
+                .output(output -> output.message(Message.builder().content(content).build()))
                 .usage(TokenUsage.builder().inputTokens(42).outputTokens(18).build())
                 .metrics(ConverseMetrics.builder().latencyMs(25L).build())
-                .stopReason("end_turn").build();
+                .stopReason("tool_use").build();
+    }
+
+    private static Document document(String json) {
+        try {
+            return document(new ObjectMapper().readTree(json));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
+            throw new IllegalArgumentException(invalid);
+        }
+    }
+
+    private static Document document(JsonNode node) {
+        if (node.isObject()) {
+            Document.MapBuilder builder = Document.mapBuilder();
+            node.properties().forEach(entry -> builder.putDocument(entry.getKey(), document(entry.getValue())));
+            return builder.build();
+        }
+        if (node.isArray()) {
+            Document.ListBuilder builder = Document.listBuilder();
+            node.forEach(element -> builder.addDocument(document(element)));
+            return builder.build();
+        }
+        return node.isNumber() ? Document.fromNumber(node.asText()) : Document.fromString(node.asText());
     }
 }

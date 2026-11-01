@@ -484,7 +484,7 @@ Decisions:
 2. transaction integration and replay — accepted in ADR-0044;
 3. client assignment and service authentication — scoped service-token direction accepted in ADR-0034; assignment contract pending;
 4. task API/state/authorization and database topology — health-db and authorization direction accepted in ADR-0034; persistence details pending;
-5. Bedrock Region/model/privacy/fallback/cost — Singapore wording-only boundary and fallback accepted in ADR-0034; model limits pending;
+5. Bedrock Region/model/privacy/fallback/cost — wording-only boundary and fallback accepted in ADR-0034; model `apac.amazon.nova-lite-v1:0` (Nova Lite, Asia-Pacific profile) accepted in ADR-0067, which supersedes the Singapore-only region; model limits pending;
 6. Auditor SQS contract and transactional outbox — atomic outbox direction accepted in ADR-0034; Auditor contract pending; and
 7. observability, deployment, backup/rollback, and cost controls — required controls accepted in ADR-0034; implementation/runbooks pending.
 
@@ -506,7 +506,7 @@ Decisions:
 | RH-SF04 | Analysis and suppression | Garvit | orchestration, suppression, watermarks | SF02/SF03; ADR-0053; health-db migrations | `task/client-health-monitor/analysis-orchestration` | Deterministic orchestration and V4 durable run/lease/watermark JDBC persistence complete and merged | 2026-10-26 |
 | RH-SF05 | Task domain and persistence | Swayam | task aggregate/repository/history/assignment | SF00 finding/ports; ADR-0053 admission policy | `task/client-health-monitor/task-persistence` | Domain, V1/V2 schema, suppression/admission rules, JDBC repository adapter and atomic SF08 task/finding/outbox writes implemented | 2026-10-23 |
 | RH-SF06 | Task API and authorization | Swayam | API/security/OpenAPI task paths | SF05; Cognito | `task/client-health-monitor/task-api` | API/runtime wiring, current-assignment reads/actions, opaque keyset pagination, bounded notes, Contract-B consumer and PostgreSQL/runtime integration suites implemented; client-profile Contract-B provider and Cognito provisioning remain pending | 2026-10-23 |
-| RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval | 2026-10-26 |
+| RH-SF07 | Bedrock explanation and fallback | Swayam | explanation/provider/fallback fixtures | SF00 evidence schema; SF05 attachment port | `task/client-health-monitor/explanations` | Implemented and merged; duplicate retries repair missing explanations, AI text is qualitative/no-number, and live Bedrock enablement remains pending owner/model/IAM approval (model and IAM now set by RH-SF13) | 2026-10-26 |
 | RH-SF08 | Audit outbox and adapter | Garvit | redacted deterministic event contract, V3 outbox, atomic task/run enqueue, leased JDBC relay and SQS gateway | ADR-0020/0053; Auditor owner; SF05 task transactions | `task/client-health-monitor/audit-delivery` | JDBC leasing/fencing/retry, conditional SQS gateway, task/signal/run events and scheduler implemented and merged; Java 25 Docker CI, IAM/Terraform and Auditor allowlist pending | 2026-10-26 |
 | RH-SF09 | Metrics and health | Swayam | low-cardinality Micrometer metrics and liveness/readiness probes; CloudWatch dashboard/alarms deferred to SF11 | Hooks across SF01-SF08; ADR-0034 | `task/client-health-monitor/metrics-health` | Implemented and merged; durable CloudWatch publication and Terraform observability are delivered by RH-SF11E1/E2 | 2026-10-27 |
 | RH-SF10 | CRM UI integration | Garvit | authenticated task API client, Agent actions, Admin read-only view, filters/pagination, explanations/evidence/history and resilient UI states | SF06/SF07; shared frontend auth/navigation | `task/client-health-monitor/ui-integration` | Implemented and merged against Contract D with deterministic API mocks; deployed API verification and owner review pending | 2026-10-27 |
@@ -520,6 +520,7 @@ Decisions:
 | RH-SF11E2 | Cloud dashboard and alarms | Garvit | Namespace-scoped metric IAM/configuration, dashboard panels, SNS alarms, Terraform tests and monitoring/runbook/cost docs | RH-SF11E1; ADR-0027/0034; thresholds require lower-environment calibration | `task/client-health-monitor/cloud-observability` | Implemented and merged through PR #164; Terraform mocked-provider validation passes under RH-SF11F, with threshold calibration, SNS drill and live apply pending | 2026-10-30 |
 | RH-SF11F | Deployment clean-up and local verification | TBD | Drop the unused direct `client_health` to transaction-service ingress, fix stale Terraform comments, `terraform fmt`, make the CRM plan tests evaluable, allow Client Health's migrations into the db-migrate build context, build the images and check the health migrations | RH-SF11A-E2; ADR-0019 decision 4; proposed ADR-0065 | `task/client-health-monitor/deploy-verification` | Implemented locally: `terraform validate` and 7/7 mocked-provider runs pass; client-health, client-service, auditor and db-migrate images build; Maven verify (163 tests) and client-service and Auditor Go tests pass; the health migrations apply twice and the login cannot change the schema. AWS apply and smoke test pending (RH-SF12) | 2026-10-30 |
 | RH-SF12 | Integration and release evidence | TBD | E2E/load/runbooks/docs/cost/AI log | All MVP subfeatures | TBD | Unassigned | N/A |
+| RH-SF13 | Nova Lite model and tool-use output | Neo Jia Wen (Garvit approved the model) | `BedrockExplanationProvider` forced-tool output, analysis-task Bedrock IAM and `client_health_ai_*` variables, AI on in prod, ADR-0067 | ADR-0034/0067; shares the model with agent engagement (ADR-0054) | `task/client-health-monitor/nova-lite-model` | Implemented locally; unit and Terraform tests pass; live tool-use probe passed; labelled-scenario run with AI on and AWS apply pending | 2026-11-01 |
 
 ## Independence protocol
 
@@ -594,7 +595,7 @@ The feature branch never merges directly into `main`.
 4. Transaction integration uses the internal pull/replay API accepted in ADR-0044; the provider implementation is merged under proposed ADR-0065, while cross-owner acceptance, the Client Health production adapter, and end-to-end verification remain pending.
 5. Assignment lookup versus assignment event.
 6. Lambda/ECS deployment shape and database connection strategy.
-7. Bedrock model/Region/retention/logging/cost caps.
+7. Bedrock model/Region/retention/logging/cost caps. Model and Region resolved 2026-11-01 by ADR-0067 (Nova Lite, Asia-Pacific profile); retention/logging/cost caps remain.
 8. Auditor event/action/payload contract.
 9. Primary owners for the remaining SF11 cloud tasks and SF12.
 

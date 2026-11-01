@@ -63,7 +63,7 @@ ENGAGEMENT_MAIL_PROVIDER=log \
 | `CRM_APP_URL` | The CRM's address, linked from invites and reminders |
 | `ENGAGEMENT_AI_ENABLED` | The kill switch. Default `false`: every draft is a template |
 | `ENGAGEMENT_HOLIDAY_SYNC_ENABLED` | Add newly published Singapore holidays from data.gov.sg (ADR-0057). Default `false`; `true` in AWS |
-| `BEDROCK_REGION`, `BEDROCK_MODEL_ID` | Default `ap-southeast-1` and `apac.amazon.nova-micro-v1:0`. A `global.` profile is refused at startup |
+| `BEDROCK_REGION`, `BEDROCK_MODEL_ID` | Default `ap-southeast-1` and `apac.amazon.nova-lite-v1:0` (ADR-0067). A `global.` profile is refused at startup |
 | `ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT`, `ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA` | Caps. Default 20 and 300,000 |
 | `ENGAGEMENT_AUDIT_PUBLISHER_ENABLED`, `AUDIT_QUEUE_URL` | The relay to the shared audit queue. Off by default |
 | `AWS_REGION`, `AWS_ENDPOINT_URL` | For SQS, SES and Cognito. The endpoint override is for LocalStack only |

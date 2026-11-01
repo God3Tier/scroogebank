@@ -85,6 +85,20 @@ data "aws_iam_policy_document" "client_health_metrics" {
   }
 }
 
+# The analysis task words new explanations; the API service never calls
+# Bedrock. The Asia-Pacific profile and its model in each region it may route
+# to, listed rather than a wildcard (ADR-0067).
+data "aws_iam_policy_document" "client_health_bedrock" {
+  statement {
+    sid     = "InvokeExplanationModel"
+    actions = ["bedrock:InvokeModel"]
+    resources = concat(
+      ["arn:${data.aws_partition.current.partition}:bedrock:${local.region}:${local.account_id}:inference-profile/${var.client_health_bedrock_model_id}"],
+      [for region in var.client_health_bedrock_profile_regions : "arn:${data.aws_partition.current.partition}:bedrock:${region}::foundation-model/${var.client_health_bedrock_foundation_model_id}"],
+    )
+  }
+}
+
 # ------------------------------------------------------------- user-service
 
 data "aws_iam_policy_document" "user_service" {
@@ -823,7 +837,8 @@ module "client_health_analysis" {
     IDP_COGNITO_APP_CLIENT_ID                            = aws_cognito_user_pool_client.web.id
     CLIENT_HEALTH_MODE                                   = "ANALYSIS"
     CLIENT_HEALTH_ANALYSIS_LEASE_DURATION                = "60m"
-    CLIENT_HEALTH_AI_ENABLED                             = "false"
+    CLIENT_HEALTH_AI_ENABLED                             = tostring(var.client_health_ai_enabled)
+    CLIENT_HEALTH_AI_MODEL_ID                            = var.client_health_bedrock_model_id
     CLIENT_HEALTH_AUDIT_PUBLISHER_ENABLED                = "false"
     CLIENT_HEALTH_CLOUDWATCH_METRICS_ENABLED             = "true"
     CLIENT_HEALTH_CLOUDWATCH_METRICS_NAMESPACE           = "Scrooge/ClientHealth"
@@ -851,6 +866,7 @@ module "client_health_analysis" {
   ]
   task_role_policies = {
     metrics = data.aws_iam_policy_document.client_health_metrics.json
+    bedrock = data.aws_iam_policy_document.client_health_bedrock.json
   }
 
   log_retention_days = local.log_retention_days

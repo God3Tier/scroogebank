@@ -60,24 +60,24 @@ variable "ai_enabled" {
 }
 
 variable "bedrock_model_id" {
-  description = "The inference profile drafts use (ADR-0054 decision 3). Nova Lite's Asia-Pacific profile may replace it if Nova Micro fails the evaluation; a global profile is not allowed."
+  description = "The inference profile drafts use (ADR-0067, which replaced ADR-0054 decision 3's Nova Micro). A global profile is not allowed."
   type        = string
-  default     = "apac.amazon.nova-micro-v1:0"
+  default     = "apac.amazon.nova-lite-v1:0"
 
   validation {
     condition     = startswith(var.bedrock_model_id, "apac.")
-    error_message = "Only an Asia-Pacific (apac.) inference profile is allowed (ADR-0054 decision 3)."
+    error_message = "Only an Asia-Pacific (apac.) inference profile is allowed (ADR-0054, ADR-0067)."
   }
 }
 
 variable "bedrock_foundation_model_id" {
   description = "The foundation model behind bedrock_model_id."
   type        = string
-  default     = "amazon.nova-micro-v1:0"
+  default     = "amazon.nova-lite-v1:0"
 }
 
 variable "bedrock_profile_regions" {
-  description = "Where the inference profile may run the request, as recorded in ADR-0054. Re-check with aws bedrock get-inference-profile before the demo."
+  description = "Where the inference profile may run the request, as recorded in ADR-0067. Re-check with aws bedrock get-inference-profile before the demo."
   type        = list(string)
   default     = ["ap-southeast-1", "ap-southeast-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1"]
 }

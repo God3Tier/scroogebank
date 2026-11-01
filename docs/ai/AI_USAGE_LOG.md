@@ -1842,3 +1842,25 @@ retry exhaustion and refusal to retry after the last available reservation.
   validate and 8 mocked worker tests passed. No AWS call or apply was made.
 - Publisher rights were not represented as verified; named human ADR reviewer
   approval was not invented. Scheduled ingestion remains disabled by default.
+
+## 2026-11-01 — Nova Lite for Client Health and follow-up drafts (ADR-0067)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: choose a Bedrock model for Client Health, then move Client Health and
+  agent engagement to `apac.amazon.nova-lite-v1:0`. Garvit approved the Client
+  Health model; Neo Jia Wen decided the engagement change and AI on in prod.
+- Files: ADR-0067 and the ADR-0034/0054 supersession notes, the ADR index,
+  `BedrockExplanationProvider` and its test (forced tool instead of
+  `outputConfig`), engagement-service defaults, both Terraform stacks with their
+  tests and prod tfvars examples, feature plans, READMEs and the deploy runbook.
+- Live checks with the `crm` profile (synthetic prompts only; each call cost a
+  fraction of a cent): model lifecycle and profile regions; the Marketplace
+  `AccessDeniedException` for OpenAI and Claude, after Claude answered once;
+  Nova's `outputConfig` rejection; Nova Lite's `ModelErrorException` for hyphenated
+  tool names, then three valid underscore-named tool calls; two plain-text drafts.
+  The pricing API was denied by the organization SCP, so no price is quoted.
+- Verification: Client Health explanation tests (7) and engagement drafting tests
+  (6) passed; Testcontainers tests were not run because Docker was not running.
+  Terraform fmt, validate and tests passed: CRM 14 runs, agent-engagement 6.
+  No AWS apply was made. The 24-case draft evaluation and the Client Health
+  labelled scenarios with AI on remain to be run.

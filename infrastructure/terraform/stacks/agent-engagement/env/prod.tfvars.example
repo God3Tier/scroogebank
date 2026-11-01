@@ -20,6 +20,6 @@ image_tag = "replace-with-the-pushed-tag"
 # git-ignored prod.tfvars.
 # sender_address = "synthetic.sender@example.test"
 
-# The AI drafting kill switch (ADR-0054 decision 7). Leave false except for
-# test and demo runs.
-ai_enabled = false
+# The AI drafting kill switch (ADR-0054 decision 7). On in prod with Nova Lite
+# (ADR-0067); false makes every draft a template.
+ai_enabled = true

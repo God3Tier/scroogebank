@@ -204,3 +204,32 @@ variable "extra_audit_producer_role_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "client_health_ai_enabled" {
+  description = "The Client Health wording kill switch, CLIENT_HEALTH_AI_ENABLED (ADR-0034 decision 5). Off, every explanation is a template. On in prod (ADR-0067)."
+  type        = bool
+  default     = false
+}
+
+variable "client_health_bedrock_model_id" {
+  description = "The inference profile the analysis task words explanations with (ADR-0067); a global profile is not allowed."
+  type        = string
+  default     = "apac.amazon.nova-lite-v1:0"
+
+  validation {
+    condition     = startswith(var.client_health_bedrock_model_id, "apac.")
+    error_message = "Only an Asia-Pacific (apac.) inference profile is allowed (ADR-0067)."
+  }
+}
+
+variable "client_health_bedrock_foundation_model_id" {
+  description = "The foundation model behind client_health_bedrock_model_id."
+  type        = string
+  default     = "amazon.nova-lite-v1:0"
+}
+
+variable "client_health_bedrock_profile_regions" {
+  description = "Where the inference profile may run the request, as recorded in ADR-0067. Re-check with aws bedrock get-inference-profile before the demo."
+  type        = list(string)
+  default     = ["ap-southeast-1", "ap-southeast-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1"]
+}

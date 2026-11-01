@@ -3,9 +3,14 @@ package bank.clienthealth.explanation;
 import bank.clienthealth.explanation.ExplanationMetricsPort.Event;
 import bank.clienthealth.explanation.ExplanationMetricsPort.Type;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import software.amazon.awssdk.core.document.Document;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient;
 import software.amazon.awssdk.services.bedrockruntime.model.*;
@@ -19,6 +24,8 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
              "items":{"enum":["RECURRING_CREDIT_INTERRUPTION","TRANSACTION_ACTIVITY_DECLINE","SUSTAINED_NET_OUTFLOW"]}},
              "disclaimer":{"const":"Human review required"}}}
             """;
+    // Nova rejects tool names containing hyphens with ModelErrorException (ADR-0067).
+    static final String TOOL_NAME = "relationship_health_explanation";
     private static final String SYSTEM = "Explain only the supplied verified relationship-health facts. "
             + "Use qualitative wording and do not include any numeric values. "
             + "Do not add facts, identifiers, advice, products, fraud, hardship, distress or attrition claims.";
@@ -52,9 +59,7 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
             long started = System.nanoTime();
             try {
                 ConverseResponse response = client.converse(providerRequest);
-                String output = response.output().message().content().stream()
-                        .map(ContentBlock::text).filter(java.util.Objects::nonNull)
-                        .collect(java.util.stream.Collectors.joining());
+                String output = toolInput(response);
                 int in = response.usage() == null || response.usage().inputTokens() == null
                         ? 0 : response.usage().inputTokens();
                 int out = response.usage() == null || response.usage().outputTokens() == null
@@ -86,17 +91,63 @@ public final class BedrockExplanationProvider implements ExplanationProvider {
         throw new ProviderException("MODEL_FAILED", properties.maxAttempts());
     }
 
+    // Nova does not support outputConfig JSON schemas, so the schema is a forced tool (ADR-0067).
     private ConverseRequest converseRequest(String input) {
+        final Document schema;
+        try { schema = toDocument(mapper.readTree(OUTPUT_SCHEMA)); }
+        catch (JsonProcessingException impossible) { throw new IllegalStateException(impossible); }
         return ConverseRequest.builder().modelId(properties.modelId())
                 .system(SystemContentBlock.fromText(SYSTEM))
                 .messages(Message.builder().role(ConversationRole.USER)
                         .content(ContentBlock.fromText(input)).build())
                 .inferenceConfig(config -> config.maxTokens(properties.maxOutputTokens()).temperature(0.0F))
-                .outputConfig(config -> config.textFormat(format -> format.type(OutputFormatType.JSON_SCHEMA)
-                        .structure(structure -> structure.jsonSchema(schema -> schema
-                                .name("relationship-health-explanation").schema(OUTPUT_SCHEMA)))))
+                .toolConfig(tools -> tools
+                        .tools(Tool.fromToolSpec(spec -> spec.name(TOOL_NAME)
+                                .description("Closed JSON output for the relationship-health explanation")
+                                .inputSchema(ToolInputSchema.fromJson(schema))))
+                        .toolChoice(ToolChoice.fromTool(choice -> choice.name(TOOL_NAME))))
                 .overrideConfiguration(config -> config.apiCallTimeout(properties.timeout())
                         .apiCallAttemptTimeout(properties.timeout())).build();
+    }
+
+    /** The forced tool's input as JSON, or blank (rejected by the validator) when the model used no tool. */
+    private String toolInput(ConverseResponse response) {
+        if (response.output() == null || response.output().message() == null) return "";
+        ToolUseBlock toolUse = response.output().message().content().stream()
+                .map(ContentBlock::toolUse).filter(Objects::nonNull).findFirst().orElse(null);
+        if (toolUse == null || toolUse.input() == null) return "";
+        try { return mapper.writeValueAsString(fromDocument(toolUse.input())); }
+        catch (JsonProcessingException invalid) { return ""; }
+    }
+
+    private static Document toDocument(JsonNode node) {
+        if (node.isObject()) {
+            Document.MapBuilder builder = Document.mapBuilder();
+            node.properties().forEach(entry -> builder.putDocument(entry.getKey(), toDocument(entry.getValue())));
+            return builder.build();
+        }
+        if (node.isArray()) {
+            Document.ListBuilder builder = Document.listBuilder();
+            node.forEach(element -> builder.addDocument(toDocument(element)));
+            return builder.build();
+        }
+        if (node.isTextual()) return Document.fromString(node.textValue());
+        if (node.isBoolean()) return Document.fromBoolean(node.booleanValue());
+        if (node.isNumber()) return Document.fromNumber(node.asText());
+        return Document.fromNull();
+    }
+
+    private static Object fromDocument(Document document) {
+        if (document.isMap()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            document.asMap().forEach((key, value) -> result.put(key, fromDocument(value)));
+            return result;
+        }
+        if (document.isList()) return document.asList().stream().map(BedrockExplanationProvider::fromDocument).toList();
+        if (document.isString()) return document.asString();
+        if (document.isBoolean()) return document.asBoolean();
+        if (document.isNumber()) return document.asNumber().bigDecimalValue();
+        return null;
     }
 
     private BigDecimal estimatedCost(int input, int output) {

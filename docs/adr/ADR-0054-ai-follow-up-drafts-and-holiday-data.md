@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/plan`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders); [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md) in part (decision 8: new Singapore years come from data.gov.sg)
+- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders); [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md) in part (decision 8: new Singapore years come from data.gov.sg); [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md) in part (decision 3's model: Nova Lite through its Asia-Pacific profile; and AI is on in prod rather than only for demo runs)
 
 ## Context
 
@@ -221,3 +221,4 @@ Nova Micro is Amazon's lowest-priced text model on Bedrock. AWS charges cross-re
 - 2026-10-21: the decision owner confirmed the profile ID `apac.amazon.nova-micro-v1:0` with `aws bedrock get-inference-profile` in the project account. It is a system-defined, active profile named "APAC Nova Micro", last updated by AWS on 2025-07-08. It routes to Nova Micro in six regions: ap-southeast-1 (Singapore), ap-southeast-2 (Sydney), ap-northeast-1 (Tokyo), ap-northeast-2 (Seoul), ap-northeast-3 (Osaka) and ap-south-1 (Mumbai).
 - 2026-10-21: decision 6 superseded in part by [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md): agents edit plain text with the names filled in, and drafts are still stored with placeholders. This record is otherwise unchanged.
 - 2026-10-21: decision 8 superseded in part by [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md): new Singapore years are added by a sync from MOM's data.gov.sg dataset; the migrations stay as the baseline. This record is otherwise unchanged.
+- 2026-11-01: decision 3's model and the "kill switch stays off outside demo runs" guidance superseded in part by [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md), as decided by the decision owner: drafts use Nova Lite through `apac.amazon.nova-lite-v1:0` (same six regions), and AI is on in prod. This record is otherwise unchanged.

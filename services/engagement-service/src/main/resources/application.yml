@@ -64,7 +64,7 @@ engagement:
     # The kill switch (ADR-0054 decision 7). Off: every draft is a template.
     enabled: ${ENGAGEMENT_AI_ENABLED:false}
     region: ${BEDROCK_REGION:ap-southeast-1}
-    model-id: ${BEDROCK_MODEL_ID:apac.amazon.nova-micro-v1:0}
+    model-id: ${BEDROCK_MODEL_ID:apac.amazon.nova-lite-v1:0}
     temperature: 0.3
     max-output-tokens: 600
     timeout: 15s
