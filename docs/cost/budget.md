@@ -1,10 +1,10 @@
 # Environments and cost (target architecture)
 
-> **Status:** Proposed target architecture, not yet accepted. **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.
+> **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-16.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
-Recorded in [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md) (Proposed).
+Recorded in [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md) (Accepted).
 
 | Environment | Where it runs | Lifecycle |
 |---|---|---|
