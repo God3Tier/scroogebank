@@ -1,6 +1,6 @@
 # ADR-0042: Filter the protected activity feed by client and time window
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-22 22:57 +08:00 (Asia/Singapore)
 - Decision owner(s): Joseph Yau (requester; acceptance pending)
 - Drafted/assisted by AI: Yes; OpenAI Codex

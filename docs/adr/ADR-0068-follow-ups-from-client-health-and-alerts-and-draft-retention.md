@@ -1,6 +1,6 @@
 # ADR-0068: Follow-up drafts from Client Health and alerts; agent details; draft text kept only while open
 
-- Status: Proposed (accepted by the decision owner for engagement-service; awaiting acknowledgement of the task and alert links by the Client Health owners, Garvit and Swayam, and the event alerts owners, Azeez and Hayyun)
+- Status: Accepted (2026-11-01; accepted by the decision owner for engagement-service, and for the team, including the Client Health and alert links, by Neo Jia Wen)
 - Decision date/time: 2026-11-01 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

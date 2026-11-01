@@ -1,6 +1,6 @@
 # ADR-0010: Alert AI provider, structured output, and safety
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-09-27 01:54:06 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewer: Hayyun

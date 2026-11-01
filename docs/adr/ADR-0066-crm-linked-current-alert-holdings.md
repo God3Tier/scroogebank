@@ -1,14 +1,14 @@
 # ADR-0066: CRM-linked current holdings for agent alerts
 
-- Status: Approved by Azeez (relayed by Hayyun, 2026-10-30); implemented locally, awaiting required reviews and merge
+- Status: Accepted (approved by Azeez, relayed by Hayyun, 2026-10-30; merged; recorded 2026-11-01 by Neo Jia Wen)
 - Decision date/time: 2026-10-29 22:45 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewers: Hayyun (holdings/domain/API); Neo Jia Wen (CRM ownership/security)
 - AI-assisted draft: Yes; Codex
 - Feature/branch: `task/event-driven-alerts/current-holdings-plan`
 - Related plan: [current-holdings plan](../feature-plans/event-driven-alerts-current-holdings_plan.md)
-- Supersedes: On acceptance, ADR-0005's bundled-fixture runtime source only
-- Amends on acceptance: ADR-0012/0049 current-agent authorization/routing and holdings-read contract; selection thresholds are unchanged
+- Supersedes: ADR-0005's bundled-fixture runtime source only
+- Amends: ADR-0012/0049 current-agent authorization/routing and holdings-read contract; selection thresholds are unchanged
 - Superseded by: N/A
 
 ## Context and decision drivers

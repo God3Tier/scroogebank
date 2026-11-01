@@ -1,6 +1,6 @@
 # ADR-0061: The import rejects a transaction not in its account's currency
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-24 18:30 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen; Joseph Yau (Feature 3 owner and Feature 2 primary developer, whose receiver and account-service this changes; agreement pending)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

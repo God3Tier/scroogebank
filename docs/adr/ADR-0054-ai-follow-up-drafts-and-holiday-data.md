@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/plan`
 - Related issue/PR: TBD
 - Supersedes: N/A
-- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders); [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md) in part (decision 8: new Singapore years come from data.gov.sg); [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md) in part (decision 3's model: Nova Lite through its Asia-Pacific profile; and AI is on in prod rather than only for demo runs); [ADR-0068](ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md), proposed, in part (decisions 2, 4 and 6: two follow-up purposes with an `{{agent_details}}` slot, the screen checks it by purpose, and a draft's text is cleared once it is sent or discarded)
+- Superseded by: [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md) in part (decision 6: agents edit plain text; drafts are still stored with placeholders); [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md) in part (decision 8: new Singapore years come from data.gov.sg); [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md) in part (decision 3's model: Nova Lite through its Asia-Pacific profile; and AI is on in prod rather than only for demo runs); [ADR-0068](ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md) in part (decisions 2, 4 and 6: two follow-up purposes with an `{{agent_details}}` slot, the screen checks it by purpose, and a draft's text is cleared once it is sent or discarded)
 
 ## Context
 

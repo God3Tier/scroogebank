@@ -1,6 +1,6 @@
 # ADR-0016: Holdings-derived public search universe
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-28 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewer: Hayyun

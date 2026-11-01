@@ -1,13 +1,13 @@
 # ADR-0028: CI/CD with GitHub Actions and OIDC, schema migrations as a task, infrastructure in Terraform
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: [ADR-0046](ADR-0046-human-deploy-access-mfa-role.md) and [ADR-0058](ADR-0058-every-deployment-ends-with-full-teardown.md) in part (decision 1's deploy and smoke-test stages and decision 2's CI deploy role: deployment is run by hand from the runbook as the MFA-protected `crm-infra-admin` role, and every deployment ends with a full teardown; CI keeps the build, test, contract and scan stages; the GitHub OIDC role stays defined but off by default)
 
 ## Context
 

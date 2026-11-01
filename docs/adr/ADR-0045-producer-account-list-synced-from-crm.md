@@ -1,6 +1,6 @@
 # ADR-0045: The simulated bank's producer uses an account list synced from the CRM
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-10-16 22:48 +08:00 (Asia/Singapore); revised 2026-10-24 17:35 +08:00 so each transaction takes its account's currency (decisions 1 and 3)
 - Decision owner(s): Neo Jia Wen; Joseph Yau (Feature 3 owner, whose producer and SFTP harness this changes; agreement pending)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

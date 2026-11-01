@@ -1,12 +1,13 @@
 # ADR-0005: Alert holdings and valuation boundary
 
-- Status: Proposed
+- Status: Accepted (2026-11-01; accepted for the team by Neo Jia Wen)
 - Decision date/time: 2026-09-27 01:54:06 +08:00 (Asia/Singapore)
 - Human owner/decision-maker: Azeez
 - Required reviewer: Hayyun
 - AI-assisted draft: Yes — Codex
 - Related branch: `task/event-driven-alerts/contracts`
 - Supersedes: None
+- Superseded by: [ADR-0066](ADR-0066-crm-linked-current-alert-holdings.md) in part (the runtime holdings source: with `alert_holdings_mode = "database"` the API and worker read the portfolios agents record against CRM accounts; the bundled fixture stays the default; valuation snapshots and freshness rules are unchanged)
 
 ## Context
 
