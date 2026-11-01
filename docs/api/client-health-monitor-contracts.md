@@ -477,6 +477,8 @@ Authorization:
 - Admin may read across agents using bounded filters.
 - Responses expose derived evidence, not raw transaction history.
 
+Consumer: engagement-service reads `GET /api/relationship-health/tasks/{taskId}` through the internal ALB with the agent's own token, to check that a `HEALTH_CHECK_IN` follow-up email names one of the agent's tasks about the same client ([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)). It reads `clientId` only and treats 401, 403 and 404 as "not yours". The explanation and evidence are never read, stored or sent to a model. Keep `clientId` in the task response, or tell the engagement owner before changing it.
+
 ### Agent actions
 
 ```text

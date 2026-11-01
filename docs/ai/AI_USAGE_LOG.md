@@ -1864,3 +1864,26 @@ retry exhaustion and refusal to retry after the last available reservation.
   Terraform fmt, validate and tests passed: CRM 14 runs, agent-engagement 6.
   No AWS apply was made. The 24-case draft evaluation and the Client Health
   labelled scenarios with AI on remain to be run.
+
+## 2026-11-01 — Follow-ups from Client Health and alerts, draft text retention (ADR-0068)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: let agents draft a follow-up email from a Client Health task or an
+  alert, with generic AI input and an agent-filled details slot; make the agent
+  responsible for what they add; keep a draft's text only while it is open.
+  Neo Jia Wen chose verified links, the slot, agent responsibility, clearing
+  text on send and discard, 14-day expiry and the Bcc copy, and the buttons on
+  the Client Health and alert pages.
+- Files: ADR-0068 and the ADR-0054 supersession note, the ADR index,
+  engagement-service (`drafting`, new `integration/sources`, `notifications`
+  Bcc, V1 migration edited in place), `docs/api/engagement-api.yaml` with the
+  accepted breaking changes, the frontend drafts page, Client Health page and
+  event briefing with their tests, the crm and agent-engagement Terraform with
+  plan tests, the feature plan, READMEs, both feature contracts and the live
+  checks.
+- Verification: engagement-service `mvn verify` 130 tests passed
+  (Testcontainers); frontend 269 tests and lint passed; Terraform fmt, validate
+  and tests passed (agent-engagement 6 runs, crm 14); oasdiff against `dev`
+  passed with the listed accepted changes. No AWS call or apply was made. The
+  Client Health and alerts owners have not yet acknowledged the links, and the
+  live Nova Lite evaluation of the two new purposes remains.

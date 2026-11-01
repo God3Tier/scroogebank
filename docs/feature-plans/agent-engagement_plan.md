@@ -5,8 +5,8 @@
 - Subtask branch prefix: `task/agent-engagement/<subtask>`
 - Status: **In progress.** Required ADRs (§19) are accepted (2026-10-21), the team accepted the feature (Q1, 2026-10-21), and the work is split across four task branches (§20): service, auditor, frontend and infrastructure. Live AWS checks (AE-T11) follow once all four are merged.
 - Primary developer: **Neo Jia Wen** (all tasks, §20)
-- Plan last updated: 2026-10-21
-- Decisions: [ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) (service, database, dispatcher), [ADR-0052](../adr/ADR-0052-calendar-invites-by-email.md) (calendar invites), [ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) (SES), [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md) (AI drafts, holidays). All Accepted 2026-10-21. Builds on ADR-0017, ADR-0020, ADR-0023, ADR-0025, ADR-0030, ADR-0035, ADR-0036, ADR-0042.
+- Plan last updated: 2026-11-01
+- Decisions: [ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) (service, database, dispatcher), [ADR-0052](../adr/ADR-0052-calendar-invites-by-email.md) (calendar invites), [ADR-0053](../adr/ADR-0053-email-delivery-through-ses.md) (SES), [ADR-0054](../adr/ADR-0054-ai-follow-up-drafts-and-holiday-data.md) (AI drafts, holidays). All Accepted 2026-10-21. [ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md) (follow-ups from Client Health and alerts, agent details, draft text retention), proposed 2026-11-01. Builds on ADR-0017, ADR-0020, ADR-0023, ADR-0025, ADR-0030, ADR-0035, ADR-0036, ADR-0042.
 - Contract: [`docs/api/engagement-api.yaml`](../api/engagement-api.yaml) (implemented by `services/engagement-service`)
 - Drafted with AI assistance (Claude Code). Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.
 
@@ -34,7 +34,8 @@ The CRM records clients, accounts and transactions, but gives agents no help man
 4. **Meeting reminders:** up to two reminder emails per event at chosen offsets, sent by an in-service dispatcher (ADR-0051, ADR-0053).
 5. **Public holidays:** a versioned holiday table, starting with Singapore 2026–2027 (ADR-0054), with later years added from MOM's data.gov.sg dataset (ADR-0057).
 6. **AI follow-up drafts:** the agent picks a client and a purpose. Bedrock writes a draft from placeholders and public holiday data only, with a template fallback (ADR-0054).
-7. **Sending client emails:** the agent reviews and edits a draft, then sends it through SES (ADR-0053).
+   - From a Client Health task or an alert, the agent opens a `HEALTH_CHECK_IN` or `ALERT_FOLLOW_UP` draft. The source is checked through its owning service with the agent's token. The AI writes a general note, and the agent adds the details at `[Add your details here]` (ADR-0068).
+7. **Sending client emails:** the agent reviews and edits a draft, then sends it through SES (ADR-0053). The agent gets a Bcc copy. The draft's text is cleared once it is sent or discarded, and open drafts expire after 14 days (ADR-0068).
 8. Audit events for every write, generate and send, plus the auditor's support for them.
 9. Frontend: calendar page, event form, draft editor, an "Upcoming meetings" panel on the agent home page, and notification preferences.
 10. Terraform stacks `stacks/agent-engagement` (per session) and `stacks/mail-identity` (long-lived SES identity), runbook steps, tests and docs.
@@ -47,12 +48,12 @@ The CRM records clients, accounts and transactions, but gives agents no help man
 - **Recurring events, attachments and shared calendars.**
 - **Sending without approval.** Nothing is ever sent automatically. Every client email needs the agent's explicit send.
 - **Free text to the model.** The agent's own notes are never sent to the model.
-- **Advice in emails.** No product, rate, price, investment or performance content in drafts.
+- **Advice in generated text.** The model and templates write no product, rate, price, investment or performance content. What the agent adds is sent as written and is the agent's responsibility (ADR-0068 decision 3).
 - **Bulk email.** One client per draft.
 - **Replies.** No inbound email, reply tracking or open tracking.
 - **Admin management of agents' calendars or drafts** (§10).
-- **Health monitor data.** No use of the health monitor's signals or evidence in drafts.
-- **Storing sent mail.** Resolved email bodies and recipient addresses are not stored after sending (§15).
+- **Health monitor and alert data.** No use of a task's signals or evidence, or of an alert's news, holdings or briefing, in drafts. Only the task's or alert's client is read, to check the link (ADR-0068).
+- **Storing sent mail.** Recipient addresses and the text of sent or discarded drafts are not stored (§15, ADR-0068). The agent's copy is the Bcc in their mailbox.
 
 ## 5. Acceptance criteria
 
@@ -109,12 +110,12 @@ All routes are under `/api/engagement`. All need the `AGENT` group (§10).
 | `DELETE /events/{id}` | Cancel. Queues a cancellation and cancels pending reminders |
 | `GET /holidays?country&from&to` | Public holidays, for the calendar view |
 | `GET /holidays/coverage?country` | How far the holiday list reaches, so the calendar stops there (ADR-0057) |
-| `POST /drafts` | Generate. Body: `clientId`, `purpose` (`CHECK_IN`, `MEETING_FOLLOW_UP`, `HOLIDAY_GREETING`, `PRE_HOLIDAY_REVIEW`), `tone` (`FORMAL`, `WARM`), optional `eventId` |
+| `POST /drafts` | Generate. Body: `clientId`, `purpose` (`CHECK_IN`, `MEETING_FOLLOW_UP`, `HOLIDAY_GREETING`, `PRE_HOLIDAY_REVIEW`, `HEALTH_CHECK_IN`, `ALERT_FOLLOW_UP`), `tone` (`FORMAL`, `WARM`), optional `eventId`; `healthTaskId` or `alertId` for the follow-ups from another feature (ADR-0068) |
 | `GET /drafts?status` | The caller's drafts |
 | `GET /drafts/{id}` | One draft, with placeholders filled in for display |
 | `PUT /drafts/{id}` | Edit subject and body (optimistic locking) |
-| `POST /drafts/{id}/send` | Send through SES. 409 if already sent or discarded |
-| `DELETE /drafts/{id}` | Discard |
+| `POST /drafts/{id}/send` | Send through SES, Bcc to the agent, then clear the text. 409 if already sent or discarded; 422 while the details slot is untouched |
+| `DELETE /drafts/{id}` | Discard and clear the text |
 | `GET /preferences`, `PUT /preferences` | `invitesEnabled`, `remindersEnabled` (both default on) |
 
 Times are stored in UTC and shown in Singapore time. Event times must be in the future when created and end after they start.
@@ -162,12 +163,12 @@ Times are stored in UTC and shown in Singapore time. Event times must be in the 
 - `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL`
 - `REMINDER_SENT`, `REMINDER_FAILED`, `REMINDER_MISSED`
 - `INVITE_SENT`, `INVITE_FAILED`
-- `DRAFT_GENERATE` (with `source` AI or TEMPLATE), `DRAFT_DISCARD`
-- `EMAIL_SEND`, `EMAIL_SEND_FAILED`
+- `DRAFT_GENERATE` (with `source` AI or TEMPLATE, and `healthTaskId` or `alertId` for a follow-up from another feature), `DRAFT_DISCARD` (`reason` `agent`, or `expired` with actor `system`)
+- `EMAIL_SEND` (with `purpose`, `source`, `edited` and the source's ID: whether the agent changed the generated text, never the text), `EMAIL_SEND_FAILED`
 - `PREFERENCES_UPDATE`
 
 - Payloads hold IDs, statuses and, for updates, changed field names with before and after times. They never hold titles, descriptions, email bodies or addresses.
-- `actor_id` is the caller's `sub`, or `system` for dispatcher events.
+- `actor_id` is the caller's `sub`, or `system` for dispatcher events and expired drafts.
 - Written through the transactional outbox (ADR-0020) and relayed to `audit-insert`.
 - The auditor gets the `ENGAGEMENT` type and payload checks (task AE-T08).
 - The activity feed (`GET /api/activities`) shows `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL` and `EMAIL_SEND`: the agent's own changes. Reminders, invites and drafts stay in the audit log only.
@@ -237,12 +238,14 @@ Rough figures; verify in the AWS Pricing Calculator for ap-southeast-1.
 - **Human review is mandatory.** Drafts are never sent automatically.
 - **Client email address:** read from client-service at send time with the caller's token, used once, and not stored. Client personal fields stay encrypted in client-service (ADR-0030).
 - **Agent-typed titles and descriptions** may name a client. They go only to the agent's own mailbox and `engagement-db`, never to the model, and are never logged.
+- **Draft text is kept only while the draft is open** (ADR-0068 decision 4). Sending or discarding clears the subject and body. A daily job discards open drafts not changed for 14 days. Client emails are Bcc'd to the agent, named only in SES's destination, so the agent keeps their own copy.
+- **Follow-ups from another feature** read only the task's or alert's client, with the agent's token, to check that the source is theirs and about this client. Nothing from the source is stored except its ID, or sent to the model (ADR-0068 decision 1).
 - **SES:**
   - sends from a subdomain identity of `itsag3t6.com` with DKIM;
   - `Reply-To` is the agent's address, so client replies reach the agent;
   - in sandbox mode only verified addresses receive mail, so demo clients use team inboxes;
   - synthetic data only.
-- **Erasure:** `engagement-db` keeps client IDs and agent-typed text, which client crypto-shredding (ADR-0022, ADR-0030) does not reach. See open question Q6.
+- **Erasure:** `engagement-db` keeps client IDs, and agent-typed text in events and open drafts, which client crypto-shredding (ADR-0022, ADR-0030) does not reach. Since ADR-0068 a draft's text lasts at most 14 days without a change. See open question Q6.
 - **Secrets:** no new secrets beyond the database credentials. SES, Bedrock, Cognito and SQS use the task role.
 
 ## 16. Test plan
@@ -320,6 +323,7 @@ Joseph Yau reviews anything touching Feature 2 contracts. The auditor owner revi
 | AE-T09 | Frontend: calendar, event form, draft editor, home panel, preferences | Neo Jia Wen | Frontend owner (review) | `frontend/src/pages/AgentCalendar.jsx`, `AgentDrafts.jsx`, `AgentDashboard.jsx`, `frontend/src/components/engagement/`, `frontend/src/api/engagement.js`, `AppRouter.jsx`, `NavBar.jsx`, `components/activityText.js`, `vite.config.js` | `task/agent-engagement/frontend` | `AgentDashboard.jsx` and `AppRouter.jsx` are shared with BD-T12 | In progress | 2026-10-21 |
 | AE-T10 | Terraform stacks, SES identity, runbook | Neo Jia Wen | Platform | `infrastructure/terraform/stacks/agent-engagement/**`, `infrastructure/terraform/stacks/mail-identity/**`, CRM stack outputs (`engagement_inputs`), `scripts/aws-session.sh`, `docs/runbooks/deploy-aws.md`, `docs/cost/resource-register.md` | `task/agent-engagement/infrastructure` | CRM stack outputs (shared with ADR-0047 work) | In progress | 2026-10-21 |
 | AE-T11 | End-to-end checks, seed data, cost check, live Nova evaluation | Neo Jia Wen | — | all of the above | `feat/agent-engagement` | All four branches merged; verified SES inboxes; Cognito agent users | In progress: checks passed in a personal account in sender-address mode, Gmail and Outlook; the 24-case Nova evaluation (now against Nova Lite, ADR-0067) and the project account (domain mode) remain ([record](../testing/agent-engagement-live-checks.md)) | 2026-10-22 |
+| AE-T12 | Follow-ups from Client Health and alerts, agent details, draft text retention (ADR-0068) | Neo Jia Wen | Garvit, Swayam (Client Health page); Azeez, Hayyun (event briefing) | `services/engagement-service` (`drafting`, `integration/sources`, `notifications`, V1 migration), `docs/api/engagement-api.yaml`, `frontend/src/pages/AgentDrafts.jsx`, `ClientHealthMonitor.jsx`, `components/EventBriefings.jsx`, `api/engagement.js`, `infrastructure/terraform/stacks/crm/outputs.tf`, `stacks/agent-engagement/**` | `task/agent-engagement/linked-follow-ups` | Client Health task API and alert detail API (read only) | Built; tests pass | 2026-11-01 |
 
 Branches. The work is split by area, one task branch each, all from `feat/agent-engagement`, built in separate git worktrees. Each branch touches only its own files, so they merge without conflicts:
 
@@ -348,7 +352,7 @@ Merge path: `task/agent-engagement/<area>` → `feat/agent-engagement` → `dev`
 | Q3 | Agent email from Cognito `ListUsers` by `sub` (no user-service change), or a new user-service `GET /api/users/me`? **Resolved 2026-10-21:** Cognito `ListUsers` by `sub`, as ADR-0053 decision 4 (accepted) | Neo Jia Wen | — |
 | Q4 | Should admins get read-only access to agents' calendars, or is the audit log enough? | Team | §10 |
 | Q5 | Which countries beyond Singapore need holiday data, given the client `country` values in the synthetic data? | Neo Jia Wen | AE-T05 |
-| Q6 | On client deletion or erasure, should engagement-service drop the client link and drafts? That needs a deletion signal from client-service | Neo Jia Wen, Joseph Yau | Erasure story |
-| Q7 | Can a health-monitor task offer a "Draft email" link with a neutral purpose only, never its signals? | Garvit, Swayam | Later integration |
+| Q6 | On client deletion or erasure, should engagement-service drop the client link and drafts? That needs a deletion signal from client-service. **Partly addressed 2026-11-01:** draft text is cleared on send and discard, and open drafts expire after 14 days (ADR-0068); events and client IDs remain | Neo Jia Wen, Joseph Yau | Erasure story |
+| Q7 | Can a health-monitor task offer a "Draft email" link with a neutral purpose only, never its signals? **Proposed 2026-11-01:** yes, `HEALTH_CHECK_IN`, with the same link from alerts (`ALERT_FOLLOW_UP`); awaiting the owners' acknowledgement (ADR-0068) | Garvit, Swayam; Azeez, Hayyun | — |
 | Q8 | Is SES sandbox enough for the demo, or is production access needed? | Neo Jia Wen | AE-T11 |
 | Q9 | Telegram reminders: when, if ever? Needs its own ADR (bot token, chat linking, content limits) | Neo Jia Wen | — |
