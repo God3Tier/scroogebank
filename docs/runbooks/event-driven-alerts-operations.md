@@ -256,6 +256,36 @@ label: `alert.holdings.portfolios.maintained`, `alert.holdings.positions.missing
 universe makes every run), the counter `alert.holdings.crm.directory.failures`, and the existing
 `alert.search.batch.deferred` for pending-source deferrals.
 
+Demo portfolios. Teardown empties alerts-db, so after every deployment, and within
+72 hours of a demo (older valuations expire), run
+`scripts/seed-demo-portfolios.py` as the demo agent. Through the app and the
+agent's token, it gives each of the agent's active investment accounts the same
+portfolio, mostly DBS with some OCBC, so the worker searches DBS under both search
+rules. It needs at least two of the agent's clients with an active investment
+account, and replaces whatever those accounts held. `--dry-run` lists the accounts
+without saving.
+
+The script needs the agent's Cognito access token, since the app's Cognito client
+allows only browser sign-in. Sign in to the app as the agent, open the browser's
+developer tools (F12), and run this in the Console:
+
+```js
+JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find(k => k.startsWith('oidc.user:')))).access_token
+```
+
+Copy the printed value without its quotes and pass it in the environment, not on
+the command line, so it stays out of the shell history:
+
+```sh
+ALERT_AGENT_TOKEN='<access token>' python scripts/seed-demo-portfolios.py --dry-run
+ALERT_AGENT_TOKEN='<access token>' python scripts/seed-demo-portfolios.py
+```
+
+The token expires after about an hour; a `401` from the script means copy a new
+one. Use an agent's token, not an admin's: only agents can save portfolios, and
+only for their own clients' accounts. Anyone holding the token can act as that
+agent until it expires, so do not paste it into chat, commits or files.
+
 Rollback: set `ALERT_HOLDINGS_MODE=fixture` and stop portfolio edits. All recorded
 portfolios, snapshots and audit events remain. Do not restore a former agent's
 access by hand; correct the assignment in the CRM.
