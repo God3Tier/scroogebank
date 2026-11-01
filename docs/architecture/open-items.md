@@ -30,6 +30,8 @@ Alerts ADR-0006 (schedule settled 2026-10-09: every 4 hours; [ADR-0031](../adr/A
 
 **Dashboard part settled (2026-10-14).** The first dashboard branch's ADR-0003 was not carried over: [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) replaces it, and dashboard-service on `dev` sends `DASHBOARD_VIEW` events straight to the audit queue. Still open: the alerts ADR-0008 and ADR-0010 points (on `dev`, the alert service defaults to the global-inference model through Bedrock in us-east-1, with AI off by default) and the health-monitor deployment decisions.
 
+**Model and health-monitor parts settled (2026-11-01).** The model point of ADR-0010 is settled by accepted [ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md): the alert model is Nova 2 Lite through its global inference profile, called from Singapore, because it receives only public data; the service and the alert-worker stack now default to ap-southeast-1. The health monitor runs daily at 08:00 SGT ([ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md)) and words its findings with Nova Lite through its Asia-Pacific profile ([ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md)). Still open: ADR-0008 (Proposed) still describes a shared database cluster, while alerts-db deploys as its own instance as the target architecture says; and ADR-0010 and [ADR-0031](../adr/ADR-0031-xf1-alert-processing-search-region-boundary.md), both Proposed, need their owners to accept them as amended by ADR-0050 or withdraw them.
+
 ## 5. SFTP file format and schedule
 
 File naming, CSV or JSON, header and field layout, and how often files are produced, agreed between the ingestion worker's owner and the SFTP server's owner.
@@ -88,6 +90,8 @@ Still open, from (e): which operations admins have on findings (read only, or al
 ## 14. Tokyo web search availability
 
 Confirm in the live AWS spike that Bedrock AgentCore web search is available in Tokyo (and whether it is now available in Singapore).
+
+**Closed (2026-11-01): superseded.** The live spike found AgentCore web search available only in Tokyo, but an AWS Organization service control policy outside the project's control denies `bedrock-agentcore:InvokeGateway` and Bedrock's own web search in the project account. Accepted [ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md) replaced the search with the Tavily API, called directly from the worker; asking for an exception to the policy stays open as a parallel track.
 
 ## 15. Instrument master source
 

@@ -7,6 +7,7 @@
 - AI-assisted draft: Yes — Codex
 - Related branch: `task/event-driven-alerts/contracts`
 - Supersedes: None
+- Superseded by: [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) in part (the Tokyo Gateway: an AWS Organization service control policy denies `bedrock-agentcore:InvokeGateway`, so the worker calls the Tavily API directly; the public-terms-only boundary, quotas and kill switch are unchanged)
 
 ## Context
 

@@ -1,5 +1,11 @@
 # Event-driven alerts: AgentCore Web Search spike
 
+> **Historical (2026-11-01).** The live spike was blocked by an AWS Organization service
+> control policy that denies `bedrock-agentcore:InvokeGateway`, and
+> [ADR-0050](../adr/ADR-0050-event-search-provider-after-scp-block.md) replaced AgentCore
+> with the Tavily search API. This record is kept as decision evidence; it does not
+> describe the deployed design.
+
 ## Record
 
 - Task: `EDA-D1-01`
