@@ -210,7 +210,9 @@ The roles' names start with the stack's prefix, `crm-<legal_entity>-<environment
 
 **The second `sed` line deletes step 9.3's four lines** (`enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint`), which an `env/prod.tfvars` from an earlier deployment still has, since the `cp` line keeps an existing file. Their commented-out copies from the example file stay. Those lines point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they would make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). If you run this block again after step 9.3, for example to fix the audit roles, run step 9.3's item 2 again before the next apply, or that apply deletes the ingest Lambda.
 
-Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs. dashboard-service's image tag is set in the business-dashboard stack, so an `image_tags` entry for it here does nothing.
+Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs.
+
+**For a load or security test only**, also add `enable_test_tooling = true` to `env/prod.tfvars`. It creates the in-VPC ZAP scanner task and the test bucket ([ADR-0071](../adr/ADR-0071-test-only-in-vpc-zap-scanner.md); `tests/security/zap/README.md`, `tests/load/README.md`). Remove the line after the test; the teardown destroys both either way. API Gateway's throttle is `api_throttle_rate_limit` and `api_throttle_burst_limit` (200 and 400, [ADR-0070](../adr/ADR-0070-api-throttle-sized-for-100-concurrent-agents.md)); a stress test may raise them with `-var` for one apply. dashboard-service's image tag is set in the business-dashboard stack, so an `image_tags` entry for it here does nothing.
 
 Create the stack, still in `stacks/crm`:
 

@@ -171,6 +171,21 @@ run "prod" {
     condition     = length(aws_wafv2_web_acl.this) == 1 && length(aws_backup_plan.daily) == 1
     error_message = "Prod: WAF and AWS Backup are on."
   }
+  assert {
+    condition = (
+      one(aws_apigatewayv2_stage.default.default_route_settings).throttling_rate_limit == 200 &&
+      one(aws_apigatewayv2_stage.default.default_route_settings).throttling_burst_limit == 400
+    )
+    error_message = "The API throttle is sized for 100 concurrent agents with twice the headroom (ADR-0070)."
+  }
+  assert {
+    condition = (
+      length(aws_ecs_task_definition.zap_scanner) == 0 && length(aws_s3_bucket.test_runs) == 0 &&
+      !contains(keys(aws_security_group.this), "zap_scanner") &&
+      length([for k in keys(aws_vpc_security_group_ingress_rule.this) : k if strcontains(k, "zap_scanner")]) == 0
+    )
+    error_message = "No test tooling, and nothing new allowed into the ALB, unless enable_test_tooling (ADR-0071)."
+  }
   # assert {
   #   # Provider-computed ARNs are unknown during a mocked plan. The vault's
   #   # kms_key_arn argument directly references this key in backup.tf; this
@@ -633,4 +648,25 @@ run "rejects_a_global_client_health_profile" {
   }
 
   expect_failures = [var.client_health_bedrock_model_id]
+}
+
+run "test_tooling_enabled" {
+  command = plan
+
+  variables {
+    enable_test_tooling = true
+  }
+
+  assert {
+    condition = (
+      length(aws_ecs_task_definition.zap_scanner) == 1 && length(aws_s3_bucket.test_runs) == 1 &&
+      aws_vpc_security_group_ingress_rule.this["alb-from-zap_scanner-${local.alb_port}"].from_port == local.alb_port &&
+      contains(keys(aws_vpc_security_group_egress_rule.anywhere), "zap_scanner")
+    )
+    error_message = "Test tooling: the scanner task, the test bucket, and the scanner's own security group allowed into the ALB (ADR-0071)."
+  }
+  assert {
+    condition     = aws_s3_bucket.test_runs[0].force_destroy
+    error_message = "Test tooling: the test bucket never blocks a teardown."
+  }
 }

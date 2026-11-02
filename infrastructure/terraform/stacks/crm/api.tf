@@ -98,10 +98,11 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
-  # Starting values, not derived from measured load (nfr-notes.md).
+  # Sized for the requirement's 100 concurrent agents, about 100 requests a
+  # second, with twice the headroom (ADR-0070).
   default_route_settings {
-    throttling_burst_limit = 100
-    throttling_rate_limit  = 50
+    throttling_burst_limit = var.api_throttle_burst_limit
+    throttling_rate_limit  = var.api_throttle_rate_limit
   }
 
   access_log_settings {

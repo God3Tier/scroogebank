@@ -41,6 +41,24 @@ variable "high_availability" {
   default     = false
 }
 
+variable "api_throttle_rate_limit" {
+  description = "API Gateway's steady request rate for the whole API, per second (ADR-0070): the requirement's 100 concurrent agents at about 100 requests a second, with twice the headroom."
+  type        = number
+  default     = 200
+}
+
+variable "api_throttle_burst_limit" {
+  description = "API Gateway's burst for the whole API (ADR-0070), twice the rate."
+  type        = number
+  default     = 400
+}
+
+variable "enable_test_tooling" {
+  description = "Test-only tooling for a load or security test (ADR-0071): a ZAP scanner task allowed into the internal ALB, and a bucket for test inputs and reports. Off outside a test; destroyed with the stack."
+  type        = bool
+  default     = false
+}
+
 variable "alert_holdings_mode" {
   description = "Where the event-alert API and worker read holdings (ADR-0066): fixture (the bundled synthetic JSON) or database (portfolios agents record against CRM accounts). Both read this one value, so they cannot differ. database needs the custom domain: the account directory is reached over HTTPS and never over HTTP. Apply the application's database migrations before switching to database."
   type        = string

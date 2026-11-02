@@ -18,7 +18,7 @@ locals {
     health       = 8087
   }
 
-  security_groups = {
+  security_groups = merge({
     vpc_link      = "API Gateway VPC Link interfaces"
     alb           = "Internal ALB"
     user          = "user-service tasks"
@@ -38,10 +38,12 @@ locals {
     db_audit      = "audit-db"
     db_alerts     = "alerts-db"
     db_health     = "health-db"
-  }
+    }, var.enable_test_tooling ? {
+    zap_scanner = "Test-only ZAP scanner tasks (ADR-0071)"
+  } : {})
 
   # to <- from on port
-  sg_ingress = [
+  sg_ingress = concat([
     { to = "alb", from = "vpc_link", port = local.alb_port },
     { to = "alb", from = "ingest", port = local.alb_port },
     { to = "alb", from = "alerts", port = local.alb_port }, # account directory, API and worker (ADR-0066)
@@ -80,11 +82,18 @@ locals {
     { to = "db_audit", from = "db_console", port = 5432 },
     { to = "db_alerts", from = "db_console", port = 5432 },
     { to = "db_health", from = "db_console", port = 5432 },
-  ]
+    ], var.enable_test_tooling ? [
+    # The scanner tests the services directly, past CloudFront, the WAF and
+    # API Gateway (ADR-0071).
+    { to = "alb", from = "zap_scanner", port = local.alb_port },
+  ] : [])
 
   # Groups whose members reach AWS APIs, Cognito's keys and the SFTP server
   # through the NAT gateway, and other tasks inside the VPC.
-  sg_egress_anywhere = ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "client_health", "ingest", "db_console"]
+  sg_egress_anywhere = concat(
+    ["user", "client", "account", "auditor", "chain_verify", "transaction", "alerts", "client_health", "ingest", "db_console"],
+    var.enable_test_tooling ? ["zap_scanner"] : [],
+  )
 
   sg = { for k, v in aws_security_group.this : k => v.id }
 }
