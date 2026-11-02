@@ -26,8 +26,8 @@ func TestDeleteClientProfile(t *testing.T) {
 		callAccounts bool
 		callRepo     bool
 	}{
-		"deletes a client with no accounts": {clientID: clientID, callAccounts: true, callRepo: true},
-		"rejects blank ID":                  {clientID: "  ", wantErr: clienterrors.ErrBadInput},
+		"deletes a client with no accounts":  {clientID: clientID, callAccounts: true, callRepo: true},
+		"rejects blank ID":                   {clientID: "  ", wantErr: clienterrors.ErrBadInput},
 		"treats a malformed ID as no client": {clientID: "not-a-uuid", wantErr: clienterrors.ErrClientNotFound},
 		"returns repository error": {
 			clientID: clientID, repoErr: repositoryErr, wantErr: repositoryErr, callAccounts: true, callRepo: true,
