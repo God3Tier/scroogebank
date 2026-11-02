@@ -45,7 +45,7 @@ func (c clientController) VerifyClientIdentity(w http.ResponseWriter, r *http.Re
 		case errors.Is(err, clientErr.ErrBadInput):
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeServerError(w, r, err)
 		}
 		return
 	}

@@ -50,6 +50,19 @@ output "db_console" {
   }
 }
 
+output "test_tooling" {
+  description = "The test-only ZAP scanner task and test bucket (ADR-0071), for tests/security/zap/run-in-vpc.sh and tests/load/seed-transactions.sh; null unless enable_test_tooling."
+  value = var.enable_test_tooling ? {
+    bucket         = aws_s3_bucket.test_runs[0].id
+    cluster        = aws_ecs_cluster.this.name
+    task_family    = aws_ecs_task_definition.zap_scanner[0].family
+    log_group      = aws_cloudwatch_log_group.zap_scanner[0].name
+    security_group = local.sg["zap_scanner"]
+    subnets        = local.app_subnet_ids
+    target         = local.alb_base_url
+  } : null
+}
+
 output "db_instance_identifiers" {
   description = "RDS instances to stop and start between sessions (ADR-0029)."
   value       = [for db in module.db : db.identifier]

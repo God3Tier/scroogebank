@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"uuid"
 
 	"github.com/aarondl/sqlboiler/v4/queries/qm"
 	"github.com/lib/pq"
@@ -25,7 +26,12 @@ func isContactTaken(err error) bool {
 }
 
 // findClient treats a deleted client as not found (ADR-0036).
+// findClient treats a malformed ID as a missing client, as GetClientProfile
+// does, rather than sending it to the database to fail as a query error.
 func (r clientRepository) findClient(ctx context.Context, clientID string) (*orm.Client, error) {
+	if _, err := uuid.Parse(clientID); err != nil {
+		return nil, clienterrors.ErrClientNotFound
+	}
 	client, err := orm.FindClient(ctx, r.db, clientID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, clienterrors.ErrClientNotFound

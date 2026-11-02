@@ -7,6 +7,10 @@
 # Personal copies of the spec, TODOs and notes; not part of the repository.
 /references/
 
+### Load and ZAP test output ###
+# Raw run output (tests/load, tests/security/zap); reports copy what they keep.
+/out/
+
 ### Java / Maven ###
 target/
 *.class

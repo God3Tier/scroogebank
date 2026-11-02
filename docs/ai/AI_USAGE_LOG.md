@@ -1887,3 +1887,81 @@ retry exhaustion and refusal to retry after the last available reservation.
   passed with the listed accepted changes. No AWS call or apply was made. The
   Client Health and alerts owners have not yet acknowledged the links, and the
   live Nova Lite evaluation of the two new purposes remains.
+
+## 2026-11-02 — k6 load tests and OWASP ZAP scans on AWS, four fixes (ADR-0069)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: write the k6 load tests, deploy the CRM to AWS (prod configuration,
+  high availability off), run the load tests and passive ZAP scans, fix what
+  they found, redeploy and test again, then tear down. Neo Jia Wen chose the
+  prod configuration over staging, passive-only ZAP scans, the test-only
+  `ALLOW_ADMIN_USER_PASSWORD_AUTH` on the web client (working copy only), and
+  asked for the fixes and a separate follow-up report.
+- Files: `tests/load` (k6 scripts and README), `tests/security/zap`,
+  `scripts/capture-scaling.sh`, `.gitignore`; the crm stack's alarms (Metrics
+  Insights) and its Terraform test; CloudFront response-headers policies and
+  ADR-0069 (proposed) with the index entry; the frontend's self-hosted fonts;
+  account-service and client-service malformed-ID handling and 500 bodies, with
+  tests; bounded database pools in account-service, client-service,
+  transaction-service and the Auditor; both reports, their evidence, the test
+  strategy's results and the NFR mapping.
+- Data/calls: synthetic users, clients, accounts, transactions and two
+  synthetic documents; real AWS. Access tokens were held only in the session's
+  scratch folder, and the root admin's token was pasted in chat; both expired
+  with the deployment.
+- Verification: the k6 and ZAP results in the two reports; `make test` passed
+  for account-service, client-service, the Auditor and the SFTP services;
+  frontend 269 tests and lint passed; crm Terraform validate and 14 tests
+  passed.
+- Human verification required: accept or change ADR-0069; the owners of
+  account-service and client-service (Feature 2), transaction-service
+  (Feature 3), the Auditor and Client Health (Garvit, Swayam) should review the
+  fixes in their code.
+
+## 2026-11-02 — Full-scale load test, active and direct ZAP scans, availability drills (ADR-0070, ADR-0071)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: run the report's specified load test (100 agents and 5 admins, 1 s
+  ramp-up, 3 loops, 10,000 clients, 30,000 accounts, 1.5 million
+  transactions) and a stress test; active ZAP scans through the edge and
+  directly at the services; the task-failure, Auditor-outage and
+  database-failover drills; then tear down. Neo Jia Wen chose to raise the API
+  throttle to 200/s (ADR-0070), to seed the 105 users directly in Cognito
+  (its own sender allows 50 e-mails a day), the in-VPC scanner (ADR-0071),
+  and the drills; Neo Jia Wen recorded the console videos.
+- Files: the crm stack's throttle variables, `test_tooling.tf`, security
+  groups, outputs and Terraform tests; ADR-0070 and ADR-0071 (proposed) with
+  the index entries; `tests/load` (`asr-load.js`, `stress.js`,
+  `seed-scale.js`, `seed-transactions.py`, `poller.js`, `lib/asr.js`, token
+  file support, README); `tests/security/zap` (`active-scope.py`, `scan.sh`,
+  `run-in-vpc.sh`, README); the runbook note; three reports, their evidence,
+  the trial reports' titles, the test strategy's results and the NFR mapping.
+- Data/calls: synthetic users (example.com), clients, accounts and
+  transactions; real AWS. Passwords, TOTP secrets and access tokens stayed in
+  the session's scratch folder and were deleted after teardown; the scanner's
+  token was a bucket input file, deleted after each run.
+- Verification: the k6, ZAP and drill results in the three reports, each
+  number traced to a file under `evidence/2026-11-02-full-scale/`; crm
+  Terraform validate and 15 tests passed; `k6 inspect` on every script;
+  shellcheck on the shell scripts.
+- Human verification: Neo Jia Wen accepted ADR-0069, ADR-0070 and ADR-0071 on
+  2026-11-02. Still required: the client-service owners (Feature 2) should weigh the key-cache open item in
+  the load-test report; the WAF owner the SQL-injection rule group.
+
+## 2026-11-02 — Client key cache and WAF SQL-injection rule (ADR-0072, ADR-0073)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: act on two open items from the full-scale load test and the ZAP
+  scans, at Neo Jia Wen's request: size client-service's data-key cache for
+  the working set and decrypt a page in parallel; add the WAF's SQL-injection
+  rule group.
+- Files: client-service `encryption/cache.go`, `encryption/datakey_test.go`,
+  `repository/client/list_clients.go`; the crm stack's `edge.tf` and plan
+  test; ADR-0072 and ADR-0073 (proposed) with the index entries, ADR-0030's
+  cross-reference, `system-overview.md`, and notes in the two reports.
+- Verification: client-service `make test` passed (14 packages); crm
+  Terraform validate and 15 tests passed. Not measured on AWS: the reports
+  say so, and each ADR names the re-test.
+- Human verification: Neo Jia Wen accepted ADR-0072 and ADR-0073 on
+  2026-11-02. Still required: client-service's owners (Feature 2) should review the cache and parallel
+  decryption.

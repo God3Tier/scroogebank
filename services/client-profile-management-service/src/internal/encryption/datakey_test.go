@@ -122,9 +122,15 @@ func TestKeyCacheExpiresAndEvicts(t *testing.T) {
 	assert.False(t, ok, "expired after the TTL")
 
 	cache.put("a", key)
+	now = now.Add(time.Second)
 	cache.put("b", key)
+	now = now.Add(time.Second)
 	cache.put("c", key)
 	assert.Len(t, cache.entries, 2, "never holds more than its size")
+	_, ok = cache.get("a")
+	assert.False(t, ok, "the key fetched longest ago is evicted first")
+	_, ok = cache.get("b")
+	assert.True(t, ok, "newer keys stay")
 
 	cache.remove("c")
 	_, ok = cache.get("c")

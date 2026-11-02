@@ -117,6 +117,20 @@ func TestDocumentsOfAMissingOrDeletedClient(t *testing.T) {
 	}
 }
 
+// A malformed ID names no client; it used to reach the database and fail as a
+// query error, which the API answered as a 500 (ZAP scan, 2026-11-02).
+func TestDocumentsOfAMalformedClientID(t *testing.T) {
+	ctx := context.Background()
+	_, repo, _ := newTestRepository(t)
+
+	err := repo.CreateDocument(ctx, models.ClientDocument{DocumentID: uuid.New().String(), ClientID: "not-a-uuid"}, syntheticPNG)
+	assert.ErrorIs(t, err, clienterrors.ErrClientNotFound)
+	_, err = repo.ListDocuments(ctx, "not-a-uuid")
+	assert.ErrorIs(t, err, clienterrors.ErrClientNotFound)
+	_, _, err = repo.GetDocument(ctx, "not-a-uuid", uuid.New().String())
+	assert.ErrorIs(t, err, clienterrors.ErrClientNotFound)
+}
+
 func TestADocumentThatCannotBeStoredIsNotRecorded(t *testing.T) {
 	db, repo, _ := newTestRepository(t)
 	seedClient(t, db, repo, documentClientID, "alice-101@example.test", "+6560000101")

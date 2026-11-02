@@ -43,6 +43,7 @@ func TestGetAccount(t *testing.T) {
 	}{
 		{name: "returns existing account", query: "?id=" + id, account: storedAccount(id), wantStatus: http.StatusOK, called: true},
 		{name: "rejects missing ID", wantStatus: http.StatusBadRequest},
+		{name: "rejects a malformed ID", query: "?id=not-a-uuid", wantStatus: http.StatusBadRequest},
 		{name: "maps missing account", query: "?id=" + id, serviceErr: clienterrors.ErrNotFound, wantStatus: http.StatusNotFound, called: true},
 		{name: "maps unexpected service error", query: "?id=" + id, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, called: true},
 	}

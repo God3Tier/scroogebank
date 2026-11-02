@@ -62,7 +62,7 @@ func (c clientController) CreateClientProfile(w http.ResponseWriter, r *http.Req
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeServerError(w, r, err)
 			return
 		}
 	}

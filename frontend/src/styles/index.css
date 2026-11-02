@@ -31,7 +31,7 @@
   --warning: #9a6700;
   --warning-bg: rgba(191, 135, 0, 0.12);
 
-  --sans: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Inter Variable', system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   --radius: 0.25rem;
@@ -61,6 +61,23 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* The icon font's class, which Google Fonts' stylesheet used to supply. */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined Variable';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
 }
 
 body {

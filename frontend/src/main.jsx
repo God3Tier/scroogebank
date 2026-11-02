@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AuthProvider } from 'react-oidc-context'
 import { BrowserRouter as Router } from 'react-router-dom'
+// Fonts are served from the app's own origin, not Google Fonts, so the
+// Content-Security-Policy allows no third-party origin (ADR-0069).
+import '@fontsource-variable/inter'
+import '@fontsource-variable/material-symbols-outlined'
 import './styles/index.css'
 import './styles/dashboard.css'
 import './styles/engagement.css'

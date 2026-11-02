@@ -72,7 +72,7 @@ func (c clientController) UpdateClientInformation(w http.ResponseWriter, r *http
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeServerError(w, r, err)
 			return
 		}
 	}
