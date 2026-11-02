@@ -69,3 +69,14 @@ func TestUpdateAccountStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateAccountStatusRejectsAMalformedID(t *testing.T) {
+	svc := servicemock.NewMockAccountService(t)
+	req := httptest.NewRequest(http.MethodPatch, "/api/accounts/not-a-uuid", strings.NewReader(`{"status":"active"}`))
+	res := httptest.NewRecorder()
+
+	NewAccountController(svc).UpdateAccountStatus(res, req, models.Caller{}, "not-a-uuid")
+	contract.Check(t, "accounts-api.yaml", http.MethodPatch, "/api/accounts/{accountId}", res)
+
+	assert.Equal(t, http.StatusBadRequest, res.Code)
+}

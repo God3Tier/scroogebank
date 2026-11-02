@@ -15,7 +15,7 @@ import (
 )
 
 func TestDeleteAccount(t *testing.T) {
-	const id = "account-123"
+	const id = "00000000-0000-0000-0000-000000000123"
 	tests := map[string]struct {
 		query      string
 		serviceErr error
@@ -24,6 +24,7 @@ func TestDeleteAccount(t *testing.T) {
 	}{
 		"deletes account":               {query: "id=" + id, wantStatus: http.StatusOK, callSvc: true},
 		"rejects missing ID":            {wantStatus: http.StatusBadRequest},
+		"rejects a malformed ID":        {query: "id=not-a-uuid", wantStatus: http.StatusBadRequest},
 		"maps invalid account":          {query: "id=" + id, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
 		"maps missing account":          {query: "id=" + id, serviceErr: clienterrors.ErrNotFound, wantStatus: http.StatusNotFound, callSvc: true},
 		"maps unexpected service error": {query: "id=" + id, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
@@ -39,6 +40,7 @@ func TestDeleteAccount(t *testing.T) {
 			NewAccountController(svc).DeleteAccount(res, req)
 			contract.Check(t, "accounts-api.yaml", http.MethodDelete, "/api/accounts/{accountId}", res)
 			assert.Equal(t, test.wantStatus, res.Code)
+			assert.NotContains(t, res.Body.String(), "database unavailable", "a 500 does not send the error's text")
 		})
 	}
 }

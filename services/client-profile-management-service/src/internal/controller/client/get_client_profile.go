@@ -17,7 +17,7 @@ func (c clientController) GetClientProfile(w http.ResponseWriter, r *http.Reques
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeServerError(w, r, err)
 			return
 		}
 	}

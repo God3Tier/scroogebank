@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"uuid"
 
 	clientErrors "client-profile-management-service/src/internal/errors"
 )
@@ -20,6 +21,11 @@ import (
 func (s clientService) DeleteClientProfile(ctx context.Context, clientID, authorization string) error {
 	if strings.TrimSpace(clientID) == "" {
 		return fmt.Errorf("%w: client_id is required; %w", clientErrors.ErrBadInput, clientErrors.ErrInvalidClientID)
+	}
+	// A malformed ID names no client. Checked here, since account-service
+	// refuses it with a 400 that would read as account-service failing.
+	if _, err := uuid.Parse(clientID); err != nil {
+		return clientErrors.ErrClientNotFound
 	}
 
 	hasAccounts, err := s.accounts.HasAccounts(ctx, clientID, authorization)

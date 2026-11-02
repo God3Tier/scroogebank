@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"uuid"
 )
 
 type updateAccountStatusInput struct {
@@ -18,6 +19,10 @@ type updateAccountStatusInput struct {
 // {"status": "ACTIVE"}: any of the four statuses, in any direction (ADR-0050).
 // Only the status can be changed.
 func (c *accountController) UpdateAccountStatus(w http.ResponseWriter, r *http.Request, caller models.Caller, accountID string) {
+	if _, err := uuid.Parse(accountID); err != nil {
+		http.Error(w, "id must be a UUID", http.StatusBadRequest)
+		return
+	}
 	var input updateAccountStatusInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "bad input", http.StatusBadRequest)

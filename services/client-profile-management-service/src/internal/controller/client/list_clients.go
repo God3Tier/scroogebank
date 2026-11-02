@@ -31,7 +31,7 @@ func (c clientController) ListClients(w http.ResponseWriter, r *http.Request, ca
 		case errors.Is(err, clientErr.ErrForbidden):
 			http.Error(w, err.Error(), http.StatusForbidden)
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeServerError(w, r, err)
 		}
 		return
 	}

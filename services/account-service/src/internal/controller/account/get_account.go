@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"uuid"
 
 	clienterrors "account-service/src/internal/errors"
 )
@@ -12,6 +13,10 @@ func (c *accountController) GetAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := r.URL.Query().Get("id")
 	if accountID == "" {
 		writeGetAccountError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	if _, err := uuid.Parse(accountID); err != nil {
+		writeGetAccountError(w, http.StatusBadRequest, "id must be a UUID")
 		return
 	}
 

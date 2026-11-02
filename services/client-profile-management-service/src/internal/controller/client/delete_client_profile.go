@@ -24,7 +24,7 @@ func (c clientController) DeleteClientProfile(w http.ResponseWriter, r *http.Req
 			http.Error(w, "account service unavailable", http.StatusServiceUnavailable)
 			return
 		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeServerError(w, r, err)
 			return
 		}
 	}
