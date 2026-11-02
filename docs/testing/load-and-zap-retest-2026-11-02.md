@@ -1,6 +1,6 @@
-# Load and ZAP retest after the fixes, 2026-11-02 (follow-up)
+# Load and ZAP small-scale trial run 2: retest after the fixes, 2026-11-02
 
-A follow-up to [run 1](load-and-zap-test-2026-11-02.md), which found four defects. This report covers the fixes and repeats the tests that found them, on the same deployment, to show the defects are gone.
+A follow-up to [trial run 1](load-and-zap-test-2026-11-02.md), which found four defects. Both trial runs were small: 3 agents, 1 admin, 75 clients; the full-scale runs are [load-test-full-scale-2026-11-02.md](load-test-full-scale-2026-11-02.md) and [zap-active-and-direct-2026-11-02.md](zap-active-and-direct-2026-11-02.md). This report covers the fixes and repeats the tests that found them, on the same deployment, to show the defects are gone.
 
 Run by Neo Jia Wen's session (Claude Code) on `task/infrastructure/load-and-zap-tests`, between 06:28 and 06:57 UTC on 2026-11-02. Same account, configuration, users and synthetic data as run 1, plus two synthetic identity documents for the browser check.
 
@@ -11,7 +11,7 @@ Run by Neo Jia Wen's session (Claude Code) on `task/infrastructure/load-and-zap-
 | 1. The CRM stack could not be deployed (CloudWatch alarms) | Alarms use Metrics Insights queries; AI safety split into two alarms | The run-1 deployment used it; Terraform tests pass (14 of 14) | **Yes** |
 | 2. Malformed IDs answered 500, some with the database's error text | 400 or 404 for a malformed ID; no 500 sends an error's text | 7 hand checks and the ZAP API scan | **Yes** |
 | 3. A burst ran client-service's database out of connections | Bounded pools in the four Go services | The same burst at 80 requests per second | **Yes** |
-| 4. No CSP, Permissions-Policy or cross-origin policies; Google Fonts without integrity; `Server: AmazonS3` | ADR-0069 (proposed): CloudFront header policies and bundled fonts | ZAP baseline and API scans, a browser check | **Yes**, apart from the accepted COEP alert |
+| 4. No CSP, Permissions-Policy or cross-origin policies; Google Fonts without integrity; `Server: AmazonS3` | ADR-0069: CloudFront header policies and bundled fonts | ZAP baseline and API scans, a browser check | **Yes**, apart from the accepted COEP alert |
 
 Nothing regressed:
 - The smoke test passed again: 25 of 25 checks.
@@ -126,7 +126,7 @@ There were no Content-Security-Policy violations. The console showed two warning
 
 ## Still open
 
-1. **ADR-0069 is proposed.** Neo Jia Wen to accept it, or change it, before merge.
+1. **ADR-0069** was accepted by Neo Jia Wen on 2026-11-02.
 2. **The fixes need their owners' review:**
    - account-service and client-service (Feature 2);
    - transaction-service (Feature 3);

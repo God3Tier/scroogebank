@@ -1,6 +1,6 @@
-# Load and ZAP test on AWS, 2026-11-02 (run 1)
+# Load and ZAP small-scale trial run 1, 2026-11-02
 
-The first run of the k6 load tests ([`tests/load`](../../tests/load/README.md)) and the OWASP ZAP scans ([`tests/security/zap`](../../tests/security/zap/README.md)) against a real deployment, the evidence the [test strategy](test-strategy.md) asks for under NFR 1 (performance and scalability) and NFR 8 (security). It found four defects. They were fixed and tested again on the same deployment; that run is reported separately in [load-and-zap-retest-2026-11-02.md](load-and-zap-retest-2026-11-02.md).
+A small-scale trial of the k6 load tests ([`tests/load`](../../tests/load/README.md)) and the OWASP ZAP scans ([`tests/security/zap`](../../tests/security/zap/README.md)) against a real deployment, the evidence the [test strategy](test-strategy.md) asks for under NFR 1 (performance and scalability) and NFR 8 (security). It found four defects. They were fixed and tested again on the same deployment; that run is reported separately in [trial run 2](load-and-zap-retest-2026-11-02.md). The trial used 3 agents, 1 admin and 75 clients, and passive ZAP scans through the edge only. The full-scale runs that followed are [load-test-full-scale-2026-11-02.md](load-test-full-scale-2026-11-02.md) (the report's 100 agents and 5 admins over 1.5 million transactions) and [zap-active-and-direct-2026-11-02.md](zap-active-and-direct-2026-11-02.md) (active scans, through the edge and directly at the services).
 
 Run by Neo Jia Wen's session (Claude Code) on `task/infrastructure/load-and-zap-tests`, from `dev` at `c2c9631`, in AWS account 727816232662, `ap-southeast-1`, on 2026-11-02 between 04:52 and 06:31 UTC. Synthetic data only. Every service, database, Cognito pool and edge component was real.
 
@@ -118,7 +118,7 @@ Every other service answered 400 or 404.
    - For the Client Health owners (Garvit, Swayam) to review.
 2. **Malformed IDs answered 500.** The full list is in the ZAP section above. Some 500s sent the database's error text, which names tables and SQL. Fixed in the retest.
 3. **The Go services' database pools had no limit.** account-service, client-service, transaction-service and the Auditor opened one connection per concurrent request. A burst exhausted the `db.t4g.micro`'s connection slots, failing most requests and losing audit events. Autoscaling cannot react within seconds. Fixed in the retest.
-4. **Missing security headers on the frontend, and Google Fonts.** Fixed in the retest, under [ADR-0069](../adr/ADR-0069-frontend-security-headers-and-self-hosted-fonts.md) (proposed).
+4. **Missing security headers on the frontend, and Google Fonts.** Fixed in the retest, under [ADR-0069](../adr/ADR-0069-frontend-security-headers-and-self-hosted-fonts.md), accepted 2026-11-02.
 
 ## Open items
 

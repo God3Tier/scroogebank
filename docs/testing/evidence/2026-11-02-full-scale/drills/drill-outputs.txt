@@ -1,0 +1,36 @@
+Availability drills, 2026-11-02 (UTC). Raw outputs copied from the run.
+
+== Drill 1: task failure (client-service, one task)
+stop-task                         11:19:03
+ECS: deregistered 1 targets       11:19:46
+ECS: has started 1 tasks          11:19:46 (task 480e1cd3...)
+ECS: registered 1 targets         11:20:44
+probe (poller.js, 1 req/s): 301 requests, 11:18:45 to 11:23:45, non-200: 59
+outage 11:19:47 to 11:20:45: 59 s, 59 failed requests, statuses ['503']
+
+== Drill 2: Auditor outage
+before: max(sequence_no) 216151, count 216151 (11:32:23)
+autoscaling suspended; auditor desired 0   11:38:52 (0 running 11:39:04)
+20 writes as the ZAP agent (5 create client, 5 update client, 10 open account): all 2xx, 11:40:16
+queue crm-sg-prod-audit-insert, visible: 0 (11:40:40) -> 30 (11:40:51 to 11:42:35)
+auditor desired 1, autoscaling resumed      11:41:36 (running 11:42:46)
+queue 0/0 (visible/in-flight)               11:43:08; dead-letter queue 0
+after: max(sequence_no) 216181, count 216181
+new rows 30, distinct event_id 30, sequence 216152..216181, chained 11:42:34.36..11:42:34.93
+by action: CREATE 15, GET 10, UPDATE 5; broken parent-hash links among new rows: 0
+chain-verify (11:55:24): checked 216181 entries, found 0 problems, 0 of them new; anchored the head
+
+== Drill 3: database failover (clients-db, Multi-AZ, high_availability = true)
+marker client "Failover Marker" created 12:03 (201)
+run 1: reboot --force-failover 12:07:45
+  12:07:58 Multi-AZ instance failover started.
+  12:08:17 DB instance restarted
+  12:08:27 Multi-AZ instance failover completed
+  probe: 360 requests, non-200 17; outage 12:08:02 to 12:08:13: 12 s, statuses ['0' (10 s timeout), '500']
+  marker read back 12:09:09: 200, fields match
+  endpoint resolves to 10.0.21.235 (subnet 10.0.21.0/24, ap-southeast-1b); DescribeDBInstances still reported 1a
+reset to 1a (not measured) 12:18:18 started, 12:18:57 completed; endpoint 10.0.20.20 (ap-southeast-1a)
+run 2 (recorded): 12:26:43 failover started, 12:26:58 restarted, 12:27:27 completed
+  endpoint 10.0.20.20 -> 10.0.21.235 at 12:26:50
+  probe: 298 requests, non-200 13; outage 12:26:47 to 12:26:54: 8 s, statuses ['0', '500']
+  marker read back 12:31:41: 200, fields match

@@ -1917,3 +1917,33 @@ retry exhaustion and refusal to retry after the last available reservation.
   account-service and client-service (Feature 2), transaction-service
   (Feature 3), the Auditor and Client Health (Garvit, Swayam) should review the
   fixes in their code.
+
+## 2026-11-02 — Full-scale load test, active and direct ZAP scans, availability drills (ADR-0070, ADR-0071)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: run the report's specified load test (100 agents and 5 admins, 1 s
+  ramp-up, 3 loops, 10,000 clients, 30,000 accounts, 1.5 million
+  transactions) and a stress test; active ZAP scans through the edge and
+  directly at the services; the task-failure, Auditor-outage and
+  database-failover drills; then tear down. Neo Jia Wen chose to raise the API
+  throttle to 200/s (ADR-0070), to seed the 105 users directly in Cognito
+  (its own sender allows 50 e-mails a day), the in-VPC scanner (ADR-0071),
+  and the drills; Neo Jia Wen recorded the console videos.
+- Files: the crm stack's throttle variables, `test_tooling.tf`, security
+  groups, outputs and Terraform tests; ADR-0070 and ADR-0071 (proposed) with
+  the index entries; `tests/load` (`asr-load.js`, `stress.js`,
+  `seed-scale.js`, `seed-transactions.py`, `poller.js`, `lib/asr.js`, token
+  file support, README); `tests/security/zap` (`active-scope.py`, `scan.sh`,
+  `run-in-vpc.sh`, README); the runbook note; three reports, their evidence,
+  the trial reports' titles, the test strategy's results and the NFR mapping.
+- Data/calls: synthetic users (example.com), clients, accounts and
+  transactions; real AWS. Passwords, TOTP secrets and access tokens stayed in
+  the session's scratch folder and were deleted after teardown; the scanner's
+  token was a bucket input file, deleted after each run.
+- Verification: the k6, ZAP and drill results in the three reports, each
+  number traced to a file under `evidence/2026-11-02-full-scale/`; crm
+  Terraform validate and 15 tests passed; `k6 inspect` on every script;
+  shellcheck on the shell scripts.
+- Human verification: Neo Jia Wen accepted ADR-0069, ADR-0070 and ADR-0071 on
+  2026-11-02. Still required: the client-service owners (Feature 2) should weigh the key-cache open item in
+  the load-test report; the WAF owner the SQL-injection rule group.
