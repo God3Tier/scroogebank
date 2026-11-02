@@ -280,10 +280,12 @@ resource "aws_cloudwatch_metric_alarm" "client_health_analysis_failures" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = local.alarm_actions
 
+  # Alarms refuse SEARCH; a Metrics Insights query sums every failure_stage.
   metric_query {
     id          = "failures"
-    expression  = "SUM(SEARCH('{${local.client_health_metric_namespace}} MetricName=\"client_health_analysis_runs_total\" outcome=\"failed\"', 'Sum', 300))"
+    expression  = "SELECT SUM(client_health_analysis_runs_total) FROM \"${local.client_health_metric_namespace}\" WHERE outcome = 'failed'"
     label       = "Failed analysis runs"
+    period      = 300
     return_data = true
   }
 }
@@ -346,9 +348,11 @@ resource "aws_cloudwatch_metric_alarm" "client_health_authorization_denied" {
   alarm_actions       = local.alarm_actions
 }
 
+# An alarm takes one Metrics Insights query, so validation rejections and
+# provider failures alarm separately.
 resource "aws_cloudwatch_metric_alarm" "client_health_ai_safety" {
   alarm_name          = "${local.name}-client-health-ai-safety"
-  alarm_description   = "Client Health AI output validation or provider safety failed. Primary: Garvit; backup: Swayam."
+  alarm_description   = "Client Health AI output failed validation. Primary: Garvit; backup: Swayam."
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 1
   threshold           = 0
@@ -357,8 +361,27 @@ resource "aws_cloudwatch_metric_alarm" "client_health_ai_safety" {
 
   metric_query {
     id          = "safety"
-    expression  = "SUM(SEARCH('{${local.client_health_metric_namespace}} MetricName=\"client_health_ai_validation_rejected_total\"', 'Sum', 300)) + SUM(SEARCH('{${local.client_health_metric_namespace}} MetricName=\"client_health_ai_provider_failures_total\"', 'Sum', 300))"
-    label       = "AI validation and provider failures"
+    expression  = "SELECT SUM(client_health_ai_validation_rejected_total) FROM \"${local.client_health_metric_namespace}\""
+    label       = "AI validation failures"
+    period      = 300
+    return_data = true
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "client_health_ai_provider_failures" {
+  alarm_name          = "${local.name}-client-health-ai-provider-failures"
+  alarm_description   = "Client Health's AI provider call or safety check failed. Primary: Garvit; backup: Swayam."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+
+  metric_query {
+    id          = "provider"
+    expression  = "SELECT SUM(client_health_ai_provider_failures_total) FROM \"${local.client_health_metric_namespace}\""
+    label       = "AI provider failures"
+    period      = 300
     return_data = true
   }
 }

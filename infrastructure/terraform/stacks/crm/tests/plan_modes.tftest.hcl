@@ -301,7 +301,7 @@ run "prod" {
       aws_cloudwatch_metric_alarm.client_health_watermark_stale.threshold == 97200 &&
       aws_cloudwatch_metric_alarm.client_health_audit_oldest.threshold == 900 &&
       aws_cloudwatch_metric_alarm.client_health_assignment_unavailable.dimensions["outcome"] == "unavailable" &&
-      anytrue([for q in aws_cloudwatch_metric_alarm.client_health_analysis_failures.metric_query : strcontains(q.expression, "outcome=\"failed\"")]) &&
+      anytrue([for q in aws_cloudwatch_metric_alarm.client_health_analysis_failures.metric_query : strcontains(q.expression, "outcome = 'failed'")]) &&
       strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "Client Health analysis") &&
       strcontains(aws_cloudwatch_dashboard.this.dashboard_body, "client_health_audit_backlog")
     )
