@@ -1887,3 +1887,33 @@ retry exhaustion and refusal to retry after the last available reservation.
   passed with the listed accepted changes. No AWS call or apply was made. The
   Client Health and alerts owners have not yet acknowledged the links, and the
   live Nova Lite evaluation of the two new purposes remains.
+
+## 2026-11-02 — k6 load tests and OWASP ZAP scans on AWS, four fixes (ADR-0069)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: write the k6 load tests, deploy the CRM to AWS (prod configuration,
+  high availability off), run the load tests and passive ZAP scans, fix what
+  they found, redeploy and test again, then tear down. Neo Jia Wen chose the
+  prod configuration over staging, passive-only ZAP scans, the test-only
+  `ALLOW_ADMIN_USER_PASSWORD_AUTH` on the web client (working copy only), and
+  asked for the fixes and a separate follow-up report.
+- Files: `tests/load` (k6 scripts and README), `tests/security/zap`,
+  `scripts/capture-scaling.sh`, `.gitignore`; the crm stack's alarms (Metrics
+  Insights) and its Terraform test; CloudFront response-headers policies and
+  ADR-0069 (proposed) with the index entry; the frontend's self-hosted fonts;
+  account-service and client-service malformed-ID handling and 500 bodies, with
+  tests; bounded database pools in account-service, client-service,
+  transaction-service and the Auditor; both reports, their evidence, the test
+  strategy's results and the NFR mapping.
+- Data/calls: synthetic users, clients, accounts, transactions and two
+  synthetic documents; real AWS. Access tokens were held only in the session's
+  scratch folder, and the root admin's token was pasted in chat; both expired
+  with the deployment.
+- Verification: the k6 and ZAP results in the two reports; `make test` passed
+  for account-service, client-service, the Auditor and the SFTP services;
+  frontend 269 tests and lint passed; crm Terraform validate and 14 tests
+  passed.
+- Human verification required: accept or change ADR-0069; the owners of
+  account-service and client-service (Feature 2), transaction-service
+  (Feature 3), the Auditor and Client Health (Garvit, Swayam) should review the
+  fixes in their code.

@@ -1,6 +1,6 @@
 # Test strategy
 
-> **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-24.
+> **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-11-02.
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.
 > Part of the [target architecture](../architecture/system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
@@ -19,3 +19,10 @@ Each mandatory quality goal has a test that shows the design works, not only a d
 | **Resiliency and durability** (NFR 5, 9) | Per-service outbox, SQS and a dead-letter queue; timeouts, retries and circuit breakers; a daily AWS Backup plan (a cross-region copy once the account allows it). | **Dead-letter-queue replay test:** send a malformed audit event, check it moves to the dead-letter queue after 5 failed receives and raises the alarm, then fix and redrive it and check it is chained exactly once. **Auditor outage test:** stop the auditor, make changes, restart it, and check every audit event arrives. **SQS outage test:** point a service at an unreachable queue, make changes, restore the queue, and check every event arrives exactly once. **Restore rehearsal:** restore a database from AWS Backup into a Terraform-built stack within the 12-hour RTO; once the account allows the cross-region copy, rebuild the stack in ap-southeast-2 from it. |
 
 Results are recorded in this file and summarised in the final report.
+
+## Results
+
+| Date | Quality goal | Test | Result | Report |
+|---|---|---|---|---|
+| 2026-11-02 | Performance and scalability (NFR 1) | k6 load tests on the prod configuration (staging has never been deployed) | At 40 requests per second: p95 65 ms, 0.003% failed. client-service scaled 1→6 tasks, transaction- and dashboard-service 1→3, all back to 1 within 25 minutes. The dashboard cache answered every refresh inside 3 minutes. A burst at 80 per second first failed most requests: the Go services' database pools had no limit. After the fix the same burst had no errors and API Gateway throttled above 50 per second. | [Run 1](load-and-zap-test-2026-11-02.md), [follow-up](load-and-zap-retest-2026-11-02.md) |
+| 2026-11-02 | Security (NFR 8) | OWASP ZAP baseline and passive API scans | Run 1: no failures. Two Medium alerts (no Content-Security-Policy; Google Fonts without Subresource Integrity), and 500s with database error text for malformed IDs. After the fixes: no Medium alerts. Remaining Lows are accepted (no COEP, ADR-0069) or expected (`/internal/*` returns the app page). | [Run 1](load-and-zap-test-2026-11-02.md), [follow-up](load-and-zap-retest-2026-11-02.md) |

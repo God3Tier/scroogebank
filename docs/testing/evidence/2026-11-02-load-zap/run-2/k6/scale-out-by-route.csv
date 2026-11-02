@@ -1,0 +1,12 @@
+route,requests,p50_ms,p95_ms,p99_ms,max_ms,non_200
+GET /api/accounts,2162,20,31,71,145,2
+GET /api/accounts/{accountId}/transactions,2097,26,40,104,260,2
+GET /api/activities,897,134,185,251,644,1
+GET /api/alerts,1435,23,35,91,290,1
+GET /api/clients,3008,22,42,107,423,2
+GET /api/clients/{clientId},2885,21,40,94,374,2
+GET /api/dashboard/agents,879,24,45,90,263,0
+GET /api/dashboard/overview,2105,24,43,86,2167,0
+GET /api/engagement/events,708,22,35,71,285,1
+GET /api/transactions,936,21,32,71,296,0
+GET /api/users,888,22,35,83,114,1
