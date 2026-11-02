@@ -65,6 +65,13 @@ func run() error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
+	// Bound the pool. Without a limit, a burst opens one connection per request
+	// and exhausts the db.t4g.micro's connection slots ("too many clients"):
+	// requests fail and audit events are lost (load test, 2026-11-02). Ten per
+	// task keeps six tasks at 60.
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxIdleTime(5 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
