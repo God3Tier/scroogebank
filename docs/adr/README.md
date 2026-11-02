@@ -109,7 +109,10 @@ assigns replacement identifiers.
 
 Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
 
-ADR-0069, ADR-0070 and ADR-0071 were accepted by Neo Jia Wen on 2026-11-02. None is proposed at present.
+ADR-0069, ADR-0070 and ADR-0071 were accepted by Neo Jia Wen on 2026-11-02.
+
+- [ADR-0072](ADR-0072-client-key-cache-sized-for-the-working-set.md) — Proposed 2026-11-02 after the full-scale load test: client-service's data-key cache holds up to 10,000 keys (still 5 minutes each) and evicts the oldest, and `ListClients` decrypts a page's rows in parallel (8 at a time); refines ADR-0030 decision 3. Owner: Neo Jia Wen; Feature 2 owners to review.
+- [ADR-0073](ADR-0073-waf-sql-injection-rule-group.md) — Proposed 2026-11-02 after the active ZAP scans: the WAF adds `AWSManagedRulesSQLiRuleSet` (rule `sql-injection`, priority 35), skipping the binary document-upload path. Owner: Neo Jia Wen.
 
 ## Maintenance rule
 

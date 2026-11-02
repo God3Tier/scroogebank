@@ -129,6 +129,8 @@ Scale-in began about 15 minutes after the load ended and took one task off every
    - unwrapping a page's keys concurrently, or with one DynamoDB `BatchGetItem`.
 
    Then re-run `asr-load.js`.
+
+   **Changed since the run** ([ADR-0072](../adr/ADR-0072-client-key-cache-sized-for-the-working-set.md)): the cache now holds 10,000 keys, evicts the oldest, and the list decrypts a page in parallel. This is not yet measured on AWS; the figures above are from before the change.
 2. **Transaction reads at 400 virtual agents**: the ownership call to account-service, and the micro databases. Re-measure after item 1.
 3. **A cold burst can still draw a few 429s** at 200/400 (25 in run 1). Raise the burst if the agents' first page loads matter more than flood protection (ADR-0070).
 

@@ -1947,3 +1947,21 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Human verification: Neo Jia Wen accepted ADR-0069, ADR-0070 and ADR-0071 on
   2026-11-02. Still required: the client-service owners (Feature 2) should weigh the key-cache open item in
   the load-test report; the WAF owner the SQL-injection rule group.
+
+## 2026-11-02 — Client key cache and WAF SQL-injection rule (ADR-0072, ADR-0073)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: act on two open items from the full-scale load test and the ZAP
+  scans, at Neo Jia Wen's request: size client-service's data-key cache for
+  the working set and decrypt a page in parallel; add the WAF's SQL-injection
+  rule group.
+- Files: client-service `encryption/cache.go`, `encryption/datakey_test.go`,
+  `repository/client/list_clients.go`; the crm stack's `edge.tf` and plan
+  test; ADR-0072 and ADR-0073 (proposed) with the index entries, ADR-0030's
+  cross-reference, `system-overview.md`, and notes in the two reports.
+- Verification: client-service `make test` passed (14 packages); crm
+  Terraform validate and 15 tests passed. Not measured on AWS: the reports
+  say so, and each ADR names the re-test.
+- Human verification required: accept or change ADR-0072 and ADR-0073;
+  client-service's owners (Feature 2) should review the cache and parallel
+  decryption.

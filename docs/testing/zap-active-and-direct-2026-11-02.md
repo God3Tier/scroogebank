@@ -88,7 +88,7 @@ None found. The Low alerts on the direct path are headers the edge sets; the ser
 
 ## Open items
 
-1. **The WAF has no SQL-injection rule group.** The services are not injectable, but `AWSManagedRulesSQLiRuleSet` would stop those payloads at the edge, before they cost a service anything (about USD 1 a month). It is a WAF design change for its owner.
+1. **The WAF has no SQL-injection rule group.** The services are not injectable, but `AWSManagedRulesSQLiRuleSet` would stop those payloads at the edge, before they cost a service anything (about USD 1 a month). It is a WAF design change for its owner. **Changed since the run** ([ADR-0073](../adr/ADR-0073-waf-sql-injection-rule-group.md)): the web ACL now has the rule group, skipping the binary document-upload path. It has not yet been scanned on AWS.
 2. **The WAF's metrics cannot be read** in this account: the SCP denies CloudWatch in us-east-1, where CloudFront-scope WAF metrics live. Sampled requests still work.
 3. **`scan.sh` ran specs back to back in one container**, and every other spec failed while the previous ZAP was still shutting down. Fixed during the run (a port per spec, waiting for the previous ZAP to exit), and the 4 affected anonymous specs were re-run.
 
