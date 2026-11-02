@@ -104,7 +104,9 @@ assigns replacement identifiers.
 
 ## Proposed decisions
 
-None. Every ADR was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
+Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
+
+- [ADR-0069](ADR-0069-frontend-security-headers-and-self-hosted-fonts.md) — Proposed 2026-11-02 after the ZAP scan: our own CloudFront response-headers policies replace the managed one, adding a Content-Security-Policy (app origin and Cognito only), Permissions-Policy, cross-origin opener and resource policies and removing `Server`, with a deny-all CSP on `/api/*`; no COEP; Inter and Material Symbols are bundled instead of loaded from Google Fonts. Owner: Neo Jia Wen.
 
 ## Maintenance rule
 

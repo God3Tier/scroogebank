@@ -129,8 +129,136 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-data "aws_cloudfront_response_headers_policy" "security" {
-  name = "Managed-SecurityHeadersPolicy"
+# Security headers (ADR-0069). Both policies keep what AWS's
+# Managed-SecurityHeadersPolicy set, add a Content-Security-Policy,
+# Permissions-Policy and cross-origin policies, and drop S3's Server header.
+locals {
+  cognito_hosts = "https://cognito-idp.${local.region}.amazonaws.com https://${aws_cognito_user_pool_domain.this.domain}.auth.${local.region}.amazoncognito.com"
+
+  # The app loads only its own scripts, styles and fonts (fonts are bundled,
+  # not from Google Fonts). It calls Cognito for sign-in and token refresh, and
+  # previews identity documents as blob: images and frames (ADR-0041).
+  frontend_csp = join("; ", [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "font-src 'self'",
+    "img-src 'self' data: blob:",
+    "connect-src 'self' ${local.cognito_hosts}",
+    "frame-src 'self' blob: ${local.cognito_hosts}",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+    "upgrade-insecure-requests",
+  ])
+
+  # The API returns data, never pages, so it may load and frame nothing.
+  api_csp = "default-src 'none'; frame-ancestors 'none'"
+
+  permissions_policy = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+}
+
+resource "aws_cloudfront_response_headers_policy" "frontend" {
+  name = "${local.name}-frontend-security"
+
+  security_headers_config {
+    content_security_policy {
+      content_security_policy = local.frontend_csp
+      override                = true
+    }
+    content_type_options {
+      override = true
+    }
+    frame_options {
+      frame_option = "SAMEORIGIN"
+      override     = false
+    }
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = false
+    }
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      override                   = false
+    }
+    xss_protection {
+      protection = true
+      mode_block = true
+      override   = false
+    }
+  }
+
+  # No Cross-Origin-Embedder-Policy: the app uses nothing that needs
+  # cross-origin isolation, and require-corp can block the PDF preview.
+  custom_headers_config {
+    items {
+      header   = "Permissions-Policy"
+      value    = local.permissions_policy
+      override = true
+    }
+    items {
+      header   = "Cross-Origin-Opener-Policy"
+      value    = "same-origin"
+      override = true
+    }
+    items {
+      header   = "Cross-Origin-Resource-Policy"
+      value    = "same-origin"
+      override = true
+    }
+  }
+
+  remove_headers_config {
+    items {
+      header = "Server"
+    }
+  }
+}
+
+resource "aws_cloudfront_response_headers_policy" "api" {
+  name = "${local.name}-api-security"
+
+  security_headers_config {
+    content_security_policy {
+      content_security_policy = local.api_csp
+      override                = true
+    }
+    content_type_options {
+      override = true
+    }
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = false
+    }
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      override                   = false
+    }
+  }
+
+  custom_headers_config {
+    items {
+      header   = "Permissions-Policy"
+      value    = local.permissions_policy
+      override = true
+    }
+    items {
+      header   = "Cross-Origin-Resource-Policy"
+      value    = "same-origin"
+      override = true
+    }
+  }
+
+  remove_headers_config {
+    items {
+      header = "Server"
+    }
+  }
 }
 
 resource "aws_cloudfront_distribution" "this" {
@@ -166,7 +294,7 @@ resource "aws_cloudfront_distribution" "this" {
     cached_methods             = ["GET", "HEAD"]
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.optimized.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.frontend.id
 
     function_association {
       event_type   = "viewer-request"
@@ -183,7 +311,7 @@ resource "aws_cloudfront_distribution" "this" {
     compress                   = true
     cache_policy_id            = data.aws_cloudfront_cache_policy.disabled.id
     origin_request_policy_id   = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
-    response_headers_policy_id = data.aws_cloudfront_response_headers_policy.security.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
   }
 
   restrictions {
