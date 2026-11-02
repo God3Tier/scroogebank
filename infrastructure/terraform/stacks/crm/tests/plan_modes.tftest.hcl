@@ -173,6 +173,13 @@ run "prod" {
   }
   assert {
     condition = (
+      contains([for r in aws_wafv2_web_acl.this[0].rule : r.name], "sql-injection") &&
+      one([for r in aws_wafv2_web_acl.this[0].rule : r.statement[0].managed_rule_group_statement[0].name if r.name == "sql-injection"]) == "AWSManagedRulesSQLiRuleSet"
+    )
+    error_message = "Prod: the WAF blocks SQL injection with AWS's managed rule group (ADR-0073)."
+  }
+  assert {
+    condition = (
       one(aws_apigatewayv2_stage.default.default_route_settings).throttling_rate_limit == 200 &&
       one(aws_apigatewayv2_stage.default.default_route_settings).throttling_burst_limit == 400
     )

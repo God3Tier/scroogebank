@@ -134,7 +134,7 @@ Each service on the diagram is listed with the requirement it serves. "Spec" mea
 | Service | Why it is included | Requirement | Optional? |
 |---|---|---|---|
 | **CloudFront** | Serves the frontend and forwards `/api/*` to API Gateway from one HTTPS origin, so the frontend needs no CORS setup. Caches static files at the edge. | NFR 1 (caching), NFR 8 (HTTPS), NFR 11 (separate presentation layer) | No |
-| **AWS WAF** | Web application firewall on CloudFront, using AWS managed rule groups (common exploits, bad inputs, IP reputation). | NFR 8 names "firewalls" | Can be left out of staging (about USD 10/month); keep in prod |
+| **AWS WAF** | Web application firewall on CloudFront, using AWS managed rule groups (common exploits, bad inputs, SQL injection ([ADR-0073](../adr/ADR-0073-waf-sql-injection-rule-group.md)), IP reputation). | NFR 8 names "firewalls" | Can be left out of staging (about USD 10/month); keep in prod |
 | **ACM** | Free TLS certificates: one in us-east-1 for CloudFront (a CloudFront requirement) and one for the internal ALB. | NFR 8, Feature 2 (encryption in transit) | Only with the custom domain ([open item 2](open-items.md#2-domain-name), resolved): without it, the ALB listens on HTTP inside the VPC |
 | **Route 53** | DNS for the custom domain, which is registered by hand in Route 53: points the app's name at CloudFront and the internal ALB's name at the ALB, and holds the ACM validation records ([ADR-0042](../adr/ADR-0042-terraform-deployment.md) decision 8). | Needed for ACM certificate validation | The stack still runs without a domain, on the default `*.cloudfront.net` address |
 

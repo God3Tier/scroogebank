@@ -428,6 +428,45 @@ resource "aws_wafv2_web_acl" "this" {
     }
   }
 
+  # SQL injection (ADR-0073). The services use parameterised queries, so this
+  # stops the payloads earlier rather than closing a hole: the 2026-11-02 ZAP
+  # scans found none reaching a service exploitable. Identity-document uploads
+  # are binary and skipped, as for the size rule above.
+  rule {
+    name     = "sql-injection"
+    priority = 35
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesSQLiRuleSet"
+        scope_down_statement {
+          not_statement {
+            statement {
+              regex_match_statement {
+                regex_string = "^/api/clients/[^/]+/documents$"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.name}-sqli"
+      sampled_requests_enabled   = true
+    }
+  }
+
   rule {
     name     = "ip-reputation"
     priority = 40
