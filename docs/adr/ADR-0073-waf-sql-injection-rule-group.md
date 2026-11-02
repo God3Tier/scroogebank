@@ -1,6 +1,6 @@
 # ADR-0073: SQL-injection rule group on the WAF
 
-- Status: Proposed (2026-11-02)
+- Status: Accepted (2026-11-02; accepted by Neo Jia Wen)
 - Decision date/time: 2026-11-02 21:30 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

@@ -1962,6 +1962,6 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Verification: client-service `make test` passed (14 packages); crm
   Terraform validate and 15 tests passed. Not measured on AWS: the reports
   say so, and each ADR names the re-test.
-- Human verification required: accept or change ADR-0072 and ADR-0073;
-  client-service's owners (Feature 2) should review the cache and parallel
+- Human verification: Neo Jia Wen accepted ADR-0072 and ADR-0073 on
+  2026-11-02. Still required: client-service's owners (Feature 2) should review the cache and parallel
   decryption.

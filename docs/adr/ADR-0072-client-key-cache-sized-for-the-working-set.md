@@ -1,6 +1,6 @@
 # ADR-0072: Client data-key cache sized for the working set, and parallel decryption of a page
 
-- Status: Proposed (2026-11-02)
+- Status: Accepted (2026-11-02; accepted by Neo Jia Wen)
 - Decision date/time: 2026-11-02 21:30 +08:00 (Asia/Singapore)
 - Decision owner(s): Neo Jia Wen; client-service's owners (Feature 2) to review
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)

@@ -53,6 +53,8 @@ a decision it governs.
 - [ADR-0069](ADR-0069-frontend-security-headers-and-self-hosted-fonts.md) — Accepted 2026-11-02 after the ZAP scan: our own CloudFront response-headers policies replace the managed one, adding a Content-Security-Policy (app origin and Cognito only), Permissions-Policy, cross-origin opener and resource policies and removing `Server`, with a deny-all CSP on `/api/*`; no COEP; Inter and Material Symbols are bundled instead of loaded from Google Fonts. Owner: Neo Jia Wen.
 - [ADR-0070](ADR-0070-api-throttle-sized-for-100-concurrent-agents.md) — Accepted 2026-11-02 after the full-scale load test: API Gateway's stage throttle becomes `api_throttle_rate_limit` and `api_throttle_burst_limit`, defaulting to 200 per second and a burst of 400, twice the Q&A's 100 requests per second for 100 concurrent agents. Owner: Neo Jia Wen.
 - [ADR-0071](ADR-0071-test-only-in-vpc-zap-scanner.md) — Accepted 2026-11-02: `enable_test_tooling` (off by default) adds a one-off ZAP task in the app subnets whose own security group may reach the internal ALB, so the services can be scanned directly, and a self-emptying bucket for scan inputs, reports and the transaction seed file. Owner: Neo Jia Wen.
+- [ADR-0072](ADR-0072-client-key-cache-sized-for-the-working-set.md) — Accepted 2026-11-02 after the full-scale load test: client-service's data-key cache holds up to 10,000 keys (still 5 minutes each) and evicts the oldest, and `ListClients` decrypts a page's rows in parallel (8 at a time); refines ADR-0030 decision 3. Owner: Neo Jia Wen; Feature 2 owners to review.
+- [ADR-0073](ADR-0073-waf-sql-injection-rule-group.md) — Accepted 2026-11-02 after the active ZAP scans: the WAF adds `AWSManagedRulesSQLiRuleSet` (rule `sql-injection`, priority 35), skipping the binary document-upload path. Owner: Neo Jia Wen.
 - [ADR-0005](ADR-0005-alert-holdings-and-valuation-boundary.md) - Use service-owned synthetic holdings and reproducible, freshness-aware valuation snapshots for the alert MVP (runtime holdings source superseded in part by ADR-0066: database mode reads portfolios recorded against CRM accounts).
 - [ADR-0006](ADR-0006-alert-processing-architecture.md) - Run bounded scheduled ECS batches with PostgreSQL idempotency and no new alert-specific broker.
 - [ADR-0007](ADR-0007-alert-service-runtime-boundary.md) - Build one Java 25 Spring Boot module with separately enabled API and worker modes.
@@ -109,10 +111,7 @@ assigns replacement identifiers.
 
 Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
 
-ADR-0069, ADR-0070 and ADR-0071 were accepted by Neo Jia Wen on 2026-11-02.
-
-- [ADR-0072](ADR-0072-client-key-cache-sized-for-the-working-set.md) — Proposed 2026-11-02 after the full-scale load test: client-service's data-key cache holds up to 10,000 keys (still 5 minutes each) and evicts the oldest, and `ListClients` decrypts a page's rows in parallel (8 at a time); refines ADR-0030 decision 3. Owner: Neo Jia Wen; Feature 2 owners to review.
-- [ADR-0073](ADR-0073-waf-sql-injection-rule-group.md) — Proposed 2026-11-02 after the active ZAP scans: the WAF adds `AWSManagedRulesSQLiRuleSet` (rule `sql-injection`, priority 35), skipping the binary document-upload path. Owner: Neo Jia Wen.
+ADR-0069 to ADR-0073 were accepted by Neo Jia Wen on 2026-11-02. None is proposed at present.
 
 ## Maintenance rule
 
