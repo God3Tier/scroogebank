@@ -11,7 +11,7 @@
 
 ## Context
 
-The CRM covers user management (Feature 1), client and account management (Feature 2), transaction import and query (Feature 3), three x-factor features (Features 4–6) and a tamper-resistant audit log. Eight developers work on these features in parallel, each feature with its own owners and branch.
+The CRM covers user management (Feature 1), client and account management (Feature 2), transaction import and query (Feature 3), three x-factor features (Features 4–6), an additional feature (Feature 7) and a tamper-resistant audit log. Eight developers work on these features in parallel, each feature with its own owners and branch.
 
 `project_plan.md` §4 says the folder structure must not imply an undecided architecture, so whether the back end is a modular monolith or a set of microservices needs an ADR. The repository already contains separate deployables: `user-service` (Java), `client-profile-management-service` (Go, holding both clients and accounts), the `auditor` (Go), `dashboard-service` and `client-health-monitor-service` (Java).
 
@@ -37,7 +37,7 @@ One deployable with internal modules per business area, sharing one database.
 
 ### Option B: one microservice per business area (chosen)
 
-user-service, client-service, account-service, transaction-service (plus the transaction-ingest worker), the auditor, and one service per x-factor (event-alert-service, dashboard-service, client-health-monitor-service). Each owns its own database, and other services reach its data only through its API.
+user-service, client-service, account-service, transaction-service (plus the transaction-ingest worker), the auditor, and one service per x-factor and additional feature (event-alert-service, engagement-service, client-health-monitor-service, dashboard-service). Each owns its own database, and other services reach its data only through its API.
 
 - Pros: independent deployment, scaling and failure; clear ownership per feature; data ownership enforced by credentials and security groups.
 - Cons: more infrastructure (one ECS service and one database per service); cross-service calls need timeouts, retries and authorization; consistency across services is eventual.
@@ -60,7 +60,7 @@ Use **one microservice per business area** (Option B), each with its own databas
 | account-service | F2 (accounts) | Go (extracted from `client-profile-management-service`'s account code; decided 2026-10-08) |
 | transaction-service and transaction-ingest | F3 | Go (ingest on Lambda); superseded on 2026-10-14 by [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 7, which replaced Java 25 |
 | event-alert-service | x-factor 1 | Java 25 |
-| dashboard-service | x-factor 2 | Java 25 |
+| dashboard-service | additional feature (Feature 7) | Java 25 |
 | client-health-monitor-service | x-factor 3 | Java 25 |
 | auditor (and chain-verify) | Audit | Go |
 

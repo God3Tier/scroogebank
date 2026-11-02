@@ -3,7 +3,7 @@
 ## Plan metadata
 
 - Status: In progress; SF00-SF10 and RH-SF11A-E2 are merged; RH-SF11F (local verification: Terraform validate and tests, image builds, health migrations) and the Nova Lite wording (ADR-0067) are merged; the AWS apply and live RH-SF12 evidence remain pending
-- Project feature: Feature 5
+- Project feature: Feature 6 (x-factor 3)
 - Feature owners: Garvit and Swayam
 - Feature branch: `feat/client-health-monitor`
 - Current task branch: `task/client-health-monitor/deploy-verification`

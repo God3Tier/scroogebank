@@ -20,7 +20,7 @@ Needed for the ACM certificate on the internal ALB, at about USD 13/year plus US
 
 ## 3. Admin-wide activity view in user-service
 
-Proposed as the owner for now. The business dashboard (x-factor 2, [X-factor 2: business dashboard](x-factors.md#x-factor-2-business-dashboard)) could host this view later.
+Proposed as the owner for now. The business dashboard (Feature 7, [Business dashboard (Feature 7)](x-factors.md#additional-feature-business-dashboard-feature-7)) could host this view later.
 
 **Resolved (2026-10-09)** by [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) decision 2: user-service owns it, as `GET /api/activities`. It is a Feature 1 requirement in the base spec, so it does not move to the business dashboard, which is an x-factor. The same feed serves agents their own activities.
 

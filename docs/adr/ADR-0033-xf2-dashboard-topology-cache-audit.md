@@ -1,4 +1,4 @@
-# ADR-0033: X-factor 2 business dashboard: stateless fan-out, 3-minute in-process cache, best-effort audit
+# ADR-0033: Business dashboard (Feature 7): stateless fan-out, 3-minute in-process cache, best-effort audit
 
 - Status: Accepted
 - Decision date/time: 2026-10-01 21:50 +08:00 (Asia/Singapore)
@@ -11,7 +11,7 @@
 
 ## Context
 
-X-factor 2 gives admins bank-wide and per-agent figures and gives agents a view of their own book. The figures come from four services that each own their data:
+The business dashboard (Feature 7, an additional feature; x-factor 2 until ADR-0074) gives admins bank-wide and per-agent figures and gives agents a view of their own book. The figures come from four services that each own their data:
 - user-service;
 - client-service;
 - account-service;
@@ -115,7 +115,7 @@ One small ECS service. No database or cache cluster.
 
 ## References
 
-- [X-factor 2: business dashboard](../architecture/x-factors.md#x-factor-2-business-dashboard)
+- [Business dashboard (Feature 7)](../architecture/x-factors.md#additional-feature-business-dashboard-feature-7)
 - [Numbered flow 12](../architecture/data-flow.md#numbered-flows)
 - `feat/business-dashboard`: ADR-0001, ADR-0003, ADR-0004 (Proposed, owner to be named) and `business-dashboard_plan.md`
 

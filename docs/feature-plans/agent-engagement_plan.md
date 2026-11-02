@@ -24,7 +24,7 @@ The CRM records clients, accounts and transactions, but gives agents no help man
 
 - **Client Health Monitor (Garvit, Swayam):** decides *who* needs attention and *why*, from transaction signals, and creates follow-up tasks. This feature handles *how* and *when* an agent makes contact. It does not create follow-up tasks or read transaction signals.
 - **Event-Driven Alerts (Azeez, Hayyun):** market news against holdings. This feature has no market data.
-- **Business dashboard (x-factor 2):** read-only figures. Unchanged by this feature.
+- **Business dashboard (Feature 7, additional):** read-only figures. Unchanged by this feature.
 
 ## 3. Scope
 

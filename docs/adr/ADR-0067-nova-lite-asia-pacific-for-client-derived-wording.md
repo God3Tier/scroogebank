@@ -14,7 +14,7 @@
 Two features send wording requests built from client records to Bedrock:
 
 - **Client Health (F-06)** words verified relationship-health facts ([ADR-0034](ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) decision 4). It has never had a model: `CLIENT_HEALTH_AI_MODEL_ID` is unset and both tasks run with AI off, so every explanation is a template. ADR-0034 chose Bedrock in Singapore and rejected cross-region inference.
-- **Agent engagement (F-07)** drafts follow-up emails from placeholders and public facts with Amazon Nova Micro through its Asia-Pacific profile ([ADR-0054](ADR-0054-ai-follow-up-drafts-and-holiday-data.md) decision 3).
+- **Agent engagement (F-05)** drafts follow-up emails from placeholders and public facts with Amazon Nova Micro through its Asia-Pacific profile ([ADR-0054](ADR-0054-ai-follow-up-drafts-and-holiday-data.md) decision 3).
 
 The alerts feature uses `global.amazon.nova-2-lite-v1:0`. That is allowed only because its model sees public data ([ADR-0050](ADR-0050-event-search-provider-after-scp-block.md) decision 3).
 
@@ -25,7 +25,7 @@ The project has budget for a larger model than Nova Micro, and one model for bot
 - **Nova Lite has an Asia-Pacific profile.** `amazon.nova-lite-v1:0` is `ACTIVE` with no end-of-life date. `apac.amazon.nova-lite-v1:0` is an active, system-defined profile that routes to the same six regions as Nova Micro: ap-southeast-1, ap-southeast-2, ap-northeast-1, ap-northeast-2, ap-northeast-3 and ap-south-1.
 - **Nova does not support Converse structured output.** A call with `outputConfig` returns `ValidationException: This model doesn't support the outputConfig field`. Client Health's provider used `outputConfig`, so with any Nova model every call would have fallen back to a template.
 - **Tool names cannot contain hyphens.** With Client Health's schema forced as a tool, Nova Lite returned `ModelErrorException: Model produced invalid sequence as part of ToolUse` whenever the tool name contained hyphens (`relationship-health-explanation`). With an underscore name (`relationship_health_explanation`), three of three calls returned schema-shaped tool input with no numbers, and `const` in the schema was accepted.
-- **Plain-text drafts work.** With F-07's real system prompt, Nova Lite returned the `{"subject","body"}` object wrapped in a Markdown fence, which `DraftSafetyScreen` already removes.
+- **Plain-text drafts work.** With F-05's real system prompt, Nova Lite returned the `{"subject","body"}` object wrapped in a Markdown fence, which `DraftSafetyScreen` already removes.
 
 ## Decision Drivers
 
@@ -46,7 +46,7 @@ The project has budget for a larger model than Nova Micro, and one model for bot
 - **Nova 2 Lite through its global profile, matching alerts.**
   - Pros: one model across all three features.
   - Cons: requests may be processed in any commercial region, which is against ADR-0034 and ADR-0054 for client-derived input. engagement-service refuses `global.` IDs at startup.
-- **Keep Nova Micro for F-07 and add it to F-06.**
+- **Keep Nova Micro for F-05 and add it to F-06.**
   - Pros: cheapest.
   - Cons: the budget allows a stronger writer, and the model choice would not change the region question.
 

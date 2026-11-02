@@ -40,7 +40,7 @@ On `dev` (2026-10-09):
 ### Where the activity feed is served
 
 - **user-service (chosen):** the feed is Feature 1, and user-service owns the CRM users, so it can show agents' names. It is already the admin's service.
-- **The business dashboard (dashboard-service):** an x-factor (ADR-0033, ADR-0039), scoped to figures rather than log entries, with no database to page through results. A base-spec requirement must not depend on an x-factor.
+- **The business dashboard (dashboard-service):** an additional feature (ADR-0033, ADR-0039), scoped to figures rather than log entries, with no database to page through results. A base-spec requirement must not depend on an optional feature.
 - **A per-client history in client-service (`GET /api/clients/{id}/activity`):** not in the spec's mock-up. Not built; a later ADR can add it.
 
 ### What the feed shows

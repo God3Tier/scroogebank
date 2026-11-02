@@ -1,10 +1,10 @@
-# Target architecture: x-factor features (Features 4–6) and Agent Engagement (Feature 7)
+# Target architecture: x-factor features (Features 4–6) and the business dashboard (Feature 7)
 
 > **Status:** Accepted target architecture (2026-11-01). **Owner:** Neo Jia Wen. **Last updated:** 2026-11-01.  
 > Drafted with AI assistance (Claude Code) from the team's architecture document. Verify AWS pricing, limits and service behaviour against official AWS documentation before accepting.  
 > Part of the [target architecture](system-overview.md); each decision is recorded as an ADR in the [ADR index](../adr/README.md), which gives its status.
 
-Features 4–6 are the team's innovation features (x-factors), and Feature 7 is an additional innovation the team built. The designs below come from the team's feature branches and the target architecture's decisions. Each subsection lists what was chosen and what was not, with the reason.
+Features 4–6 are the team's innovation features (x-factors): market-news alerts, Agent Engagement and the Client Relationship Health Monitor. Feature 7, the business dashboard, is an additional feature ([ADR-0074](../adr/ADR-0074-x-factor-classification.md)). The designs below come from the team's feature branches and the target architecture's decisions. Each subsection lists what was chosen and what was not, with the reason.
 
 ## X-factor 1: event-driven market-news alerts
 
@@ -58,47 +58,7 @@ Agents receive alerts when public market news may matter to instruments their cl
 | Holdings source | Portfolios agents record against CRM accounts, chosen with `alert_holdings_mode = "database"` ([ADR-0066](../adr/ADR-0066-crm-linked-current-alert-holdings.md)); the bundled synthetic fixture (alerts branch ADR-0005) stays the default | Extending the fixture: a second source of identities and assignments, rebuilt into the image for every change. A production holdings feed: future integration work. |
 | Dissemination to clients | The agent decides; an optional follow-up e-mail is drafted from the alert in Agent Engagement and sent only by the agent ([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)) | Automatic e-mail from the alert service: no agent judgement, and alert content (instrument, headline) would reach the drafting model. |
 
-## X-factor 2: business dashboard
-
-Recorded in [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (Accepted). What each figure means is in [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) (Accepted), and the owning services' endpoints are in [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (Accepted). Plan: [business-dashboard_plan.md](../feature-plans/business-dashboard_plan.md).
-
-Admins see bank-wide and per-agent figures; agents see their own book and work queue. The pages ship inside the existing frontend; the figures come from `dashboard-service`.
-
-- The owning services serve the figures on private `/aggregates` routes, outside `/api`, scoped by the caller's token and audited once by the dashboard.
-- Transaction figures come from transaction-service, which scopes an agent's request to the accounts account-service says they own ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)).
-
-| Decision | Chosen | Not chosen, and why |
-|---|---|---|
-| Topology | Stateless dashboard-service; each owning service computes its own aggregates (pushdown), fetched with the caller's JWT | Its own RDS read model: a costly extra instance and a second copy of client data to secure and erase. Event-sourced projection over a broker: infrastructure for its own sake. Composing in the browser: cross-service joins and failure handling in the frontend, untestable payloads, more round trips. Reading other services' databases: breaks data ownership. |
-| Access control | Forward the caller's JWT; each service scopes its own answer | A service credential for the dashboard: it could read more than the caller, and the ownership rule would be duplicated. |
-| Cache | In-process Caffeine per task, 3 minutes, keyed by caller | ElastiCache: a billable cluster for a small dataset. No cache: every refresh fans out to four services. |
-| Audit | `DASHBOARD_VIEW` events sent straight to SQS, best-effort; cache hits still audited | An outbox: there is no database to hold one. Failing the request when auditing fails: auditing a read must not take the read down. |
-
-## X-factor 3: Client Relationship Health Monitor
-
-Recorded in [ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) (Accepted; its Bedrock region is superseded by [ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md), Accepted).
-
-Detects explainable changes in client banking activity and turns them into prioritised, auditable follow-up tasks for agents. The MVP has three deterministic signals: **recurring-credit interruption**, **transaction-activity decline** and **sustained net-outflow trend**; more will follow.
-
-- The Java rules engine calculates every signal, determines severity, supplies exact evidence, and handles suppression and deduplication. One active task per client collects all qualifying evidence.
-- Bedrock only turns verified facts into readable wording, with Amazon Nova Lite through its Asia-Pacific inference profile, called from Singapore ([ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md)). AWS may process a request in Sydney, Tokyo, Seoul, Osaka or Mumbai as well as Singapore, never outside Asia-Pacific. Only the daily analysis task calls it. It receives signal type, percentage or banded changes, transaction counts, time-window lengths, expected cadence and days since an expected credit.
-- Bedrock **never** receives names, client IDs, account numbers, raw transactions, descriptions, exact balances, agent IDs or contact information.
-- If Bedrock fails or returns unsupported content, a deterministic template is used, so AI failure never stops task creation.
-- The analysis task reads matched activity from transaction-service (`/internal/v1/transactions`, scope `crm-transactions/read`; [ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)) and current assignments from client-service (`/internal/v1/clients/{clientId}/assignment`, scope `crm-clients/assignment.read`) through the internal ALB, with a client-credentials token from one Cognito machine client, because a standalone scheduled task cannot use Service Connect. The task API checks current assignments the same way. API Gateway forwards only `/api/*`, so both routes stay private. The contract-faithful synthetic provider supports local work.
-- The analysis task is the service's image started with `CLIENT_HEALTH_MODE=ANALYSIS`. It analyses one Singapore date without a web server, under a 60-minute lease, and exits 0 when the run completes and 1 otherwise. It commits tasks, run state and audit rows to health-db; the task API relays the outbox to the audit queue.
-- **Health probes:** `/actuator/health/liveness` checks only that the process is alive; `/actuator/health/readiness` adds health-db connectivity. Both are anonymous for ALB and ECS checks and return no details. Bedrock, SQS, transaction replay and assignment outages do not make the task API unready, because each has a template, outbox or fail-closed path.
-- **Metrics and alarms:** identifier-free Micrometer metrics cover analysis runs and the age of the last successful watermark, replay, rule signals, task outcomes and authorization denials, assignment lookups, AI calls, fallbacks, tokens and estimated cost, and the audit backlog ([monitoring and alerting](../observability/monitoring-alerting.md)). Tags are closed enums; client, account, task, transaction and agent identifiers are never labels. Both tasks publish them to CloudWatch under `Scrooge/ClientHealth`, the only namespace their role may write. SNS alarms fire on no successful watermark for 27 hours, any failed run, more than 100 undelivered audit events or one older than 15 minutes, 3 or more assignment outages in 15 minutes, more than 10 authorization denials in 5 minutes, and any AI validation or provider failure; an EventBridge rule also alerts when the analysis task exits non-zero.
-- An agent can open a check-in e-mail draft from a task in Agent Engagement; only the task's client field is read for it ([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)).
-
-| Decision | Chosen | Not chosen, and why |
-|---|---|---|
-| Detection | Deterministic Java rules engine | LLM detection or prioritisation: not explainable, not reproducible, hard to audit. |
-| AI use | Bedrock for wording only, with a template fallback | No AI: tasks are harder to read, and at least one x-factor must use AI. AI in the critical path: an outage would stop task creation. |
-| Trigger | EventBridge-scheduled analysis task, same image, once a day at 08:00 SGT | A timer inside the always-on service: runs in every copy and restarts with each deployment. Hourly or more often: the 30-day and 90-day comparison windows barely change within a day, so extra runs repeat work. Overnight: outside the demo week the databases are stopped outside working hours, and agents see new tasks at the start of their day either way. |
-| Bedrock region | Nova Lite through its Asia-Pacific profile, called from Singapore | Singapore only: no model the project account can invoke runs in-Region there. A global profile: the facts come from client activity, so they stay in Asia-Pacific. |
-| Storage | Own RDS instance, health-db | A shared database: weaker isolation. |
-
-## Additional feature: Agent Engagement (Feature 7)
+## X-factor 2: Agent Engagement (Feature 5)
 
 Recorded in [ADR-0051](../adr/ADR-0051-engagement-service-and-mail-dispatcher.md) to [ADR-0057](../adr/ADR-0057-holiday-sync-from-data-gov-sg.md) (the engagement records), [ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md) and [ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md) (Accepted). Plan: [agent-engagement_plan.md](../feature-plans/agent-engagement_plan.md).
 
@@ -124,3 +84,43 @@ Gives agents one place to plan client contact: meetings that appear in their own
 | Follow-ups from tasks and alerts | Linked by ID, checked with the agent's token, only the client field read | Copying the task's or alert's text into the prompt: client finances would reach the model. No link: the audit trail could not show why the e-mail was sent. |
 | Draft retention | Text kept only while the draft is open; 14-day expiry | Keeping every sent body: client e-mail text outside the client-erasure path. |
 | Holidays | A versioned table seeded by migrations; new years from data.gov.sg ([ADR-0057](../adr/ADR-0057-holiday-sync-from-data-gov-sg.md)) | A public holiday API at run time: a third-party dependency for data that changes once a year. |
+
+## X-factor 3: Client Relationship Health Monitor
+
+Recorded in [ADR-0034](../adr/ADR-0034-xf3-health-monitor-rules-and-bedrock-boundary.md) (Accepted; its Bedrock region is superseded by [ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md), Accepted).
+
+Detects explainable changes in client banking activity and turns them into prioritised, auditable follow-up tasks for agents. The MVP has three deterministic signals: **recurring-credit interruption**, **transaction-activity decline** and **sustained net-outflow trend**; more will follow.
+
+- The Java rules engine calculates every signal, determines severity, supplies exact evidence, and handles suppression and deduplication. One active task per client collects all qualifying evidence.
+- Bedrock only turns verified facts into readable wording, with Amazon Nova Lite through its Asia-Pacific inference profile, called from Singapore ([ADR-0067](../adr/ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md)). AWS may process a request in Sydney, Tokyo, Seoul, Osaka or Mumbai as well as Singapore, never outside Asia-Pacific. Only the daily analysis task calls it. It receives signal type, percentage or banded changes, transaction counts, time-window lengths, expected cadence and days since an expected credit.
+- Bedrock **never** receives names, client IDs, account numbers, raw transactions, descriptions, exact balances, agent IDs or contact information.
+- If Bedrock fails or returns unsupported content, a deterministic template is used, so AI failure never stops task creation.
+- The analysis task reads matched activity from transaction-service (`/internal/v1/transactions`, scope `crm-transactions/read`; [ADR-0065](../adr/ADR-0065-client-health-matched-transaction-history.md)) and current assignments from client-service (`/internal/v1/clients/{clientId}/assignment`, scope `crm-clients/assignment.read`) through the internal ALB, with a client-credentials token from one Cognito machine client, because a standalone scheduled task cannot use Service Connect. The task API checks current assignments the same way. API Gateway forwards only `/api/*`, so both routes stay private. The contract-faithful synthetic provider supports local work.
+- The analysis task is the service's image started with `CLIENT_HEALTH_MODE=ANALYSIS`. It analyses one Singapore date without a web server, under a 60-minute lease, and exits 0 when the run completes and 1 otherwise. It commits tasks, run state and audit rows to health-db; the task API relays the outbox to the audit queue.
+- **Health probes:** `/actuator/health/liveness` checks only that the process is alive; `/actuator/health/readiness` adds health-db connectivity. Both are anonymous for ALB and ECS checks and return no details. Bedrock, SQS, transaction replay and assignment outages do not make the task API unready, because each has a template, outbox or fail-closed path.
+- **Metrics and alarms:** identifier-free Micrometer metrics cover analysis runs and the age of the last successful watermark, replay, rule signals, task outcomes and authorization denials, assignment lookups, AI calls, fallbacks, tokens and estimated cost, and the audit backlog ([monitoring and alerting](../observability/monitoring-alerting.md)). Tags are closed enums; client, account, task, transaction and agent identifiers are never labels. Both tasks publish them to CloudWatch under `Scrooge/ClientHealth`, the only namespace their role may write. SNS alarms fire on no successful watermark for 27 hours, any failed run, more than 100 undelivered audit events or one older than 15 minutes, 3 or more assignment outages in 15 minutes, more than 10 authorization denials in 5 minutes, and any AI validation or provider failure; an EventBridge rule also alerts when the analysis task exits non-zero.
+- An agent can open a check-in e-mail draft from a task in Agent Engagement; only the task's client field is read for it ([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)).
+
+| Decision | Chosen | Not chosen, and why |
+|---|---|---|
+| Detection | Deterministic Java rules engine | LLM detection or prioritisation: not explainable, not reproducible, hard to audit. |
+| AI use | Bedrock for wording only, with a template fallback | No AI: tasks are harder to read, and at least one x-factor must use AI. AI in the critical path: an outage would stop task creation. |
+| Trigger | EventBridge-scheduled analysis task, same image, once a day at 08:00 SGT | A timer inside the always-on service: runs in every copy and restarts with each deployment. Hourly or more often: the 30-day and 90-day comparison windows barely change within a day, so extra runs repeat work. Overnight: outside the demo week the databases are stopped outside working hours, and agents see new tasks at the start of their day either way. |
+| Bedrock region | Nova Lite through its Asia-Pacific profile, called from Singapore | Singapore only: no model the project account can invoke runs in-Region there. A global profile: the facts come from client activity, so they stay in Asia-Pacific. |
+| Storage | Own RDS instance, health-db | A shared database: weaker isolation. |
+
+## Additional feature: business dashboard (Feature 7)
+
+Recorded in [ADR-0033](../adr/ADR-0033-xf2-dashboard-topology-cache-audit.md) (Accepted). What each figure means is in [ADR-0038](../adr/ADR-0038-dashboard-metric-definitions.md) (Accepted), and the owning services' endpoints are in [ADR-0039](../adr/ADR-0039-dashboard-aggregate-endpoints.md) (Accepted). Plan: [business-dashboard_plan.md](../feature-plans/business-dashboard_plan.md).
+
+Admins see bank-wide and per-agent figures; agents see their own book and work queue. The pages ship inside the existing frontend; the figures come from `dashboard-service`.
+
+- The owning services serve the figures on private `/aggregates` routes, outside `/api`, scoped by the caller's token and audited once by the dashboard.
+- Transaction figures come from transaction-service, which scopes an agent's request to the accounts account-service says they own ([ADR-0064](../adr/ADR-0064-transaction-service-authenticates-its-own-reads.md)).
+
+| Decision | Chosen | Not chosen, and why |
+|---|---|---|
+| Topology | Stateless dashboard-service; each owning service computes its own aggregates (pushdown), fetched with the caller's JWT | Its own RDS read model: a costly extra instance and a second copy of client data to secure and erase. Event-sourced projection over a broker: infrastructure for its own sake. Composing in the browser: cross-service joins and failure handling in the frontend, untestable payloads, more round trips. Reading other services' databases: breaks data ownership. |
+| Access control | Forward the caller's JWT; each service scopes its own answer | A service credential for the dashboard: it could read more than the caller, and the ownership rule would be duplicated. |
+| Cache | In-process Caffeine per task, 3 minutes, keyed by caller | ElastiCache: a billable cluster for a small dataset. No cache: every refresh fans out to four services. |
+| Audit | `DASHBOARD_VIEW` events sent straight to SQS, best-effort; cache hits still audited | An outbox: there is no database to hold one. Failing the request when auditing fails: auditing a read must not take the read down. |
