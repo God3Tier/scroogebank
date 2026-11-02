@@ -1,4 +1,4 @@
-# Business Dashboard (x-factor 2) — Feature Plan
+# Business Dashboard (Feature 7, additional feature) — Feature Plan
 
 - Feature name: `business-dashboard`
 - Shared feature branch: `feat/business-dashboard`, restarted from `dev` at `5f9690a` on 2026-10-09. The first line is kept as `backup/business-dashboard-v1`.

@@ -11,7 +11,7 @@
 
 ## Context
 
-dashboard-service, the business dashboard of X-factor 2 ([ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md)), was deployed by `stacks/crm`. Its module sat in `services.tf`, and the stack also named it in seven shared lists: the ECR repositories, the security groups, the security group rules and egress rules, the ports, the audit queue's allowed senders, and the GitHub deploy role's services. Every change to the dashboard, such as its CPU in PR #118, meant planning and applying the whole CRM stack, which also holds the databases, Cognito, the edge and the audit chain. The dashboard's changes also landed in `services.tf` and `security_groups.tf`, which the infrastructure plan already lists as a conflict zone.
+dashboard-service, the business dashboard (Feature 7, [ADR-0033](ADR-0033-xf2-dashboard-topology-cache-audit.md)), was deployed by `stacks/crm`. Its module sat in `services.tf`, and the stack also named it in seven shared lists: the ECR repositories, the security groups, the security group rules and egress rules, the ports, the audit queue's allowed senders, and the GitHub deploy role's services. Every change to the dashboard, such as its CPU in PR #118, meant planning and applying the whole CRM stack, which also holds the databases, Cognito, the edge and the audit chain. The dashboard's changes also landed in `services.tf` and `security_groups.tf`, which the infrastructure plan already lists as a conflict zone.
 
 The dashboard is a leaf of the CRM:
 

@@ -1965,3 +1965,21 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Human verification: Neo Jia Wen accepted ADR-0072 and ADR-0073 on
   2026-11-02. Still required: client-service's owners (Feature 2) should review the cache and parallel
   decryption.
+
+## 2026-11-02 — X-factor reclassification across the docs (ADR-0074)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: Neo Jia Wen decided that Agent Engagement is x-factor 2 (Feature 5)
+  and the business dashboard the additional feature (Feature 7), and asked
+  for every document to follow, ADRs included.
+- Files: ADR-0074 and its index entry; the wording (not file names) of
+  ADR-0017, ADR-0021, ADR-0033, ADR-0047, ADR-0067 and the ADR index;
+  `x-factors.md` (sections reordered), `system-overview.md`, `data-flow.md`,
+  `decision-log.md`, `open-items.md`, `schema.md`, `resource-register.md`,
+  three feature plans (the Client Health plan's "Feature 5" corrected to
+  Feature 6) and dashboard-service's README; outside the repo, the report,
+  ARCHITECTURE.docx and both draw.io diagrams.
+- Verification: a search for the old numbering finds only history; links to
+  the renamed x-factors.md sections were updated.
+- Human verification required: none beyond Neo Jia Wen's decision; owners of
+  the dashboard and Agent Engagement may want to check their sections.

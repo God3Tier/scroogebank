@@ -1,6 +1,6 @@
 # dashboard-service
 
-The business dashboard (x-factor 2): per-agent and bank-wide figures for admins, and a scoped portfolio and work queue for agents.
+The business dashboard (Feature 7, an additional feature): per-agent and bank-wide figures for admins, and a scoped portfolio and work queue for agents.
 
 Feature plan: [`docs/feature-plans/business-dashboard_plan.md`](../../docs/feature-plans/business-dashboard_plan.md). API: [`docs/api/dashboard-api.yaml`](../../docs/api/dashboard-api.yaml). What it fetches: [`docs/api/dashboard-aggregates.yaml`](../../docs/api/dashboard-aggregates.yaml). Decisions: [ADR-0033](../../docs/adr/ADR-0033-xf2-dashboard-topology-cache-audit.md), [ADR-0038](../../docs/adr/ADR-0038-dashboard-metric-definitions.md), [ADR-0039](../../docs/adr/ADR-0039-dashboard-aggregate-endpoints.md).
 
