@@ -66,7 +66,7 @@ That code was dropped from `dev` in merge e4f5028 (2026-09-30), which resolved c
    - encrypts the fields with the plaintext key and inserts the row.
 
    The key is stored before the row, so a row never exists without its key. If the insert fails, client-service deletes the new key; a failed delete leaves an unused key, which is harmless.
-3. **Reads:** client-service fetches the wrapped key and calls KMS `Decrypt` with the same encryption context. It caches the plaintext key in memory for up to 5 minutes to limit KMS calls.
+3. **Reads:** client-service fetches the wrapped key and calls KMS `Decrypt` with the same encryption context. It caches the plaintext key in memory for up to 5 minutes to limit KMS calls. [ADR-0072](ADR-0072-client-key-cache-sized-for-the-working-set.md) sizes that cache for every client a task serves and decrypts a page's rows in parallel; the 5-minute limit is unchanged.
 4. **Access:**
    - only client-service's IAM role can read the table and use the keys;
    - the table is reached through the DynamoDB gateway endpoint;
