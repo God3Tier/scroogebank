@@ -3,8 +3,15 @@
 import { fail } from 'k6';
 
 export const BASE_URL = (__ENV.BASE_URL || '').replace(/\/+$/, '');
-export const AGENT_TOKENS = (__ENV.AGENT_TOKENS || '').split(',').map((t) => t.trim()).filter(Boolean);
-export const ADMIN_TOKEN = (__ENV.ADMIN_TOKEN || '').trim();
+
+// TOKENS_FILE names a JSON file, {"agents": [...], "admins": [...]}, mounted
+// into the container; a hundred tokens are too long for one variable. Without
+// it, AGENT_TOKENS (comma-separated) and ADMIN_TOKEN are read instead.
+const FILE = __ENV.TOKENS_FILE ? JSON.parse(open(__ENV.TOKENS_FILE)) : null;
+const list = (s) => (s || '').split(',').map((t) => t.trim()).filter(Boolean);
+export const AGENT_TOKENS = FILE ? FILE.agents || [] : list(__ENV.AGENT_TOKENS);
+export const ADMIN_TOKENS = FILE ? FILE.admins || [] : list(__ENV.ADMIN_TOKEN);
+export const ADMIN_TOKEN = ADMIN_TOKENS[0] || '';
 
 export function requireSettings({ admin = true } = {}) {
   if (!BASE_URL.startsWith('https://')) fail('BASE_URL must be the deployment\'s https:// address');

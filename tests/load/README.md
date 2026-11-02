@@ -1,6 +1,6 @@
 # Load tests (k6)
 
-The k6 scripts behind the performance evidence for NFR 1 ([test strategy](../../docs/testing/test-strategy.md)). They run against a deployed stack, never against a stack someone else is using, and only read data, apart from `seed.js`. Results of each run go in a dated report under [`docs/testing/`](../../docs/testing/), the first being [load-and-zap-test-2026-11-02.md](../../docs/testing/load-and-zap-test-2026-11-02.md).
+The k6 scripts behind the performance evidence for NFR 1 ([test strategy](../../docs/testing/test-strategy.md)). They run against a deployed stack, never against a stack someone else is using, and only read data, apart from `seed.js`. Results of each run go in a dated report under [`docs/testing/`](../../docs/testing/), the small-scale trial being [load-and-zap-test-2026-11-02.md](../../docs/testing/load-and-zap-test-2026-11-02.md) and the full-scale run [load-test-full-scale-2026-11-02.md](../../docs/testing/load-test-full-scale-2026-11-02.md).
 
 | Script | What it shows |
 |---|---|
@@ -8,6 +8,11 @@ The k6 scripts behind the performance evidence for NFR 1 ([test strategy](../../
 | `smoke.js` | Every route in both journeys answers 200 once. Run before any load. |
 | `dashboard-cache.js` | A repeat dashboard refresh within the 3-minute cache returns the cached answer (same `generatedAt`), and a call after it does not. Run while dashboard-service has one task. |
 | `scale-out.js` | Read load ramping to `PEAK_RPS` (default 40) over `RAMP` (3m), held for `HOLD` (12m). Fails if more than 1% of requests fail or p95 is 2000 ms or more. |
+| `seed-scale.js` | The report's data volume through the API: 100 clients per agent (`CLIENTS_PER_AGENT`) with 3 accounts each (`ACCOUNTS_PER_CLIENT`), at `RATE` (30) clients a second. With 100 agents: 10,000 clients and 30,000 accounts. |
+| `seed-transactions.py` | 50 transactions per account (1.5 million for 30,000 accounts), inserted by a one-off psql task through the test bucket (`enable_test_tooling`, ADR-0071). Run after `seed-scale.js`. |
+| `asr-load.js` | The report's load test: 100 agents and 5 admins at once, a 1-second ramp-up and 3 loops, each user with its own token. Agent ASR: clients, a client, its accounts, an account's transactions. Admin ASR: users, activity feed. Results per ASR and per route. |
+| `stress.js` | The agent ASR stepping from 100 to 400 virtual agents (`STEPS`), `STEP_HOLD` (3m) each, with `THINK` (1 s) between journeys, to find where latency and errors rise. |
+| `poller.js` | One request a second for `DURATION`, for the availability drills; with `--out csv`, the outage is the run of non-200 rows. |
 | `throttle.js` | A burst at `RATE` (default 80) requests per second for 60 s, above API Gateway's 50 per second: 429 is expected, a 5xx fails. |
 
 `lib/journeys.js` holds the request mixes: about 80% agent reads (dashboard, clients, accounts, transactions, alerts, calendar) and 20% admin reads (users, activity feed, all transactions, the agents dashboard), one request per iteration.
@@ -20,6 +25,8 @@ k6 runs from its image, so nothing is installed. Use Docker Desktop and Git Bash
 export BASE_URL=https://sg.itsag3t6.com          # terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url
 export AGENT_TOKENS=<token>,<token>,<token>       # agents' access tokens, comma-separated
 export ADMIN_TOKEN=<token>                        # an admin's access token
+# or, for many users: TOKENS_FILE=/secrets/tokens.json, a file {"agents": [...], "admins": [...]}
+# mounted into the container (-v <folder outside the repo>:/secrets:ro -e TOKENS_FILE)
 k6() { MSYS_NO_PATHCONV=1 docker run --rm -i -v "$(pwd -W)/tests/load:/scripts" -v "$(pwd -W)/out:/out" \
   -e BASE_URL -e AGENT_TOKENS -e ADMIN_TOKEN -e PEAK_RPS -e HOLD -u "$(id -u)" grafana/k6:2.3.0 "$@"; }
 k6 run /scripts/seed.js
@@ -43,7 +50,8 @@ Never commit a token or an `out/` folder holding one: the summaries hold none, b
 
 ## Limits to know
 
-- API Gateway's stage limit (50 per second, burst 100, `stacks/crm/api.tf`) caps every test. Keep `PEAK_RPS` below it unless you mean to test the limit.
+- API Gateway's stage limit (200 per second, burst 400, `api_throttle_rate_limit` and `api_throttle_burst_limit` in the crm stack, ADR-0070) caps every test. Keep the load below it unless you mean to test the limit; `stress.js` needs it raised for its run (`terraform apply -var api_throttle_rate_limit=1000 -var api_throttle_burst_limit=2000`, then apply again without them).
+- The specified test needs 105 users. Cognito's own e-mail sender allows 50 a day, so create test users with `aws cognito-idp admin-create-user --message-action SUPPRESS`, add them to their group, and insert their `users` rows for user-service, rather than through `POST /api/users`.
 - The latency threshold is the API latency alarm's 2000 ms (`stacks/crm/observability.tf`), not an agreed target: no NFR sets a number.
 - A load test may trip the 5xx and latency alarms, which e-mail `alarm_email`.
 - The databases are `db.t4g.micro`, which run on CPU credits, so a long run can slow down once the credits are spent.
