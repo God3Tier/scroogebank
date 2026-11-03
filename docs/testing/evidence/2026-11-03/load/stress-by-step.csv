@@ -1,0 +1,21 @@
+virtual_agents,route,requests,median_ms,p95_ms,p99_ms,failed
+100,ALL,59785,23,78,611,0
+100,GET /api/accounts,14947,19,34,114,
+100,GET /api/accounts/{accountId}/transactions,14943,32,387,5787,
+100,GET /api/clients,14948,23,45,128,
+100,GET /api/clients/{clientId},14947,21,34,89,
+200,ALL,86308,25,514,5556,0
+200,GET /api/accounts,21626,20,128,428,
+200,GET /api/accounts/{accountId}/transactions,21431,68,4679,9769,
+200,GET /api/clients,21625,25,168,618,
+200,GET /api/clients/{clientId},21626,23,104,349,
+300,ALL,47410,27,6087,7920,0
+300,GET /api/accounts,11831,20,88,390,
+300,GET /api/accounts/{accountId}/transactions,11917,3934,7666,20393,
+300,GET /api/clients,11831,27,127,317,
+300,GET /api/clients/{clientId},11831,24,107,192,
+400,ALL,54511,27,6438,7817,0
+400,GET /api/accounts,13687,21,63,356,
+400,GET /api/accounts/{accountId}/transactions,13450,5502,7639,9155,
+400,GET /api/clients,13687,28,113,304,
+400,GET /api/clients/{clientId},13687,23,89,223,

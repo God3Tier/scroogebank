@@ -2033,3 +2033,18 @@ retry exhaustion and refusal to retry after the last available reservation.
 - Human verification required: Neo Jia Wen to accept ADR-0077 and ADR-0078;
   Feature 2's owners (client-, account-service) and the transaction-service
   owners to review the audit and pool changes.
+
+## 2026-11-03 — Stress results by step, and the load-test run commands
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: make the stress test's per-step figures traceable from the repository,
+  and record how the 2026-11-03 load and stress runs were started.
+- Files: `tests/load/stress-by-step.py` (new), its output
+  `docs/testing/evidence/2026-11-03/load/stress-by-step.csv`,
+  `tests/load/README.md` (the run commands, the HTML report and CSV outputs),
+  `tests/load/throttle.js` (the 200 per second limit of ADR-0070; default rate
+  80 → 300), and `docs/testing/retest-2026-11-03.md`.
+- Verification: the script's requests, medians and p95s for each step
+  match the re-test report's table and the panel added to `stress.html`.
+  `throttle.js` at its new default rate was not run.
+- Human verification required: Neo Jia Wen to review.
