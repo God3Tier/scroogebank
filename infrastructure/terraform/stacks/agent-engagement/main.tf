@@ -41,9 +41,10 @@ locals {
   identity_name          = local.domain_mode ? local.mail_domain : local.sender_address
   configuration_set_name = "${local.name}-engagement"
 
-  # ADR-0051: at least 1 task and at most 2 while the CRM stack runs, none
-  # while it is stopped.
-  min_tasks = local.crm.min_tasks > 0 ? 1 : 0
+  # Exactly 2 tasks while the CRM stack runs, none while it is stopped: the
+  # minimum is 2 (ADR-0075), and ADR-0051 caps the service at 2 because more
+  # tasks would not send more mail.
+  min_tasks = local.crm.min_tasks > 0 ? 2 : 0
   max_tasks = local.crm.max_tasks > 0 ? 2 : 0
 
   db_url = "jdbc:postgresql://${module.db.address}:5432/${module.db.db_name}"

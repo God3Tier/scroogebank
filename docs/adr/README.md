@@ -56,6 +56,8 @@ a decision it governs.
 - [ADR-0072](ADR-0072-client-key-cache-sized-for-the-working-set.md) — Accepted 2026-11-02 after the full-scale load test: client-service's data-key cache holds up to 10,000 keys (still 5 minutes each) and evicts the oldest, and `ListClients` decrypts a page's rows in parallel (8 at a time); refines ADR-0030 decision 3. Owner: Neo Jia Wen; Feature 2 owners to review.
 - [ADR-0073](ADR-0073-waf-sql-injection-rule-group.md) — Accepted 2026-11-02 after the active ZAP scans: the WAF adds `AWSManagedRulesSQLiRuleSet` (rule `sql-injection`, priority 35), skipping the binary document-upload path. Owner: Neo Jia Wen.
 - [ADR-0074](ADR-0074-x-factor-classification.md) — Accepted 2026-11-02: the x-factors are market-news alerts (Feature 4), Agent Engagement (Feature 5) and the Client Relationship Health Monitor (Feature 6); the business dashboard is the additional feature (Feature 7). Wording only; file names keep their old tags. Owner: Neo Jia Wen.
+- [ADR-0075](ADR-0075-two-tasks-minimum-per-service.md) — Accepted 2026-11-03: every ECS service runs at least 2 tasks while the stack runs, so one task's failure or a deployment causes no outage (the 2026-11-02 drill measured 59 s of 503s with one). engagement-service runs exactly 2. Owner: Neo Jia Wen.
+- [ADR-0076](ADR-0076-evaluation-accounts-without-mfa.md) — Accepted 2026-11-03: the evaluation accounts `admin@crm.com` and `agent1@crm.com` sign in without MFA; the pool's MFA becomes optional and a pre token generation trigger enforces it for everyone else through the `crm/api` scope API Gateway requires. Owner: Neo Jia Wen.
 - [ADR-0005](ADR-0005-alert-holdings-and-valuation-boundary.md) - Use service-owned synthetic holdings and reproducible, freshness-aware valuation snapshots for the alert MVP (runtime holdings source superseded in part by ADR-0066: database mode reads portfolios recorded against CRM accounts).
 - [ADR-0006](ADR-0006-alert-processing-architecture.md) - Run bounded scheduled ECS batches with PostgreSQL idempotency and no new alert-specific broker.
 - [ADR-0007](ADR-0007-alert-service-runtime-boundary.md) - Build one Java 25 Spring Boot module with separately enabled API and worker modes.
@@ -112,7 +114,7 @@ assigns replacement identifiers.
 
 Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
 
-ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02. None is proposed at present.
+ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 and ADR-0076 on 2026-11-03. None is proposed at present.
 
 ## Maintenance rule
 

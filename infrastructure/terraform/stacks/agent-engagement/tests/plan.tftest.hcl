@@ -78,7 +78,7 @@ override_data {
         app_host                = "sg.itsag3t6.com"
         app_url                 = "https://sg.itsag3t6.com"
         alarm_topic_arn         = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
-        min_tasks               = 1
+        min_tasks               = 2
         max_tasks               = 6
         use_spot                = false
         log_retention_days      = 30
@@ -315,7 +315,7 @@ run "audit_queue_does_not_allow_the_role" {
           app_host                = "sg.itsag3t6.com"
           app_url                 = "https://sg.itsag3t6.com"
           alarm_topic_arn         = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
-          min_tasks               = 1
+          min_tasks               = 2
           max_tasks               = 6
           use_spot                = false
           log_retention_days      = 30
@@ -386,7 +386,7 @@ run "sender_address_without_a_domain" {
           app_host                = null
           app_url                 = "https://d111111abcdef8.cloudfront.net"
           alarm_topic_arn         = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
-          min_tasks               = 1
+          min_tasks               = 2
           max_tasks               = 6
           use_spot                = false
           log_retention_days      = 30
@@ -476,7 +476,7 @@ run "needs_a_sender_address_without_a_domain" {
           app_host                = null
           app_url                 = "https://d111111abcdef8.cloudfront.net"
           alarm_topic_arn         = "arn:aws:sns:ap-southeast-1:123456789012:crm-sg-prod-alarms"
-          min_tasks               = 1
+          min_tasks               = 2
           max_tasks               = 6
           use_spot                = false
           log_retention_days      = 30

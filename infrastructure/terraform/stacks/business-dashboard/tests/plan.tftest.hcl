@@ -55,7 +55,7 @@ override_data {
         audit_queue_url          = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
         audit_queue_arn          = "arn:aws:sqs:ap-southeast-1:123456789012:crm-sg-prod-audit-insert"
         audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-user-service-task", "arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task"]
-        min_tasks                = 1
+        min_tasks                = 2
         max_tasks                = 6
         use_spot                 = false
         log_retention_days       = 30
@@ -202,7 +202,7 @@ run "audit_queue_does_not_allow_the_role" {
           audit_queue_url          = "https://sqs.ap-southeast-1.amazonaws.com/123456789012/crm-sg-prod-audit-insert"
           audit_queue_arn          = "arn:aws:sqs:ap-southeast-1:123456789012:crm-sg-prod-audit-insert"
           audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-user-service-task"]
-          min_tasks                = 1
+          min_tasks                = 2
           max_tasks                = 6
           use_spot                 = false
           log_retention_days       = 30
