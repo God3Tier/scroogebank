@@ -1,12 +1,12 @@
-// A short burst above API Gateway's stage limit (50 requests per second,
-// burst 100; stacks/crm/api.tf), to show the limit answers 429 and nothing
+// A short burst above API Gateway's stage limit (200 requests per second,
+// burst 400; stacks/crm/api.tf, ADR-0070), to show the limit answers 429 and nothing
 // behind it fails. 429 counts as expected here; any 5xx fails the run.
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
 import { BASE_URL, AGENT_TOKENS, requireSettings, params } from './lib/config.js';
 
-const RATE = parseInt(__ENV.RATE || '80', 10);
+const RATE = parseInt(__ENV.RATE || '300', 10);
 const throttled = new Counter('throttled_429');
 const serverErrors = new Counter('server_errors_5xx');
 
