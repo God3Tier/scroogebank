@@ -1,0 +1,10 @@
+rule,sampled_blocked
+crm-sg-prod-sqli: AWS#AWSManagedRulesSQLiRuleSet#SQLi_BODY,44
+crm-sg-prod-common: AWS#AWSManagedRulesCommonRuleSet#CrossSiteScripting_BODY,40
+crm-sg-prod-bad-inputs: AWS#AWSManagedRulesKnownBadInputsRuleSet#JavaDeserializationRCE_BODY,34
+crm-sg-prod-sqli: AWS#AWSManagedRulesSQLiRuleSet#SQLi_QUERYARGUMENTS,29
+crm-sg-prod-sqli: AWS#AWSManagedRulesSQLiRuleSet#SQLiExtendedPatterns_BODY,29
+crm-sg-prod-common: AWS#AWSManagedRulesCommonRuleSet#RestrictedExtensions_QUERYARGUMENTS,13
+crm-sg-prod-common: AWS#AWSManagedRulesCommonRuleSet#CrossSiteScripting_QUERYARGUMENTS,11
+crm-sg-prod-common: AWS#AWSManagedRulesCommonRuleSet#SizeRestrictions_QUERYSTRING,3
+crm-sg-prod-bad-inputs: AWS#AWSManagedRulesKnownBadInputsRuleSet#JavaDeserializationRCE_QUERYSTRING,2
