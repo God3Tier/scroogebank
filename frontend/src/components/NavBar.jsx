@@ -6,8 +6,8 @@ import { ADMIN, AGENT, inAnyGroup } from '../auth/roles.js'
 import { signOut } from '../auth/signOut.js'
 
 // import logo
-import logo from '../../public/scrooge-global-bank-logo.svg'
-import logotrans from '../../public/scrooge-global-bank-transparent.svg'
+import logo from '/scrooge-global-bank-logo.svg'
+import logotrans from '/scrooge-global-bank-transparent.svg'
 
 
 // The agent pages under /agent with a link of their own.
