@@ -722,3 +722,16 @@ run "evaluation_accounts_without_mfa" {
     error_message = "The SPA can enrol TOTP itself, and its build is told to."
   }
 }
+
+run "client_service_capacity_and_audit_alarm" {
+  command = plan
+
+  assert {
+    condition     = module.client_service.task_cpu == 512 && module.client_service.task_memory == 1024
+    error_message = "client-service tasks have 0.5 vCPU and 1 GB (ADR-0077)."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_log_metric_filter.service_audit_send_failed) == 3 && aws_cloudwatch_log_metric_filter.service_audit_send_failed["client"].pattern == "\"AUDIT_SEND_FAILED\""
+    error_message = "A lost audit event in client-, account- or transaction-service raises an alarm (ADR-0078)."
+  }
+}

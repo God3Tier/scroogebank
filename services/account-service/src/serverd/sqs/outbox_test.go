@@ -1,9 +1,11 @@
 package sqs
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"os"
 	"testing"
 
@@ -128,4 +130,50 @@ func envOrDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// captureLog sends the standard logger to a buffer for one test.
+func captureLog(t *testing.T) *bytes.Buffer {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
+func TestQueueFallback_SavedEventIsNotSentDirectly(t *testing.T) {
+	outbox := &fakeOutbox{}
+	queue := &fakeSQS{}
+
+	require.NoError(t, NewQueueFallback(outbox, queue, testQueueURL).Save(context.Background(), "event-1", []byte(`{"n":1}`)))
+
+	require.Len(t, outbox.saved, 1)
+	assert.Zero(t, queue.calls, "the relay sends saved events; no direct send")
+}
+
+func TestQueueFallback_SendsTheSameEventWhenTheOutboxFails(t *testing.T) {
+	logs := captureLog(t)
+	outbox := &fakeOutbox{err: context.DeadlineExceeded}
+	queue := &fakeSQS{}
+	// The save's context has already expired, as after a timed-out outbox write.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	require.NoError(t, NewQueueFallback(outbox, queue, testQueueURL).Save(ctx, "event-1", []byte(`{"event_id":"event-1"}`)))
+
+	assert.Equal(t, []string{`{"event_id":"event-1"}`}, queue.bodies, "the same body, so the Auditor can drop a repeat by event_id")
+	assert.Equal(t, []string{testQueueURL}, queue.queues)
+	assert.Contains(t, logs.String(), "sent straight to the queue")
+	assert.NotContains(t, logs.String(), "AUDIT_SEND_FAILED")
+}
+
+func TestQueueFallback_LogsTheWholeEventWhenBothFail(t *testing.T) {
+	logs := captureLog(t)
+	outbox := &fakeOutbox{err: errors.New("pool exhausted")}
+	queue := &fakeSQS{failFrom: 1}
+
+	err := NewQueueFallback(outbox, queue, testQueueURL).Save(context.Background(), "event-1", []byte(`{"event_id":"event-1"}`))
+
+	require.Error(t, err)
+	assert.Contains(t, logs.String(), "AUDIT_SEND_FAILED event_id=event-1")
+	assert.Contains(t, logs.String(), `audit_event={"event_id":"event-1"}`, "the event is logged whole, for replay")
 }

@@ -55,11 +55,24 @@ func run() error {
 	defer db.Close()
 	// Bound the pool. Without a limit, a burst opens one connection per request
 	// and exhausts the db.t4g.micro's connection slots ("too many clients"):
-	// requests fail and audit events are lost (load test, 2026-11-02). Ten per
-	// task keeps six tasks at 60.
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
+	// requests fail and audit events are lost (load test, 2026-11-02). The
+	// instance allows 79, five of them reserved for administrators, so this
+	// pool and the audit pool below together keep six tasks at 60.
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(8)
 	db.SetConnMaxIdleTime(5 * time.Minute)
+
+	// Read-audit outbox writes get two connections of their own, so they never
+	// wait behind a burst's queries for the pool above (ADR-0078). With it, a
+	// task uses at most 10.
+	auditDB, err := sql.Open("postgres", databaseDSN())
+	if err != nil {
+		return fmt.Errorf("open audit database pool: %w", err)
+	}
+	defer auditDB.Close()
+	auditDB.SetMaxOpenConns(2)
+	auditDB.SetMaxIdleConns(2)
+	auditDB.SetConnMaxIdleTime(5 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -72,7 +85,7 @@ func run() error {
 		return fmt.Errorf("configure Cognito authentication: %w", err)
 	}
 
-	saveAudit, err := auditSaver(db)
+	saveAudit, err := auditSaver(db, auditDB)
 	if err != nil {
 		return err
 	}
@@ -114,11 +127,12 @@ func run() error {
 }
 
 // auditSaver starts the relay that sends read events from read_audit_outbox
-// to the Auditor's queue, and returns the function that saves them there;
-// the import's events are the Lambda's to send (ADR-0064 decision 5).
+// to the Auditor's queue, and returns the function that saves them there,
+// through auditDB, or else sends them straight to the queue (ADR-0078); the
+// import's events are the Lambda's to send (ADR-0064 decision 5).
 // Production needs the queue. Locally, as for the poller, an empty
 // AUDIT_QUEUE_URL turns read auditing off.
-func auditSaver(db *sql.DB) (audit.Save, error) {
+func auditSaver(db, auditDB *sql.DB) (audit.Save, error) {
 	queueURL := os.Getenv("AUDIT_QUEUE_URL")
 	if queueURL == "" {
 		if envOrDefault("APP_ENV", "production") == "production" {
@@ -140,10 +154,11 @@ func auditSaver(db *sql.DB) (audit.Save, error) {
 			options.BaseEndpoint = aws.String(endpoint)
 		}
 	})
-	go outbox.NewRelay(db, sqsClient, queueURL, outbox.ReadTable).Run(context.Background(), relayInterval)
-	return func(ctx context.Context, event models.AuditEvent) error {
-		return outbox.Save(ctx, db, event)
-	}, nil
+	relay := outbox.NewRelay(db, sqsClient, queueURL, outbox.ReadTable)
+	go relay.Run(context.Background(), relayInterval)
+	return audit.WithFallback(func(ctx context.Context, event models.AuditEvent) error {
+		return outbox.Save(ctx, auditDB, event)
+	}, relay.Send), nil
 }
 
 func databaseDSN() string {

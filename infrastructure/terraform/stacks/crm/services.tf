@@ -250,9 +250,15 @@ module "client_service" {
   subnet_ids         = local.app_subnet_ids
   security_group_ids = [local.sg["client"]]
   image              = local.image["client-service"]
-  cpu_architecture   = var.cpu_architecture
-  port               = local.ports.client
-  port_name          = "https"
+  # 0.5 vCPU, not the module's 0.25: decrypting each page of clients is
+  # CPU-bound, and at the specified load (100 agents, 1 s ramp-up) two
+  # 0.25 vCPU tasks gave a p95 of 9.1 s before any new task could start
+  # (load test, 2026-11-03; ADR-0077).
+  cpu              = 512
+  memory           = 1024
+  cpu_architecture = var.cpu_architecture
+  port             = local.ports.client
+  port_name        = "https"
 
   environment = {
     APP_ENV                            = "production"

@@ -58,6 +58,8 @@ a decision it governs.
 - [ADR-0074](ADR-0074-x-factor-classification.md) — Accepted 2026-11-02: the x-factors are market-news alerts (Feature 4), Agent Engagement (Feature 5) and the Client Relationship Health Monitor (Feature 6); the business dashboard is the additional feature (Feature 7). Wording only; file names keep their old tags. Owner: Neo Jia Wen.
 - [ADR-0075](ADR-0075-two-tasks-minimum-per-service.md) — Accepted 2026-11-03: every ECS service runs at least 2 tasks while the stack runs, so one task's failure or a deployment causes no outage (the 2026-11-02 drill measured 59 s of 503s with one). engagement-service runs exactly 2. Owner: Neo Jia Wen.
 - [ADR-0076](ADR-0076-evaluation-accounts-without-mfa.md) — Accepted 2026-11-03: the evaluation accounts `admin@crm.com` and `agent1@crm.com` sign in without MFA; the pool's MFA becomes optional and a pre token generation trigger enforces it for everyone else through the `crm/api` scope API Gateway requires. Owner: Neo Jia Wen.
+- [ADR-0077](ADR-0077-client-service-task-size.md) — Accepted 2026-11-03: client-service tasks get 0.5 vCPU and 1 GB and keep 128 idle AWS connections per host; at the specified load two 0.25 vCPU tasks gave an agent p95 of 9.1 s before auto scaling could add any. Owner: Neo Jia Wen; Feature 2 to review.
+- [ADR-0078](ADR-0078-audit-events-survive-a-busy-database.md) — Accepted 2026-11-03: client-, account- and transaction-service audit writes get their own 2-connection pool and 5 s, fall back to sending straight to the audit queue, and log and alarm `AUDIT_SEND_FAILED` if both fail; 37 events were lost under load before. Owner: Neo Jia Wen; Feature 2 to review.
 - [ADR-0005](ADR-0005-alert-holdings-and-valuation-boundary.md) - Use service-owned synthetic holdings and reproducible, freshness-aware valuation snapshots for the alert MVP (runtime holdings source superseded in part by ADR-0066: database mode reads portfolios recorded against CRM accounts).
 - [ADR-0006](ADR-0006-alert-processing-architecture.md) - Run bounded scheduled ECS batches with PostgreSQL idempotency and no new alert-specific broker.
 - [ADR-0007](ADR-0007-alert-service-runtime-boundary.md) - Build one Java 25 Spring Boot module with separately enabled API and worker modes.
@@ -114,7 +116,7 @@ assigns replacement identifiers.
 
 Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
 
-ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 and ADR-0076 on 2026-11-03. None is proposed at present.
+ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 and ADR-0076 on 2026-11-03. ADR-0077 and ADR-0078 were accepted by Neo Jia Wen on 2026-11-03, with Feature 2 and transaction-service owners to review the code. None is proposed at present.
 
 ## Maintenance rule
 
