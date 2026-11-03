@@ -2,6 +2,12 @@
 # authorization-code flow and PKCE from a public app client, ADMIN and AGENT
 # groups in cognito:groups, a client-credentials client for the transaction
 # import, and the login/password-reset audit triggers (ADR-0040).
+#
+# ADR-0076: the brief's evaluation accounts sign in without MFA. Cognito can
+# exempt no single user while MFA is ON, so with the triggers deployed the pool
+# is OPTIONAL and the token-scope trigger enforces MFA instead: only a user
+# with TOTP enrolled, or in the MFA_EXEMPT group, gets the crm/api scope that
+# API Gateway requires. Without the triggers the pool stays ON.
 
 resource "random_id" "cognito_domain" {
   byte_length = 3
@@ -21,7 +27,7 @@ resource "aws_cognito_user_pool" "this" {
     case_sensitive = false
   }
 
-  mfa_configuration = "ON"
+  mfa_configuration = var.enable_cognito_triggers ? "OPTIONAL" : "ON"
   software_token_mfa_configuration {
     enabled = true
   }
@@ -39,6 +45,12 @@ resource "aws_cognito_user_pool" "this" {
     temporary_password_validity_days = 3
   }
 
+  # The SPA's access token may call Cognito's own user APIs (to enrol TOTP), so
+  # a changed e-mail address takes effect only once it is verified.
+  user_attribute_update_settings {
+    attributes_require_verification_before_update = ["email"]
+  }
+
   account_recovery_setting {
     recovery_mechanism {
       name     = "verified_email"
@@ -51,6 +63,12 @@ resource "aws_cognito_user_pool" "this" {
     content {
       post_authentication = aws_lambda_function.cognito_triggers[0].arn
       post_confirmation   = aws_lambda_function.cognito_triggers[0].arn
+
+      # V2_0 events can add scopes to access tokens (Essentials tier).
+      pre_token_generation_config {
+        lambda_arn     = aws_lambda_function.token_scope[0].arn
+        lambda_version = "V2_0"
+      }
     }
   }
 }
@@ -60,6 +78,39 @@ resource "aws_cognito_user_group" "this" {
   name         = each.key
   user_pool_id = aws_cognito_user_pool.this.id
   description  = "CRM ${lower(each.key)}s"
+}
+
+# ADR-0076: members sign in without MFA. Only Terraform adds users to it (the
+# evaluation accounts below); the token-scope trigger keeps the group out of
+# tokens, so no service ever sees it.
+resource "aws_cognito_user_group" "mfa_exempt" {
+  count        = var.enable_cognito_triggers ? 1 : 0
+  name         = "MFA_EXEMPT"
+  user_pool_id = aws_cognito_user_pool.this.id
+  description  = "Evaluation accounts that sign in without MFA (ADR-0076)"
+}
+
+# The evaluation accounts. They are created without a password and with no
+# e-mail sent (they have no mailbox); scripts/evaluation-accounts.sh then sets
+# their permanent passwords, so the passwords never reach Terraform state.
+# user-service adds the role groups: the root admin on start, the agent when
+# an admin creates it in the CRM, which adopts this Cognito user.
+resource "aws_cognito_user" "mfa_exempt" {
+  for_each       = var.enable_cognito_triggers ? toset(var.mfa_exempt_users) : toset([])
+  user_pool_id   = aws_cognito_user_pool.this.id
+  username       = each.key
+  message_action = "SUPPRESS"
+  attributes = {
+    email          = each.key
+    email_verified = "true"
+  }
+}
+
+resource "aws_cognito_user_in_group" "mfa_exempt" {
+  for_each     = aws_cognito_user.mfa_exempt
+  user_pool_id = aws_cognito_user_pool.this.id
+  group_name   = aws_cognito_user_group.mfa_exempt[0].name
+  username     = each.value.username
 }
 
 resource "aws_cognito_user_pool_domain" "this" {
@@ -88,10 +139,15 @@ resource "aws_cognito_user_pool_client" "web" {
   generate_secret                      = false
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["openid", "email"]
-  supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = [for o in local.web_origins : "${o}/auth/callback"]
-  logout_urls                          = [for o in local.web_origins : "${o}/"]
+  # aws.cognito.signin.user.admin lets the SPA enrol a TOTP authenticator for
+  # a user who has none (ADR-0076). With it a user could also edit their own
+  # attributes, so the client may write only their names (an empty list would
+  # mean every attribute); the CRM shows the names users-db holds.
+  allowed_oauth_scopes         = concat(["openid", "email"], var.enable_cognito_triggers ? ["aws.cognito.signin.user.admin"] : [])
+  write_attributes             = ["family_name", "given_name"]
+  supported_identity_providers = ["COGNITO"]
+  callback_urls                = [for o in local.web_origins : "${o}/auth/callback"]
+  logout_urls                  = [for o in local.web_origins : "${o}/"]
   # Do not enable ALLOW_USER_SRP_AUTH: browser sign-in goes only through the
   # managed-login authorization-code flow with PKCE (ADR-0025).
   explicit_auth_flows           = ["ALLOW_REFRESH_TOKEN_AUTH"]

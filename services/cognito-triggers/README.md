@@ -10,6 +10,16 @@ One Lambda function that the Cognito user pool runs after a login and after a co
 
 Logout, user changes and admin password resets are audited by user-service, not here.
 
+## The token-scope trigger
+
+The same zip has a second handler, `bank.cognito.TokenScopeHandler`, deployed as its own function (`<stack>-token-scope`) for the pool's pre token generation trigger, V2_0 events ([ADR-0076](../../docs/adr/ADR-0076-evaluation-accounts-without-mfa.md)). The pool's MFA is optional so that the evaluation accounts can sign in without it; this trigger enforces MFA for everyone else:
+
+- it adds the scope `crm/api`, which every API Gateway route but sign-out requires, only for a user in the `MFA_EXEMPT` group or with a TOTP authenticator enrolled (one `AdminGetUser` call, skipped for exempt users);
+- it copies the user's groups into the tokens without `MFA_EXEMPT`, so services see only `ADMIN` and `AGENT` (Cognito would drop the groups claim if the response left them out);
+- it **fails closed**: if it cannot read the user's MFA settings, it logs `MFA_LOOKUP_FAILED` and throws, and Cognito fails that sign-in or refresh.
+
+Each call logs one `TOKEN_SCOPE` line with the trigger source, the pool's username (a UUID, not the e-mail), `api_access` and `mfa_exempt`. Its client has a 0.5-second connect and 2-second read timeout and no retries. It needs `cognito-idp:AdminGetUser` and its own log group, and nothing else; `TokenScopeHandlerTest` covers each case.
+
 ## What it sends
 
 The auditor's usual envelope (`AuditMessage`), with a new `event_id` for each call:
@@ -121,7 +131,7 @@ Each event is sent exactly as logged, with its `event_id`, so replaying an event
 
 ## Infrastructure requirements
 
-Nothing here is built yet. Terraform will need ([ADR-0040](../../docs/adr/ADR-0040-cognito-triggers-java-lambda.md)):
+The crm stack's `lambda.tf` builds this ([ADR-0040](../../docs/adr/ADR-0040-cognito-triggers-java-lambda.md)):
 - **The function:**
   - runtime `java25` on `arm64`, handler `bank.cognito.Handler::handleRequest`, code `target/cognito-triggers.zip`;
   - 1,769 MB of memory and a 5-second timeout;
@@ -143,4 +153,4 @@ Nothing here is built yet. Terraform will need ([ADR-0040](../../docs/adr/ADR-00
 
 ## Dependencies
 
-Versions come from the root `pom.xml`: the AWS SDK BOM, and Spring Boot's BOM for Jackson, SLF4J, Lombok and the test libraries. Testcontainers matches user-service. The SQS client is used without its default Netty and Apache HTTP clients, which the function does not need; the JDK's URL connection client takes their place. `slf4j-nop` silences the SDK's logging, which would otherwise warn on every cold start. Lombok is compile-time only (`provided`), so it is not in the zip.
+Versions come from the root `pom.xml`: the AWS SDK BOM, and Spring Boot's BOM for Jackson, SLF4J, Lombok and the test libraries. Testcontainers matches user-service. The SQS and Cognito clients are used without its default Netty and Apache HTTP clients, which the function does not need; the JDK's URL connection client takes their place. `slf4j-nop` silences the SDK's logging, which would otherwise warn on every cold start. Lombok is compile-time only (`provided`), so it is not in the zip.

@@ -1,6 +1,7 @@
 import { useAuth } from 'react-oidc-context'
 import { Navigate, useLocation } from 'react-router-dom'
 
+import { needsMfaEnrolment } from './apiAccess.js'
 import { inAnyGroup } from './roles.js'
 
 // Shows its page only to a signed-in user and, when groups are given, only to
@@ -15,6 +16,10 @@ function RequireAuth({ groups, children }) {
   }
   if (!auth.isAuthenticated) {
     return <Navigate to="/login" replace state={{ returnTo: location.pathname + location.search }} />
+  }
+  // The API refuses a user with no authenticator yet (ADR-0076).
+  if (needsMfaEnrolment(auth.user)) {
+    return <Navigate to="/mfa-setup" replace />
   }
   if (groups && !inAnyGroup(auth.user, groups)) {
     return (

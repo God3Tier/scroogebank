@@ -134,7 +134,7 @@ variable "local_dev_origins" {
 }
 
 variable "root_admin_email" {
-  description = "The root admin user-service creates on first start. A mailbox the operator can read: Cognito e-mails the temporary password there. Changing it after the first start creates a second root admin."
+  description = "The root admin user-service creates on first start. A mailbox the operator can read, as Cognito e-mails the temporary password there, unless it is also in mfa_exempt_users: then no e-mail is sent and scripts/evaluation-accounts.sh sets the password. Changing it after the first start creates a second root admin."
   type        = string
 }
 
@@ -183,6 +183,12 @@ variable "enable_cognito_triggers" {
   description = "Deploy the login and password-reset audit triggers (ADR-0040). Needs the built zip. Keep true: false is for the mocked tests, and leaves sign-ins unaudited."
   type        = bool
   default     = true
+}
+
+variable "mfa_exempt_users" {
+  description = "E-mail addresses of the evaluation accounts that sign in without MFA (ADR-0076): admin@crm.com and agent1@crm.com in prod. Their passwords are set by scripts/evaluation-accounts.sh, never here. Needs enable_cognito_triggers."
+  type        = list(string)
+  default     = []
 }
 
 variable "cognito_triggers_zip" {

@@ -147,7 +147,11 @@ module "user_service" {
     AUDITOR_BASE_URL      = "https://${local.sc.auditor}:${local.ports.auditor_http}"
     AUDITOR_GRPC_TARGET   = "${local.sc.auditor}:${local.ports.auditor_grpc}"
     AUDITOR_GRPC_TLS_CA   = "/tls/ca.pem"
-    ROOT_ADMIN_EMAIL      = var.root_admin_email
+    # Read from the Cognito user when Terraform creates it (ADR-0076), so that
+    # user exists before user-service starts and adopts it, rather than
+    # creating it and e-mailing a temporary password to an address with no
+    # mailbox.
+    ROOT_ADMIN_EMAIL      = try(aws_cognito_user.mfa_exempt[var.root_admin_email].attributes.email, var.root_admin_email)
     SPRING_FLYWAY_ENABLED = "false" # db-migrate applies its migrations
   }
   secrets = {

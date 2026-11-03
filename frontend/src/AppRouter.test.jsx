@@ -4,8 +4,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import AppRouter from './AppRouter.jsx'
+import { accessToken } from './test/tokens.js'
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
+// The enrolment page asks Cognito for a key; no test here may reach it.
+vi.mock('./auth/totp.js', () => ({ startTotpEnrolment: vi.fn(() => new Promise(() => {})), finishTotpEnrolment: vi.fn(), otpauthUri: vi.fn() }))
 vi.mock('./api/clients.js', () => ({
   getClient: vi.fn().mockResolvedValue({ first_name: 'Synthetic', last_name: 'Client', verification_status: 'UNVERIFIED' }),
   listDocuments: vi.fn().mockResolvedValue([]),
@@ -135,5 +138,18 @@ describe('routes', () => {
 
     expect(await screen.findByRole('heading', { name: 'Synthetic Client' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Identity documents' })).toBeInTheDocument()
+  })
+
+  it('sends a signed-in user without an authenticator to enrol one first (ADR-0076)', () => {
+    vi.stubEnv('VITE_MFA_ENROLMENT', 'true')
+    vi.stubEnv('VITE_COGNITO_AUTHORITY', 'https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_Example')
+    const auth = signedInAs(['AGENT'])
+    auth.user.access_token = accessToken('openid email aws.cognito.signin.user.admin')
+    useAuth.mockReturnValue(auth)
+
+    renderAt('/agent')
+
+    expect(screen.getByRole('heading', { name: 'Set up your authenticator' })).toBeInTheDocument()
+    expect(screen.queryByText('Agent Home')).not.toBeInTheDocument()
   })
 })

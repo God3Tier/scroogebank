@@ -11,6 +11,9 @@ export function cognitoSettings(env = import.meta.env, origin = window.location.
     // Both must be listed on the app client: the callback URL and the sign-out URL.
     redirectUri: `${origin}/auth/callback`,
     logoutUri: `${origin}/`,
+    // Set when the pool's MFA is optional and the token-scope trigger enforces
+    // it (ADR-0076): the app then enrols a TOTP authenticator itself.
+    mfaEnrolment: env.VITE_MFA_ENROLMENT === 'true',
   }
 }
 
@@ -27,6 +30,8 @@ export function oidcSettings(settings = cognitoSettings()) {
     client_id: settings.clientId,
     redirect_uri: settings.redirectUri,
     response_type: 'code',
-    scope: 'openid email',
+    // aws.cognito.signin.user.admin lets the access token enrol TOTP with
+    // Cognito's own API, which only a pool with optional MFA needs.
+    scope: settings.mfaEnrolment ? 'openid email aws.cognito.signin.user.admin' : 'openid email',
   }
 }
