@@ -205,8 +205,8 @@ run "prod" {
     error_message = "Prod outside the demo week: one NAT gateway."
   }
   assert {
-    condition     = local.min_tasks == 1 && local.max_tasks == 6 && local.log_retention_days == 30
-    error_message = "Prod: 1 to 6 tasks per service and 30-day logs."
+    condition     = local.min_tasks == 2 && local.max_tasks == 6 && local.log_retention_days == 30
+    error_message = "Prod: 2 to 6 tasks per service and 30-day logs."
   }
   assert {
     condition     = !local.db_settings.skip_final_snapshot && alltrue([for s in aws_secretsmanager_secret.service_tls : s.recovery_window_in_days == 7])
@@ -675,5 +675,63 @@ run "test_tooling_enabled" {
   assert {
     condition     = aws_s3_bucket.test_runs[0].force_destroy
     error_message = "Test tooling: the test bucket never blocks a teardown."
+  }
+}
+
+run "mfa_required_without_triggers" {
+  command = plan
+
+  assert {
+    condition     = aws_cognito_user_pool.this.mfa_configuration == "ON" && length(coalesce(aws_apigatewayv2_route.api.authorization_scopes, [])) == 0 && length(aws_cognito_user.mfa_exempt) == 0
+    error_message = "Without the token-scope trigger nothing enforces MFA but Cognito, so the pool requires it and no route needs crm/api (ADR-0076)."
+  }
+}
+
+run "evaluation_accounts_without_mfa" {
+  command = plan
+
+  variables {
+    enable_cognito_triggers = true
+    cognito_triggers_zip    = "tests/fixtures/placeholder.zip"
+    root_admin_email        = "admin@crm.com"
+    mfa_exempt_users        = ["admin@crm.com", "agent1@crm.com"]
+  }
+
+  assert {
+    condition     = aws_cognito_user_pool.this.mfa_configuration == "OPTIONAL" && length(aws_lambda_function.token_scope) == 1
+    error_message = "With the trigger deployed, the pool's MFA is optional and the trigger enforces it (ADR-0076)."
+  }
+  assert {
+    condition     = toset(aws_apigatewayv2_route.api.authorization_scopes) == toset(["crm/api"]) && length(coalesce(aws_apigatewayv2_route.logout.authorization_scopes, [])) == 0
+    error_message = "Every API route needs crm/api, except the sign-out report."
+  }
+  assert {
+    condition     = length(aws_cognito_user.mfa_exempt) == 2 && alltrue([for u in aws_cognito_user.mfa_exempt : u.message_action == "SUPPRESS" && u.password == null && u.temporary_password == null])
+    error_message = "The evaluation accounts are created with no e-mail and no password in Terraform."
+  }
+  assert {
+    condition     = length(aws_cognito_user_in_group.mfa_exempt) == 2 && alltrue([for g in aws_cognito_user_in_group.mfa_exempt : g.group_name == "MFA_EXEMPT"])
+    error_message = "Terraform adds the evaluation accounts to MFA_EXEMPT only; user-service adds the role groups."
+  }
+  assert {
+    condition     = module.user_service.app_environment["ROOT_ADMIN_EMAIL"] == "admin@crm.com"
+    error_message = "user-service seeds the root admin from the Cognito user Terraform created."
+  }
+  assert {
+    condition     = contains(aws_cognito_user_pool_client.web.allowed_oauth_scopes, "aws.cognito.signin.user.admin") && output.frontend_build_env.VITE_MFA_ENROLMENT == "true"
+    error_message = "The SPA can enrol TOTP itself, and its build is told to."
+  }
+}
+
+run "client_service_capacity_and_audit_alarm" {
+  command = plan
+
+  assert {
+    condition     = module.client_service.task_cpu == 512 && module.client_service.task_memory == 1024
+    error_message = "client-service tasks have 0.5 vCPU and 1 GB (ADR-0077)."
+  }
+  assert {
+    condition     = length(aws_cloudwatch_log_metric_filter.service_audit_send_failed) == 3 && aws_cloudwatch_log_metric_filter.service_audit_send_failed["client"].pattern == "\"AUDIT_SEND_FAILED\""
+    error_message = "A lost audit event in client-, account- or transaction-service raises an alarm (ADR-0078)."
   }
 }

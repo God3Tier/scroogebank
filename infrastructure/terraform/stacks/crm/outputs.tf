@@ -12,6 +12,9 @@ output "frontend_build_env" {
     VITE_COGNITO_CLIENT_ID = aws_cognito_user_pool_client.web.id
     VITE_COGNITO_DOMAIN    = "https://${aws_cognito_user_pool_domain.this.domain}.auth.${local.region}.amazoncognito.com"
     VITE_API_URL           = ""
+    # The app sends a user with no TOTP authenticator to enrol one (ADR-0076).
+    # Without the triggers the pool requires MFA and managed login enrols them.
+    VITE_MFA_ENROLMENT = var.enable_cognito_triggers ? "true" : ""
   }
 }
 

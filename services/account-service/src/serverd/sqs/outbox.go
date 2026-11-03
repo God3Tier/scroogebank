@@ -3,6 +3,7 @@ package sqs
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -16,8 +17,12 @@ const (
 	relayInterval = 2 * time.Second
 	// relayBatchSize caps the events one run sends, so its transaction stays short.
 	relayBatchSize = 50
-	// saveTimeout bounds the outbox write that follows each request.
-	saveTimeout = 2 * time.Second
+	// saveTimeout bounds the outbox write that follows each request. The
+	// endpoint has already answered, so it can wait out a burst (ADR-0078).
+	saveTimeout = 5 * time.Second
+	// fallbackTimeout bounds the direct send to the queue when the outbox
+	// write has failed (ADR-0078).
+	fallbackTimeout = 3 * time.Second
 )
 
 type SQSAPI interface {
@@ -47,6 +52,43 @@ func (o *PostgresOutbox) Save(ctx context.Context, eventID string, body []byte) 
 		return fmt.Errorf("save audit event %s: %w", eventID, err)
 	}
 	return nil
+}
+
+// QueueFallback saves each event to the outbox and, if that fails, sends it
+// straight to the Auditor's queue, so a burst that holds every database
+// connection does not lose events (ADR-0078; ADR-0020 allows direct sends).
+// The event keeps its event_id, and the Auditor drops a repeat by event_id,
+// so an event that reached both does no harm. Only when both fail is the
+// event lost; it is then logged whole as AUDIT_SEND_FAILED, which is alarmed,
+// for an operator to send again.
+type QueueFallback struct {
+	outbox   Outbox
+	client   SQSAPI
+	queueURL string
+}
+
+func NewQueueFallback(outbox Outbox, client SQSAPI, queueURL string) *QueueFallback {
+	return &QueueFallback{outbox: outbox, client: client, queueURL: queueURL}
+}
+
+func (q *QueueFallback) Save(ctx context.Context, eventID string, body []byte) error {
+	saveErr := q.outbox.Save(ctx, eventID, body)
+	if saveErr == nil {
+		return nil
+	}
+	// ctx may have expired with the failed save; the send gets its own time.
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fallbackTimeout)
+	defer cancel()
+	_, sendErr := q.client.SendMessage(sendCtx, &sqs.SendMessageInput{
+		QueueUrl:    aws.String(q.queueURL),
+		MessageBody: aws.String(string(body)),
+	})
+	if sendErr == nil {
+		log.Printf("audit event %s sent straight to the queue; the outbox save failed: %v", eventID, saveErr)
+		return nil
+	}
+	log.Printf("AUDIT_SEND_FAILED event_id=%s outbox_error=%q queue_error=%q audit_event=%s", eventID, saveErr, sendErr, body)
+	return fmt.Errorf("audit event %s neither saved nor sent: %w", eventID, errors.Join(saveErr, sendErr))
 }
 
 // Relay sends audit events from the outbox to the Auditor's SQS queue.

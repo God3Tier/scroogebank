@@ -4,6 +4,7 @@ import { ADMIN, AGENT } from './auth/roles.js'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import SignInCallback from './pages/SignInCallback.jsx'
+import MfaSetup from './pages/MfaSetup.jsx'
 import AgentDashboard from './pages/AgentDashboard.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
 import ClientTransactions from './pages/ClientTransactions.jsx'
@@ -33,6 +34,7 @@ function AppRouter() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<SignInCallback />} />
+      <Route path="/mfa-setup" element={<MfaSetup />} />
       <Route path="/agent" element={<RequireAuth groups={[AGENT]}><AgentDashboard /></RequireAuth>} />
       <Route path="/agent/alerts" element={<RequireAuth groups={[AGENT]}><EventAlerts /></RequireAuth>} />
       <Route path="/agent/calendar" element={<RequireAuth groups={[AGENT]}><AgentCalendar /></RequireAuth>} />

@@ -60,7 +60,7 @@ clients-db ran Multi-AZ, with the primary in ap-southeast-1a and the standby in 
 
 ## Open items
 
-1. **One task per service** means a task failure costs about a minute of that service. Setting `min_tasks = 2` for the services agents depend on most (client, account, transaction) would remove that, at roughly USD 0.01 an hour per extra task. A cost decision for the owners (ADR-0029).
+1. **One task per service** means a task failure costs about a minute of that service. Setting `min_tasks = 2` for the services agents depend on most (client, account, transaction) would remove that, at roughly USD 0.01 an hour per extra task. A cost decision for the owners (ADR-0029). **Done 2026-11-03:** every service now runs at least 2 tasks ([ADR-0075](../adr/ADR-0075-two-tasks-minimum-per-service.md)).
 2. **A few requests fail during a database failover** (8–12 s). The services could retry an idempotent read once on a dropped connection; today the error reaches the user.
 
 ## Teardown

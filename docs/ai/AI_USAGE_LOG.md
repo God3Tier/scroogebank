@@ -1983,3 +1983,53 @@ retry exhaustion and refusal to retry after the last available reservation.
   the renamed x-factors.md sections were updated.
 - Human verification required: none beyond Neo Jia Wen's decision; owners of
   the dashboard and Agent Engagement may want to check their sections.
+
+## 2026-11-03 — Two tasks per service and evaluation accounts without MFA (ADR-0075, ADR-0076)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: run at least two tasks of every service, so a task failure causes no
+  outage; let the brief's evaluation accounts (`admin@crm.com`,
+  `agent1@crm.com`) sign in with a password alone while MFA stays mandatory
+  for everyone else; cover every stack in the deploy runbook; redraw the
+  report's sequence diagrams in PlantUML with the course's arrow notation.
+- Files: the crm, business-dashboard and agent-engagement stacks (task
+  minimum, tests); the crm stack's Cognito pool, token-scope Lambda, API route
+  scopes, evaluation users and frontend build output; cognito-triggers'
+  `TokenScopeHandler` and tests; the frontend's enrolment page, scope check and
+  tests; `scripts/evaluation-accounts.sh`; ADR-0075, ADR-0076, the ADR index
+  and the ADRs they supersede in part; the runbook, security model,
+  architecture overview, decision log, NFR notes, schema notes and READMEs.
+- Verification: crm (17), agent-engagement (6) and business-dashboard (3)
+  Terraform tests; `TokenScopeHandlerTest` (6) and the module's other tests;
+  frontend lint, build and 282 tests. On AWS on 2026-11-03, the 106 load-test
+  users enrolled TOTP through the access-token path the enrolment page uses,
+  and both evaluation accounts signed in without MFA.
+- Human verification: Neo Jia Wen accepted ADR-0075 and ADR-0076 on
+  2026-11-03 and set the evaluation passwords with the script; they are not in the
+  repository. Feature 1's owners should review the enrolment page and the
+  trigger.
+
+## 2026-11-03 — Re-test on AWS; client-service capacity and audit events under load (ADR-0077, ADR-0078)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: re-run the task-failure drill, the specified load test, the stress
+  test and an active ZAP scan through the edge on a fresh deployment, and fix
+  what they found.
+- Found: a cold agent p95 of 9.1 s in client-service (0.25 vCPU, new TLS
+  connections for each KMS and DynamoDB call); 37 client-service and 7,367
+  transaction-service audit events dropped under load; a first audit fix that
+  ran the clients database out of connections (316 HTTP 500s in a stress run).
+- Files: client-service, account-service and transaction-service `main.go`
+  (pools of 8 plus 2 for audit writes, AWS connection reuse in
+  client-service), their audit outbox code (`QueueFallback`,
+  `audit.WithFallback`) and tests; the crm stack's client-service size, audit
+  alarm and plan test; the ecs-service module's task size outputs; ADR-0077,
+  ADR-0078 and the ADR index; `docs/testing/retest-2026-11-03.md`, its
+  evidence and the test strategy.
+- Verification: `make test` in all three services; crm `terraform test` (18);
+  on AWS, cold agent p95 9.1 s → 2.89 s, no audit event lost after the fix,
+  no connection-slot errors at six tasks. ZAP's SQL Injection alerts were
+  triaged by hand as a WAF-caused false positive (403 to one probe of two).
+- Human verification required: Neo Jia Wen to accept ADR-0077 and ADR-0078;
+  Feature 2's owners (client-, account-service) and the transaction-service
+  owners to review the audit and pool changes.

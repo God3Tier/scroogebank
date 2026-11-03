@@ -1,7 +1,7 @@
 # Deploy the CRM to AWS by hand (Terraform)
 
-> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-10-23.
-> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack), [ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) (every deployment ends with a full teardown; proposed).
+> **Status:** for testing deployments from a developer machine. There is no CI pipeline for Terraform yet ([infrastructure plan](../feature-plans/infrastructure_plan.md) INF-09). **Owner:** Neo Jia Wen. **Last updated:** 2026-11-03.
+> Decisions: [ADR-0028](../adr/ADR-0028-cicd-migrations-terraform.md), [ADR-0029](../adr/ADR-0029-environment-lifecycle-and-cost-controls.md), [ADR-0042](../adr/ADR-0042-terraform-deployment.md), [ADR-0046](../adr/ADR-0046-human-deploy-access-mfa-role.md) (AWS access), [ADR-0047](../adr/ADR-0047-business-dashboard-terraform-stack.md) (the business-dashboard stack), [ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md) (every deployment ends with a full teardown), [ADR-0075](../adr/ADR-0075-two-tasks-minimum-per-service.md) (two tasks per service), [ADR-0076](../adr/ADR-0076-evaluation-accounts-without-mfa.md) (the evaluation accounts).
 
 **Every deployment starts from an empty account and ends with [Tear down](#tear-down)**, which destroys every Terraform stack, `bootstrap` and `mail-identity` included ([ADR-0058](../adr/ADR-0058-every-deployment-ends-with-full-teardown.md)). That way everyone starts from the same state. Only what is created by hand stays between deployments: the `crm-infra-admin` role and your IAM user ([AWS access](#aws-access)), the budget alerts, and the domain with its hosted zone ([Register a domain](#register-a-domain-once-per-account)). One deployment runs at a time; [Check the account is empty](#check-the-account-is-empty) tells you whether one is in progress.
 
@@ -9,13 +9,32 @@ The code is in `infrastructure/terraform/` (see its [README](../../infrastructur
 
 **In parallel** notes in the steps below say what can run at the same time, in a second terminal. In that terminal, run [Start each session](#start-each-session) first, and set any shell variable the step uses again, such as `TAG`. Never run two Terraform commands on the same stack at once: the second fails with `Error acquiring the state lock`.
 
+## Every stack, in order
+
+A full deployment creates seven Terraform stacks. The steps below give each one's commands; this is the order, and what each stack runs.
+
+| Step | Stack (`infrastructure/terraform/...`) | What it runs |
+|---|---|---|
+| 1 | `bootstrap` | The state bucket and CloudTrail |
+| 2 | (no stack) | Builds the Cognito triggers zip, the ingest Lambda zip and every image |
+| 3 | `stacks/crm`, stopped | The network, Cognito, the edge, the databases, user-service, client-service, account-service, transaction-service, the auditor, event-alert-service and client-health-monitor-service |
+| 3a | `stacks/mail-identity` | The SES identity for Agent Engagement's mail |
+| 4 | `stacks/business-dashboard`, stopped | dashboard-service (Feature 7) |
+| 4a | `stacks/agent-engagement`, stopped | engagement-service and engagement-db (Feature 5) |
+| 5 | (no stack) | Pushes the images |
+| 6 | the three stacks above, started | Every service, at 2 tasks each (ADR-0075) |
+| 6.1 | `stacks/alert-worker` | The market-news alert worker (Feature 4), scheduled every four hours |
+| 6.2 | (no stack) | The evaluation accounts' passwords (ADR-0076) |
+| 7 | (no stack) | The frontend |
+| 9.1–9.3 | `stacks/sftp-server`, then `stacks/crm` again | The bank's SFTP server and producer, then the ingest Lambda (Feature 3) |
+
 ## Before you start
 
 - **Tools:** Terraform 1.10 or newer (tested with 1.16.6), AWS CLI v2, Docker, GNU Make (step 2), JDK 25 and Maven, Node.js for the frontend, Python 3 for the scripts (step 5, 9.5 and the database console).
 - **AWS access:** set up your CLI once and start each session as in [AWS access](#aws-access) below. Terraform and the scripts use the credentials that section puts in your terminal; without them, Terraform fails with "No valid credential sources found".
 - **The account must be on the paid plan.** In the Billing console, "Free Tier" shows the account plan; upgrade a Free plan account first. The Free plan caps RDS instances below the seven the stack needs, and refuses its backup settings (ADR-0042).
   - New accounts may have low **service quotas**. If tasks stay in `PROVISIONING` or an instance fails to launch on a vCPU limit, check Fargate On-Demand vCPUs and EC2 Standard vCPUs in Service Quotas.
-- **Cost.** A deployment bills from step 1 until its teardown. Prod costs about USD 360 a month left running at one task per service, and about USD 65 a month even when stopped ([Pausing a deployment](#pausing-a-deployment)), so tear it down when you are done rather than leaving it stopped (ADR-0042 "Cost Impact").
+- **Cost.** A deployment bills from step 1 until its teardown. Prod costs about USD 560 a month left running at two tasks per service (ADR-0075; about USD 360 at one), and about USD 65 a month even when stopped ([Pausing a deployment](#pausing-a-deployment)), so tear it down when you are done rather than leaving it stopped (ADR-0042 "Cost Impact").
 
 ## AWS access
 
@@ -210,7 +229,18 @@ The roles' names start with the stack's prefix, `crm-<legal_entity>-<environment
 
 **The second `sed` line deletes step 9.3's four lines** (`enable_ingest_lambda`, `ingest_lambda_zip`, `sftp_server_address` and `sftp_host_key_fingerprint`), which an `env/prod.tfvars` from an earlier deployment still has, since the `cp` line keeps an existing file. Their commented-out copies from the example file stay. Those lines point at the old account's SFTP server, and step 9.3 adds them back with the new stack's values. Left in, they would make this apply create the ingest Lambda early, which a new account's Lambda concurrency quota of 10 can refuse ("decreases account's UnreservedConcurrentExecution below its minimum value of [10]"). If you run this block again after step 9.3, for example to fix the audit roles, run step 9.3's item 2 again before the next apply, or that apply deletes the ingest Lambda.
 
-Then set `root_admin_email` and `alarm_email` in `env/prod.tfvars` by hand: they are your mailboxes, not Terraform outputs.
+Then set `alarm_email` in `env/prod.tfvars` by hand: it is your mailbox, not a Terraform output.
+
+**The evaluation accounts** (the brief's `admin@crm.com` and `agent1@crm.com`, [ADR-0076](../adr/ADR-0076-evaluation-accounts-without-mfa.md)) need two lines. `admin@crm.com` is then the root admin: Terraform creates it with no password and no e-mail, since nobody can read that mailbox, and step 6.2 sets the passwords. Without these lines the root admin is a mailbox of yours, `root_admin_email`, which Cognito e-mails a temporary password, and every user enrols an authenticator.
+
+```sh
+cd infrastructure/terraform/stacks/crm
+sed -i -E '/^(root_admin_email|mfa_exempt_users) *=/d' env/prod.tfvars   # replaces older lines
+printf '%s\n' 'root_admin_email = "admin@crm.com"' 'mfa_exempt_users = ["admin@crm.com", "agent1@crm.com"]' >> env/prod.tfvars
+cd -
+```
+
+The passwords are never written here: step 6.2 asks for them.
 
 **For a load or security test only**, also add `enable_test_tooling = true` to `env/prod.tfvars`. It creates the in-VPC ZAP scanner task and the test bucket ([ADR-0071](../adr/ADR-0071-test-only-in-vpc-zap-scanner.md); `tests/security/zap/README.md`, `tests/load/README.md`). Remove the line after the test; the teardown destroys both either way. API Gateway's throttle is `api_throttle_rate_limit` and `api_throttle_burst_limit` (200 and 400, [ADR-0070](../adr/ADR-0070-api-throttle-sized-for-100-concurrent-agents.md)); a stress test may raise them with `-var` for one apply. dashboard-service's image tag is set in the business-dashboard stack, so an `image_tags` entry for it here does nothing.
 
@@ -371,9 +401,40 @@ over HTTP.
 
 **No service needs a restart afterwards.** Each apply redeploys every service in its stack before starting its tasks, so they can call each other through Service Connect. This works only because step 3 created the stack stopped. Each plan shows every `aws_ecs_service` updating in place, which is expected.
 
-### 6.1 The alert worker (optional)
+### 6.1 The alert worker
 
-The event-alert worker has its own stack, `stacks/alert-worker` ([ADR-0048](../adr/ADR-0048-alert-worker-terraform-stack.md)). It needs the CRM stack running and the images pushed, and it does nothing until ingestion is switched on. The steps are in the [event-alert operations runbook](event-driven-alerts-operations.md#deploy-the-worker).
+The event-alert worker has its own stack, `stacks/alert-worker` ([ADR-0048](../adr/ADR-0048-alert-worker-terraform-stack.md)). It uses event-alert-service's image and tag, which step 5 pushed, and reads the CRM stack's state, so it comes after step 6's CRM apply.
+
+**In parallel:** step 6's business-dashboard and agent-engagement applies, and step 7.
+
+```sh
+cd infrastructure/terraform/stacks/alert-worker
+STATE_BUCKET=$(terraform -chdir=../../bootstrap output -raw state_bucket); echo "$STATE_BUCKET"
+sed "s/^bucket *=.*/bucket       = \"${STATE_BUCKET:?no state_bucket output: finish step 1}\"/" env/prod.s3.tfbackend.example > env/prod.s3.tfbackend
+[ -f env/prod.tfvars ] || cp env/prod.tfvars.example env/prod.tfvars   # keeps an existing file
+sed -i "s/^state_bucket *=.*/state_bucket = \"$STATE_BUCKET\"/" env/prod.tfvars
+terraform init -backend-config=env/prod.s3.tfbackend
+terraform apply -var-file=env/prod.tfvars
+cd -
+```
+
+With `ingestion_enabled` and `ai_enabled` at their default `false`, this creates the task definition, a `DISABLED` schedule, the failed-run rule, two IAM roles and an empty Tavily secret, and nothing runs. To run the worker, put the Tavily key in that secret and turn ingestion on as the [event-alert operations runbook](event-driven-alerts-operations.md#deploy-the-worker) says: both need its benchmark gates first. The schedule follows the CRM stack's `running`, so apply this stack again after every CRM apply that changes it ([Pausing a deployment](#pausing-a-deployment)).
+
+### 6.2 The evaluation accounts
+
+Only with step 3's `mfa_exempt_users` lines. The crm apply created `admin@crm.com` and `agent1@crm.com` in Cognito, with no password, and put them in `MFA_EXEMPT`. Set their permanent passwords, the ones written in the report (Table 2), so neither is asked to change it at the first sign-in:
+
+```sh
+scripts/evaluation-accounts.sh   # asks for each password; nothing is stored
+```
+
+It prints each account's groups: `MFA_EXEMPT`, and for `admin@crm.com` also `ADMIN` once user-service has started and adopted it as the root admin. Then:
+
+1. Sign in to the app as `admin@crm.com`. No code is asked for.
+2. In **Manage Agents**, create `agent1@crm.com` as an agent (first name `Agent`, last name `One`). user-service adopts the Cognito user Terraform created, so no e-mail is sent, and adds it to `AGENT`.
+3. Sign out, and sign in as `agent1@crm.com`. No code is asked for.
+
+Every other user, the ones admins create, gets a mailed temporary password, sets a new one, and is sent to **Set up your authenticator** before any page loads; the API refuses their token until they have (ADR-0076). From then on, each of their sign-ins asks for a code.
 
 ## 7. Upload the frontend
 
@@ -400,7 +461,9 @@ cd -
    ```
 
    A service stuck restarting shows why in its log group (`/ecs/$STACK-<service>`): a `tls-init` failure usually means no NAT gateway (the stack is stopped); for a `db-migrate` failure, its `db-migrate/…` log stream gives Flyway's reason ([Troubleshooting](#troubleshooting)).
-2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. user-service creates the root admin from `root_admin_email` on its first start, and Cognito e-mails a temporary password. Sign in, set a new password, and enrol an authenticator app (MFA is required).
+   Each service runs 2 tasks (ADR-0075), or more while auto scaling has added some.
+2. **Sign in:** open the URL that `terraform -chdir=infrastructure/terraform/stacks/crm output -raw app_url` prints: `https://sg.<domain>` with a domain, or the `*.cloudfront.net` address without one. With the evaluation accounts, sign in as in step 6.2. Without them, user-service creates the root admin from `root_admin_email` on its first start and Cognito e-mails a temporary password: sign in, set a new password, and enrol an authenticator.
+   - **MFA enforcement:** create a test user as an admin and sign in as them. The app shows **Set up your authenticator**, and `curl -H "Authorization: Bearer <their access token>" <app_url>/api/users/me` gives 403 until they enrol. The token-scope trigger's log, `/aws/lambda/$STACK-token-scope`, has one `TOKEN_SCOPE` line per sign-in or refresh, with `api_access`; `MFA_LOOKUP_FAILED` means a sign-in failed because Cognito could not be read.
 3. **Audit:** create a client, then open the activity feed. The change appears within seconds. A message in the audit dead-letter queue, or the `audit-oldest-message` alarm, means the auditor is not consuming.
 4. **Sign-in audit (Cognito triggers):** the sign-in in item 2 ran the trigger. Read its log:
 
@@ -596,17 +659,19 @@ To pause a deployment that runs over several sessions, such as overnight, stop i
 terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tfvars -var running=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/alert-worker apply -var-file=env/prod.tfvars
 scripts/aws-session.sh stop
 # start
 scripts/aws-session.sh start
 terraform -chdir=infrastructure/terraform/stacks/crm apply -var-file=env/prod.tfvars -var running=true
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/alert-worker apply -var-file=env/prod.tfvars
 ```
 
 - Stopping scales every service to 0, pauses the schedules, removes the NAT gateway (its Elastic IP stays) and stops the databases and the SFTP server.
-- The business-dashboard and agent-engagement stacks read `running` from the CRM stack's state, so apply them after the CRM stack every time. **In parallel:** those two applies can run at the same time, in two terminals. Keep `scripts/aws-session.sh` where it is: `stop` after the applies, `start` before them. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
-- Starting and stopping each redeploy every service, for Service Connect (step 3), so each plan shows every `aws_ecs_service` updating in place. A stop briefly starts one new task per service, which the scale to 0 stops within seconds.
+- The business-dashboard, agent-engagement and alert-worker stacks read `running` from the CRM stack's state, so apply them after the CRM stack every time. **In parallel:** those three applies can run at the same time, in separate terminals. Keep `scripts/aws-session.sh` where it is: `stop` after the applies, `start` before them. Skipped after a stop, dashboard-service keeps one task running, at about USD 1.50 a day. Skipped after a start, it stays at 0 tasks.
+- Starting and stopping each redeploy every service, for Service Connect (step 3), so each plan shows every `aws_ecs_service` updating in place. A stop briefly starts new tasks for each service, which the scale to 0 stops within seconds.
 - The script also stops and starts engagement-db when the agent-engagement stack exists. While stopped, no invite or reminder is sent; a reminder whose meeting starts in the meantime is recorded as missed (ADR-0051 decision 6).
 - Starting takes several minutes, mostly the databases.
 - RDS starts a stopped instance again after 7 days. A deployment paused that long should be torn down instead.
@@ -629,18 +694,14 @@ terraform -chdir=infrastructure/terraform/stacks/sftp-server destroy -var-file=e
 terraform -chdir=infrastructure/terraform/stacks/crm apply   -var-file=env/prod.tfvars -var deletion_protection=false
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard apply   -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/business-dashboard destroy -var-file=env/prod.tfvars
-# only if you created the alert worker (6.1); it owns no data, so no extra apply is needed first
-terraform -chdir=infrastructure/terraform/stacks/alert-worker destroy -var-file=env/prod.tfvars
-terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
-```
-
-- **Destroy alert-worker and business-dashboard before crm.** The alert worker's task runs in the CRM's cluster and uses its security group and database secret.
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement apply   -var-file=env/prod.tfvars
 terraform -chdir=infrastructure/terraform/stacks/agent-engagement destroy -var-file=env/prod.tfvars
+terraform -chdir=infrastructure/terraform/stacks/alert-worker destroy -var-file=env/prod.tfvars   # it owns no data, so no apply first
 terraform -chdir=infrastructure/terraform/stacks/crm destroy -var-file=env/prod.tfvars -var deletion_protection=false
 ```
 
-- **In parallel:** the sftp-server destroy can run beside the first crm apply. After that apply, the business-dashboard pair (apply, destroy) and the agent-engagement pair can run at the same time, in two terminals. The crm destroy waits for both.
+- **In parallel:** the sftp-server destroy can run beside the first crm apply. After that apply, the business-dashboard pair (apply, destroy), the agent-engagement pair and the alert-worker destroy can run at the same time, in separate terminals. The crm destroy waits for all three.
+- **Destroy alert-worker before crm.** Its task runs in the CRM's cluster and uses its security group and database secret.
 - **Destroy business-dashboard before crm.** Its rules sit on the CRM stack's security groups and its service runs in the CRM's cluster, so the CRM stack cannot be destroyed while it exists. Its apply after the CRM's `deletion_protection=false` apply lets its destroy empty dashboard-service's image repository.
 - **Destroy agent-engagement before crm too,** for the same reasons: its rule sits on client-service's group, it runs in the CRM's cluster, and engagement-db uses the CRM's subnet group, parameter group and KMS key. Its apply after the CRM's `deletion_protection=false` apply turns off engagement-db's deletion protection and final snapshot.
 - **Prod first needs its protections lifted:** the first crm apply above, with `-var deletion_protection=false`, turns off deletion protection on the databases, the client-keys table, the ALB and the user pool, and lets destroy empty the buckets. It also makes destroy delete the secrets at once and skip the databases' final snapshots. Staging has none to lift.
@@ -677,7 +738,7 @@ cd -
 
 **4. Check the account is empty:** run the commands in [Check the account is empty](#check-the-account-is-empty). Each must print nothing. Anything left is the next person's problem, so remove it now: a listed stack resource means a destroy above stopped part way; run it again and fix the error it reports.
 
-The next deployment starts with a new user pool and empty databases, so `root_admin_email` can change then.
+The next deployment starts with a new user pool and empty databases, so `root_admin_email` can change then. Step 3 creates the evaluation accounts again, and they need step 6.2 again.
 
 ## Troubleshooting
 

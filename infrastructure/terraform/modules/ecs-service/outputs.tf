@@ -8,6 +8,16 @@ output "task_definition_family" {
   value       = aws_ecs_task_definition.this.family
 }
 
+output "task_cpu" {
+  description = "Task CPU units (256 = 0.25 vCPU)."
+  value       = var.cpu
+}
+
+output "task_memory" {
+  description = "Task memory in MiB."
+  value       = var.memory
+}
+
 output "container_names" {
   description = "The task's containers, in the order they start."
   value       = [for c in concat(local.init_container, local.migrate_container, [local.app_container]) : c.name]

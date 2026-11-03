@@ -77,6 +77,76 @@ resource "aws_lambda_permission" "cognito_triggers" {
   source_arn    = aws_cognito_user_pool.this.arn
 }
 
+# The token-scope trigger (ADR-0076): Cognito's pre token generation trigger,
+# from the same zip. It adds the crm/api scope that API Gateway requires only
+# for a user with TOTP enrolled or in MFA_EXEMPT. It fails closed: if it cannot
+# tell, the sign-in fails and the user tries again.
+locals {
+  token_scope_name = "${local.name}-token-scope"
+}
+
+resource "aws_cloudwatch_log_group" "token_scope" {
+  count             = var.enable_cognito_triggers ? 1 : 0
+  name              = "/aws/lambda/${local.token_scope_name}"
+  retention_in_days = local.log_retention_days
+}
+
+resource "aws_iam_role" "token_scope" {
+  count              = var.enable_cognito_triggers ? 1 : 0
+  name               = local.token_scope_name
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+data "aws_iam_policy_document" "token_scope" {
+  count = var.enable_cognito_triggers ? 1 : 0
+
+  statement {
+    sid       = "OwnLogGroup"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.token_scope[0].arn}:*"]
+  }
+
+  # Any pool in this account and region: the pool's own ARN would make a
+  # cycle, since the pool names this function as its trigger.
+  statement {
+    sid       = "ReadMfaSettings"
+    actions   = ["cognito-idp:AdminGetUser"]
+    resources = ["arn:${data.aws_partition.current.partition}:cognito-idp:${local.region}:${local.account_id}:userpool/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "token_scope" {
+  count  = var.enable_cognito_triggers ? 1 : 0
+  name   = "token-scope"
+  role   = aws_iam_role.token_scope[0].id
+  policy = data.aws_iam_policy_document.token_scope[0].json
+}
+
+resource "aws_lambda_function" "token_scope" {
+  count            = var.enable_cognito_triggers ? 1 : 0
+  function_name    = local.token_scope_name
+  description      = "Adds the crm/api scope for users with MFA enrolled or exempt"
+  role             = aws_iam_role.token_scope[0].arn
+  runtime          = "java25"
+  architectures    = ["arm64"]
+  handler          = "bank.cognito.TokenScopeHandler::handleRequest"
+  filename         = var.cognito_triggers_zip
+  source_code_hash = filebase64sha256(var.cognito_triggers_zip)
+  memory_size      = 1769
+  timeout          = 5
+
+  depends_on = [aws_cloudwatch_log_group.token_scope, aws_iam_role_policy.token_scope]
+}
+
+resource "aws_lambda_permission" "token_scope" {
+  count         = var.enable_cognito_triggers ? 1 : 0
+  statement_id  = "AllowThisUserPool"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.token_scope[0].function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.this.arn
+}
+
 # The replay role: an operator assumes it to send AUDIT_SEND_FAILED events
 # back to the queue (services/cognito-triggers Replay). It is also the role to
 # redrive the dead-letter queue with, since the queue policy admits producers

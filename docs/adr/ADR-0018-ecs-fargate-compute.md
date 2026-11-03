@@ -7,7 +7,7 @@
 - Feature/branch: `feat/target-architecture`
 - Related issue/PR: TBD (pull request from `feat/target-architecture` to `dev`)
 - Supersedes: N/A
-- Superseded by: N/A
+- Superseded by: in part, ADR-0075 (at least 2 tasks per service)
 
 ## Context
 

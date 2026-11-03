@@ -21,6 +21,13 @@ image_tag = "replace-with-the-pushed-tag"
 root_admin_email = "you+crm-root@example.edu"
 alarm_email      = "you@example.edu"
 
+# The brief's evaluation accounts sign in without MFA (ADR-0076). With these,
+# root_admin_email is "admin@crm.com" too: Terraform creates both with no
+# password and no e-mail, and scripts/evaluation-accounts.sh sets the
+# passwords, which stay out of this file.
+# root_admin_email = "admin@crm.com"
+# mfa_exempt_users = ["admin@crm.com", "agent1@crm.com"]
+
 # The project account's domain (runbook "Register a domain"): the app is at
 # https://sg.itsag3t6.com and the internal ALB listens on HTTPS. Runbook
 # step 3 rewrites this line, and removes it in an account without this

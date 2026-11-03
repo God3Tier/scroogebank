@@ -6,6 +6,8 @@ package audit
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"regexp"
 	"time"
@@ -17,8 +19,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// saveTimeout bounds the outbox write that follows each request.
-const saveTimeout = 2 * time.Second
+// saveTimeout bounds the outbox write that follows each request. The
+// response has already been sent, so it can wait out a burst (ADR-0078).
+const saveTimeout = 5 * time.Second
+
+// fallbackTimeout bounds the direct send to the queue after a failed save.
+const fallbackTimeout = 3 * time.Second
 
 const (
 	eventType     = "CRUD"
@@ -85,6 +91,31 @@ func Read(save Save, resourceType, idParam string) gin.HandlerFunc {
 		if err := save(ctx, auditEvent); err != nil {
 			log.Printf("could not save transaction read audit event_id=%s: %v", auditEvent.ID, err)
 		}
+	}
+}
+
+// WithFallback saves each event with save and, if that fails, sends it
+// straight to the Auditor's queue with send, so a burst that holds every
+// database connection loses no read events (ADR-0078). The event keeps its
+// ID, and the Auditor drops a repeat by event_id. If both fail, the event is
+// logged whole as AUDIT_SEND_FAILED, which is alarmed, for an operator to
+// send again.
+func WithFallback(save, send Save) Save {
+	return func(ctx context.Context, event models.AuditEvent) error {
+		saveErr := save(ctx, event)
+		if saveErr == nil {
+			return nil
+		}
+		// ctx may have expired with the failed save; the send gets its own time.
+		sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fallbackTimeout)
+		defer cancel()
+		sendErr := send(sendCtx, event)
+		if sendErr == nil {
+			log.Printf("audit event %s sent straight to the queue; the outbox save failed: %v", event.ID, saveErr)
+			return nil
+		}
+		log.Printf("AUDIT_SEND_FAILED event_id=%s outbox_error=%q queue_error=%q audit_event=%s", event.ID, saveErr, sendErr, event.Body)
+		return fmt.Errorf("audit event %s neither saved nor sent: %w", event.ID, errors.Join(saveErr, sendErr))
 	}
 }
 

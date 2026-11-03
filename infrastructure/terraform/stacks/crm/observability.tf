@@ -146,6 +146,43 @@ resource "aws_cloudwatch_metric_alarm" "audit_send_failed" {
   alarm_actions       = local.alarm_actions
 }
 
+# client-, account- and transaction-service log an audit event they could neither
+# save to the outbox nor send to the queue (ADR-0078). The line holds the whole
+# event, to send again by hand.
+resource "aws_cloudwatch_log_metric_filter" "service_audit_send_failed" {
+  for_each = {
+    client      = module.client_service.log_group_name
+    account     = module.account_service.log_group_name
+    transaction = module.transaction_service.log_group_name
+  }
+  name           = "${local.name}-${each.key}-audit-send-failed"
+  log_group_name = each.value
+  pattern        = "\"AUDIT_SEND_FAILED\""
+
+  metric_transformation {
+    name          = "ServiceAuditSendFailed"
+    namespace     = local.metric_namespace
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "service_audit_send_failed" {
+  alarm_name          = "${local.name}-service-audit-send-failed"
+  alarm_description   = "client-, account- or transaction-service lost an audit event: neither the outbox nor the queue took it. Its AUDIT_SEND_FAILED log line holds the event; send it to the audit queue. Owner: Feature 2."
+  namespace           = local.metric_namespace
+  metric_name         = "ServiceAuditSendFailed"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+
+  depends_on = [aws_cloudwatch_log_metric_filter.service_audit_send_failed]
+}
+
 resource "aws_cloudwatch_metric_alarm" "cognito_triggers_errors" {
   count               = var.enable_cognito_triggers ? 1 : 0
   alarm_name          = "${local.name}-cognito-triggers-errors"

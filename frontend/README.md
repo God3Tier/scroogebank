@@ -41,6 +41,7 @@ Set these in `.env`. None of them is a secret:
 | `VITE_COGNITO_AUTHORITY` | The user pool's issuer, `https://cognito-idp.<region>.amazonaws.com/<pool-id>`: the same value as the services' `COGNITO_ISSUER_URI` |
 | `VITE_COGNITO_CLIENT_ID` | The CRM app client, the same one the services check as `COGNITO_APP_CLIENT_ID` |
 | `VITE_COGNITO_DOMAIN` | The user pool domain, `https://<prefix>.auth.<region>.amazoncognito.com` |
+| `VITE_MFA_ENROLMENT` | `true` when the pool's MFA is optional and the token-scope trigger enforces it ([ADR-0076](../docs/adr/ADR-0076-evaluation-accounts-without-mfa.md)), as in the crm stack's `frontend_build_env` output. A signed-in user whose token lacks the `crm/api` scope is then sent to `/mfa-setup` to enrol an authenticator. Leave it empty when the pool requires MFA |
 
 Without them, the Login page says sign-in is not configured.
 

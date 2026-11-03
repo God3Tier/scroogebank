@@ -80,9 +80,26 @@ resource "aws_apigatewayv2_integration" "alb" {
   }
 }
 
+# Every API route needs the crm/api scope, which the token-scope trigger adds
+# only for a user with MFA enrolled or exempt (ADR-0076).
+locals {
+  api_scopes = var.enable_cognito_triggers ? ["crm/api"] : []
+}
+
 resource "aws_apigatewayv2_route" "api" {
+  api_id               = aws_apigatewayv2_api.this.id
+  route_key            = "ANY /api/{proxy+}"
+  target               = "integrations/${aws_apigatewayv2_integration.alb.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.cognito.id
+  authorization_scopes = local.api_scopes
+}
+
+# Except the sign-out report: a user who signs out before enrolling TOTP is
+# still audited (ADR-0025 decision 5).
+resource "aws_apigatewayv2_route" "logout" {
   api_id             = aws_apigatewayv2_api.this.id
-  route_key          = "ANY /api/{proxy+}"
+  route_key          = "POST /api/users/me/logout"
   target             = "integrations/${aws_apigatewayv2_integration.alb.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

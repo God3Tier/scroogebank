@@ -1,11 +1,15 @@
 package audit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,4 +133,46 @@ func TestReadKeepsTheResponseWhenTheSaveFails(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, res.Code)
 	assert.Len(t, saved.events, 1)
+}
+
+func TestWithFallbackSendsWhenTheSaveFails(t *testing.T) {
+	var sent []models.AuditEvent
+	save := WithFallback(
+		func(context.Context, models.AuditEvent) error { return context.DeadlineExceeded },
+		func(_ context.Context, e models.AuditEvent) error { sent = append(sent, e); return nil })
+	event := models.AuditEvent{ID: "event-1", Body: []byte(`{"event_id":"event-1"}`)}
+
+	if err := save(context.Background(), event); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if len(sent) != 1 || string(sent[0].Body) != `{"event_id":"event-1"}` {
+		t.Fatalf("want the same event sent once, got %v", sent)
+	}
+}
+
+func TestWithFallbackDoesNotSendASavedEvent(t *testing.T) {
+	sends := 0
+	save := WithFallback(
+		func(context.Context, models.AuditEvent) error { return nil },
+		func(context.Context, models.AuditEvent) error { sends++; return nil })
+
+	if err := save(context.Background(), models.AuditEvent{ID: "event-1"}); err != nil || sends != 0 {
+		t.Fatalf("want no direct send for a saved event, got err=%v sends=%d", err, sends)
+	}
+}
+
+func TestWithFallbackLogsTheWholeEventWhenBothFail(t *testing.T) {
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	save := WithFallback(
+		func(context.Context, models.AuditEvent) error { return errors.New("pool exhausted") },
+		func(context.Context, models.AuditEvent) error { return errors.New("SQS unavailable") })
+
+	err := save(context.Background(), models.AuditEvent{ID: "event-1", Body: []byte(`{"event_id":"event-1"}`)})
+
+	if err == nil || !strings.Contains(logs.String(), `AUDIT_SEND_FAILED event_id=event-1`) ||
+		!strings.Contains(logs.String(), `audit_event={"event_id":"event-1"}`) {
+		t.Fatalf("want an error and the whole event logged, got err=%v logs=%q", err, logs.String())
+	}
 }
