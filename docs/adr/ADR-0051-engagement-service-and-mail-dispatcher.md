@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/plan`
 - Related issue/PR: TBD
 - Supersedes: N/A. Extends [ADR-0017](ADR-0017-microservices-per-business-area.md) (adds a service) and [ADR-0023](ADR-0023-rds-per-service-backup-no-cache.md) (adds a database)
-- Superseded by: N/A
+- Superseded by: in part, ADR-0075 (at least 2 tasks, so engagement-service runs exactly 2)
 
 ## Context
 

@@ -12,7 +12,7 @@ Testcontainers-backed tests still run on a developer machine (they need Docker, 
 
 ## MFA
 
-Feature 1 requires MFA. Cognito must enforce MFA in the user-pool configuration; the application does not implement MFA itself. The user-service validates access-token type, issuer, app-client ID, signature, and time claims, while MFA enrollment and challenge enforcement remain Cognito responsibilities. The infrastructure directory is absent in this checkout, so the deployed pool's MFA setting cannot be verified here.
+Feature 1 requires MFA. Since [ADR-0076](../adr/ADR-0076-evaluation-accounts-without-mfa.md) the pool's MFA is optional, so that the brief's two evaluation accounts can sign in without it, and a pre token generation trigger enforces it for everyone else: API Gateway requires the `crm/api` scope, which the trigger adds only for a user with TOTP enrolled or in `MFA_EXEMPT`. The app enrols TOTP for a user who has none. Earlier, Cognito enforced MFA in the user-pool configuration alone. The user-service validates access-token type, issuer, app-client ID, signature, and time claims, while MFA enrollment and challenge enforcement remain Cognito responsibilities. The infrastructure directory is absent in this checkout, so the deployed pool's MFA setting cannot be verified here.
 
 ## NFR 12 (Data Segregation): single-tenant assumption, not built
 

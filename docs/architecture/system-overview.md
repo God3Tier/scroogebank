@@ -37,7 +37,7 @@ This page is the entry point to the CRM's target AWS architecture. It replaces t
   - **Reads** use synchronous **gRPC** calls from other services, through **ECS Service Connect**.
   - A daily **chain-verify** task checks the hash chain and anchors its head in an **S3 Object Lock** bucket.
 - **Transaction import:** a scheduled **Lambda function** connects out over SSH/SFTP to the external core banking SFTP server (simulated on an EC2 instance), reads files marked as ready, and imports them.
-- **Identity:** **Amazon Cognito** handles sign-in, with mandatory MFA and Admin/Agent groups.
+- **Identity:** **Amazon Cognito** handles sign-in, with mandatory MFA and Admin/Agent groups. Only the two evaluation accounts the brief requires sign in without MFA; a token trigger enforces it for everyone else ([ADR-0076](../adr/ADR-0076-evaluation-accounts-without-mfa.md)).
 
 ## Architecture diagram
 
@@ -162,7 +162,7 @@ Each service on the diagram is listed with the requirement it serves. "Spec" mea
 
 | Service | Why it is included | Requirement | Optional? |
 |---|---|---|---|
-| **ECS Fargate services** (user, client, account, transaction, event-alert, dashboard, health-monitor, engagement, auditor) | Runs the containerised services with no servers to manage. Target-tracking auto scaling keeps at least one task per service and scales out across two AZs. | NFR 1 (auto-scaling), NFR 2, NFR 11 (cloud native, containers) | No |
+| **ECS Fargate services** (user, client, account, transaction, event-alert, dashboard, health-monitor, engagement, auditor) | Runs the containerised services with no servers to manage. Target-tracking auto scaling keeps at least two tasks per service, spread across the two AZs, and scales out to six ([ADR-0075](../adr/ADR-0075-two-tasks-minimum-per-service.md)). | NFR 1 (auto-scaling), NFR 2, NFR 11 (cloud native, containers) | No |
 | **AWS Lambda: transaction-ingest** (VPC-attached) | The Feature 3 ingestion worker. Invoked on a schedule, it connects to the external SFTP server, imports ready files into transactions-db and audits each file. Costs almost nothing between runs ([Transaction ingestion (Feature 3)](data-flow.md#transaction-ingestion-feature-3)). | Feature 3 | No |
 | **chain-verify** (scheduled ECS task) | Daily hash-chain verification and anchoring. Runs to completion and costs nothing between runs. | Spec: "Audit logs should be tamper-resistant" | No |
 | **db-migrate** (init container in each service's task) | Applies each service's database migrations before its app starts. Only this container gets the database's master credentials; the app connects with its own login, which cannot change the schema. | NFR 3, NFR 10 (automated deployment) | Yes: migrations can run on service startup instead ([Databases](../database/schema.md#databases)) |

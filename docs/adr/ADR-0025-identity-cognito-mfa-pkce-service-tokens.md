@@ -7,7 +7,7 @@
 - Feature/branch: `feat/target-architecture` (proposed); `task/governance/adr-0025-sign-in` (amended, accepted); implementation on `task/base-features/frontend-sign-in`
 - Related issue/PR: TBD
 - Supersedes: N/A (extends [ADR-0005](ADR-0005-cognito-security-across-features-1-and-2.md))
-- Superseded by: N/A
+- Superseded by: in part, ADR-0076 (MFA enforced through a token scope, so two evaluation accounts can be exempt)
 
 ## Context
 
