@@ -1,8 +1,8 @@
 # ADR-0079: Agents add their own search domains per company
 
-- Status: Proposed (2026-11-04; Azeez review pending, to be confirmed by Hayyun when Azeez replies)
+- Status: Accepted (2026-11-04; owner Hayyun; reviewed and approved by Azeez)
 - Decision date/time: 2026-11-04 (Asia/Singapore)
-- Decision owner(s): Hayyun (proposer and owner); reviewer: Azeez
+- Decision owner(s): Hayyun (proposer and owner); reviewer: Azeez (approved)
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
 - Feature/branch: `task/event-driven-alerts/custom-source-domains`
 - Related issue/PR: TBD
@@ -73,7 +73,7 @@ New migration `V11` in event-alert-service. No Terraform change. The worker read
 
 ## Validation
 
-Unit, integration, API and UI tests listed in the feature plan. Not verified: behaviour against real Tavily with a custom domain, and the effect of custom domains on search quality.
+Unit, integration, API and UI tests listed in the feature plan. Checked against real Tavily on 2026-11-04 (about 3 credits): a search limited to one added domain returned results only from that domain, and the worker's built searches carried it and returned only approved domains, with the strict gate still rejecting weak matches. Not verified: the effect of custom domains on search quality over time.
 
 ## References
 

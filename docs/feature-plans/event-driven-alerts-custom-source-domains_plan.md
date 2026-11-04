@@ -1,7 +1,7 @@
 # Agent-added search domains per company
 
-Owner: Hayyun. Reviewer: Azeez (reply pending). Status: Implemented and tested locally (backend 303 tests, frontend 292 tests); not deployed. Last updated: 2026-11-04.
-Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Decision: [ADR-0079](../adr/ADR-0079-agent-added-search-domains-per-company.md) (Proposed).
+Owner: Hayyun. Reviewer: Azeez (approved). Status: Implemented and tested locally (backend 303 tests, frontend 292 tests); not deployed. Last updated: 2026-11-04.
+Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Decision: [ADR-0079](../adr/ADR-0079-agent-added-search-domains-per-company.md) (Accepted).
 Branch: `task/event-driven-alerts/custom-source-domains`, from `dev` at `0c0c7d2`. Merges into `feat/event-driven-alerts` only when Hayyun says so.
 
 ## Goal and scope
@@ -12,7 +12,7 @@ Let agents see, add and deactivate extra search domains for the companies their 
 
 | Decision | ADR | Status |
 |---|---|---|
-| Per-company, agent-added, live at once, guardrails | ADR-0079 | Proposed |
+| Per-company, agent-added, live at once, guardrails | ADR-0079 | Accepted |
 
 ## Design
 
@@ -58,4 +58,4 @@ None new. Ingestion and AI stay controlled by `ingestion_enabled` and `ai_enable
 
 - Agents' identities are not shown on shared entries (only "you" or "another agent").
 - Custom-domain search quality is unmeasured; terms of use are the agent's responsibility.
-- Azeez's review of ADR-0079 is pending.
+- Azeez approved ADR-0079 on 2026-11-04.
