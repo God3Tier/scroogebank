@@ -7,7 +7,7 @@ import { signOut } from '../auth/signOut.js'
 
 // import logo
 import logo from '/scrooge-global-bank-logo.svg'
-import logotrans from '/scrooge-global-bank-transparent.svg'
+// import logotrans from '/scrooge-global-bank-transparent.svg'
 
 
 // The agent pages under /agent with a link of their own.
