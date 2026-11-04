@@ -9,12 +9,20 @@
 # must be running, then rewrites the producer's account file on the instance
 # with SSM Run Command. The producer reads the file at its next run.
 #
+# Accounts listed in the exclude file are left out, so seeded demo accounts
+# keep only their deterministic history and get no random transactions. The
+# file is scripts/sync-producer-accounts.exclude, or PRODUCER_ACCOUNTS_EXCLUDE,
+# one account ID per line; it is gitignored, so the IDs stay out of the
+# repository. A missing file excludes nothing.
+#
 # usage: scripts/sync-producer-accounts.sh [crm-stack-dir] [sftp-stack-dir]
 # Needs terraform, the AWS CLI and Python, as scripts/db-run-sql.sh does.
 set -euo pipefail
 
 crm_dir=${1:-infrastructure/terraform/stacks/crm}
 sftp_dir=${2:-infrastructure/terraform/stacks/sftp-server}
+exclude=${PRODUCER_ACCOUNTS_EXCLUDE:-$(dirname "$0")/sync-producer-accounts.exclude}
+[[ -f "$exclude" ]] || exclude=/dev/null
 limit=100 # keeps the Run Command request small
 
 instance=$(terraform -chdir="$sftp_dir" output -raw instance_id)
@@ -37,9 +45,13 @@ fi
 # Only entries that match a UUID and a three-letter currency code reach the
 # instance's command line.
 entry='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Z]{3}'
-ids=$(grep -oE "sync-account $entry" <<<"$output" | cut -d' ' -f2 | tr '\n' ' ' || true)
+all=$(grep -oE "sync-account $entry" <<<"$output" | cut -d' ' -f2 || true)
+excluded_ids=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$exclude" | sed 's/$/:/' || true)
+ids=$(grep -vF -f <(printf '%s\n' "$excluded_ids" | sed '/^$/d') <<<"$all" | tr '\n' ' ' || true)
 ids=${ids% }
 count=$(wc -w <<<"$ids" | tr -d ' ')
+skipped=$(( $(wc -w <<<"$all") - count ))
+(( skipped == 0 )) || echo "Left out $skipped account(s) listed in $exclude."
 
 # Written beside the file and renamed, so the producer never reads half a
 # list. With no IDs, xargs -r writes an empty file.
