@@ -1,6 +1,6 @@
 # Agent-added search domains per company
 
-Owner: Hayyun. Reviewer: Azeez (reply pending). Status: Planned. Last updated: 2026-11-04.
+Owner: Hayyun. Reviewer: Azeez (reply pending). Status: Implemented and tested locally (backend 303 tests, frontend 292 tests); not deployed. Last updated: 2026-11-04.
 Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Decision: [ADR-0079](../adr/ADR-0079-agent-added-search-domains-per-company.md) (Proposed).
 Branch: `task/event-driven-alerts/custom-source-domains`, from `dev` at `0c0c7d2`. Merges into `feat/event-driven-alerts` only when Hayyun says so.
 
@@ -22,7 +22,7 @@ Let agents see, add and deactivate extra search domains for the companies their 
 | Method and path | Who | Result |
 |---|---|---|
 | `GET /api/alerts/search-sources` | agent: companies they hold; admin: all active companies | companies with `official`, `shared`, `custom` lists and `canAdd` |
-| `POST /api/alerts/search-sources/{instrumentId}/domains` body `{domain}` + `Idempotency-Key` | agent who holds the company | 201 with the entry; 400 bad format or blocked; 403 not held; 409 duplicate or cap |
+| `POST /api/alerts/search-sources/{instrumentId}/domains` body `{domain}` | agent who holds the company | 201 with the entry; 400 bad format or blocked; 403 not held; 409 duplicate or cap. There is no idempotency key: the unique index makes a retry a harmless 409. |
 | `DELETE /api/alerts/search-sources/{instrumentId}/domains/{id}` | agent who holds it, or admin | 204; 404 if not found or not allowed |
 
 **Validation** in one `SourceDomainPolicy` class: normalise, hostname rules, blocklist, cap of 10, duplicate check against official, shared and custom (including subdomains).
@@ -37,12 +37,12 @@ Let agents see, add and deactivate extra search domains for the companies their 
 
 | ID | Task | Owner | Files | Depends on | Status |
 |---|---|---|---|---|---|
-| SD-01 | Migration, entity, repository | Hayyun | `db/migration/V11`, `domain/`, `repository/` | none | Planned |
-| SD-02 | `SourceDomainPolicy` and service with audit | Hayyun | `service/`, `config/` | SD-01 | Planned |
-| SD-03 | Controller, DTOs, OpenAPI | Hayyun | `api/`, `docs/api/openapi.yaml`, `docs/api/event-driven-alerts-contracts.md` | SD-02 | Planned |
-| SD-04 | Worker uses custom domains | Hayyun | `ingestion/` | SD-01 | Planned |
-| SD-05 | Frontend API client and Search sources section | Hayyun | `frontend/src/api`, `components`, `pages/EventAlerts.jsx` | SD-03 | Planned |
-| SD-06 | Docs: source register, ADR index, AI usage log | Hayyun | `docs/` | all | Planned |
+| SD-01 | Migration, entity, repository | Hayyun | `db/migration/V11`, `domain/`, `repository/` | none | Done |
+| SD-02 | `SourceDomainPolicy` and service with audit | Hayyun | `service/` | SD-01 | Done |
+| SD-03 | Controller, DTOs, OpenAPI | Hayyun | `api/`, `docs/api/openapi.yaml`, `docs/api/event-driven-alerts-contracts.md` | SD-02 | Done |
+| SD-04 | Worker uses custom domains | Hayyun | `ingestion/` | SD-01 | Done |
+| SD-05 | Frontend API client and Search sources section | Hayyun | `frontend/src/api`, `components`, `pages/EventAlerts.jsx` | SD-03 | Done |
+| SD-06 | Docs: source register, ADR index, AI usage log | Hayyun | `docs/` | all | Done |
 
 No other team's files are expected to change. Shared contract touched: the alerts section of `docs/api/openapi.yaml`.
 

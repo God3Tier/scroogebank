@@ -39,7 +39,7 @@ Agents are the people who know which sources matter for the companies their clie
 3. **Live at once.** There is no approval step. Safety comes from the guardrails in decision 4 and from the audit trail.
 4. **Guardrails.**
    - Format: a plain host name such as `example.com`. A scheme, path, port, query, wildcard, spaces or an IP address is rejected. Input is lower-cased and a leading `www.` is removed.
-   - A short blocklist of social, forum and blog platforms is rejected (for example reddit.com, x.com, facebook.com, youtube.com, medium.com). It is configuration and can be changed by a later ADR amendment.
+   - A short blocklist of social, forum and blog platforms is rejected (for example reddit.com, x.com, facebook.com, youtube.com, medium.com). It is a list in `SourceDomainPolicy`, so changing it is a reviewed code change.
    - At most 10 active custom domains per company.
    - A domain already covered by the company's official domains, the shared news list, or an active custom entry (including a subdomain of one) is rejected as a duplicate.
    - Adding a domain that was earlier deactivated creates a new entry.
