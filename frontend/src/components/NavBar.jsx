@@ -5,6 +5,11 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ADMIN, AGENT, inAnyGroup } from '../auth/roles.js'
 import { signOut } from '../auth/signOut.js'
 
+// import logo
+import logo from '/scrooge-global-bank-logo.svg'
+// import logotrans from '/scrooge-global-bank-transparent.svg'
+
+
 // The agent pages under /agent with a link of their own.
 const AGENT_PAGES = [
   { to: '/agent/client-health', icon: 'monitor_heart', label: 'Client Health' },
@@ -42,7 +47,7 @@ function NavBar() {
     <aside className="sidebar">
       <div className="sidebar-brand">
         <div className="sidebar-brand-row">
-          <div className="sidebar-logo">S</div>
+          <img src={logo} alt="Scrooge Global Bank Logo" className="sidebar-logo" />
           <span className="sidebar-title">Scrooge Global</span>
         </div>
         <p className="sidebar-subtitle">Staff Portal</p>
