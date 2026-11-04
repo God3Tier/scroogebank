@@ -3,13 +3,17 @@ package bank.alert.ingestion;
 import bank.alert.config.AlertMode;
 import bank.alert.config.AlertModeProperties;
 import bank.alert.config.IngestionProperties;
+import bank.alert.domain.InstrumentSourceDomain;
 import bank.alert.repository.InstrumentRepository;
+import bank.alert.repository.InstrumentSourceDomainRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class IngestionJob {
@@ -18,16 +22,18 @@ public class IngestionJob {
     private final IngestionProperties properties;
     private final SearchUniverseProvider searchUniverse;
     private final InstrumentRepository instruments;
+    private final InstrumentSourceDomainRepository sourceDomains;
     private final IngestionCoordinator coordinator;
     private final InstrumentCoverageService coverage;
 
     public IngestionJob(AlertModeProperties mode, IngestionProperties properties,
             SearchUniverseProvider searchUniverse, InstrumentRepository instruments,
-            IngestionCoordinator coordinator, InstrumentCoverageService coverage) {
+            InstrumentSourceDomainRepository sourceDomains, IngestionCoordinator coordinator, InstrumentCoverageService coverage) {
         this.mode = mode;
         this.properties = properties;
         this.searchUniverse = searchUniverse;
         this.instruments = instruments;
+        this.sourceDomains = sourceDomains;
         this.coordinator = coordinator;
         this.coverage = coverage;
     }
@@ -60,12 +66,17 @@ public class IngestionJob {
     private List<CatalogueEntry> catalogue() {
         Set<String> eligibleIds = Set.copyOf(searchUniverse.eligibleInstrumentIds());
         if (eligibleIds.isEmpty()) return List.of();
+        Map<String, List<String>> custom = sourceDomains
+                .findByInstrumentIdInAndActiveTrueOrderByAddedAtAsc(eligibleIds).stream()
+                .collect(Collectors.groupingBy(InstrumentSourceDomain::getInstrumentId,
+                        Collectors.mapping(InstrumentSourceDomain::getDomain, Collectors.toList())));
         return instruments.findAllById(eligibleIds).stream()
                 .filter(instrument -> instrument.isActive() && eligibleIds.contains(instrument.getId()))
                 .sorted(Comparator.comparing(instrument -> instrument.getId()))
                 .map(instrument -> new CatalogueEntry(instrument.getId(), new InstrumentSearchTerms(
                         instrument.getTicker(), instrument.getIssuerName(), instrument.getSector(),
-                        instrument.getSearchAliases(), properties.eventTerms(), instrument.getOfficialDomains())))
+                        instrument.getSearchAliases(), properties.eventTerms(), instrument.getOfficialDomains(),
+                        custom.getOrDefault(instrument.getId(), List.of()))))
                 .toList();
     }
 

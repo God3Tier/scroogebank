@@ -52,6 +52,27 @@ class IssuerQueryBuilderTest {
     }
 
     @Test
+    void agentAddedDomainsAreSearchedButAreNotTreatedAsOfficial() {
+        List<IssuerSearchQuery> queries = builder.build(List.of(
+                new InstrumentSearchTerms("D05", "DBS Group Holdings Ltd", "Financials", List.of("DBS"),
+                        List.of("earnings"), List.of("sgx.com", "dbs.com"), List.of("businesstimes.com.sg"))),
+                List.of("reuters.com"), 4);
+
+        assertThat(queries).hasSize(2).allSatisfy(query -> {
+            assertThat(query.approvedDomains())
+                    .containsExactly("sgx.com", "dbs.com", "reuters.com", "businesstimes.com.sg");
+            assertThat(query.issuerDomains()).containsExactly("sgx.com", "dbs.com");
+            // The strict gate applies: the company must be named in the title.
+            assertThat(query.accepts(new PublicSearchResult("r1", "https://www.businesstimes.com.sg/a",
+                    "DBS reports record earnings", java.time.Instant.parse("2026-11-04T01:00:00Z"),
+                    java.time.Instant.parse("2026-11-04T02:00:00Z"), null))).isTrue();
+            assertThat(query.accepts(new PublicSearchResult("r2", "https://www.businesstimes.com.sg/b",
+                    "Bank reports record earnings", java.time.Instant.parse("2026-11-04T01:00:00Z"),
+                    java.time.Instant.parse("2026-11-04T02:00:00Z"), "DBS Group said profit rose."))).isFalse();
+        });
+    }
+
+    @Test
     void refusesToSilentlyDropMoreInstrumentsThanQueries() {
         List<InstrumentSearchTerms> catalogue = IntStream.range(0, 3)
                 .mapToObj(index -> new InstrumentSearchTerms("T" + index, "Issuer " + index,

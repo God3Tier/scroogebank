@@ -315,6 +315,77 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/search-sources:
+    get:
+      tags: [Alerts]
+      operationId: listSearchSources
+      summary: Search domains per company (ADR-0079)
+      description: >-
+        An agent sees the companies their clients currently hold; an admin sees every active
+        company. Each company lists its official domains, the shared news domains, and the
+        domains agents added. Other agents' identities are not shown, only whether the caller
+        added a domain.
+      responses:
+        '200':
+          description: Companies with their search domains.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/CompanySources'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/search-sources/{instrumentId}/domains:
+    post:
+      tags: [Alerts]
+      operationId: addSearchDomain
+      summary: Add a search domain to a company held by one of the agent's clients
+      description: >-
+        Agents only; live at once. 400: not a plain domain name (INVALID_FORMAT) or a social,
+        forum or blog platform (BLOCKED_DOMAIN). 403: no client of the caller holds the company
+        (NOT_HELD). 404: unknown company. 409: already searched or covered by an existing domain
+        (ALREADY_COVERED) or the company has 10 added domains (LIMIT_REACHED). The change is
+        audited as alert.search-domain-added.
+      parameters:
+        - $ref: '#/components/parameters/InstrumentId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddSourceDomainRequest'}
+      responses:
+        '201':
+          description: The added domain.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CustomDomain'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/search-sources/{instrumentId}/domains/{domainId}:
+    delete:
+      tags: [Alerts]
+      operationId: deactivateSearchDomain
+      summary: Deactivate an added search domain
+      description: >-
+        An agent whose client holds the company, or an admin. The row is kept as history and the
+        change is audited as alert.search-domain-deactivated. 404 when the domain is absent, already
+        inactive, or the agent does not hold the company.
+      parameters:
+        - $ref: '#/components/parameters/InstrumentId'
+        - $ref: '#/components/parameters/SourceDomainId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '204': {description: Deactivated.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /alert-portfolios/{accountId}:
     get:
       tags: [Alerts]
@@ -376,6 +447,16 @@ components:
   parameters:
     EventId:
       name: eventId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    InstrumentId:
+      name: instrumentId
+      in: path
+      required: true
+      schema: {type: string, maxLength: 32}
+    SourceDomainId:
+      name: domainId
       in: path
       required: true
       schema: {type: string, format: uuid}
@@ -887,6 +968,34 @@ components:
         expectedVersion: {type: integer, minimum: 1}
         reasonCode: {type: string, minLength: 1, maxLength: 128}
         note: {type: string, nullable: true, maxLength: 500}
+    CustomDomain:
+      type: object
+      additionalProperties: false
+      required: [id, domain, addedAt, addedByYou]
+      properties:
+        id: {type: string, format: uuid}
+        domain: {type: string, maxLength: 253}
+        addedAt: {type: string, format: date-time}
+        addedByYou: {type: boolean}
+    CompanySources:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, ticker, issuerName, official, shared, custom, canAdd, maxCustom]
+      properties:
+        instrumentId: {type: string}
+        ticker: {type: string}
+        issuerName: {type: string}
+        official: {type: array, items: {type: string}}
+        shared: {type: array, items: {type: string}}
+        custom: {type: array, items: {$ref: '#/components/schemas/CustomDomain'}}
+        canAdd: {type: boolean, description: "False for admins, who cannot add."}
+        maxCustom: {type: integer, minimum: 1}
+    AddSourceDomainRequest:
+      type: object
+      additionalProperties: false
+      required: [domain]
+      properties:
+        domain: {type: string, minLength: 1, maxLength: 300, example: businesstimes.com.sg}
     Problem:
       type: object
       additionalProperties: false
@@ -898,3 +1007,4 @@ components:
         status: {type: integer, minimum: 400, maximum: 599}
         detail: {type: string, nullable: true, maxLength: 500}
         correlationId: {type: string, format: uuid}
+        code: {type: string, maxLength: 64, description: "Stable reason code such as BLOCKED_DOMAIN."}

@@ -34,6 +34,8 @@ public class IssuerQueryBuilder {
         for (InstrumentSearchTerms instrument : instruments) {
             LinkedHashSet<String> domains = new LinkedHashSet<>(instrument.officialDomains());
             domains.addAll(sharedDomains);
+            // Agent-added domains are searched but are not official, so they get no issuer-domain exception (ADR-0079).
+            domains.addAll(instrument.customDomains());
             List<String> issuerTerms = new ArrayList<>();
             issuerTerms.add(instrument.issuer());
             issuerTerms.addAll(instrument.aliases());
