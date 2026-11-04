@@ -50,6 +50,43 @@ describe('search sources', () => {
     expect(screen.getByLabelText('Add a site for D05')).toHaveValue('')
   })
 
+  it('says a search started when adding a site starts one', async () => {
+    listSearchSources.mockResolvedValueOnce([company()]).mockResolvedValueOnce([company({ custom: [MINE] })])
+    addSearchDomain.mockResolvedValue({ ...MINE, research: 'STARTED', researchLookbackDays: 14 })
+    render(<SearchSources />)
+
+    fireEvent.change(await screen.findByLabelText('Add a site for D05'), { target: { value: 'businesstimes.com.sg' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add site' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Searching the last 14 days')
+  })
+
+  it('says the next scheduled run will pick it up when no instant search started', async () => {
+    for (const research of ['COOLDOWN', 'DAILY_LIMIT', 'FAILED']) {
+      listSearchSources.mockResolvedValueOnce([company()]).mockResolvedValueOnce([company({ custom: [MINE] })])
+      addSearchDomain.mockResolvedValue({ ...MINE, research })
+      const { unmount } = render(<SearchSources />)
+
+      fireEvent.change(await screen.findByLabelText('Add a site for D05'), { target: { value: 'businesstimes.com.sg' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Add site' }))
+
+      expect(await screen.findByRole('status')).toHaveTextContent('next scheduled run')
+      unmount()
+    }
+  })
+
+  it('shows no search message when the feature is off', async () => {
+    listSearchSources.mockResolvedValueOnce([company()]).mockResolvedValueOnce([company({ custom: [MINE] })])
+    addSearchDomain.mockResolvedValue({ ...MINE, research: 'OFF' })
+    render(<SearchSources />)
+
+    fireEvent.change(await screen.findByLabelText('Add a site for D05'), { target: { value: 'businesstimes.com.sg' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add site' }))
+
+    expect(await screen.findByText('businesstimes.com.sg')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('shows the refusal next to the form and keeps what was typed', async () => {
     listSearchSources.mockResolvedValue([company()])
     addSearchDomain.mockRejectedValue(Object.assign(

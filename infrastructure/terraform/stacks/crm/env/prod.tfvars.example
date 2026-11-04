@@ -42,6 +42,10 @@ domain_name = "itsag3t6.com"
 # account ID; keep it on one line, which that step replaces.
 extra_audit_producer_role_arns = ["arn:aws:iam::123456789012:role/crm-sg-prod-dashboard-service-task", "arn:aws:iam::123456789012:role/crm-sg-prod-engagement-service-task"]
 
+# Let the event-alert API start one worker run when an agent adds a search domain (ADR-0080).
+# Needs stacks/alert-worker applied with ingestion_enabled = true; each run spends Tavily credits.
+# alert_search_on_add = true
+
 # Client Health words new explanations with Nova Lite (ADR-0067). This is the
 # kill switch (ADR-0034 decision 5): false makes every explanation a template.
 client_health_ai_enabled = true

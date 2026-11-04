@@ -59,6 +59,12 @@ variable "enable_test_tooling" {
   default     = false
 }
 
+variable "alert_search_on_add" {
+  description = "When an agent adds a search domain, let the event-alert API start one worker task to search that company over the last 14 days using only the new domain (ADR-0080). Needs the alert-worker stack applied with ingestion_enabled = true, and spends Tavily credits. It gives the API's task role ecs:RunTask on the worker's task definition and iam:PassRole on the worker's two roles. Off by default."
+  type        = bool
+  default     = false
+}
+
 variable "alert_holdings_mode" {
   description = "Where the event-alert API and worker read holdings (ADR-0066): fixture (the bundled synthetic JSON) or database (portfolios agents record against CRM accounts). Both read this one value, so they cannot differ. database needs the custom domain: the account directory is reached over HTTPS and never over HTTP. Apply the application's database migrations before switching to database."
   type        = string

@@ -1,5 +1,6 @@
 package bank.alert.api;
 
+import bank.alert.research.SearchOnAddService;
 import bank.alert.security.JwtRoleConverter;
 import bank.alert.security.SecurityConfiguration;
 import bank.alert.service.SearchSourceService;
@@ -42,6 +43,9 @@ class SearchSourceControllerTest {
     private SearchSourceService service;
 
     @MockBean
+    private SearchOnAddService searchOnAdd;
+
+    @MockBean
     private JwtDecoder jwtDecoder;
 
     @Test
@@ -75,6 +79,7 @@ class SearchSourceControllerTest {
 
     @Test
     void anAgentAddsADomainAndGetsCreated() throws Exception {
+        when(searchOnAdd.request(any(), any(), any(), any())).thenReturn(SearchOnAddService.Outcome.OFF);
         when(service.add(eq("SGX-D05"), eq("agent-a"), any(), eq("example.com")))
                 .thenReturn(new SearchSourceService.CustomDomain(DOMAIN_ID, "example.com", Instant.parse("2026-11-04T04:00:00Z"), true));
 
@@ -82,7 +87,34 @@ class SearchSourceControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"domain\":\"example.com\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(DOMAIN_ID.toString()))
-                .andExpect(jsonPath("$.domain").value("example.com"));
+                .andExpect(jsonPath("$.domain").value("example.com"))
+                .andExpect(jsonPath("$.research").value("OFF"))
+                .andExpect(jsonPath("$.researchLookbackDays").doesNotExist());
+    }
+
+    @Test
+    void aStartedSearchIsReportedWithItsLookback() throws Exception {
+        when(service.add(eq("SGX-D05"), eq("agent-a"), any(), eq("example.com")))
+                .thenReturn(new SearchSourceService.CustomDomain(DOMAIN_ID, "example.com", Instant.parse("2026-11-04T04:00:00Z"), true));
+        when(searchOnAdd.request(eq("SGX-D05"), eq("example.com"), eq("agent-a"), any()))
+                .thenReturn(SearchOnAddService.Outcome.STARTED);
+        when(searchOnAdd.lookbackDays()).thenReturn(14L);
+
+        mockMvc.perform(post("/api/alerts/search-sources/SGX-D05/domains").with(user("agent-a").roles("AGENT"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"domain\":\"example.com\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.research").value("STARTED"))
+                .andExpect(jsonPath("$.researchLookbackDays").value(14));
+    }
+
+    @Test
+    void aRefusedAddNeverStartsASearch() throws Exception {
+        when(service.add(any(), any(), any(), any())).thenThrow(SourceDomainException.forbidden());
+
+        mockMvc.perform(post("/api/alerts/search-sources/SGX-D05/domains").with(user("agent-a").roles("AGENT"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"domain\":\"example.com\"}"))
+                .andExpect(status().isForbidden());
+        verify(searchOnAdd, never()).request(any(), any(), any(), any());
     }
 
     @Test

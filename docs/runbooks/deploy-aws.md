@@ -418,7 +418,7 @@ terraform apply -var-file=env/prod.tfvars
 cd -
 ```
 
-With ingestion on and the CRM stack running, the apply also starts one worker run at its end, so alerts do not wait four hours for the schedule's first run ([ADR-0080](../adr/ADR-0080-alert-worker-runs-once-on-every-apply.md)). It needs the AWS CLI and your `crm` session, spends a run's Tavily credits, and `run_on_apply = false` turns it off.
+With `alert_search_on_add = true` in the CRM stack, an agent adding a search domain also starts one worker run for that company ([ADR-0081](../adr/ADR-0081-search-starts-when-an-agent-adds-a-domain.md)); apply the CRM stack after the event-alert-service image is pushed. With ingestion on and the CRM stack running, the apply also starts one worker run at its end, so alerts do not wait four hours for the schedule's first run ([ADR-0080](../adr/ADR-0080-alert-worker-runs-once-on-every-apply.md)). It needs the AWS CLI and your `crm` session, spends a run's Tavily credits, and `run_on_apply = false` turns it off.
 
 With `ingestion_enabled` and `ai_enabled` at their default `false`, this creates the task definition, a `DISABLED` schedule, the failed-run rule, two IAM roles and an empty Tavily secret, and nothing runs. To run the worker, put the Tavily key in that secret and turn ingestion on as the [event-alert operations runbook](event-driven-alerts-operations.md#deploy-the-worker) says: both need its benchmark gates first. The schedule follows the CRM stack's `running`, so apply this stack again after every CRM apply that changes it ([Pausing a deployment](#pausing-a-deployment)).
 

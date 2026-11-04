@@ -1,6 +1,7 @@
 package bank.alert.worker;
 
 import bank.alert.config.ReplayProperties;
+import bank.alert.config.ResearchProperties;
 import bank.alert.ingestion.IngestionJob;
 import bank.alert.ingestion.IngestionOutcome;
 import bank.alert.ingestion.IngestionStatus;
@@ -47,7 +48,8 @@ class WorkerRunnerTest {
     }
 
     private WorkerRunner runner(ReplayProperties replay) {
-        return new WorkerRunner(job, Clock.fixed(NOW, ZoneOffset.UTC), replay, audit, meters, controls, pipeline);
+        return new WorkerRunner(job, Clock.fixed(NOW, ZoneOffset.UTC), replay, audit,
+                new ResearchProperties(null, null, null, null), meters, controls, pipeline);
     }
 
     @ParameterizedTest

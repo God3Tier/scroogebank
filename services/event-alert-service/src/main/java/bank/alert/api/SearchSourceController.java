@@ -1,5 +1,6 @@
 package bank.alert.api;
 
+import bank.alert.research.SearchOnAddService;
 import bank.alert.service.SearchSourceService;
 import bank.alert.service.SearchSourceService.CompanySources;
 import bank.alert.service.SearchSourceService.CustomDomain;
@@ -26,9 +27,11 @@ import java.util.UUID;
 public class SearchSourceController {
 
     private final SearchSourceService service;
+    private final SearchOnAddService searchOnAdd;
 
-    public SearchSourceController(SearchSourceService service) {
+    public SearchSourceController(SearchSourceService service, SearchOnAddService searchOnAdd) {
         this.service = service;
+        this.searchOnAdd = searchOnAdd;
     }
 
     @GetMapping
@@ -40,13 +43,17 @@ public class SearchSourceController {
     @PostMapping("/{instrumentId}/domains")
     @PreAuthorize("hasRole('AGENT')")
     @ResponseStatus(HttpStatus.CREATED)
-    public CustomDomain add(
+    public AddedSourceDomain add(
             @PathVariable String instrumentId,
             @RequestHeader(value = "X-Correlation-Id", required = false) UUID correlationId,
             @Valid @RequestBody AddSourceDomainRequest request,
             Authentication authentication) {
-        return service.add(instrumentId, authentication.getName(),
-                correlationId == null ? UUID.randomUUID() : correlationId, request.domain());
+        UUID correlation = correlationId == null ? UUID.randomUUID() : correlationId;
+        CustomDomain added = service.add(instrumentId, authentication.getName(), correlation, request.domain());
+        // The domain is saved and committed by now; the search is a bonus and never fails the add (ADR-0080).
+        SearchOnAddService.Outcome research = searchOnAdd.request(
+                instrumentId, added.domain(), authentication.getName(), correlation);
+        return AddedSourceDomain.of(added, research, searchOnAdd.lookbackDays());
     }
 
     @DeleteMapping("/{instrumentId}/domains/{domainId}")

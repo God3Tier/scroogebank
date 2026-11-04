@@ -11,6 +11,22 @@ function problemText(error) {
   return error.message || 'Something went wrong. Try again.'
 }
 
+// What happened to the search started when a site was added (ADR-0080).
+function researchText(added) {
+  switch (added?.research) {
+    case 'STARTED':
+      return `Searching the last ${added.researchLookbackDays || 14} days of news on this site now. Results appear on this page in a few minutes.`
+    case 'COOLDOWN':
+      return 'Added. This company was searched a moment ago, so it will be searched again on the next scheduled run.'
+    case 'DAILY_LIMIT':
+      return 'Added. The daily limit for instant searches is reached, so it will be searched on the next scheduled run.'
+    case 'FAILED':
+      return 'Added. The instant search could not start, so it will be searched on the next scheduled run.'
+    default:
+      return ''
+  }
+}
+
 function formatDate(value) {
   return new Intl.DateTimeFormat('en-SG', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Singapore' })
     .format(new Date(value))
@@ -29,6 +45,7 @@ function DomainChips({ label, domains }) {
 function CompanySources({ company, readOnly, onChanged }) {
   const [domain, setDomain] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState(null)
   const full = company.custom.length >= company.maxCustom
@@ -39,9 +56,11 @@ function CompanySources({ company, readOnly, onChanged }) {
     if (busy) return
     setBusy(true)
     setError('')
+    setNotice('')
     try {
-      await addSearchDomain(company.instrumentId, domain)
+      const added = await addSearchDomain(company.instrumentId, domain)
       setDomain('')
+      setNotice(researchText(added))
       await onChanged()
     } catch (e) {
       setError(problemText(e))
@@ -93,6 +112,7 @@ function CompanySources({ company, readOnly, onChanged }) {
         )}
       </div>
       {error && <p className="error-text" role="alert">{error}</p>}
+      {notice && <p className="holdings-note" role="status">{notice}</p>}
       {!readOnly && company.canAdd && (
         full ? (
           <p className="holdings-note">This company has {company.maxCustom} added sites. Remove one to add another.</p>

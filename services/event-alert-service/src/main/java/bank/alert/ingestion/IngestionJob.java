@@ -3,6 +3,7 @@ package bank.alert.ingestion;
 import bank.alert.config.AlertMode;
 import bank.alert.config.AlertModeProperties;
 import bank.alert.config.IngestionProperties;
+import bank.alert.domain.Instrument;
 import bank.alert.domain.InstrumentSourceDomain;
 import bank.alert.repository.InstrumentRepository;
 import bank.alert.repository.InstrumentSourceDomainRepository;
@@ -61,6 +62,23 @@ public class IngestionJob {
         List<CatalogueEntry> catalogue = catalogue();
         List<String> selected = coverage.replay(catalogue.stream().map(CatalogueEntry::id).toList(), windowTo);
         return coordinator.replay(windowFrom, windowTo, terms(catalogue, selected));
+    }
+
+    /**
+     * Searches one company over a recent window using only the agent-added domain (ADR-0080). The
+     * company need not be in the scheduled selection, but the domain must be one of its active
+     * added domains, so nothing else can be searched this way.
+     */
+    public IngestionOutcome researchCompany(String instrumentId, String domain, Instant windowFrom, Instant windowTo) {
+        requireWorkerMode();
+        Instrument instrument = instruments.findById(instrumentId).filter(Instrument::isActive).orElse(null);
+        boolean registered = instrument != null && sourceDomains
+                .findByInstrumentIdAndActiveTrueOrderByAddedAtAsc(instrumentId).stream()
+                .anyMatch(entry -> entry.getDomain().equals(domain));
+        if (!registered) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
+        InstrumentSearchTerms terms = new InstrumentSearchTerms(instrument.getTicker(), instrument.getIssuerName(),
+                instrument.getSector(), instrument.getSearchAliases(), properties.eventTerms(), List.of(), List.of(domain));
+        return coordinator.research(windowFrom, windowTo, List.of(terms));
     }
 
     private List<CatalogueEntry> catalogue() {

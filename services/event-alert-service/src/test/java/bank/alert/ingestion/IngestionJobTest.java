@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -111,6 +112,63 @@ class IngestionJobTest {
                 org.mockito.ArgumentMatchers.argThat(terms -> terms.size() == 1
                         && terms.getFirst().officialDomains().equals(List.of("sgx.com"))
                         && terms.getFirst().customDomains().equals(List.of("businesstimes.com.sg"))));
+    }
+
+    @Test
+    void researchSearchesOneCompanyUsingOnlyItsAddedDomain() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        InstrumentSourceDomainRepository sourceDomains = mock(InstrumentSourceDomainRepository.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
+                mock(SearchUniverseProvider.class), instruments, sourceDomains, coordinator, mock(InstrumentCoverageService.class));
+        Instant from = Instant.parse("2026-10-21T04:00:00Z");
+        Instant to = Instant.parse("2026-11-04T04:00:00Z");
+        Instrument instrument = mock(Instrument.class);
+        when(instrument.getTicker()).thenReturn("D05");
+        when(instrument.getIssuerName()).thenReturn("DBS Group Holdings Ltd");
+        when(instrument.getSector()).thenReturn("Financials");
+        when(instrument.getSearchAliases()).thenReturn(List.of("DBS"));
+        when(instrument.isActive()).thenReturn(true);
+        when(instruments.findById("SGX-D05")).thenReturn(java.util.Optional.of(instrument));
+        when(sourceDomains.findByInstrumentIdAndActiveTrueOrderByAddedAtAsc("SGX-D05")).thenReturn(List.of(
+                new InstrumentSourceDomain(java.util.UUID.randomUUID(), "SGX-D05", "businesstimes.com.sg", "agent-a", from)));
+
+        job.researchCompany("SGX-D05", "businesstimes.com.sg", from, to);
+
+        verify(coordinator).research(org.mockito.ArgumentMatchers.eq(from), org.mockito.ArgumentMatchers.eq(to),
+                org.mockito.ArgumentMatchers.argThat(terms -> terms.size() == 1
+                        && terms.getFirst().officialDomains().isEmpty()
+                        && terms.getFirst().customDomains().equals(List.of("businesstimes.com.sg"))));
+    }
+
+    @Test
+    void researchSearchesNothingForADomainThatIsNotAnActiveAddedDomain() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        InstrumentSourceDomainRepository sourceDomains = mock(InstrumentSourceDomainRepository.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
+                mock(SearchUniverseProvider.class), instruments, sourceDomains, coordinator, mock(InstrumentCoverageService.class));
+        Instrument instrument = mock(Instrument.class);
+        when(instrument.isActive()).thenReturn(true);
+        when(instruments.findById("SGX-D05")).thenReturn(java.util.Optional.of(instrument));
+        when(sourceDomains.findByInstrumentIdAndActiveTrueOrderByAddedAtAsc("SGX-D05")).thenReturn(List.of());
+
+        IngestionOutcome outcome = job.researchCompany("SGX-D05", "random.example.com",
+                Instant.parse("2026-10-21T04:00:00Z"), Instant.parse("2026-11-04T04:00:00Z"));
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.NO_QUERIES);
+        verify(coordinator, never()).research(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void researchRefusesToRunInsideTheApiProcess() {
+        IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.API), properties(),
+                mock(SearchUniverseProvider.class), mock(InstrumentRepository.class),
+                mock(InstrumentSourceDomainRepository.class), mock(IngestionCoordinator.class), mock(InstrumentCoverageService.class));
+
+        assertThatThrownBy(() -> job.researchCompany("SGX-D05", "example.com", Instant.EPOCH, Instant.now()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("WORKER mode");
     }
 
     private static IngestionProperties properties() {

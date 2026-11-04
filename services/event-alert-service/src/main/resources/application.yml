@@ -54,6 +54,18 @@ alert:
     enabled: ${ALERT_RETENTION_ENABLED:true}
     interval: ${ALERT_RETENTION_INTERVAL:1h}
     batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
+  # A search started when an agent adds a domain (ADR-0080). Off unless a mode is set: ecs starts the
+  # worker task in AWS, local-process starts it as a child process on a developer's machine.
+  search-on-add:
+    mode: ${ALERT_SEARCH_ON_ADD_MODE:off}
+    cooldown: ${ALERT_SEARCH_ON_ADD_COOLDOWN:15m}
+    daily-cap: ${ALERT_SEARCH_ON_ADD_DAILY_CAP:20}
+    lookback: ${ALERT_SEARCH_ON_ADD_LOOKBACK:14d}
+    cluster: ${ALERT_SEARCH_ON_ADD_CLUSTER:}
+    task-definition: ${ALERT_SEARCH_ON_ADD_TASK_DEFINITION:}
+    subnets: ${ALERT_SEARCH_ON_ADD_SUBNETS:}
+    security-group: ${ALERT_SEARCH_ON_ADD_SECURITY_GROUP:}
+    command: ${ALERT_SEARCH_ON_ADD_COMMAND:}
   ingestion:
     # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
     enabled: ${ALERT_INGESTION_ENABLED:false}

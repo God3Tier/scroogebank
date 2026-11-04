@@ -64,13 +64,13 @@ public class IngestionCoordinator {
         Instant windowFrom = watermarks.findById(properties.provider())
                 .map(watermark -> watermark.getLastSuccessfulTo().minus(properties.overlap()))
                 .orElseGet(() -> scheduledWindowTo.minus(properties.initialLookback()));
-        return execute(windowFrom, scheduledWindowTo, catalogue, true);
+        return execute(windowFrom, scheduledWindowTo, catalogue, true, properties.approvedDomains());
     }
 
     public IngestionOutcome run(Instant windowFrom, Instant windowTo,
             List<InstrumentSearchTerms> catalogue) {
         if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
-        return execute(windowFrom, windowTo, catalogue, true);
+        return execute(windowFrom, windowTo, catalogue, true, properties.approvedDomains());
     }
 
     /** Reprocesses one historical bounded window without moving the scheduler watermark. */
@@ -78,11 +78,21 @@ public class IngestionCoordinator {
             List<InstrumentSearchTerms> catalogue) {
         if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
         requireReplayWindow(windowFrom, windowTo);
-        return execute(windowFrom, windowTo, catalogue, false);
+        return execute(windowFrom, windowTo, catalogue, false, properties.approvedDomains());
+    }
+
+    /**
+     * One targeted search over a recent window (ADR-0080), started when an agent adds a domain. The
+     * catalogue holds that one company with only the new domain, and no shared news sites are added,
+     * so only that domain is searched. Like a replay it does not move the scheduler watermark.
+     */
+    public IngestionOutcome research(Instant windowFrom, Instant windowTo, List<InstrumentSearchTerms> catalogue) {
+        if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
+        return execute(windowFrom, windowTo, catalogue, false, List.of());
     }
 
     private IngestionOutcome execute(Instant windowFrom, Instant windowTo,
-            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark) {
+            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark, List<String> sharedDomains) {
         if (!windowFrom.isBefore(windowTo)) {
             throw new IllegalArgumentException("ingestion window start must precede its end");
         }
@@ -94,14 +104,14 @@ public class IngestionCoordinator {
                     0, 0, 0, 0, null);
         }
         try (IngestionRunLock.Hold ignored = hold.get()) {
-            return executeLocked(windowFrom, windowTo, catalogue, advanceWatermark);
+            return executeLocked(windowFrom, windowTo, catalogue, advanceWatermark, sharedDomains);
         }
     }
 
     private IngestionOutcome executeLocked(Instant windowFrom, Instant windowTo,
-            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark) {
+            List<InstrumentSearchTerms> catalogue, boolean advanceWatermark, List<String> sharedDomains) {
         List<IssuerSearchQuery> queries = queryBuilder.build(
-                catalogue, properties.approvedDomains(), properties.maxQueriesPerRun());
+                catalogue, sharedDomains, properties.maxQueriesPerRun());
         if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 
         Instant now = clock.instant();

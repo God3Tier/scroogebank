@@ -114,7 +114,7 @@ intent only. Replaying the same key and body returns the stored result.
 | Method | Path | Roles | Contract |
 |---|---|---|---|
 | GET | `/api/alerts/search-sources` | agent, admin | Companies the agent's clients currently hold (admin: all active), each with `official`, `shared`, `custom[{id, domain, addedAt, addedByYou}]`, `canAdd`, `maxCustom`. |
-| POST | `/api/alerts/search-sources/{instrumentId}/domains` | agent | `{domain}`. 201 with the entry. 400 `INVALID_FORMAT` or `BLOCKED_DOMAIN`; 403 `NOT_HELD`; 404 unknown company; 409 `ALREADY_COVERED` or `LIMIT_REACHED`. Audited as `alert.search-domain-added`. |
+| POST | `/api/alerts/search-sources/{instrumentId}/domains` | agent | `{domain}`. 201 with the entry. 400 `INVALID_FORMAT` or `BLOCKED_DOMAIN`; 403 `NOT_HELD`; 404 unknown company; 409 `ALREADY_COVERED` or `LIMIT_REACHED`. The reply also has `research` (`STARTED`, `COOLDOWN`, `DAILY_LIMIT`, `OFF` or `FAILED`) and, when `STARTED`, `researchLookbackDays`: the API starts one worker run for that company using only the new domain (ADR-0081), and a search that did not start never fails the add. Audited as `alert.search-domain-added`. |
 | DELETE | `/api/alerts/search-sources/{instrumentId}/domains/{domainId}` | agent who holds the company, admin | 204. Keeps the row as history. Audited as `alert.search-domain-deactivated`. |
 
 Refusals are RFC 9457 problems with an extra `code`. The worker reads active rows from `instrument_source_domain` on every run and adds them to the company's approved domains; they are not official domains, so the strict relevance gate applies in full.

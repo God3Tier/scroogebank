@@ -19,6 +19,8 @@ import java.time.Clock;
         BedrockAiProperties.class,
         OperationalProperties.class,
         ReplayProperties.class,
+        ResearchProperties.class,
+        SearchOnAddProperties.class,
         TavilyProperties.class,
         PipelineProperties.class,
         CrmDirectoryProperties.class

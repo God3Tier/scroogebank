@@ -346,7 +346,9 @@ paths:
         forum or blog platform (BLOCKED_DOMAIN). 403: no client of the caller holds the company
         (NOT_HELD). 404: unknown company. 409: already searched or covered by an existing domain
         (ALREADY_COVERED) or the company has 10 added domains (LIMIT_REACHED). The change is
-        audited as alert.search-domain-added.
+        audited as alert.search-domain-added. Once the domain is saved, one targeted search of
+        the company may start, using only that domain (ADR-0080); the reply's research field
+        says what happened to it, and a search that did not start never fails the add.
       parameters:
         - $ref: '#/components/parameters/InstrumentId'
         - $ref: '#/components/parameters/CorrelationId'
@@ -357,10 +359,10 @@ paths:
             schema: {$ref: '#/components/schemas/AddSourceDomainRequest'}
       responses:
         '201':
-          description: The added domain.
+          description: The added domain, and what happened to the search started for it.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/CustomDomain'}
+              schema: {$ref: '#/components/schemas/AddedSourceDomain'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -977,6 +979,20 @@ components:
         domain: {type: string, maxLength: 253}
         addedAt: {type: string, format: date-time}
         addedByYou: {type: boolean}
+    AddedSourceDomain:
+      type: object
+      additionalProperties: false
+      required: [id, domain, addedAt, addedByYou, research]
+      properties:
+        id: {type: string, format: uuid}
+        domain: {type: string, maxLength: 253}
+        addedAt: {type: string, format: date-time}
+        addedByYou: {type: boolean}
+        research:
+          type: string
+          enum: [STARTED, COOLDOWN, DAILY_LIMIT, 'OFF', FAILED]
+          description: "STARTED: a search of this company using only this domain was started. COOLDOWN: the company was searched this way recently. DAILY_LIMIT: too many searches started today. OFF: the feature is not switched on. FAILED: it could not be started."
+        researchLookbackDays: {type: integer, minimum: 1, description: "How many days back the started search looks. Present only when research is STARTED."}
     CompanySources:
       type: object
       additionalProperties: false

@@ -121,6 +121,8 @@ ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 an
 
 - [ADR-0080](ADR-0080-alert-worker-runs-once-on-every-apply.md) — Proposed 2026-11-04 (owner Hayyun; review pending): the alert-worker stack starts one worker run at the end of every apply, then the four-hour schedule carries on; switch off with `run_on_apply = false`; each run spends Tavily credits.
 
+- [ADR-0081](ADR-0081-search-starts-when-an-agent-adds-a-domain.md) — Proposed 2026-11-04 (owner Hayyun; review pending): when an agent adds a search domain the API starts one worker run for that company over the last 14 days using only that domain; 15-minute cooldown per company, 20 searches a day, adding never fails because of it; off unless `alert_search_on_add` is set.
+
 ## Maintenance rule
 
 Add or update exactly one concise entry whenever an ADR is added, superseded, or

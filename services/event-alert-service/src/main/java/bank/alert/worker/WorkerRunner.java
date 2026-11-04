@@ -1,6 +1,7 @@
 package bank.alert.worker;
 
 import bank.alert.config.ReplayProperties;
+import bank.alert.config.ResearchProperties;
 import bank.alert.ingestion.IngestionJob;
 import bank.alert.ingestion.IngestionOutcome;
 import bank.alert.ingestion.IngestionStatus;
@@ -18,6 +19,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
+import java.time.Instant;
 
 /**
  * Runs one ingestion window when the service starts in WORKER mode. EventBridge
@@ -40,18 +42,20 @@ public class WorkerRunner implements ApplicationRunner, ExitCodeGenerator {
     private final Clock clock;
     private final ReplayProperties replay;
     private final ReplayRequestAudit replayAudit;
+    private final ResearchProperties research;
     private final MeterRegistry meters;
     private final OutboundControlService controls;
     private final SourcePipeline pipeline;
     private int exitCode;
 
     public WorkerRunner(IngestionJob job, Clock clock, ReplayProperties replay,
-            ReplayRequestAudit replayAudit, MeterRegistry meters, OutboundControlService controls,
-            SourcePipeline pipeline) {
+            ReplayRequestAudit replayAudit, ResearchProperties research, MeterRegistry meters,
+            OutboundControlService controls, SourcePipeline pipeline) {
         this.job = job;
         this.clock = clock;
         this.replay = replay;
         this.replayAudit = replayAudit;
+        this.research = research;
         this.meters = meters;
         this.controls = controls;
         this.pipeline = pipeline;
@@ -60,7 +64,8 @@ public class WorkerRunner implements ApplicationRunner, ExitCodeGenerator {
     @Override
     public void run(ApplicationArguments args) {
         try {
-            IngestionOutcome outcome = replay.requested() ? replayWindow() : scheduledWindow();
+            IngestionOutcome outcome = replay.requested() ? replayWindow()
+                    : research.requested() ? researchWindow() : scheduledWindow();
             if (outcome != null) {
                 report(outcome);
                 runPipeline();
@@ -74,6 +79,21 @@ public class WorkerRunner implements ApplicationRunner, ExitCodeGenerator {
 
     private IngestionOutcome scheduledWindow() {
         return job.runScheduledWindow(clock.instant());
+    }
+
+    /** An agent added a domain (ADR-0080): search that company over its recent past, using only that domain. */
+    private IngestionOutcome researchWindow() {
+        try {
+            research.validate();
+        } catch (IllegalArgumentException refused) {
+            exitCode = 1;
+            meters.counter("alert.worker.runs", "status", "research_refused").increment();
+            log.error("worker research refused error_code=INVALID_RESEARCH_REQUEST");
+            return null;
+        }
+        log.info("worker research requested correlation_id={}", research.correlationId());
+        Instant to = clock.instant();
+        return job.researchCompany(research.instrument(), research.domain(), to.minus(research.lookback()), to);
     }
 
     private IngestionOutcome replayWindow() {
