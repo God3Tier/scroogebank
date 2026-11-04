@@ -48,6 +48,12 @@ variable "schedule" {
   default     = "rate(4 hours)"
 }
 
+variable "run_on_apply" {
+  description = "Start one worker run at the end of every apply, so alerts do not wait for the schedule's first run (ADR-0080). It spends a run's Tavily credits each time and needs the AWS CLI where terraform runs. Only has an effect while ingestion_enabled is true and the CRM stack is running."
+  type        = bool
+  default     = true
+}
+
 variable "minimum_search_client_share" {
   description = "Inclusive distinct-client share required by the common-holding search rule."
   type        = number

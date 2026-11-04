@@ -89,7 +89,7 @@ real key merely to test failure handling. With ingestion on, the run fails
 cleanly with `PROVIDER_ACCESS_DENIED` and exits 1, which should raise the alarm.
 
 1. Set `ingestion_enabled = true` in `env/prod.tfvars` and apply. The schedule becomes `ENABLED` while the stack is running.
-2. Start one run now. The output holds the full command; run it, and note the task ARN it prints:
+2. Start one run now. While `ingestion_enabled` is true, `run_on_apply` (default `true`, ADR-0080) has already started one at the end of the apply; set `run_on_apply = false` to stop that. To start another by hand, the output holds the full command; run it, and note the task ARN it prints:
 
    ```sh
    eval "$(terraform -chdir=infrastructure/terraform/stacks/alert-worker output -raw run_once_command)"

@@ -248,6 +248,30 @@ resource "aws_scheduler_schedule" "alert_worker" {
   }
 }
 
+# ------------------------------------------------------ a run on every apply
+
+# A schedule's first run comes one interval (four hours) after it is created or
+# switched on, so a fresh deployment would otherwise show no alerts for hours.
+# This starts one run at the end of every apply (ADR-0080); the schedule then
+# carries on as before. The worker's run lock stops it overlapping a scheduled
+# run, but a run started here does search, so it spends that run's Tavily
+# credits. It needs the AWS CLI and the applier's credentials; a failed start
+# only warns, because the schedule still runs. Turn it off with
+# run_on_apply = false.
+resource "terraform_data" "run_on_apply" {
+  count = local.schedule_on && var.run_on_apply ? 1 : 0
+
+  # A new value on every apply, so the run starts every time.
+  triggers_replace = timestamp()
+
+  provisioner "local-exec" {
+    command    = "aws ecs run-task --region ${var.aws_region} --cluster ${local.crm.cluster_name} --launch-type FARGATE --task-definition ${module.event_alert_worker.task_definition_arn} --network-configuration \"awsvpcConfiguration={subnets=[${join(",", local.crm.subnet_ids)}],securityGroups=[${local.crm.alerts_service_sg}],assignPublicIp=DISABLED}\" --query tasks[0].taskArn --output text"
+    on_failure = continue
+  }
+
+  depends_on = [aws_scheduler_schedule.alert_worker]
+}
+
 # ---------------------------------------------------------------- the alarm
 
 # The worker exits 1 when its window failed (WorkerRunner), so a non-zero exit

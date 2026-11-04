@@ -103,6 +103,42 @@ run "ingestion_on_while_running" {
 
 }
 
+run "run_on_apply_starts_one_run" {
+  command = plan
+
+  variables {
+    ingestion_enabled = true
+  }
+
+  assert {
+    condition     = length(terraform_data.run_on_apply) == 1
+    error_message = "With ingestion on and the CRM stack running, every apply starts one run."
+  }
+}
+
+run "run_on_apply_can_be_switched_off" {
+  command = plan
+
+  variables {
+    ingestion_enabled = true
+    run_on_apply      = false
+  }
+
+  assert {
+    condition     = length(terraform_data.run_on_apply) == 0
+    error_message = "run_on_apply = false starts nothing."
+  }
+}
+
+run "no_run_on_apply_while_ingestion_is_off" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.run_on_apply) == 0
+    error_message = "With ingestion off there is nothing to run, so apply starts nothing."
+  }
+}
+
 run "rejects_unreviewed_news_domain" {
   command = plan
 
