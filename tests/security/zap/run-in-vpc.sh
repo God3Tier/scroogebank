@@ -40,7 +40,9 @@ print("awsvpcConfiguration={subnets=[%s],securityGroups=[%s],assignPublicIp=DISA
 
 inputs="s3://$bucket/in/$run_id"
 aws s3 cp "$specs" "$inputs/specs/" --recursive --only-show-errors
-aws s3 cp "$here/scan.sh" "$inputs/scan.sh" --only-show-errors
+# The task's sh cannot run a script with Windows line endings, which a
+# checkout with core.autocrlf gives it.
+tr -d '\r' < "$here/scan.sh" | aws s3 cp - "$inputs/scan.sh" --only-show-errors
 [[ -n "$token_file" ]] && aws s3 cp "$token_file" "$inputs/token" --only-show-errors
 trap 'aws s3 rm "$inputs/" --recursive --only-show-errors' EXIT
 

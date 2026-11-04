@@ -5,6 +5,8 @@ The drills the [test strategy](test-strategy.md) sets for NFR 2 (availability) a
 - the Auditor is down while users make changes;
 - a database's primary fails over to its standby in the other zone.
 
+To repeat them, use the scripts in [`tests/drills/`](../../tests/drills/README.md), added on 2026-11-04 from the steps below.
+
 They ran on the same deployment as the [full-scale load test](load-test-full-scale-2026-11-02.md) and the [ZAP scans](zap-active-and-direct-2026-11-02.md), after both. The deployment was then torn down (below).
 
 Run by Neo Jia Wen's session (Claude Code) at `4ddcaad`, account 727816232662, prod configuration, 2026-11-02 11:18–12:32 UTC. `high_availability` was switched on at 10:29 for drill 3, which gives Multi-AZ standbys and a second NAT gateway; the conversion finished at 10:39 with no downtime. The outage in each drill was measured by `poller.js`: one agent request to `GET /api/clients` a second, logged with its status.
