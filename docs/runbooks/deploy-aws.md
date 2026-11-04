@@ -650,7 +650,7 @@ The producer writes transactions only for the accounts in its list, and nothing 
 
    It prints how many accounts it synced: those neither closed nor deleted, at most the 100 most recently opened. Each is copied with its currency, and its transactions are in that currency. The producer uses them from its next file, within `publish_interval_seconds` (5 minutes by default).
 
-To keep seeded demo accounts, such as the Client Health presentation's, to their deterministic history, list their IDs one per line in `scripts/sync-producer-accounts.exclude`. That file is gitignored, so the IDs stay out of the repository. The sync leaves those accounts out and says how many it left out. To use another file, set `PRODUCER_ACCOUNTS_EXCLUDE` ([ADR-0081](../adr/ADR-0081-producer-sync-leaves-out-seeded-demo-accounts.md)).
+The sync leaves out the Client Health demo accounts in the script's `demo_accounts` list and says how many it left out, so those accounts keep only their deterministic history ([ADR-0081](../adr/ADR-0081-producer-sync-leaves-out-seeded-demo-accounts.md)). After reseeding the demo accounts with new IDs, for example after a teardown, update that list.
 
 Run it again after opening, closing or deleting accounts, and after the sftp-server stack replaces the instance, which starts with an empty list. Stopping the instance between sessions keeps the list. To see the list on the server, open a Session Manager shell (9.4) and run `cat /etc/producer/account-ids`, one `<id>:<currency>` per line; `sudo docker logs --tail 5 producer` says when a run published nothing.
 

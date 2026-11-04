@@ -7,7 +7,7 @@
 - Feature/branch: `task/transaction-integration/producer-account-sync`
 - Related issue/PR: TBD
 - Supersedes: N/A (extends [ADR-0024](ADR-0024-transaction-ingestion-sftp-lambda.md) decision 1's file generator)
-- Superseded by: [ADR-0081](ADR-0081-producer-sync-leaves-out-seeded-demo-accounts.md) in part, if accepted (decision 3: the sync leaves out accounts listed in a local exclude file)
+- Superseded by: [ADR-0081](ADR-0081-producer-sync-leaves-out-seeded-demo-accounts.md) in part, if accepted (decision 3: the sync leaves out the Client Health demo accounts)
 
 ## Context
 

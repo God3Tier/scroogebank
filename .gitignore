@@ -68,7 +68,3 @@ crash.*.log
 secrets
 **/bruno/
 **/gen/ 
-
-### Producer sync exclusions ###
-# Demo account IDs scripts/sync-producer-accounts.sh leaves out; kept private.
-/scripts/sync-producer-accounts.exclude
