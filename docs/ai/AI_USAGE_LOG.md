@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-11-04 - The alert worker runs once at the end of every apply
+
+- Human owner: Hayyun; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Start one worker run after every apply of `stacks/alert-worker`, so alerts do not wait four hours for the schedule's first run (ADR-0080, Proposed).
+- Files/components affected: `infrastructure/terraform/stacks/alert-worker/main.tf` (`terraform_data.run_on_apply`), `variables.tf` (`run_on_apply`), `tests/plan.tftest.hcl`; ADR-0080 and its index entry; the deploy and event-alerts operations runbooks.
+- Data/calls: no AWS, Tavily or model calls; mocked-provider tests only.
+- Verification: `terraform fmt -check`, `terraform validate` and `terraform test` (11 runs, three new) pass.
+- Human verification required: review of ADR-0080; one apply against real AWS to confirm the run starts, including from a Windows shell; agreement that every apply spends a run's Tavily credits.
+
 ## 2026-11-04 - Agent-added search domains per company
 
 - Human owner: Hayyun; Azeez review pending.

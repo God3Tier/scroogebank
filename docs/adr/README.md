@@ -119,6 +119,8 @@ Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architectu
 
 ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 and ADR-0076 on 2026-11-03. ADR-0077 and ADR-0078 were accepted by Neo Jia Wen on 2026-11-03, with Feature 2 and transaction-service owners to review the code. None is proposed at present.
 
+- [ADR-0080](ADR-0080-alert-worker-runs-once-on-every-apply.md) — Proposed 2026-11-04 (owner Hayyun; review pending): the alert-worker stack starts one worker run at the end of every apply, then the four-hour schedule carries on; switch off with `run_on_apply = false`; each run spends Tavily credits.
+
 ## Maintenance rule
 
 Add or update exactly one concise entry whenever an ADR is added, superseded, or
