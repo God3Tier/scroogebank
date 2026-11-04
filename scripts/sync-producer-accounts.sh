@@ -9,6 +9,10 @@
 # must be running, then rewrites the producer's account file on the instance
 # with SSM Run Command. The producer reads the file at its next run.
 #
+# The accounts in demo_accounts are left out, so the Client Health demo's
+# seeded accounts keep only their deterministic history (producer -history)
+# and get no random transactions (ADR-0081).
+#
 # usage: scripts/sync-producer-accounts.sh [crm-stack-dir] [sftp-stack-dir]
 # Needs terraform, the AWS CLI and Python, as scripts/db-run-sql.sh does.
 set -euo pipefail
@@ -16,6 +20,14 @@ set -euo pipefail
 crm_dir=${1:-infrastructure/terraform/stacks/crm}
 sftp_dir=${2:-infrastructure/terraform/stacks/sftp-server}
 limit=100 # keeps the Run Command request small
+
+# The Client Health demo's synthetic accounts, seeded 2026-11-04.
+demo_accounts=(
+  107bca5c-9ca2-4128-ba0d-77a5a14bfc89 # recurring-credit interruption
+  32f72eae-3cc6-4dd5-aeef-c0596f443d0a # transaction-activity decline
+  80272835-28f2-4316-80d1-76b7b3ecc096 # sustained net outflow
+  85549ca7-d488-448d-b5dc-dcf25496f0e8 # healthy control
+)
 
 instance=$(terraform -chdir="$sftp_dir" output -raw instance_id)
 file=$(terraform -chdir="$sftp_dir" output -raw producer_account_ids_file)
@@ -37,9 +49,12 @@ fi
 # Only entries that match a UUID and a three-letter currency code reach the
 # instance's command line.
 entry='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Z]{3}'
-ids=$(grep -oE "sync-account $entry" <<<"$output" | cut -d' ' -f2 | tr '\n' ' ' || true)
+all=$(grep -oE "sync-account $entry" <<<"$output" | cut -d' ' -f2 || true)
+ids=$(grep -vF -f <(printf '%s:\n' "${demo_accounts[@]}") <<<"$all" | tr '\n' ' ' || true)
 ids=${ids% }
 count=$(wc -w <<<"$ids" | tr -d ' ')
+skipped=$(( $(wc -w <<<"$all") - count ))
+(( skipped == 0 )) || echo "Left out $skipped Client Health demo account(s)."
 
 # Written beside the file and renamed, so the producer never reads half a
 # list. With no IDs, xargs -r writes an empty file.
