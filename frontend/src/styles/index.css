@@ -1294,6 +1294,17 @@ textarea:focus {
   margin-bottom: var(--stack-sm);
 }
 
+.main .hero button {
+  background-color: #a1f5e1;
+  color: #1f3b57;
+  border-color: #a1f5e1;
+}
+
+.main .hero button:hover {
+  background-color: #ffffff;
+  border-color: #a1f5e1;
+}
+
 /* ---------- Client Health Monitor ---------- */
 
 .health-page {
