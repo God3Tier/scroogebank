@@ -6,6 +6,7 @@ import bank.alert.service.AlertMutationConflictException;
 import bank.alert.service.AlertNotFoundException;
 import bank.alert.service.AuditUnavailableException;
 import bank.alert.service.InvalidAlertTransitionException;
+import bank.alert.service.SourceDomainException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -46,6 +47,13 @@ public class AlertApiExceptionHandler {
     @ExceptionHandler(PortfolioApiException.class)
     ProblemDetail portfolio(PortfolioApiException exception) {
         return problem(exception.status(), "Holdings request refused", exception.getMessage());
+    }
+
+    @ExceptionHandler(SourceDomainException.class)
+    ProblemDetail sourceDomain(SourceDomainException exception) {
+        ProblemDetail problem = problem(exception.status(), "Search source refused", exception.getMessage());
+        problem.setProperty("code", exception.code());
+        return problem;
     }
 
     @ExceptionHandler(DirectoryUnavailableException.class)

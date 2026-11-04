@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-11-04 - Agent-added search domains per company
+
+- Human owner: Hayyun; Azeez review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Let agents add, list and deactivate extra Tavily search domains per company from the Event Alerts page (ADR-0079, Proposed).
+- Files/components affected: event-alert-service migration V11, `InstrumentSourceDomain`, `SourceDomainPolicy`, `SearchSourceService`, `SearchSourceController`, `IngestionJob`, `IssuerQueryBuilder`, their tests; `docs/api/openapi.yaml`; frontend `SearchSources`, `searchSources.js`, `EventAlerts`; ADR-0079, plan, source register.
+- Data/calls: synthetic data only; local PostgreSQL in Docker; no AWS, Tavily or model calls so far.
+- Verification: event-alert-service `mvn test` passes (303 tests); frontend lint, 292 tests and build pass.
+- Human verification required: Azeez's review of ADR-0079; agent-visible behaviour on AWS with real Cognito roles and CRM ownership; real Tavily behaviour with a custom domain; whether showing "you / another agent" instead of names is acceptable.
+
 ## 2026-10-31 - Real-AWS test of event-driven alerts, two fixes and focused searches
 
 - Human owner: Hayyun; Azeez and Neo Jia Wen review requested.

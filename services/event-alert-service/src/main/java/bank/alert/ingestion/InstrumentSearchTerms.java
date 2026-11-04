@@ -9,7 +9,8 @@ public record InstrumentSearchTerms(
         String sector,
         List<String> aliases,
         List<String> eventTerms,
-        List<String> officialDomains) {
+        List<String> officialDomains,
+        List<String> customDomains) {
 
     public InstrumentSearchTerms {
         ticker = requirePublicTerm(ticker, "ticker");
@@ -18,14 +19,20 @@ public record InstrumentSearchTerms(
         aliases = copyTerms(aliases);
         eventTerms = copyTerms(eventTerms);
         officialDomains = copyTerms(officialDomains).stream().map(String::toLowerCase).toList();
+        customDomains = copyTerms(customDomains).stream().map(String::toLowerCase).toList();
         if (eventTerms.isEmpty()) {
             throw new IllegalArgumentException("at least one event term is required");
         }
     }
 
     public InstrumentSearchTerms(String ticker, String issuer, String sector,
+            List<String> aliases, List<String> eventTerms, List<String> officialDomains) {
+        this(ticker, issuer, sector, aliases, eventTerms, officialDomains, List.of());
+    }
+
+    public InstrumentSearchTerms(String ticker, String issuer, String sector,
             List<String> aliases, List<String> eventTerms) {
-        this(ticker, issuer, sector, aliases, eventTerms, List.of());
+        this(ticker, issuer, sector, aliases, eventTerms, List.of(), List.of());
     }
 
     private static List<String> copyTerms(List<String> terms) {

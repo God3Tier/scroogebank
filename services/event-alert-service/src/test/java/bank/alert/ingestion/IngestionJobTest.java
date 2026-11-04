@@ -4,7 +4,9 @@ import bank.alert.config.AlertMode;
 import bank.alert.config.AlertModeProperties;
 import bank.alert.config.IngestionProperties;
 import bank.alert.domain.Instrument;
+import bank.alert.domain.InstrumentSourceDomain;
 import bank.alert.repository.InstrumentRepository;
+import bank.alert.repository.InstrumentSourceDomainRepository;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -23,11 +25,12 @@ class IngestionJobTest {
     @Test
     void refusesToRunInsideTheApiProcess() {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
+        InstrumentSourceDomainRepository sourceDomains = mock(InstrumentSourceDomainRepository.class);
         SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
         IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
         InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
         IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.API), properties(),
-                searchUniverse, instruments, coordinator, coverage);
+                searchUniverse, instruments, sourceDomains, coordinator, coverage);
 
         assertThatThrownBy(() -> job.runScheduledWindow(Instant.parse("2026-09-28T04:00:00Z")))
                 .isInstanceOf(IllegalStateException.class)
@@ -39,11 +42,12 @@ class IngestionJobTest {
     @Test
     void searchesNewlyRegisteredInstrumentAndSkipsUnknownOrInactiveHoldings() {
         InstrumentRepository instruments = mock(InstrumentRepository.class);
+        InstrumentSourceDomainRepository sourceDomains = mock(InstrumentSourceDomainRepository.class);
         SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
         IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
         InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
         IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
-                searchUniverse, instruments, coordinator, coverage);
+                searchUniverse, instruments, sourceDomains, coordinator, coverage);
         Instant from = Instant.parse("2026-09-28T02:00:00Z");
         Instant to = Instant.parse("2026-09-28T04:00:00Z");
         Instrument instrument = mock(Instrument.class);
@@ -72,6 +76,41 @@ class IngestionJobTest {
                                 && terms.getFirst().aliases().equals(List.of("Toyota"))
                                 && terms.getFirst().officialDomains()
                                 .equals(List.of("global.toyota", "jpx.co.jp"))));
+    }
+
+    @Test
+    void passesActiveAgentAddedDomainsToTheSearch() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        InstrumentSourceDomainRepository sourceDomains = mock(InstrumentSourceDomainRepository.class);
+        SearchUniverseProvider searchUniverse = mock(SearchUniverseProvider.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
+        IngestionJob job = new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
+                searchUniverse, instruments, sourceDomains, coordinator, coverage);
+        Instant from = Instant.parse("2026-09-28T02:00:00Z");
+        Instant to = Instant.parse("2026-09-28T04:00:00Z");
+        Instrument instrument = mock(Instrument.class);
+        when(instrument.getId()).thenReturn("SGX-D05");
+        when(instrument.getTicker()).thenReturn("D05");
+        when(instrument.getIssuerName()).thenReturn("DBS Group Holdings Ltd");
+        when(instrument.getSector()).thenReturn("Financials");
+        when(instrument.getSearchAliases()).thenReturn(List.of("DBS"));
+        when(instrument.getOfficialDomains()).thenReturn(List.of("sgx.com"));
+        when(instrument.isActive()).thenReturn(true);
+        when(searchUniverse.eligibleInstrumentIds()).thenReturn(List.of("SGX-D05"));
+        when(instruments.findAllById(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(instrument));
+        when(sourceDomains.findByInstrumentIdInAndActiveTrueOrderByAddedAtAsc(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(new InstrumentSourceDomain(java.util.UUID.randomUUID(), "SGX-D05",
+                        "businesstimes.com.sg", "agent-a", from)));
+        when(coverage.replay(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(to)))
+                .thenReturn(List.of("SGX-D05"));
+
+        job.replayWindow(from, to);
+
+        verify(coordinator).replay(org.mockito.ArgumentMatchers.eq(from), org.mockito.ArgumentMatchers.eq(to),
+                org.mockito.ArgumentMatchers.argThat(terms -> terms.size() == 1
+                        && terms.getFirst().officialDomains().equals(List.of("sgx.com"))
+                        && terms.getFirst().customDomains().equals(List.of("businesstimes.com.sg"))));
     }
 
     private static IngestionProperties properties() {

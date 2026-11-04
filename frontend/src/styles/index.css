@@ -3119,3 +3119,14 @@ textarea:focus {
 .event-actions { display: flex; gap: 1rem; flex-wrap: wrap; border: 0; padding: 0; }
 .event-outcomes { margin: 0; padding-left: 1.25rem; }
 .client-alert-list { margin-top: 1.5rem; }
+.search-sources { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.source-card { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid var(--border, rgba(127, 127, 127, 0.35)); border-radius: 0.5rem; }
+.source-card h3 { margin: 0; }
+.source-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; }
+.source-chip { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.85rem; border: 1px solid var(--border, rgba(127, 127, 127, 0.45)); }
+.source-chip--added { font-weight: 600; }
+.source-added { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; width: 100%; }
+.source-remove { margin-left: 0.5rem; }
+.source-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.source-add input { min-width: 14rem; flex: 1 1 14rem; }
+.muted { opacity: 0.7; }
