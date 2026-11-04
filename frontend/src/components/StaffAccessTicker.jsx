@@ -10,6 +10,10 @@ const notices = [
     title: "Trouble signing in?",
     message: "Contact your IT help desk for help accessing your staff account.",
   },
+  {
+    title: "Maintenance notice",
+    message: "We are currently performing scheduled maintenance on the staff access portal. Please check back later.",
+  },
 ];
 
 export default function StaffAccessTicker() {
