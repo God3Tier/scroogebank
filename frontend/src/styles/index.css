@@ -526,6 +526,11 @@ textarea:focus {
   color: #fff;
 }
 
+.row-list button:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .plain-rows > li {
   font-family: var(--mono);
   font-size: 13px;
