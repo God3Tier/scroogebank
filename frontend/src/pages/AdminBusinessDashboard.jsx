@@ -207,7 +207,7 @@ function AdminBusinessDashboard() {
 
       <MetricDefinitions
         keys={[
-          'clientsOnboarded', 'verificationRate', 'bookedInitialDeposits', 'accountsPerClient',
+          'clientsOnboarded', 'verifiedShare', 'verificationRate', 'accountsOpened', 'bookedInitialDeposits', 'accountsPerClient',
           'failureRate', 'pendingBacklog', 'transactionValue', 'staleUnverified',
         ]}
       />
