@@ -40,8 +40,8 @@ engagement:
     alerts-base-url: ${ALERT_SERVICE_BASE_URL:}
     timeout: 5s
   alert-reports:
-    # The rollout kill switch (ADR-0084). Off: no alert report is queued or sent.
-    enabled: ${ENGAGEMENT_ALERT_REPORTS_ENABLED:false}
+    # The kill switch (ADR-0084). On by default; set false to stop any alert report being queued or sent.
+    enabled: ${ENGAGEMENT_ALERT_REPORTS_ENABLED:true}
     # How long one request keeps sending; the rest stays QUEUED and goes when the same request is sent again.
     processing-budget: 20s
     max-attempts: 3

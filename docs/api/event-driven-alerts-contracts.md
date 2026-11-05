@@ -159,4 +159,4 @@ migrated `briefing-v1-legacy`), every source linked to the event with the ones t
 - `POST /api/engagement/alert-report-deliveries` (engagement service) takes `eventId`, `expectedReportVersion`,
   `alertIds`, an optional `agentNote` and an `Idempotency-Key`. It returns the batch and a status per recipient:
   `QUEUED`, `SENT`, `FAILED` or `NOT_AUTHORISED`. Repeating the request with the same key carries on with
-  `QUEUED` recipients and never resends one already sent. Off by default (`ENGAGEMENT_ALERT_REPORTS_ENABLED`).
+  `QUEUED` recipients and never resends one already sent. On by default; `ENGAGEMENT_ALERT_REPORTS_ENABLED=false` switches it off.

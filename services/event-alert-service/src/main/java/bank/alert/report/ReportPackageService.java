@@ -62,7 +62,8 @@ public class ReportPackageService {
      * @throws bank.alert.service.AlertNotFoundException        the event has no alert of this agent
      * @throws AlertMutationConflictException                   there is no report, or it is not at the expected version
      */
-    @Transactional(readOnly = true)
+    // Not read-only: reading the event refreshes the agent's current ownership, which can write.
+    @Transactional
     public ReportPackage build(UUID eventId, String agent, int expectedVersion, List<UUID> alertIds) {
         EventDetail detail = events.detail(eventId, agent);
         if (detail.report() == null || detail.report().version() != expectedVersion) {

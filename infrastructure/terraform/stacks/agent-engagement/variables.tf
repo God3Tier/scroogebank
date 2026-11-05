@@ -60,9 +60,9 @@ variable "ai_enabled" {
 }
 
 variable "alert_reports_enabled" {
-  description = "The rollout kill switch for emailing event reports to clients, ENGAGEMENT_ALERT_REPORTS_ENABLED (ADR-0084). Off, no report is queued or sent. Turn it on for one verified SES recipient first."
+  description = "The rollout kill switch for emailing event reports to clients, ENGAGEMENT_ALERT_REPORTS_ENABLED (ADR-0084). On by default; set false to stop any report being queued or sent. A report is still sent only when an agent approves it, and mail still needs the SES provider and a verified sender."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "bedrock_model_id" {

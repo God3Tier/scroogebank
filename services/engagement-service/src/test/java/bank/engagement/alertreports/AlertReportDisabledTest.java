@@ -4,12 +4,14 @@ import bank.engagement.testsupport.PostgresIntegrationTest;
 import bank.engagement.testsupport.Tokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** The rollout kill switch is off by default (ADR-0084): nothing is queued or sent. */
+/** With the kill switch turned off (it is on by default, ADR-0084), nothing is queued or sent. */
+@TestPropertySource(properties = "engagement.alert-reports.enabled=false")
 class AlertReportDisabledTest extends PostgresIntegrationTest {
 
     @Test
