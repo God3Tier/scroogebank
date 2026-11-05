@@ -1,14 +1,14 @@
 # AI usage log
 
-## 2026-11-04 - A search starts when an agent adds a domain
+## 2026-11-05 - Searches by hand and on adding a website; one shared list of websites; fixed schedule
 
 - Human owner: Hayyun; review pending.
 - AI tool: Claude Code (Anthropic).
-- Task/purpose: When an agent adds a search domain, start one targeted worker run for that company over the last 14 days using only that domain, with a cooldown and a daily cap (ADR-0081, Proposed).
-- Files/components affected: event-alert-service migration V12, `SourceSearchRequest`, `research/` (service, ECS and local-process triggers), `ResearchProperties`, `SearchOnAddProperties`, `IngestionCoordinator.research`, `IngestionJob.researchCompany`, `WorkerRunner`, `SearchSourceController` and `AddedSourceDomain`, `AgentHeldInstruments` (fixture mode now reads the bundled holdings file); `docs/api/openapi.yaml`; the `crm` stack (`alert_search_on_add`, a start-the-worker policy, API environment) and its test; the Search sources screen and its tests.
-- Data/calls: synthetic holdings only; a local PostgreSQL in Docker; real Tavily searches from a developer machine (a few credits); no AWS calls.
-- Verification: event-alert-service `mvn test`, frontend tests and lint, `terraform fmt`, `validate` and `test` for the `crm` stack pass. A local run against real Tavily stored one passing article for DBS.
-- Human verification required: review of ADR-0081; starting the worker through ECS in AWS (permissions and reaching the ECS API); the credits this spends per added site.
+- Task/purpose: Start a targeted worker run when an agent adds a website or presses Search now, with a per-company cooldown and no small cap (ADR-0081, Proposed); replace the per-company websites with one shared list and show which clients hold each company (ADR-0082, Proposed); run the automatic searches at fixed Singapore times and show the next one; keep the client alerts always open.
+- Files/components affected: event-alert-service migrations V12 and V13, `SearchWebsite`, `SearchWebsiteService`, `HoldingsOverview`, `SourceSearchRequest`, `research/` (service, ECS and local-process triggers), `ResearchProperties`, `SearchOnAddProperties`, `ScheduleProperties`, `SearchScheduleService`, the new search controllers, `IngestionCoordinator.research`, `IngestionJob.researchCompanies`, `WorkerRunner`, the raised per-run search limits; `docs/api/openapi.yaml`; the `crm` stack (`alert_search_on_add`, a start-the-worker policy) and the `alert-worker` schedule, with their tests; the Event Alerts page and the Search sources screens and their tests.
+- Data/calls: synthetic data only; a local PostgreSQL in Docker; real Tavily searches from a developer machine (a few credits); no AWS calls.
+- Verification: event-alert-service `mvn test`, frontend tests and lint, and `terraform fmt`, `validate` and `test` for the `crm` and `alert-worker` stacks pass. A local run against real Tavily stored a passing article for DBS.
+- Human verification required: review of ADR-0081 and ADR-0082; starting the worker through ECS in AWS (permissions and reaching the ECS API); the cron schedule in AWS; the credits spent per company per run.
 
 ## 2026-11-04 - The alert worker runs once at the end of every apply
 

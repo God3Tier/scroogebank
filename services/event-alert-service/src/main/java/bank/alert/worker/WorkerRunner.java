@@ -81,7 +81,7 @@ public class WorkerRunner implements ApplicationRunner, ExitCodeGenerator {
         return job.runScheduledWindow(clock.instant());
     }
 
-    /** An agent added a domain (ADR-0080): search that company over its recent past, using only that domain. */
+    /** An agent added a website or pressed Search now (ADR-0081): search these companies over their recent past. */
     private IngestionOutcome researchWindow() {
         try {
             research.validate();
@@ -93,7 +93,7 @@ public class WorkerRunner implements ApplicationRunner, ExitCodeGenerator {
         }
         log.info("worker research requested correlation_id={}", research.correlationId());
         Instant to = clock.instant();
-        return job.researchCompany(research.instrument(), research.domain(), to.minus(research.lookback()), to);
+        return job.researchCompanies(research.instruments(), research.domain(), to.minus(research.lookback()), to);
     }
 
     private IngestionOutcome replayWindow() {

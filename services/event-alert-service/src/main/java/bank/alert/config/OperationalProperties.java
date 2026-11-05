@@ -10,7 +10,7 @@ public record OperationalProperties(boolean ingestionEnabled, boolean modelEnabl
         int maxModelTokensPerInvocation, BigDecimal monthlyBudgetUsd) {
     public OperationalProperties {
         monthlySearchQuota = positiveOrDefault(monthlySearchQuota, 1_000, "monthlySearchQuota");
-        maxSearchesPerRun = positiveOrDefault(maxSearchesPerRun, 4, "maxSearchesPerRun");
+        maxSearchesPerRun = positiveOrDefault(maxSearchesPerRun, 200, "maxSearchesPerRun");
         if (monthlyModelTokenQuota < 0) {
             throw new IllegalArgumentException("monthlyModelTokenQuota cannot be negative");
         }

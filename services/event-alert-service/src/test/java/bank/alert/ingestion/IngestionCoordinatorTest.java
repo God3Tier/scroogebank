@@ -105,7 +105,7 @@ class IngestionCoordinatorTest {
         List<InstrumentSearchTerms> catalogue = List.of(new InstrumentSearchTerms("SYN", "Synthetic Issuer",
                 "Synthetic", List.of(), List.of("earnings"), List.of(), List.of("added.example.com")));
 
-        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, catalogue);
+        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, catalogue, List.of());
 
         ArgumentCaptor<PublicSearchRequest> requests = ArgumentCaptor.forClass(PublicSearchRequest.class);
         verify(provider, times(2)).search(requests.capture());
@@ -120,7 +120,7 @@ class IngestionCoordinatorTest {
     void researchIsSkippedWhileAnotherRunHoldsTheLock() {
         when(runLock.tryAcquire()).thenReturn(Optional.empty());
 
-        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, CATALOGUE);
+        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, CATALOGUE, List.of());
 
         assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
         verify(provider, never()).search(any());

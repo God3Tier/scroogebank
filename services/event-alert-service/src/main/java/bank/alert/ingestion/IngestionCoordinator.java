@@ -82,13 +82,14 @@ public class IngestionCoordinator {
     }
 
     /**
-     * One targeted search over a recent window (ADR-0080), started when an agent adds a domain. The
-     * catalogue holds that one company with only the new domain, and no shared news sites are added,
-     * so only that domain is searched. Like a replay it does not move the scheduler watermark.
+     * One targeted search over a recent window (ADR-0081), started when an agent adds a website or presses
+     * Search now. The caller says which websites are searched (the added one alone, or all of them). Like a
+     * replay it does not move the scheduler watermark.
      */
-    public IngestionOutcome research(Instant windowFrom, Instant windowTo, List<InstrumentSearchTerms> catalogue) {
+    public IngestionOutcome research(Instant windowFrom, Instant windowTo, List<InstrumentSearchTerms> catalogue,
+            List<String> sharedDomains) {
         if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
-        return execute(windowFrom, windowTo, catalogue, false, List.of());
+        return execute(windowFrom, windowTo, catalogue, false, sharedDomains);
     }
 
     private IngestionOutcome execute(Instant windowFrom, Instant windowTo,
@@ -111,7 +112,8 @@ public class IngestionCoordinator {
     private IngestionOutcome executeLocked(Instant windowFrom, Instant windowTo,
             List<InstrumentSearchTerms> catalogue, boolean advanceWatermark, List<String> sharedDomains) {
         List<IssuerSearchQuery> queries = queryBuilder.build(
-                catalogue, sharedDomains, properties.maxQueriesPerRun());
+                catalogue, sharedDomains,
+                Math.max(properties.maxQueriesPerRun(), catalogue.size() * IssuerQueryBuilder.QUERIES_PER_INSTRUMENT));
         if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 
         Instant now = clock.instant();

@@ -22,8 +22,8 @@ public class IssuerQueryBuilder {
 
     public List<IssuerSearchQuery> build(List<InstrumentSearchTerms> instruments,
             List<String> sharedDomains, int maximumQueries) {
-        if (maximumQueries < 1 || maximumQueries > 4) {
-            throw new IllegalArgumentException("maximumQueries must be between 1 and 4");
+        if (maximumQueries < 1) {
+            throw new IllegalArgumentException("maximumQueries must be at least 1");
         }
         if (instruments == null || instruments.isEmpty()) return List.of();
         if (instruments.size() * QUERIES_PER_INSTRUMENT > maximumQueries) {

@@ -315,79 +315,132 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /alerts/search-sources:
+  /alerts/search-websites:
     get:
       tags: [Alerts]
-      operationId: listSearchSources
-      summary: Search domains per company (ADR-0079)
+      operationId: listSearchWebsites
+      summary: The websites searched for every company
       description: >-
-        An agent sees the companies their clients currently hold; an admin sees every active
-        company. Each company lists its official domains, the shared news domains, and the
-        domains agents added. Other agents' identities are not shown, only whether the caller
-        added a domain.
+        The shared news sites set by the deployment, and the websites agents added, which are searched for
+        every company (ADR-0082). Agents and admins; only agents can add.
       responses:
         '200':
-          description: Companies with their search domains.
+          description: The websites.
           content:
             application/json:
-              schema:
-                type: array
-                items: {$ref: '#/components/schemas/CompanySources'}
+              schema: {$ref: '#/components/schemas/SearchWebsiteList'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-        '503': {$ref: '#/components/responses/Unavailable'}
-  /alerts/search-sources/{instrumentId}/domains:
     post:
       tags: [Alerts]
-      operationId: addSearchDomain
-      summary: Add a search domain to a company held by one of the agent's clients
+      operationId: addSearchWebsite
+      summary: Add a website that is searched for every company
       description: >-
-        Agents only; live at once. 400: not a plain domain name (INVALID_FORMAT) or a social,
-        forum or blog platform (BLOCKED_DOMAIN). 403: no client of the caller holds the company
-        (NOT_HELD). 404: unknown company. 409: already searched or covered by an existing domain
-        (ALREADY_COVERED) or the company has 10 added domains (LIMIT_REACHED). The change is
-        audited as alert.search-domain-added. Once the domain is saved, one targeted search of
-        the company may start, using only that domain (ADR-0080); the reply's research field
-        says what happened to it, and a search that did not start never fails the add.
+        Agents only; live at once. 400: not a plain domain name (INVALID_FORMAT) or a social, forum or blog
+        platform (BLOCKED_DOMAIN). 409: already searched or covered by an existing website (ALREADY_COVERED) or
+        the list is full (LIMIT_REACHED). The change is audited as alert.search-website-added. Once the website
+        is saved, one targeted search of the companies the agent's clients hold may start, using only that
+        website (ADR-0081); the reply's search field says what happened, and a search that did not start never
+        fails the add.
       parameters:
-        - $ref: '#/components/parameters/InstrumentId'
         - $ref: '#/components/parameters/CorrelationId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/AddSourceDomainRequest'}
+            schema: {$ref: '#/components/schemas/AddWebsiteRequest'}
       responses:
         '201':
-          description: The added domain, and what happened to the search started for it.
+          description: The added website, and what happened to the search started for it.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/AddedSourceDomain'}
+              schema: {$ref: '#/components/schemas/AddedWebsite'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/search-websites/{websiteId}:
+    delete:
+      tags: [Alerts]
+      operationId: removeSearchWebsite
+      summary: Remove an added website
+      description: >-
+        Any agent or an admin. The row is kept as history and the change is audited as
+        alert.search-website-removed. 404 when the website is absent or already removed.
+      parameters:
+        - $ref: '#/components/parameters/WebsiteId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '204': {description: Removed.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/search-holdings:
+    get:
+      tags: [Alerts]
+      operationId: listSearchHoldings
+      summary: Which clients hold each company that is searched
+      description: >-
+        The companies held by the agent's own clients, or by every client for an admin, each with its official
+        sites and the clients that hold it (ADR-0082). Clients are anonymous ids; the page looks names up in the
+        CRM with the caller's own login. The owning agent is given to admins only.
+      responses:
+        '200':
+          description: The companies and their holders.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/CompanyHoldings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/search-now:
+    post:
+      tags: [Alerts]
+      operationId: searchNow
+      summary: Search now
+      description: >-
+        Starts one targeted search over the last 14 days using every website, for one company or for every company
+        the caller may search (an agent's own; an admin's any held company). A company searched within the cooldown
+        is skipped and reported with when it can be searched again. It never changes the automatic schedule
+        (ADR-0081). 403: the agent's clients do not hold the company (NOT_HELD).
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SearchNowRequest'}
+      responses:
+        '200':
+          description: What was started, and what was skipped.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SearchRun'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
-        '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /alerts/search-sources/{instrumentId}/domains/{domainId}:
-    delete:
+  /alerts/search-schedule:
+    get:
       tags: [Alerts]
-      operationId: deactivateSearchDomain
-      summary: Deactivate an added search domain
+      operationId: getSearchSchedule
+      summary: When the next automatic search is
       description: >-
-        An agent whose client holds the company, or an admin. The row is kept as history and the
-        change is audited as alert.search-domain-deactivated. 404 when the domain is absent, already
-        inactive, or the agent does not hold the company.
-      parameters:
-        - $ref: '#/components/parameters/InstrumentId'
-        - $ref: '#/components/parameters/SourceDomainId'
-        - $ref: '#/components/parameters/CorrelationId'
+        The automatic searches run every interval from midnight in the zone (ADR-0081). A manual search never
+        changes this.
       responses:
-        '204': {description: Deactivated.}
+        '200':
+          description: The schedule.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SearchSchedule'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '503': {$ref: '#/components/responses/Unavailable'}
   /alert-portfolios/{accountId}:
     get:
       tags: [Alerts]
@@ -452,13 +505,8 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
-    InstrumentId:
-      name: instrumentId
-      in: path
-      required: true
-      schema: {type: string, maxLength: 32}
-    SourceDomainId:
-      name: domainId
+    WebsiteId:
+      name: websiteId
       in: path
       required: true
       schema: {type: string, format: uuid}
@@ -970,7 +1018,7 @@ components:
         expectedVersion: {type: integer, minimum: 1}
         reasonCode: {type: string, minLength: 1, maxLength: 128}
         note: {type: string, nullable: true, maxLength: 500}
-    CustomDomain:
+    SearchWebsite:
       type: object
       additionalProperties: false
       required: [id, domain, addedAt, addedByYou]
@@ -979,39 +1027,86 @@ components:
         domain: {type: string, maxLength: 253}
         addedAt: {type: string, format: date-time}
         addedByYou: {type: boolean}
-    AddedSourceDomain:
+    SearchWebsiteList:
       type: object
       additionalProperties: false
-      required: [id, domain, addedAt, addedByYou, research]
+      required: [shared, added, canAdd, max]
       properties:
-        id: {type: string, format: uuid}
-        domain: {type: string, maxLength: 253}
-        addedAt: {type: string, format: date-time}
-        addedByYou: {type: boolean}
-        research:
-          type: string
-          enum: [STARTED, COOLDOWN, DAILY_LIMIT, 'OFF', FAILED]
-          description: "STARTED: a search of this company using only this domain was started. COOLDOWN: the company was searched this way recently. DAILY_LIMIT: too many searches started today. OFF: the feature is not switched on. FAILED: it could not be started."
-        researchLookbackDays: {type: integer, minimum: 1, description: "How many days back the started search looks. Present only when research is STARTED."}
-    CompanySources:
-      type: object
-      additionalProperties: false
-      required: [instrumentId, ticker, issuerName, official, shared, custom, canAdd, maxCustom]
-      properties:
-        instrumentId: {type: string}
-        ticker: {type: string}
-        issuerName: {type: string}
-        official: {type: array, items: {type: string}}
         shared: {type: array, items: {type: string}}
-        custom: {type: array, items: {$ref: '#/components/schemas/CustomDomain'}}
+        added: {type: array, items: {$ref: '#/components/schemas/SearchWebsite'}}
         canAdd: {type: boolean, description: "False for admins, who cannot add."}
-        maxCustom: {type: integer, minimum: 1}
-    AddSourceDomainRequest:
+        max: {type: integer, minimum: 1}
+    AddWebsiteRequest:
       type: object
       additionalProperties: false
       required: [domain]
       properties:
         domain: {type: string, minLength: 1, maxLength: 300, example: businesstimes.com.sg}
+    SearchWaiting:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, availableAt]
+      properties:
+        instrumentId: {type: string}
+        availableAt: {type: string, format: date-time}
+    SearchRun:
+      type: object
+      additionalProperties: false
+      required: [outcome, started, cooldown, lookbackDays]
+      properties:
+        outcome:
+          type: string
+          enum: [STARTED, COOLDOWN, DAILY_LIMIT, 'OFF', FAILED, NOTHING_TO_SEARCH]
+          description: "STARTED: at least one company is being searched. COOLDOWN: every company was searched too recently. DAILY_LIMIT: the optional daily cap is reached. OFF: the feature is not switched on. FAILED: it could not be started. NOTHING_TO_SEARCH: no company to search."
+        started: {type: array, items: {type: string}}
+        cooldown: {type: array, items: {$ref: '#/components/schemas/SearchWaiting'}}
+        lookbackDays: {type: integer, minimum: 1}
+    AddedWebsite:
+      type: object
+      additionalProperties: false
+      required: [id, domain, addedAt, addedByYou, search]
+      properties:
+        id: {type: string, format: uuid}
+        domain: {type: string, maxLength: 253}
+        addedAt: {type: string, format: date-time}
+        addedByYou: {type: boolean}
+        search: {$ref: '#/components/schemas/SearchRun'}
+    SearchNowRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        instrumentId: {type: string, maxLength: 32, nullable: true}
+    Holder:
+      type: object
+      additionalProperties: false
+      required: [clientId, accountId, quantity, valueSgd, sharePercent]
+      properties:
+        clientId: {type: string, description: "The CRM client id; the page looks the name up with the caller's own login."}
+        accountId: {type: string}
+        quantity: {type: number}
+        valueSgd: {type: number}
+        sharePercent: {type: number, description: "This company's share of the account's value, in percent."}
+        ownerAgentSubject: {type: string, nullable: true, description: "The agent who owns the client. Given to admins only."}
+    CompanyHoldings:
+      type: object
+      additionalProperties: false
+      required: [instrumentId, ticker, issuerName, officialDomains, holders]
+      properties:
+        instrumentId: {type: string}
+        ticker: {type: string}
+        issuerName: {type: string}
+        officialDomains: {type: array, items: {type: string}}
+        holders: {type: array, items: {$ref: '#/components/schemas/Holder'}}
+    SearchSchedule:
+      type: object
+      additionalProperties: false
+      required: [enabled, intervalMinutes, zone, previousRunAt, nextRunAt]
+      properties:
+        enabled: {type: boolean}
+        intervalMinutes: {type: integer, minimum: 1}
+        zone: {type: string, example: Asia/Singapore}
+        previousRunAt: {type: string, format: date-time}
+        nextRunAt: {type: string, format: date-time}
     Problem:
       type: object
       additionalProperties: false

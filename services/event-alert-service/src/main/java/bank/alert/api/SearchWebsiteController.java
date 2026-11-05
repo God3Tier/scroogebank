@@ -1,9 +1,10 @@
 package bank.alert.api;
 
 import bank.alert.research.SearchOnAddService;
-import bank.alert.service.SearchSourceService;
-import bank.alert.service.SearchSourceService.CompanySources;
-import bank.alert.service.SearchSourceService.CustomDomain;
+import bank.alert.service.HoldingsOverview;
+import bank.alert.service.SearchWebsiteService;
+import bank.alert.service.SearchWebsiteService.Website;
+import bank.alert.service.SearchWebsiteService.WebsiteList;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,57 +19,56 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
-/** Per-company search domains that agents add (ADR-0079). */
+/** The websites searched for every company (ADR-0082). */
 @RestController
-@RequestMapping("/api/alerts/search-sources")
-public class SearchSourceController {
+@RequestMapping("/api/alerts/search-websites")
+public class SearchWebsiteController {
 
-    private final SearchSourceService service;
+    private final SearchWebsiteService service;
+    private final HoldingsOverview holdings;
     private final SearchOnAddService searchOnAdd;
 
-    public SearchSourceController(SearchSourceService service, SearchOnAddService searchOnAdd) {
+    public SearchWebsiteController(SearchWebsiteService service, HoldingsOverview holdings, SearchOnAddService searchOnAdd) {
         this.service = service;
+        this.holdings = holdings;
         this.searchOnAdd = searchOnAdd;
     }
 
     @GetMapping
     @PreAuthorize("hasAnyRole('AGENT','ADMIN')")
-    public List<CompanySources> list(Authentication authentication) {
+    public WebsiteList list(Authentication authentication) {
         return service.list(authentication.getName(), isAdmin(authentication));
     }
 
-    @PostMapping("/{instrumentId}/domains")
+    @PostMapping
     @PreAuthorize("hasRole('AGENT')")
     @ResponseStatus(HttpStatus.CREATED)
-    public AddedSourceDomain add(
-            @PathVariable String instrumentId,
+    public AddedWebsiteResponse add(
             @RequestHeader(value = "X-Correlation-Id", required = false) UUID correlationId,
-            @Valid @RequestBody AddSourceDomainRequest request,
+            @Valid @RequestBody AddWebsiteRequest request,
             Authentication authentication) {
         UUID correlation = correlationId == null ? UUID.randomUUID() : correlationId;
-        CustomDomain added = service.add(instrumentId, authentication.getName(), correlation, request.domain());
-        // The domain is saved and committed by now; the search is a bonus and never fails the add (ADR-0080).
-        SearchOnAddService.Outcome research = searchOnAdd.request(
-                instrumentId, added.domain(), authentication.getName(), correlation);
-        return AddedSourceDomain.of(added, research, searchOnAdd.lookbackDays());
+        Website added = service.add(authentication.getName(), correlation, request.domain());
+        // The website is saved and committed by now; the search is a bonus and never fails the add (ADR-0081).
+        SearchOnAddService.Result search = searchOnAdd.afterAdd(added.domain(),
+                holdings.instrumentIdsFor(authentication.getName()), authentication.getName(), correlation);
+        return AddedWebsiteResponse.of(added, SearchRunResponse.of(search));
     }
 
-    @DeleteMapping("/{instrumentId}/domains/{domainId}")
+    @DeleteMapping("/{websiteId}")
     @PreAuthorize("hasAnyRole('AGENT','ADMIN')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deactivate(
-            @PathVariable String instrumentId,
-            @PathVariable UUID domainId,
+    public void remove(
+            @PathVariable UUID websiteId,
             @RequestHeader(value = "X-Correlation-Id", required = false) UUID correlationId,
             Authentication authentication) {
-        service.deactivate(instrumentId, domainId, authentication.getName(), isAdmin(authentication),
+        service.remove(websiteId, authentication.getName(), isAdmin(authentication),
                 correlationId == null ? UUID.randomUUID() : correlationId);
     }
 
-    private static boolean isAdmin(Authentication authentication) {
+    static boolean isAdmin(Authentication authentication) {
         return authentication.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 }

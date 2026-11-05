@@ -8,16 +8,13 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** A search domain an agent added for one company (ADR-0079). Deactivating keeps the row. */
+/** A website agents added that is searched for every company (ADR-0082). Removing keeps the row. */
 @Entity
-@Table(name = "instrument_source_domain")
-public class InstrumentSourceDomain {
+@Table(name = "search_website")
+public class SearchWebsite {
 
     @Id
     private UUID id;
-
-    @Column(name = "instrument_id", nullable = false, length = 32)
-    private String instrumentId;
 
     @Column(nullable = false, length = 253)
     private String domain;
@@ -37,12 +34,11 @@ public class InstrumentSourceDomain {
     @Column(name = "deactivated_at")
     private Instant deactivatedAt;
 
-    protected InstrumentSourceDomain() {
+    protected SearchWebsite() {
     }
 
-    public InstrumentSourceDomain(UUID id, String instrumentId, String domain, String addedBySubject, Instant addedAt) {
+    public SearchWebsite(UUID id, String domain, String addedBySubject, Instant addedAt) {
         this.id = id;
-        this.instrumentId = instrumentId;
         this.domain = domain;
         this.addedBySubject = addedBySubject;
         this.addedAt = addedAt;
@@ -54,12 +50,23 @@ public class InstrumentSourceDomain {
         this.deactivatedAt = at;
     }
 
-    public UUID getId() { return id; }
-    public String getInstrumentId() { return instrumentId; }
-    public String getDomain() { return domain; }
-    public String getAddedBySubject() { return addedBySubject; }
-    public Instant getAddedAt() { return addedAt; }
-    public boolean isActive() { return active; }
-    public String getDeactivatedBySubject() { return deactivatedBySubject; }
-    public Instant getDeactivatedAt() { return deactivatedAt; }
+    public UUID getId() {
+        return id;
+    }
+
+    public String getDomain() {
+        return domain;
+    }
+
+    public String getAddedBySubject() {
+        return addedBySubject;
+    }
+
+    public Instant getAddedAt() {
+        return addedAt;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
 }

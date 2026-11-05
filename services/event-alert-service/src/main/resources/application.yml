@@ -54,12 +54,18 @@ alert:
     enabled: ${ALERT_RETENTION_ENABLED:true}
     interval: ${ALERT_RETENTION_INTERVAL:1h}
     batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
-  # A search started when an agent adds a domain (ADR-0080). Off unless a mode is set: ecs starts the
+  # When the automatic searches run, for the page to show the next one (ADR-0081). The schedule itself is
+  # EventBridge Scheduler's, in stacks/alert-worker; keep these two in step.
+  schedule:
+    enabled: ${ALERT_SCHEDULE_ENABLED:true}
+    interval: ${ALERT_SCHEDULE_INTERVAL:4h}
+    zone: ${ALERT_SCHEDULE_ZONE:Asia/Singapore}
+  # A search started when an agent adds a website or presses Search now (ADR-0081). Off unless a mode is set: ecs starts the
   # worker task in AWS, local-process starts it as a child process on a developer's machine.
   search-on-add:
     mode: ${ALERT_SEARCH_ON_ADD_MODE:off}
     cooldown: ${ALERT_SEARCH_ON_ADD_COOLDOWN:15m}
-    daily-cap: ${ALERT_SEARCH_ON_ADD_DAILY_CAP:20}
+    daily-cap: ${ALERT_SEARCH_ON_ADD_DAILY_CAP:0}
     lookback: ${ALERT_SEARCH_ON_ADD_LOOKBACK:14d}
     cluster: ${ALERT_SEARCH_ON_ADD_CLUSTER:}
     task-definition: ${ALERT_SEARCH_ON_ADD_TASK_DEFINITION:}
@@ -72,7 +78,9 @@ alert:
     provider: ${ALERT_SEARCH_PROVIDER:tavily}
     overlap: 5m
     initial-lookback: 4h
-    max-queries-per-run: 4
+    # No fixed cap on companies per run: every eligible company is searched each time (ADR-0081). The
+    # monthly search quota below still stops all searching if the Tavily plan would be exceeded.
+    max-queries-per-run: ${ALERT_MAX_QUERIES_PER_RUN:200}
     max-results-per-query: 10
     max-attempts: 3
     retention: 90d
@@ -138,7 +146,7 @@ alert:
     ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
     model-enabled: ${ALERT_AI_ENABLED:false}
     monthly-search-quota: ${ALERT_MONTHLY_SEARCH_QUOTA:1000}
-    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:4}
+    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:200}
     monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}
     max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
     monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}

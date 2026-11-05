@@ -27,7 +27,7 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_AI_MODEL` | `global.amazon.nova-2-lite-v1:0` | Pinned Nova 2 Lite global inference profile |
 | `ALERT_AI_BEDROCK_REGION` | `ap-southeast-1` | Singapore source Region for Bedrock Runtime; global inference may process elsewhere |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
-| `ALERT_MAX_SEARCHES_PER_RUN` | `4` | Search reservations per worker run |
+| `ALERT_MAX_SEARCHES_PER_RUN` | `200` | Search reservations per worker run (ADR-0081: no small cap; the monthly quota still applies) |
 | `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.20` | Inclusive fraction of distinct positive-position clients for the common-holding rule |
 | `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
 | `ALERT_MINIMUM_ACCOUNT_CONCENTRATION` | `0.50` | Inclusive per-account share of positive SGD portfolio value for the concentration rule |

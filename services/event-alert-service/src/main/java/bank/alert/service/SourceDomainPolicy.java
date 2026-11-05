@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 @Component
 public class SourceDomainPolicy {
 
-    public static final int MAX_CUSTOM_DOMAINS_PER_COMPANY = 10;
+    public static final int MAX_WEBSITES = 20;
 
     /** Platforms where anyone can post, so a story from them is not a reported event. */
     static final List<String> BLOCKED = List.of(

@@ -6,11 +6,12 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * What happens when an agent adds a search domain (ADR-0080): the API asks for one targeted
- * search of that company, over the last {@code lookback}, using only the new domain.
+ * When an agent adds a website or presses Search now, the API asks for one targeted search of the
+ * companies concerned over the last {@code lookback} (ADR-0081).
  *
  * {@code mode} is {@code off} (the default), {@code ecs} (start the worker task in AWS) or
  * {@code local-process} (start the worker as a child process, for a developer's machine only).
+ * {@code dailyCap} is the most company searches that may start in 24 hours; zero, the default, means no cap.
  */
 @ConfigurationProperties(prefix = "alert.search-on-add")
 public record SearchOnAddProperties(
@@ -28,7 +29,7 @@ public record SearchOnAddProperties(
     public SearchOnAddProperties {
         mode = mode == null || mode.isBlank() ? "off" : mode.strip().toLowerCase();
         cooldown = cooldown == null ? Duration.ofMinutes(15) : cooldown;
-        dailyCap = dailyCap <= 0 ? 20 : dailyCap;
+        dailyCap = Math.max(0, dailyCap);
         lookback = lookback == null ? Duration.ofDays(14) : lookback;
         containerName = containerName == null || containerName.isBlank() ? "event-alert-worker" : containerName;
         subnets = subnets == null ? List.of() : List.copyOf(subnets);

@@ -16,7 +16,7 @@ class OperationalPropertiesTest {
         assertThat(properties.ingestionEnabled()).isFalse();
         assertThat(properties.modelEnabled()).isFalse();
         assertThat(properties.monthlySearchQuota()).isEqualTo(1_000);
-        assertThat(properties.maxSearchesPerRun()).isEqualTo(4);
+        assertThat(properties.maxSearchesPerRun()).isEqualTo(200);
         assertThat(properties.monthlyModelTokenQuota()).isEqualTo(200_000);
         assertThat(properties.maxModelTokensPerInvocation()).isEqualTo(2_000);
         assertThat(properties.monthlyBudgetUsd()).isEqualByComparingTo("25.00");

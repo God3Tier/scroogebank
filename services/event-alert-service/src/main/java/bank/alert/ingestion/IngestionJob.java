@@ -4,9 +4,9 @@ import bank.alert.config.AlertMode;
 import bank.alert.config.AlertModeProperties;
 import bank.alert.config.IngestionProperties;
 import bank.alert.domain.Instrument;
-import bank.alert.domain.InstrumentSourceDomain;
+import bank.alert.domain.SearchWebsite;
 import bank.alert.repository.InstrumentRepository;
-import bank.alert.repository.InstrumentSourceDomainRepository;
+import bank.alert.repository.SearchWebsiteRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -23,18 +23,18 @@ public class IngestionJob {
     private final IngestionProperties properties;
     private final SearchUniverseProvider searchUniverse;
     private final InstrumentRepository instruments;
-    private final InstrumentSourceDomainRepository sourceDomains;
+    private final SearchWebsiteRepository websites;
     private final IngestionCoordinator coordinator;
     private final InstrumentCoverageService coverage;
 
     public IngestionJob(AlertModeProperties mode, IngestionProperties properties,
             SearchUniverseProvider searchUniverse, InstrumentRepository instruments,
-            InstrumentSourceDomainRepository sourceDomains, IngestionCoordinator coordinator, InstrumentCoverageService coverage) {
+            SearchWebsiteRepository websites, IngestionCoordinator coordinator, InstrumentCoverageService coverage) {
         this.mode = mode;
         this.properties = properties;
         this.searchUniverse = searchUniverse;
         this.instruments = instruments;
-        this.sourceDomains = sourceDomains;
+        this.websites = websites;
         this.coordinator = coordinator;
         this.coverage = coverage;
     }
@@ -65,37 +65,42 @@ public class IngestionJob {
     }
 
     /**
-     * Searches one company over a recent window using only the agent-added domain (ADR-0080). The
-     * company need not be in the scheduled selection, but the domain must be one of its active
-     * added domains, so nothing else can be searched this way.
+     * Searches these companies over a recent window (ADR-0081). With a {@code domain}, which must be one of the
+     * added websites, only that website is searched; without one, every website is: each company's official
+     * sites, the shared news sites and all the added websites. The companies need not be in the scheduled selection.
      */
-    public IngestionOutcome researchCompany(String instrumentId, String domain, Instant windowFrom, Instant windowTo) {
+    public IngestionOutcome researchCompanies(List<String> instrumentIds, String domain, Instant windowFrom, Instant windowTo) {
         requireWorkerMode();
-        Instrument instrument = instruments.findById(instrumentId).filter(Instrument::isActive).orElse(null);
-        boolean registered = instrument != null && sourceDomains
-                .findByInstrumentIdAndActiveTrueOrderByAddedAtAsc(instrumentId).stream()
-                .anyMatch(entry -> entry.getDomain().equals(domain));
-        if (!registered) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
-        InstrumentSearchTerms terms = new InstrumentSearchTerms(instrument.getTicker(), instrument.getIssuerName(),
-                instrument.getSector(), instrument.getSearchAliases(), properties.eventTerms(), List.of(), List.of(domain));
-        return coordinator.research(windowFrom, windowTo, List.of(terms));
+        List<String> added = addedWebsites();
+        if (domain != null && !added.contains(domain)) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
+        List<InstrumentSearchTerms> terms = instruments.findAllById(instrumentIds).stream()
+                .filter(Instrument::isActive)
+                .sorted(Comparator.comparing(Instrument::getId))
+                .map(instrument -> new InstrumentSearchTerms(instrument.getTicker(), instrument.getIssuerName(),
+                        instrument.getSector(), instrument.getSearchAliases(), properties.eventTerms(),
+                        domain == null ? instrument.getOfficialDomains() : List.of(),
+                        domain == null ? added : List.of(domain)))
+                .toList();
+        if (terms.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
+        return coordinator.research(windowFrom, windowTo, terms, domain == null ? properties.approvedDomains() : List.of());
     }
 
     private List<CatalogueEntry> catalogue() {
         Set<String> eligibleIds = Set.copyOf(searchUniverse.eligibleInstrumentIds());
         if (eligibleIds.isEmpty()) return List.of();
-        Map<String, List<String>> custom = sourceDomains
-                .findByInstrumentIdInAndActiveTrueOrderByAddedAtAsc(eligibleIds).stream()
-                .collect(Collectors.groupingBy(InstrumentSourceDomain::getInstrumentId,
-                        Collectors.mapping(InstrumentSourceDomain::getDomain, Collectors.toList())));
+        List<String> added = addedWebsites();
         return instruments.findAllById(eligibleIds).stream()
                 .filter(instrument -> instrument.isActive() && eligibleIds.contains(instrument.getId()))
                 .sorted(Comparator.comparing(instrument -> instrument.getId()))
                 .map(instrument -> new CatalogueEntry(instrument.getId(), new InstrumentSearchTerms(
                         instrument.getTicker(), instrument.getIssuerName(), instrument.getSector(),
-                        instrument.getSearchAliases(), properties.eventTerms(), instrument.getOfficialDomains(),
-                        custom.getOrDefault(instrument.getId(), List.of()))))
+                        instrument.getSearchAliases(), properties.eventTerms(), instrument.getOfficialDomains(), added)))
                 .toList();
+    }
+
+    /** The websites agents added; they are searched for every company (ADR-0082). */
+    private List<String> addedWebsites() {
+        return websites.findByActiveTrueOrderByAddedAtAsc().stream().map(SearchWebsite::getDomain).toList();
     }
 
     private static List<InstrumentSearchTerms> terms(List<CatalogueEntry> catalogue, List<String> selected) {

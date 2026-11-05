@@ -113,9 +113,12 @@ intent only. Replaying the same key and body returns the stored result.
 
 | Method | Path | Roles | Contract |
 |---|---|---|---|
-| GET | `/api/alerts/search-sources` | agent, admin | Companies the agent's clients currently hold (admin: all active), each with `official`, `shared`, `custom[{id, domain, addedAt, addedByYou}]`, `canAdd`, `maxCustom`. |
-| POST | `/api/alerts/search-sources/{instrumentId}/domains` | agent | `{domain}`. 201 with the entry. 400 `INVALID_FORMAT` or `BLOCKED_DOMAIN`; 403 `NOT_HELD`; 404 unknown company; 409 `ALREADY_COVERED` or `LIMIT_REACHED`. The reply also has `research` (`STARTED`, `COOLDOWN`, `DAILY_LIMIT`, `OFF` or `FAILED`) and, when `STARTED`, `researchLookbackDays`: the API starts one worker run for that company using only the new domain (ADR-0081), and a search that did not start never fails the add. Audited as `alert.search-domain-added`. |
-| DELETE | `/api/alerts/search-sources/{instrumentId}/domains/{domainId}` | agent who holds the company, admin | 204. Keeps the row as history. Audited as `alert.search-domain-deactivated`. |
+| GET | `/api/alerts/search-websites` | agent, admin | `shared` (the deployment's news sites), `added[{id, domain, addedAt, addedByYou}]`, `canAdd`, `max`. Searched for every company (ADR-0082). |
+| POST | `/api/alerts/search-websites` | agent | `{domain}`. 201 with the entry and `search` (what happened to the search started for the agent's companies, ADR-0081). 400 `INVALID_FORMAT` or `BLOCKED_DOMAIN`; 409 `ALREADY_COVERED` or `LIMIT_REACHED`. Audited as `alert.search-website-added`. |
+| DELETE | `/api/alerts/search-websites/{websiteId}` | agent, admin | 204. Keeps the row as history. Audited as `alert.search-website-removed`. |
+| GET | `/api/alerts/search-holdings` | agent, admin | Each company held by the agent's clients (admin: everyone's) with `officialDomains` and `holders[{clientId, accountId, quantity, valueSgd, sharePercent, ownerAgentSubject}]`. Client ids are anonymous; the page looks names up in the CRM. The owner is given to admins only. |
+| POST | `/api/alerts/search-now` | agent, admin | Optional `{instrumentId}`. Searches one company or every company the caller may search, over 14 days on every website. Returns `{outcome, started[], cooldown[{instrumentId, availableAt}], lookbackDays}`. 403 `NOT_HELD`. Never changes the automatic schedule (ADR-0081). |
+| GET | `/api/alerts/search-schedule` | agent, admin | `{enabled, intervalMinutes, zone, previousRunAt, nextRunAt}`. |
 
 Refusals are RFC 9457 problems with an extra `code`. The worker reads active rows from `instrument_source_domain` on every run and adds them to the company's approved domains; they are not official domains, so the strict relevance gate applies in full.
 

@@ -21,6 +21,7 @@ import java.time.Clock;
         ReplayProperties.class,
         ResearchProperties.class,
         SearchOnAddProperties.class,
+        ScheduleProperties.class,
         TavilyProperties.class,
         PipelineProperties.class,
         CrmDirectoryProperties.class

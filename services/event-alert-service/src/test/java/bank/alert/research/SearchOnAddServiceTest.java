@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,6 +22,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,6 +37,7 @@ class SearchOnAddServiceTest {
     @BeforeEach
     void saves() {
         when(requests.saveAndFlush(any(SourceSearchRequest.class))).thenAnswer(call -> call.getArgument(0));
+        when(requests.findFirstByInstrumentIdAndStatusOrderByRequestedAtDesc(anyString(), anyString())).thenReturn(Optional.empty());
     }
 
     @SuppressWarnings("unchecked")
@@ -46,62 +49,116 @@ class SearchOnAddServiceTest {
         return new SearchOnAddService(properties, provider, requests, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
-    private SearchOnAddService.Outcome add(SearchOnAddService service) {
-        return service.request("SGX-D05", "businesstimes.com.sg", "agent-a", CORRELATION);
+    private static SourceSearchRequest startedAt(String instrumentId, Instant at) {
+        return new SourceSearchRequest(UUID.randomUUID(), instrumentId, null, "MANUAL", "agent-a", at, "STARTED", null);
     }
 
     @Test
     void doesNothingWhenOff() {
-        assertThat(add(service("off", null, 20))).isEqualTo(SearchOnAddService.Outcome.OFF);
+        SearchOnAddService.Result result = service("off", null, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION);
+
+        assertThat(result.outcome()).isEqualTo(SearchOnAddService.Outcome.OFF);
         verify(requests, never()).saveAndFlush(any());
     }
 
     @Test
     void doesNothingWhenNoStarterIsConfigured() {
-        assertThat(add(service("ecs", null, 20))).isEqualTo(SearchOnAddService.Outcome.OFF);
+        assertThat(service("ecs", null, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION).outcome())
+                .isEqualTo(SearchOnAddService.Outcome.OFF);
     }
 
     @Test
-    void startsOneSearchWithTheConfiguredLookbackAndRecordsIt() {
-        assertThat(add(service("ecs", trigger, 20))).isEqualTo(SearchOnAddService.Outcome.STARTED);
+    void withNoCompaniesThereIsNothingToSearch() {
+        assertThat(service("ecs", trigger, 0).manual(List.of(), "agent-a", CORRELATION).outcome())
+                .isEqualTo(SearchOnAddService.Outcome.NOTHING_TO_SEARCH);
+        verify(trigger, never()).start(any());
+    }
 
+    @Test
+    void aManualSearchStartsOneTaskForAllTheCompaniesUsingEveryWebsite() {
+        SearchOnAddService.Result result = service("ecs", trigger, 0)
+                .manual(List.of("SGX-D05", "SGX-O39", "NASDAQ-AAPL"), "agent-a", CORRELATION);
+
+        assertThat(result.outcome()).isEqualTo(SearchOnAddService.Outcome.STARTED);
+        assertThat(result.started()).containsExactly("SGX-D05", "SGX-O39", "NASDAQ-AAPL");
         ArgumentCaptor<SearchOnAddTrigger.ResearchRequest> sent = ArgumentCaptor.forClass(SearchOnAddTrigger.ResearchRequest.class);
         verify(trigger).start(sent.capture());
-        assertThat(sent.getValue().instrumentId()).isEqualTo("SGX-D05");
-        assertThat(sent.getValue().domain()).isEqualTo("businesstimes.com.sg");
+        assertThat(sent.getValue().instrumentIds()).containsExactly("SGX-D05", "SGX-O39", "NASDAQ-AAPL");
+        assertThat(sent.getValue().domain()).isNull();
         assertThat(sent.getValue().lookback()).isEqualTo(Duration.ofDays(14));
         assertThat(sent.getValue().correlationId()).isEqualTo(CORRELATION.toString());
         ArgumentCaptor<SourceSearchRequest> saved = ArgumentCaptor.forClass(SourceSearchRequest.class);
-        verify(requests).saveAndFlush(saved.capture());
-        assertThat(saved.getValue().getStatus()).isEqualTo("STARTED");
-        assertThat(saved.getValue().getRequestedBySubject()).isEqualTo("agent-a");
+        verify(requests, times(3)).saveAndFlush(saved.capture());
+        assertThat(saved.getAllValues()).extracting(SourceSearchRequest::getStatus).containsOnly("STARTED");
+        assertThat(saved.getAllValues()).extracting(SourceSearchRequest::getKind).containsOnly("MANUAL");
     }
 
     @Test
-    void aCompanySearchedRecentlyIsInCooldown() {
-        when(requests.existsByInstrumentIdAndStatusAndRequestedAtAfter(anyString(), anyString(), any())).thenReturn(true);
+    void anAddedWebsiteIsSearchedAloneForTheAgentsCompanies() {
+        service("ecs", trigger, 0).afterAdd("businesstimes.com.sg", List.of("SGX-D05", "SGX-O39"), "agent-a", CORRELATION);
 
-        assertThat(add(service("ecs", trigger, 20))).isEqualTo(SearchOnAddService.Outcome.COOLDOWN);
-
-        verify(trigger, never()).start(any());
+        ArgumentCaptor<SearchOnAddTrigger.ResearchRequest> sent = ArgumentCaptor.forClass(SearchOnAddTrigger.ResearchRequest.class);
+        verify(trigger).start(sent.capture());
+        assertThat(sent.getValue().domain()).isEqualTo("businesstimes.com.sg");
         ArgumentCaptor<SourceSearchRequest> saved = ArgumentCaptor.forClass(SourceSearchRequest.class);
-        verify(requests).saveAndFlush(saved.capture());
-        assertThat(saved.getValue().getStatus()).isEqualTo("COOLDOWN");
+        verify(requests, times(2)).saveAndFlush(saved.capture());
+        assertThat(saved.getAllValues()).extracting(SourceSearchRequest::getKind).containsOnly("ADD");
     }
 
     @Test
-    void theCooldownLooksBackByTheConfiguredPeriod() {
-        add(service("ecs", trigger, 20));
+    void aCompanySearchedRecentlyIsSkippedAndSaysWhenItCanBeSearchedAgain() {
+        when(requests.findFirstByInstrumentIdAndStatusOrderByRequestedAtDesc("SGX-D05", "STARTED"))
+                .thenReturn(Optional.of(startedAt("SGX-D05", NOW.minusSeconds(300))));
 
-        verify(requests).existsByInstrumentIdAndStatusAndRequestedAtAfter("SGX-D05", "STARTED", NOW.minus(Duration.ofMinutes(15)));
+        SearchOnAddService.Result result = service("ecs", trigger, 0)
+                .manual(List.of("SGX-D05", "SGX-O39"), "agent-a", CORRELATION);
+
+        assertThat(result.outcome()).isEqualTo(SearchOnAddService.Outcome.STARTED);
+        assertThat(result.started()).containsExactly("SGX-O39");
+        assertThat(result.cooldown()).singleElement().satisfies(skipped -> {
+            assertThat(skipped.instrumentId()).isEqualTo("SGX-D05");
+            assertThat(skipped.availableAt()).isEqualTo(NOW.plus(Duration.ofMinutes(10)));
+        });
+        ArgumentCaptor<SearchOnAddTrigger.ResearchRequest> sent = ArgumentCaptor.forClass(SearchOnAddTrigger.ResearchRequest.class);
+        verify(trigger).start(sent.capture());
+        assertThat(sent.getValue().instrumentIds()).containsExactly("SGX-O39");
     }
 
     @Test
-    void stopsAtTheDailyCap() {
-        when(requests.countByStatusAndRequestedAtAfter(anyString(), any())).thenReturn(2L);
+    void whenEveryCompanyIsInCooldownNothingStarts() {
+        when(requests.findFirstByInstrumentIdAndStatusOrderByRequestedAtDesc(anyString(), anyString()))
+                .thenReturn(Optional.of(startedAt("SGX-D05", NOW.minusSeconds(60))));
 
-        assertThat(add(service("ecs", trigger, 2))).isEqualTo(SearchOnAddService.Outcome.DAILY_LIMIT);
+        SearchOnAddService.Result result = service("ecs", trigger, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION);
 
+        assertThat(result.outcome()).isEqualTo(SearchOnAddService.Outcome.COOLDOWN);
+        verify(trigger, never()).start(any());
+    }
+
+    @Test
+    void aCooldownThatHasPassedDoesNotBlock() {
+        when(requests.findFirstByInstrumentIdAndStatusOrderByRequestedAtDesc(anyString(), anyString()))
+                .thenReturn(Optional.of(startedAt("SGX-D05", NOW.minus(Duration.ofMinutes(16)))));
+
+        assertThat(service("ecs", trigger, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION).outcome())
+                .isEqualTo(SearchOnAddService.Outcome.STARTED);
+    }
+
+    @Test
+    void thereIsNoDailyCapByDefault() {
+        when(requests.countByStatusAndRequestedAtAfter(anyString(), any())).thenReturn(10_000L);
+
+        assertThat(service("ecs", trigger, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION).outcome())
+                .isEqualTo(SearchOnAddService.Outcome.STARTED);
+    }
+
+    @Test
+    void anOptionalDailyCapStopsASearchThatWouldExceedIt() {
+        when(requests.countByStatusAndRequestedAtAfter(anyString(), any())).thenReturn(19L);
+
+        SearchOnAddService.Result result = service("ecs", trigger, 20).manual(List.of("SGX-D05", "SGX-O39"), "agent-a", CORRELATION);
+
+        assertThat(result.outcome()).isEqualTo(SearchOnAddService.Outcome.DAILY_LIMIT);
         verify(trigger, never()).start(any());
         verify(requests).countByStatusAndRequestedAtAfter("STARTED", NOW.minus(Duration.ofHours(24)));
     }
@@ -110,25 +167,27 @@ class SearchOnAddServiceTest {
     void aSearchThatCannotStartIsReportedAndDoesNotHoldTheCooldown() {
         doThrow(new IllegalStateException("no capacity")).when(trigger).start(any());
 
-        assertThat(add(service("ecs", trigger, 20))).isEqualTo(SearchOnAddService.Outcome.FAILED);
+        SearchOnAddService.Result result = service("ecs", trigger, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION);
 
+        assertThat(result.outcome()).isEqualTo(SearchOnAddService.Outcome.FAILED);
         ArgumentCaptor<SourceSearchRequest> saved = ArgumentCaptor.forClass(SourceSearchRequest.class);
-        verify(requests, org.mockito.Mockito.times(2)).saveAndFlush(saved.capture());
+        verify(requests, times(2)).saveAndFlush(saved.capture());
         assertThat(saved.getAllValues()).extracting(SourceSearchRequest::getStatus).containsExactly("STARTED", "FAILED");
-        verify(requests).delete(saved.getAllValues().get(0));
+        verify(requests).deleteAll(any());
     }
 
     @Test
     void neverThrowsWhenTheDatabaseIsUnavailable() {
-        when(requests.existsByInstrumentIdAndStatusAndRequestedAtAfter(anyString(), anyString(), any()))
+        when(requests.findFirstByInstrumentIdAndStatusOrderByRequestedAtDesc(anyString(), anyString()))
                 .thenThrow(new IllegalStateException("database down"));
 
-        assertThat(add(service("ecs", trigger, 20))).isEqualTo(SearchOnAddService.Outcome.FAILED);
+        assertThat(service("ecs", trigger, 0).manual(List.of("SGX-D05"), "agent-a", CORRELATION).outcome())
+                .isEqualTo(SearchOnAddService.Outcome.FAILED);
         verify(trigger, never()).start(any());
     }
 
     @Test
     void reportsTheLookbackInWholeDays() {
-        assertThat(service("ecs", trigger, 20).lookbackDays()).isEqualTo(14);
+        assertThat(service("ecs", trigger, 0).lookbackDays()).isEqualTo(14);
     }
 }

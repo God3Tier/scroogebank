@@ -8,7 +8,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** One "search now" request made when an agent added a search domain (ADR-0080). */
+/** One company searched because an agent added a website or pressed Search now (ADR-0081). */
 @Entity
 @Table(name = "source_search_request")
 public class SourceSearchRequest {
@@ -19,8 +19,12 @@ public class SourceSearchRequest {
     @Column(name = "instrument_id", nullable = false, length = 32)
     private String instrumentId;
 
-    @Column(nullable = false, length = 253)
+    /** The website that was added, or null for a Search now over all websites. */
+    @Column(length = 253)
     private String domain;
+
+    @Column(nullable = false, length = 8)
+    private String kind;
 
     @Column(name = "requested_by_subject", nullable = false, length = 128)
     private String requestedBySubject;
@@ -37,11 +41,12 @@ public class SourceSearchRequest {
     protected SourceSearchRequest() {
     }
 
-    public SourceSearchRequest(UUID id, String instrumentId, String domain, String requestedBySubject,
+    public SourceSearchRequest(UUID id, String instrumentId, String domain, String kind, String requestedBySubject,
             Instant requestedAt, String status, String detail) {
         this.id = id;
         this.instrumentId = instrumentId;
         this.domain = domain;
+        this.kind = kind;
         this.requestedBySubject = requestedBySubject;
         this.requestedAt = requestedAt;
         this.status = status;
@@ -58,6 +63,10 @@ public class SourceSearchRequest {
 
     public String getDomain() {
         return domain;
+    }
+
+    public String getKind() {
+        return kind;
     }
 
     public String getRequestedBySubject() {

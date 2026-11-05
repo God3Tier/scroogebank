@@ -3130,3 +3130,9 @@ textarea:focus {
 .source-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .source-add input { min-width: 14rem; flex: 1 1 14rem; }
 .muted { opacity: 0.7; }
+
+/* Search sources: when the next search is, the shared websites, and who holds each company (ADR-0081, ADR-0082). */
+.search-schedule { margin: 0; padding: 0.75rem 1rem; border: 1px solid var(--border, rgba(127, 127, 127, 0.35)); border-radius: 0.5rem; }
+.holders-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.holders-table th, .holders-table td { padding: 0.3rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25)); }
+.holders-table .num { text-align: right; font-variant-numeric: tabular-nums; }

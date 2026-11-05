@@ -24,7 +24,9 @@ import static org.mockito.Mockito.when;
 class SearchOnAddTriggersTest {
 
     private static final SearchOnAddTrigger.ResearchRequest REQUEST = new SearchOnAddTrigger.ResearchRequest(
-            "SGX-D05", "businesstimes.com.sg", Duration.ofDays(14), "corr-1");
+            List.of("SGX-D05", "SGX-O39"), "businesstimes.com.sg", Duration.ofDays(14), "corr-1");
+    private static final SearchOnAddTrigger.ResearchRequest ALL_WEBSITES = new SearchOnAddTrigger.ResearchRequest(
+            List.of("SGX-D05"), null, Duration.ofDays(14), "corr-2");
 
     private static SearchOnAddProperties properties(List<String> command) {
         return new SearchOnAddProperties("ecs", null, 0, null, "crm-sg-prod", "crm-sg-prod-event-alert-worker",
@@ -32,12 +34,18 @@ class SearchOnAddTriggersTest {
     }
 
     @Test
-    void theWorkerReadsTheCompanyTheDomainTheLookbackAndTheCorrelationId() {
+    void theWorkerReadsTheCompaniesTheDomainTheLookbackAndTheCorrelationId() {
         assertThat(SearchOnAddTrigger.workerEnvironment(REQUEST)).containsExactly(
-                java.util.Map.entry("ALERT_WORKER_RESEARCH_INSTRUMENT", "SGX-D05"),
+                java.util.Map.entry("ALERT_WORKER_RESEARCH_INSTRUMENTS", "SGX-D05,SGX-O39"),
                 java.util.Map.entry("ALERT_WORKER_RESEARCH_DOMAIN", "businesstimes.com.sg"),
                 java.util.Map.entry("ALERT_WORKER_RESEARCH_LOOKBACK", "PT336H"),
                 java.util.Map.entry("ALERT_WORKER_RESEARCH_CORRELATION_ID", "corr-1"));
+    }
+
+    @Test
+    void withoutADomainTheWorkerIsNotToldOneSoItSearchesEveryWebsite() {
+        assertThat(SearchOnAddTrigger.workerEnvironment(ALL_WEBSITES).keySet()).containsExactly(
+                "ALERT_WORKER_RESEARCH_INSTRUMENTS", "ALERT_WORKER_RESEARCH_LOOKBACK", "ALERT_WORKER_RESEARCH_CORRELATION_ID");
     }
 
     @Test
@@ -59,7 +67,7 @@ class SearchOnAddTriggersTest {
         assertThat(task.overrides().containerOverrides()).hasSize(1);
         assertThat(task.overrides().containerOverrides().get(0).name()).isEqualTo("event-alert-worker");
         assertThat(task.overrides().containerOverrides().get(0).environment()).extracting(KeyValuePair::name)
-                .containsExactly("ALERT_WORKER_RESEARCH_INSTRUMENT", "ALERT_WORKER_RESEARCH_DOMAIN",
+                .containsExactly("ALERT_WORKER_RESEARCH_INSTRUMENTS", "ALERT_WORKER_RESEARCH_DOMAIN",
                         "ALERT_WORKER_RESEARCH_LOOKBACK", "ALERT_WORKER_RESEARCH_CORRELATION_ID");
     }
 

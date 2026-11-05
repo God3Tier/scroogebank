@@ -3,37 +3,40 @@ package bank.alert.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
- * A request, made by starting a worker task with these variables (ALERT_WORKER_RESEARCH_INSTRUMENT
- * and so on), to search one company over its recent past using one added domain (ADR-0080).
- * Like a replay it never moves the scheduler watermark.
+ * A request, made by starting a worker task with these variables (ALERT_WORKER_RESEARCH_INSTRUMENTS
+ * and so on), to search some companies over their recent past (ADR-0081). With a {@code domain} only
+ * that added website is searched; without one, every website is searched. Like a replay it never
+ * moves the scheduler watermark.
  */
 @ConfigurationProperties(prefix = "alert.worker.research")
-public record ResearchProperties(String instrument, String domain, Duration lookback, String correlationId) {
+public record ResearchProperties(List<String> instruments, String domain, Duration lookback, String correlationId) {
 
     static final Duration LONGEST_LOOKBACK = Duration.ofDays(31);
     private static final Duration SHORTEST_LOOKBACK = Duration.ofHours(1);
 
     public ResearchProperties {
-        instrument = blankToNull(instrument);
+        instruments = instruments == null ? List.of() : instruments.stream()
+                .filter(id -> id != null && !id.isBlank()).map(String::strip).distinct().toList();
         domain = blankToNull(domain);
         correlationId = blankToNull(correlationId);
         lookback = lookback == null ? Duration.ofDays(14) : lookback;
     }
 
-    /** True when either value is set, so a half-filled request fails closed. */
+    /** True when any company is named, so a half-filled request fails closed. */
     public boolean requested() {
-        return instrument != null || domain != null;
+        return !instruments.isEmpty() || domain != null;
     }
 
-    /** Throws IllegalArgumentException unless the company, the domain and a sensible lookback are set. */
+    /** Throws IllegalArgumentException unless at least one company and a sensible lookback are set. */
     public void validate() {
-        if (instrument == null || instrument.length() > 32) {
-            throw new IllegalArgumentException("research instrument must contain 1 to 32 characters");
+        if (instruments.isEmpty() || instruments.size() > 200 || instruments.stream().anyMatch(id -> id.length() > 32)) {
+            throw new IllegalArgumentException("research instruments must name 1 to 200 companies");
         }
-        if (domain == null || domain.length() > 253) {
-            throw new IllegalArgumentException("research domain must contain 1 to 253 characters");
+        if (domain != null && domain.length() > 253) {
+            throw new IllegalArgumentException("research domain must contain at most 253 characters");
         }
         if (lookback.compareTo(SHORTEST_LOOKBACK) < 0 || lookback.compareTo(LONGEST_LOOKBACK) > 0) {
             throw new IllegalArgumentException("research lookback must be between 1 hour and 31 days");
