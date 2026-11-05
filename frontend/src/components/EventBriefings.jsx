@@ -36,6 +36,48 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('en-SG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore' }).format(new Date(value))
 }
 
+function ReportPanel({ report }) {
+  if (!report) return null
+  const body = report.report
+  const cited = (list) => (list || []).map((item) => item.text)
+  return (
+    <section className="event-report" aria-label="Event report">
+      <h3>{body.headline}</h3>
+      <p className="holdings-note">Version {report.version} of {report.versionCount}. {report.schemaVersion === 'briefing-v1-legacy' ? 'Migrated from an earlier briefing.' : 'AI-written from public sources; checked before it is shown.'}</p>
+      {cited(body.executiveSummary).map((text) => <p key={text}>{text}</p>)}
+      {(body.keyFacts || []).length > 0 && (
+        <>
+          <h4>Key facts</h4>
+          <ul>{body.keyFacts.map((fact) => <li key={fact.label}><strong>{fact.label}:</strong> {fact.value}. {fact.context}</li>)}</ul>
+        </>
+      )}
+      {(body.whyItMatters || []).length > 0 && (
+        <>
+          <h4>Why it matters</h4>
+          <ul>{body.whyItMatters.map((item) => <li key={item.text}>{item.kind === 'POTENTIAL_IMPLICATION' ? `Potential implication: ${item.text}` : item.text}</li>)}</ul>
+        </>
+      )}
+      {(body.whatToMonitor || []).length > 0 && (
+        <>
+          <h4>What to monitor</h4>
+          <ul>{body.whatToMonitor.map((item) => <li key={item}>{item}</li>)}</ul>
+        </>
+      )}
+      {body.uncertainty && <p><strong>Uncertainty:</strong> {body.uncertainty}</p>}
+      <h4>Sources</h4>
+      <ul>
+        {report.sources.map((source) => (
+          <li key={source.url}>
+            <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> ({source.domain}){source.usedInReport ? '' : ' - linked, not used in the summary'}
+          </li>
+        ))}
+      </ul>
+      {Object.values(report.portfolioLines || {}).map((line) => <p key={line}>{line}</p>)}
+      <p className="holdings-note">{report.disclaimer}</p>
+    </section>
+  )
+}
+
 function EventDetailPanel({ eventId, onChanged }) {
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
@@ -86,6 +128,7 @@ function EventDetailPanel({ eventId, onChanged }) {
   return (
     <form className="event-clients" onSubmit={submit} aria-label="Affected clients">
       {error && <p className="error-text" role="alert">{error}</p>}
+      <ReportPanel report={detail.report} />
       <div className="table-wrap">
         <table className="data-table">
           <thead>

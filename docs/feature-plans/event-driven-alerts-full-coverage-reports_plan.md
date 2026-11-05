@@ -18,9 +18,9 @@ Search every eligible instrument every run, combine corroborating sources into o
 | FC-03 | The two query groups as listed in the ADR | FC-02 | Done |
 | FC-04 | One atomic reservation per run; quota and USD 25 budget; CONTROL_BLOCKED | FC-02 | Done |
 | FC-05 | `ALERT_SEARCH_ONLY_INSTRUMENT_ID`, refused before any quota is used | FC-02 | Done |
-| FC-06 | Group sources into one event; `public_event_source`; backfill | FC-02 | Not started |
-| FC-07 | `event_report` and `alert-client-report-v2`; generate after a score of 60 or more | FC-06 | Not started |
-| FC-08 | Citation and figure checks; application-added text | FC-07 | Not started |
+| FC-06 | Group sources into one event; `public_event_source`; backfill | FC-02 | Done |
+| FC-07 | `event_report` and `alert-client-report-v2`; generate after a score of 60 or more | FC-06 | Done |
+| FC-08 | Citation and figure checks; application-added text | FC-07 | Done |
 | FC-09 | Agent approves a report and chooses recipients (API and page) | FC-07 | Not started |
 | FC-10 | Deliver individually addressed emails through the engagement service and SES | FC-09 | Not started |
 | FC-11 | Documentation, runbook, API contract | all | In progress |

@@ -42,6 +42,38 @@ describe('event briefings', () => {
       .toHaveAttribute('href', CARD.evidence.url)
   })
 
+  it('shows the event report with every linked source and the fixed text', async () => {
+    listEvents.mockResolvedValue({ items: [CARD] })
+    getEvent.mockResolvedValue({
+      ...DETAIL,
+      report: {
+        reportId: 'r1', version: 2, versionCount: 2, schemaVersion: 'alert-client-report-v2',
+        report: {
+          headline: 'Synthetic report headline',
+          executiveSummary: [{ text: 'First cited sentence.', sourceRefs: ['s1'] }, { text: 'Second cited sentence.', sourceRefs: ['s1'] }],
+          keyFacts: [{ label: 'Revenue', value: '$10 million', context: 'Up on the year', sourceRefs: ['s1'] }],
+          whyItMatters: [{ text: 'Demand may grow.', kind: 'POTENTIAL_IMPLICATION', sourceRefs: [] }],
+          marketContext: null, whatToMonitor: ['Next quarter', 'Guidance'], uncertainty: 'One source.', sourceRefs: ['s1'],
+        },
+        sources: [
+          { title: 'Used source', url: 'https://a.invalid/x', domain: 'a.invalid', publishedAt: null, usedInReport: true },
+          { title: 'Extra source', url: 'https://b.invalid/y', domain: 'b.invalid', publishedAt: null, usedInReport: false },
+        ],
+        portfolioLines: { 'SYN-SGX-001': 'Your portfolio has exposure to Synthetic Ltd, which may be affected by this event.' },
+        disclaimer: 'This report is for information only.', createdAt: '2026-10-30T02:00:00Z',
+      },
+    })
+    render(<EventBriefings />)
+
+    fireEvent.click(await screen.findByText('Review affected clients'))
+
+    expect(await screen.findByText('Synthetic report headline')).toBeInTheDocument()
+    expect(screen.getByText('Potential implication: Demand may grow.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Extra source' })).toHaveAttribute('href', 'https://b.invalid/y')
+    expect(screen.getByText(/Your portfolio has exposure to Synthetic Ltd/)).toBeInTheDocument()
+    expect(screen.getByText('This report is for information only.')).toBeInTheDocument()
+  })
+
   it('loads the next event page without replacing the first', async () => {
     const older = { ...CARD, eventId: 'event-2', headline: 'Older synthetic event' }
     listEvents.mockResolvedValueOnce({ items: [CARD], nextCursor: 'cursor-1' })

@@ -508,7 +508,7 @@ class CurrentHoldingsIntegrationTest {
     void eventPagesUseAStableCursorAndRecheckCurrentOwnership() {
         put(ACCOUNT_1, "key-82500001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
         generate("agent-a", 2);
-        generate("agent-a", 3);
+        generate("agent-a", 3, EventType.CREDIT);
 
         var first = eventQueries.list("agent-a", false, null, 1);
         assertThat(first.items()).hasSize(1);
@@ -625,6 +625,11 @@ class CurrentHoldingsIntegrationTest {
     }
 
     private AlertGenerationOutcome generate(String agent, int sourceNumber) {
+        return generate(agent, sourceNumber, EventType.EARNINGS);
+    }
+
+    /** A source of another event type is a different event; the same type, instruments and direction would group (ADR-0084). */
+    private AlertGenerationOutcome generate(String agent, int sourceNumber, EventType eventType) {
         jdbc.update("""
                 INSERT INTO search_run (id, window_from, window_to, status, created_at)
                 VALUES ('70000000-0000-4000-8000-000000000001', '2026-10-29T20:00:00Z', '2026-10-30T00:00:00Z',
@@ -637,7 +642,7 @@ class CurrentHoldingsIntegrationTest {
                 Instant.parse("2026-10-30T00:00:00Z"), NOW, "d".repeat(64), Instant.parse("2027-01-28T00:00:00Z"));
         if (sourceResults.findById(source.getId()).isEmpty()) sourceResults.saveAndFlush(source);
         EventClassification classification = new EventClassification("Synthetic earnings event",
-                EventType.EARNINGS, EventDirection.POSITIVE, new BigDecimal("0.90"),
+                eventType, EventDirection.POSITIVE, new BigDecimal("0.90"),
                 List.of(new AffectedInstrument("SYN-SGX-001", source.getId().toString())),
                 List.of(source.getId().toString()), "fixture-model-v1", "prompt-v1", NOW);
         AgentBriefing briefing = new AgentBriefing("Synthetic issuer update",

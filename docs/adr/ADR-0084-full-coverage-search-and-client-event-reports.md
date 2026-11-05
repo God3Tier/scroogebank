@@ -36,7 +36,7 @@ This ADR records the plan written by Azeez: search every eligible instrument on 
 5. **A test setting.** `ALERT_SEARCH_ONLY_INSTRUMENT_ID`, when set, searches only that instrument. It must be known, active and eligible, or the run is refused before any quota is used (status INVALID_FILTER, exit code 1). Unset, every eligible instrument is searched.
 6. **The safe defaults stay.** The monthly quota stays at 1,000 until Azeez approves a new one from a live billed-credit benchmark. Ingestion stays off until that approval is recorded.
 
-### Part 2: the multi-source client report (not yet built)
+### Part 2: the multi-source client report (built)
 
 7. A classified source joins an existing event only if its sorted set of affected instruments, its event type and its direction all match within a rolling 72 hours; ambiguous or conflicting classifications stay separate. All linked sources are kept; at most five distinct-domain sources go to the model, chosen by publication time and canonical URL. The first report is not delayed waiting for more sources.
 8. One `event_report` per `public_event`, with a `public_event_source` join table. Existing briefings are backfilled and the old `briefing` table is kept for rollback. A report is generated once per event, only after deterministic scoring gives at least one alert of 60 or more.
