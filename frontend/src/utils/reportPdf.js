@@ -4,9 +4,9 @@
 const MARGIN = 48
 const LINE = 1.35
 
-// The built-in PDF font covers Latin-1 plus a few typographic marks; anything else would print as junk.
-const WINANSI_EXTRA = '–—‘’“”…€'
-const printable = (text) => [...text].map((ch) => (ch.charCodeAt(0) <= 0xFF || WINANSI_EXTRA.includes(ch) ? ch : '?')).join('')
+// The built-in PDF font only covers Latin-1, so typographic marks become plain ones and anything else a "?".
+const PLAIN = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...', '€': 'EUR' }
+const printable = (text) => [...text].map((ch) => PLAIN[ch] ?? (ch.charCodeAt(0) <= 0xFF ? ch : '?')).join('')
 const clean = (value) => printable(String(value ?? '').replace(/\s+/g, ' ').trim())
 
 /** The text of the report as ordered blocks, so the page and the tests share one definition of the layout. */
