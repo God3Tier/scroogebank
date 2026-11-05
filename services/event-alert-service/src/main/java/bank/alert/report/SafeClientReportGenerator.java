@@ -12,6 +12,8 @@ import bank.alert.operations.ReservationResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -61,6 +63,9 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
             + "state prices or market data, state what is uncertain, and return only the closed schema.";
 
     private final AiProperties properties;
+    private static final Logger log = LoggerFactory.getLogger(SafeClientReportGenerator.class);
+    /** A full cited report needs more room than a classification: at 1,200 tokens the answer was cut off before its last fields. */
+    static final int MINIMUM_REPORT_OUTPUT_TOKENS = 2_000;
     private final AiModelGateway gateway;
     private final AiSafetyScreen safety;
     private final ObjectMapper mapper;
@@ -94,13 +99,14 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
         if (publicJson.length() > properties.maxInputCharacters()) {
             return outcome(ReportOutcome.Status.ABSTAINED, null, "INPUT_TOO_LARGE", 0);
         }
+        int outputTokens = Math.max(properties.maxOutputTokens(), MINIMUM_REPORT_OUTPUT_TOKENS);
         AiModelRequest request = new AiModelRequest(OPERATION, properties.model(), "alert-client-report-v2",
-                SYSTEM_INSTRUCTION, publicJson, OUTPUT_SCHEMA, properties.maxOutputTokens());
+                SYSTEM_INSTRUCTION, publicJson, OUTPUT_SCHEMA, outputTokens);
         String lastReason = "PROVIDER_FAILURE";
         int attemptsMade = 0;
         for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
             attemptsMade = attempt;
-            ReservationResult reservation = outboundControls.reserveModelTokens(properties.maxOutputTokens());
+            ReservationResult reservation = outboundControls.reserveModelTokens(outputTokens);
             if (!reservation.allowed()) {
                 return outcome(ReportOutcome.Status.PENDING, null, reservation.code(), attempt - 1);
             }
@@ -114,6 +120,10 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
                 String invalid = ClientReportValidator.validate(output, input.evidence());
                 if (invalid != null) {
                     lastReason = invalid;
+                    // Sizes only, never text: enough to see which part of the answer broke the rules.
+                    log.warn("report output refused reason={} summary={} keyFacts={} whyItMatters={} whatToMonitor={} sourceRefs={}",
+                            invalid, size(output.executiveSummary()), size(output.keyFacts()), size(output.whyItMatters()),
+                            size(output.whatToMonitor()), size(output.sourceRefs()));
                     continue;
                 }
                 if (Boolean.TRUE.equals(output.abstain())) {
@@ -135,6 +145,10 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
         // A report the model could not write validly is not retried forever: the caller counts attempts.
         boolean provider = lastReason.startsWith("MODEL_") || "PROVIDER_FAILURE".equals(lastReason);
         return outcome(provider ? ReportOutcome.Status.PENDING : ReportOutcome.Status.ABSTAINED, null, lastReason, attemptsMade);
+    }
+
+    private static int size(java.util.List<?> list) {
+        return list == null ? -1 : list.size();
     }
 
     private ReportOutcome outcome(ReportOutcome.Status status, ClientReport report, String reason, int attempts) {

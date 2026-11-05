@@ -122,6 +122,7 @@ public final class AnthropicAiModelGateway implements AiModelGateway {
                 break;
             }
         }
+        if ("max_tokens".equals(root.path("stop_reason").asText())) throw failure("MODEL_OUTPUT_TRUNCATED", false);
         if (toolInput == null || !toolInput.isObject()) throw failure("EMPTY_MODEL_RESPONSE", true);
         String output;
         try {

@@ -72,6 +72,17 @@ class AnthropicAiModelGatewayTest {
     }
 
     @Test
+    void aReplyCutOffByTheTokenLimitIsRefusedNotHandedOnIncomplete() {
+        reply = toolReply("{\"label\":\"EARNINGS\"}").replace("\"stop_reason\":\"tool_use\"", "\"stop_reason\":\"max_tokens\"");
+
+        assertThatThrownBy(() -> gateway(true, KEY).invoke(request(), Duration.ofSeconds(10)))
+                .isInstanceOfSatisfying(AiProviderException.class, e -> {
+                    assertThat(e.code()).isEqualTo("MODEL_OUTPUT_TRUNCATED");
+                    assertThat(e.retryable()).isFalse();
+                });
+    }
+
+    @Test
     void sendsTheKeyAVersionAndAToolWithTheOutputSchema() throws Exception {
         reply = toolReply("{\"label\":\"EARNINGS\"}");
 
