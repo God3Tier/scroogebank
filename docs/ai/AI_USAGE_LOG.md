@@ -2103,3 +2103,26 @@ retry exhaustion and refusal to retry after the last available reservation.
     because Docker was not running.
 - Human verification required: Neo Jia Wen to review, and to run each script
   once on the next deployment before relying on its results.
+
+## 2026-11-05 — Check-in drafts always fell back to the template (prompt drafts-v3)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: find why every AI follow-up draft in prod showed "the AI draft did
+  not pass the safety checks", and fix it.
+- Finding: the engagement-service logs for 4 and 5 November held 24 screen
+  rejections, all `unknown_placeholder`. Prompt `drafts-v2` (AE-T12)
+  described `{{agent_details}}` in the system prompt to every purpose, and
+  Nova Lite then wrote it into check-ins, which have no details slot. With
+  the `drafts-v2` prompt, 6 of 9 live Check-in replies held the slot.
+- Files: `DraftPrompt.java` (the system prompt is built per purpose; version
+  `drafts-v3`), `DraftGenerator.java`, new `DraftPromptTest.java`, an
+  implementation note in ADR-0068 decision 2, AE-T13 in the feature plan.
+- Verification: the drafting unit tests pass. With the `drafts-v3` text,
+  9 of 9 live Check-in replies held no slot, and 6 of 6 passed a Python copy
+  of the full screen. Health check-in replies kept the slot, but 2 of 6
+  were blocked for the word "offer", a separate issue not changed here.
+  Not yet deployed.
+- Data: the model received only the purpose, tone, two public holidays and
+  placeholders; no client data.
+- Human verification required: Neo Jia Wen to review, deploy, and confirm
+  that new prod check-ins come from the AI.

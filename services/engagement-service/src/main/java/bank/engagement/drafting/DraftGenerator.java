@@ -50,7 +50,7 @@ class DraftGenerator {
 
         DraftModelGateway.ModelReply reply;
         try {
-            reply = model.invoke(DraftPrompt.SYSTEM, DraftPrompt.userInput(purpose, tone, holidays, recency, mapper));
+            reply = model.invoke(DraftPrompt.system(purpose),DraftPrompt.userInput(purpose, tone, holidays, recency, mapper));
         } catch (DraftModelException ex) {
             usage.record(agentSub, today, 0, 0);
             return template(purpose, tone, holidays, ex.reason());
