@@ -1,6 +1,7 @@
-import { Routes, Route } from 'react-router-dom'
+import { useAuth } from 'react-oidc-context'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import RequireAuth from './auth/RequireAuth.jsx'
-import { ADMIN, AGENT } from './auth/roles.js'
+import { ADMIN, AGENT, homeFor } from './auth/roles.js'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import SignInCallback from './pages/SignInCallback.jsx'
@@ -28,10 +29,30 @@ import UserList from './components/UserList.jsx'
 // page is too: client-service lets an admin act on any client and an agent
 // only on their own (ADR-0041). The lists on Agent Home and Admin Home show
 // their first ten rows and open in full, paged, on their own pages.
+
+function HomeEntry() {
+  const auth = useAuth()
+  if (!auth.isLoading){
+    return(
+      <p className="empty-state" role="status">
+        Checking your sign-in status...
+      </p>
+    )
+  }
+
+  if (auth.isAuthenticated) {
+    const destination = homeFor(auth.user)
+    if (destination !== '/') {
+      return <Navigate to={destination} replace />
+    }
+  }
+  return <Home />
+}
+
 function AppRouter() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<HomeEntry />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<SignInCallback />} />
       <Route path="/mfa-setup" element={<MfaSetup />} />

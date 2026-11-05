@@ -53,10 +53,12 @@ function NavBar() {
         <p className="sidebar-subtitle">Staff Portal</p>
       </div>
       <nav className="navbar sidebar-nav">
-        <NavLink to="/">
-          <span className="material-symbols-outlined" aria-hidden="true">home</span>
-          Home
-        </NavLink>
+        {!auth.isLoading && !signedIn &&(
+          <NavLink to="/">
+            <span className="material-symbols-outlined" aria-hidden="true">home</span>
+            Home
+          </NavLink>
+        )}
         {!signedIn && (
           <NavLink to="/login">
             <span className="material-symbols-outlined" aria-hidden="true">login</span>
