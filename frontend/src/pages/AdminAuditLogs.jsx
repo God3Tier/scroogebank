@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 
 import { listActivities } from '../api/activities.js'
 import { cursorSource, usePagedList } from '../components/paging.js'
+import CorruptedAuditLogs from '../components/CorruptedAuditLogs.jsx'
 
 function errorMessage(error) {
   if (error.status === 401) return 'Your session has expired. Sign in again.'
@@ -110,6 +111,8 @@ export default function AdminAuditLogs() {
           </button>
         </nav>
       </section>
+
+      <CorruptedAuditLogs />
     </div>
   )
 }
