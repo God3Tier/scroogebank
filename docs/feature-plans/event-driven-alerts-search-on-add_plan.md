@@ -11,9 +11,9 @@ Agents and admins see what is searched and when, can search by hand, and an agen
 
 ## Design
 
-**Websites.** `search_website` (migration V13) holds the websites agents add, searched for every company. Any agent adds, any agent or admin removes, at most 20. The per-company table is kept as history and no longer read.
+**Websites.** `search_website` (migration V15) holds the websites agents add, searched for every company. Any agent adds, any agent or admin removes, at most 20. The per-company table is kept as history and no longer read.
 
-**Searches.** `SearchOnAddService` starts one worker task for the companies concerned: after adding a website, the agent's companies using only that website; for Search now, one company or all the caller may search, using every website. 14-day look-back, a 15-minute cooldown per company that the page reports, no daily cap by default, the monthly quota as the safety net, and the two per-run caps raised from 4 to 200. A failed start never fails the add. Each company searched is recorded in `source_search_request` (V12).
+**Searches.** `SearchOnAddService` starts one worker task for the companies concerned: after adding a website, the agent's companies using only that website; for Search now, one company or all the caller may search, using every website. 14-day look-back, a 15-minute cooldown per company that the page reports, no daily cap by default, the monthly quota as the safety net, and the two per-run caps raised from 4 to 200. A failed start never fails the add. Each company searched is recorded in `source_search_request` (V14).
 
 **Worker.** `ALERT_WORKER_RESEARCH_INSTRUMENTS` (and `_DOMAIN`) make `WorkerRunner` call `IngestionJob.researchCompanies`, which uses `IngestionCoordinator.research` (no watermark move, same run lock, quota and filter) and then runs the pipeline.
 
@@ -29,10 +29,10 @@ Agents and admins see what is searched and when, can search by hand, and an agen
 
 | ID | Task | Owner | Status |
 |---|---|---|---|
-| SA-01 | Request log and cooldown (V12), `SearchOnAddService` | Hayyun | Done |
+| SA-01 | Request log and cooldown (V14), `SearchOnAddService` | Hayyun | Done |
 | SA-02 | Worker research mode for several companies | Hayyun | Done |
 | SA-03 | ECS and local-process triggers | Hayyun | Done |
-| SA-04 | Shared websites (V13), service, API and OpenAPI | Hayyun | Done |
+| SA-04 | Shared websites (V15), service, API and OpenAPI | Hayyun | Done |
 | SA-05 | Holdings overview and its API | Hayyun | Done |
 | SA-06 | Search now API | Hayyun | Done |
 | SA-07 | Fixed schedule, schedule API | Hayyun | Done |

@@ -53,7 +53,7 @@ No new AWS resources and no extra Tavily searches. One small table.
 
 ## Operational Impact
 
-Migration `V13` creates `search_website` and carries the existing websites over. No Terraform change for this decision. Removing the per-company routes is a breaking API change for the Event Alerts page only; both ship together.
+Migration `V15` creates `search_website` and carries the existing websites over. No Terraform change for this decision. Removing the per-company routes is a breaking API change for the Event Alerts page only; both ship together.
 
 ## Validation
 

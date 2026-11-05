@@ -70,7 +70,7 @@ No new AWS resources. Fargate task time and Tavily and model calls per search, b
 
 ## Operational Impact
 
-New migration `V12` (table `source_search_request`). The event-alert-service image must be rebuilt and pushed, since the API and worker share it. To switch on in AWS: apply `stacks/alert-worker` (new schedule), push the image, then apply the `crm` stack with `alert_search_on_add = true`. It is off until then.
+New migration `V14` (table `source_search_request`). The event-alert-service image must be rebuilt and pushed, since the API and worker share it. To switch on in AWS: apply `stacks/alert-worker` (new schedule), push the image, then apply the `crm` stack with `alert_search_on_add = true`. It is off until then.
 
 ## Validation
 
