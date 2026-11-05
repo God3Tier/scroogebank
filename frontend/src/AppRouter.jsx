@@ -33,7 +33,7 @@ import UserList from './components/UserList.jsx'
 
 function HomeEntry() {
   const auth = useAuth()
-  if (!auth.isLoading){
+  if (auth.isLoading){
     return(
       <p className="empty-state" role="status">
         Checking your sign-in status...
