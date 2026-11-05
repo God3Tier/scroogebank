@@ -644,12 +644,25 @@
   color: var(--warning);
 }
 
-.demo-note {
+/* The figures ADR-0038 leaves out, under the definitions. */
+.definitions-omitted {
   margin: 12px 16px 0;
-  padding: 8px 0 12px;
+  padding: 12px 0;
   border-top: 1px solid var(--outline-variant);
-  color: var(--outline);
-  font-size: 11px;
+}
+
+.definitions-omitted h3 {
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.definitions .definitions-omitted dl {
+  padding: 8px 0 0;
 }
 
 /* ---------- Narrow screens ---------- */

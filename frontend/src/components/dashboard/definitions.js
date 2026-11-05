@@ -1,10 +1,12 @@
-// Metric definitions from docs/feature-plans/business-dashboard_plan.md §8.3,
-// shown in the UI so no figure can be misread (requirement S3).
+// Metric definitions from ADR-0038 (as amended by ADR-0060 and ADR-0062),
+// shown in the UI so no figure can be misread (requirement S3). A new figure
+// needs a row in ADR-0038 first.
 
 export const DEFINITIONS = {
   clientsOnboarded: {
     term: 'Clients onboarded',
-    text: 'Clients created in the window, counted against the agent who created them.',
+    text: 'Clients created in the window, counted against their current agent.',
+    caveat: 'A reassigned client counts for the agent it was moved to.',
   },
   verifiedShare: {
     term: 'Verified share',
@@ -19,6 +21,10 @@ export const DEFINITIONS = {
     term: 'Booked initial deposits',
     text: 'Sum of opening deposits for accounts opened in the window.',
     caveat: 'Opening deposit only, not a current balance. Shown per currency; never added across currencies.',
+  },
+  accountsOpened: {
+    term: 'Accounts opened',
+    text: 'Accounts with an opening date in the window, counted against their owning agent.',
   },
   accountsPerClient: {
     term: 'Accounts per client',
@@ -38,25 +44,28 @@ export const DEFINITIONS = {
     text: 'Sum of transaction amounts in the window.',
     caveat: 'Shown in its currency; not added up when transactions span more than one.',
   },
-  ingestionFreshness: {
-    term: 'Ingestion freshness',
-    text: 'Time since the transaction import last synced.',
-    caveat: 'Warns above 60 minutes.',
-  },
   staleUnverified: {
     term: 'Stale unverified clients',
-    text: 'Unverified or pending clients created more than 7 days ago.',
-  },
-  withoutAccount: {
-    term: 'Clients without an account',
-    text: 'Clients with no account row.',
+    text: 'Clients not yet verified and created more than 7 days ago.',
+    caveat: 'The list shows the oldest 50; the count covers all.',
   },
   teamMedian: {
     term: 'Team median',
-    text: 'Median clients onboarded across active agents. Anonymous.',
-    caveat: 'Shown only when at least 5 agents are active.',
+    text: 'Median clients onboarded across agents who created a client in the last 12 months. Anonymous.',
+    caveat: 'Last 7, 30 or 90 days only, and shown only when the group has at least 5 agents.',
   },
 }
+
+// Figures ADR-0038 leaves out because the data cannot support them honestly,
+// listed so nobody reads their absence as an oversight.
+export const NOT_SHOWN = [
+  { term: 'Time-to-verify', reason: 'Only the last update time is stored, which is wrong after any later edit.' },
+  { term: 'Agent score or rating', reason: 'Any weighting would be invented; agents are compared by one explicit figure.' },
+  { term: 'Client lifecycle (active, dormant, churned)', reason: 'Clients have no such state.' },
+  { term: 'Rejected or pending verifications', reason: 'Nothing sets these statuses.' },
+  { term: 'Ingestion freshness', reason: 'The transaction import keeps no record of its last successful poll.' },
+  { term: 'Clients without an account', reason: 'Needs clients and accounts joined across two services.' },
+]
 
 // Tooltip text for a tile: definition plus caveat.
 export function hintFor(key) {
