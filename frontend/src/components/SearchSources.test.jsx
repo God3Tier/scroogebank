@@ -16,7 +16,6 @@ vi.mock('../api/searchSources.js', () => ({
 vi.mock('../api/clients.js', () => ({ getClient: vi.fn() }))
 vi.mock('../api/users.js', () => ({ listUsers: vi.fn() }))
 vi.mock('../components/AlertWorkspace.jsx', () => ({ default: ({ readOnly }) => <section>Alert workspace {readOnly ? 'read only' : 'editable'}</section> }))
-vi.mock('../components/EventBriefings.jsx', () => ({ default: () => <section>Event briefings</section> }))
 
 // Synthetic data only.
 const MINE = { id: 'w1', domain: 'businesstimes.com.sg', addedAt: '2026-11-04T04:00:00Z', addedByYou: true }
@@ -259,7 +258,7 @@ describe('the event alerts page', () => {
   it('keeps the client alerts open for an agent, with no collapsible section', async () => {
     const { container } = render(<EventAlerts />)
 
-    expect(screen.getByText('Event briefings')).toBeInTheDocument()
+    expect(screen.queryByText('Events that may affect your clients')).not.toBeInTheDocument()
     expect(screen.getByText('Alert workspace editable')).toBeInTheDocument()
     expect(container.querySelector('details')).toBeNull()
     expect(await screen.findByText('Search sources')).toBeInTheDocument()

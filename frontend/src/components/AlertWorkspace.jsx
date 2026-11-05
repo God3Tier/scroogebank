@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getAlert, listAlerts, recordDecision, recordFeedback } from '../api/alerts.js'
+import { getEvent } from '../api/alertEvents.js'
+import { isCrmClientId, sendAlertReport } from '../api/engagement.js'
+import { CombinedSources, EventReport } from './EventReport.jsx'
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`.trim()} aria-hidden="true">{name}</span>
@@ -12,6 +15,9 @@ const STATUS_LABELS = {
   INFORMED: 'Inform planned',
   DISMISSED: 'Dismissed',
 }
+
+const DELIVERY_LABELS = { QUEUED: 'Queued', SENT: 'Sent', FAILED: 'Failed', NOT_AUTHORISED: 'Not authorised' }
+const MAX_CONTINUES = 5
 
 const DECISIONS = [
   { value: 'INFORM_CLIENT', label: 'Plan client briefing', help: 'Records intent only. No message is sent.' },
@@ -105,6 +111,10 @@ function AlertWorkspace({ readOnly = false }) {
   const [note, setNote] = useState('')
   const [decisionState, setDecisionState] = useState({ saving: false, error: null, message: '' })
   const [feedbackState, setFeedbackState] = useState({ saving: false, message: '', error: null })
+  const [report, setReport] = useState(null)
+  const [agentNote, setAgentNote] = useState('')
+  const [approved, setApproved] = useState(false)
+  const [sendState, setSendState] = useState({ sending: false, error: '', deliveries: null })
 
   const loadQueue = useCallback(async (cursor = '') => {
     setListState({ loading: true, error: null })
@@ -129,15 +139,23 @@ function AlertWorkspace({ readOnly = false }) {
     setDetailState({ loading: true, error: null })
     setDecisionState({ saving: false, error: null, message: '' })
     setFeedbackState({ saving: false, error: null, message: '' })
+    setReport(null)
+    setApproved(false)
+    setAgentNote('')
+    setSendState({ sending: false, error: '', deliveries: null })
     try {
       const response = await getAlert(alertId)
       setDetail(response)
       setDetailState({ loading: false, error: null })
+      // The combined report belongs to the event; agents read it, and an alert without one shows its own briefing.
+      if (!readOnly && response.eventId) {
+        getEvent(response.eventId).then((event) => setReport(event.report || null), () => setReport(null))
+      }
     } catch (error) {
       setDetail(null)
       setDetailState({ loading: false, error })
     }
-  }, [])
+  }, [readOnly])
 
   useEffect(() => {
     // Fetching the server-owned queue is the external synchronization for this view.
@@ -196,9 +214,34 @@ function AlertWorkspace({ readOnly = false }) {
     }
   }
 
+  async function sendReport() {
+    if (!detail || !report || !approved) return
+    setSendState({ sending: true, error: '', deliveries: null })
+    const key = crypto.randomUUID()
+    const request = { eventId: detail.eventId, expectedReportVersion: report.version, alertIds: [detail.id], agentNote: agentNote.trim() }
+    try {
+      let outcome = await sendAlertReport(request, key)
+      // A recipient not reached within one request stays QUEUED; the same request carries on with it.
+      for (let round = 0; round < MAX_CONTINUES && outcome.recipients.some((r) => r.status === 'QUEUED'); round += 1) {
+        outcome = await sendAlertReport(request, key)
+      }
+      setSendState({ sending: false, error: '', deliveries: outcome.recipients })
+      setApproved(false)
+    } catch (error) {
+      setSendState({
+        sending: false,
+        deliveries: null,
+        error: error.status === 409 ? 'The report changed since you looked. Reload and review it again.'
+          : error.status === 503 ? 'Sending is switched off or a service is unavailable. Nothing more was sent.'
+            : error.message || 'Something went wrong. Try again.',
+      })
+    }
+  }
+
   const selectedDecision = DECISIONS.find((item) => item.value === decision)
   const filtered = Boolean(status || minimumScore)
   const canRecordDecision = detail?.status === 'NEW' || detail?.status === 'MONITORING'
+  const canSendReport = !readOnly && Boolean(report) && detail?.status === 'INFORMED' && isCrmClientId(detail?.clientRef)
 
   return (
     <div className="alerts-page" id="main-content">
@@ -329,10 +372,10 @@ function AlertWorkspace({ readOnly = false }) {
               <div className="detail-columns">
                 <section className="detail-section" aria-labelledby="brief-title">
                   <div className="section-heading">
-                    <div><Icon name="auto_awesome" /><h3 id="brief-title">AI-generated briefing</h3></div>
+                    <div><Icon name="auto_awesome" /><h3 id="brief-title">{report ? 'Combined report' : 'AI-generated briefing'}</h3></div>
                     <span>Decision support</span>
                   </div>
-                  {detail.briefing ? (
+                  {report ? <EventReport report={report} /> : detail.briefing ? (
                     <div className="briefing">
                       <p>{detail.briefing.summary}</p>
                       {detail.briefing.uncertainty && (
@@ -358,23 +401,9 @@ function AlertWorkspace({ readOnly = false }) {
                       </li>
                     ))}
                   </ol>
+                  <CombinedSources report={report} evidence={detail.evidence} />
                 </section>
               </div>
-
-              <section className="detail-section evidence-section" aria-labelledby="evidence-title">
-                <div className="section-heading">
-                  <div><Icon name="verified_user" /><h3 id="evidence-title">Public evidence</h3></div>
-                  <span>{detail.evidence.length} cited source{detail.evidence.length === 1 ? '' : 's'}</span>
-                </div>
-                <ul className="evidence-list">
-                  {detail.evidence.map((item) => (
-                    <li key={item.url}>
-                      <div><strong>{item.title}</strong><span>{item.sourceDomain} · retrieved {formatDate(item.retrievedAt)}</span></div>
-                      <a href={item.url} target="_blank" rel="noreferrer">Open source <Icon name="arrow_outward" /></a>
-                    </li>
-                  ))}
-                </ul>
-              </section>
 
               {readOnly ? (
                 <div className="read-only-notice"><Icon name="verified_user" /><span><strong>Read-only oversight.</strong> Only the assigned agent can record a decision or feedback.</span></div>
@@ -417,6 +446,34 @@ function AlertWorkspace({ readOnly = false }) {
                     <div className="decision-closed">
                       <Icon name="verified_user" />
                       <span><strong>Decision complete.</strong> This alert is closed for further decisions; feedback remains available.</span>
+                    </div>
+                  )}
+
+                  {canSendReport && (
+                    <div className="send-report">
+                      <h4>Email this report to the client</h4>
+                      <p className="holdings-note">
+                        You marked this client to be informed. Review the report, add an optional note, confirm, and send. The report
+                        text cannot be edited; your note is sent under its own label.
+                      </p>
+                      <label>Note to the client (optional)
+                        <textarea maxLength={500} rows={2} value={agentNote} onChange={(e) => setAgentNote(e.target.value)} />
+                      </label>
+                      <label className="send-report__confirm">
+                        <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} />
+                        I have reviewed version {report.version} of this report and approve sending it
+                      </label>
+                      <button className="button button--primary" type="button" onClick={sendReport} disabled={sendState.sending || !approved}>
+                        {sendState.sending ? 'Sending…' : 'Send report to this client'}
+                      </button>
+                      {sendState.error && <p className="error-text" role="alert">{sendState.error}</p>}
+                      {sendState.deliveries && (
+                        <ul role="status">
+                          {sendState.deliveries.map((d) => (
+                            <li key={d.alertId}>{DELIVERY_LABELS[d.status] || d.status}{d.errorCode ? ` (${d.errorCode})` : ''}</li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   )}
 

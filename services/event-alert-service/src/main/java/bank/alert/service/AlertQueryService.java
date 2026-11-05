@@ -74,7 +74,7 @@ public class AlertQueryService {
                 .map(DecisionResponse::from)
                 .orElse(null);
         return new AlertDetailResponse(
-                summary.id(), summary.clientRef(), summary.instrumentId(), summary.headline(),
+                summary.id(), row.eventId(), summary.clientRef(), summary.instrumentId(), summary.headline(),
                 summary.status(), summary.score(), summary.createdAt(), summary.version(),
                 new ExposureResponse(
                         row.amountSgd().setScale(2, RoundingMode.HALF_UP).toPlainString(),

@@ -1443,7 +1443,7 @@ textarea:focus {
    ===================================================================== */
 
 .alerts-page {
-  width: min(1400px, 100%);
+  width: min(1840px, 100%);
   margin: 0 auto;
   padding-bottom: var(--stack-lg);
 }
@@ -1481,9 +1481,9 @@ textarea:focus {
 }
 
 .alerts-workspace {
-  min-height: 640px;
+  min-height: max(780px, calc(100vh - 190px));
   display: grid;
-  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  grid-template-columns: minmax(380px, 460px) minmax(0, 1fr);
   background: var(--surface-lowest);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-xl);
@@ -1633,10 +1633,10 @@ textarea:focus {
   display: -webkit-box;
   color: var(--on-surface);
   font-weight: 620;
-  font-size: 16px;
-  line-height: 1.26;
+  font-size: 18px;
+  line-height: 1.28;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   overflow: hidden;
 }
 
@@ -1799,9 +1799,9 @@ textarea:focus {
 }
 
 .detail-header h2 {
-  max-width: 920px;
+  max-width: 1100px;
   margin: var(--stack-md) 0;
-  font-size: clamp(24px, 3vw, 36px);
+  font-size: clamp(28px, 3.2vw, 42px);
   line-height: 1.1;
   font-weight: 630;
   text-wrap: balance;
@@ -1890,7 +1890,7 @@ textarea:focus {
 
 .detail-columns {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 1.3fr 0.9fr;
   border-bottom: 1px solid var(--outline-variant);
 }
 
@@ -1899,7 +1899,7 @@ textarea:focus {
 }
 
 .detail-section {
-  padding: 24px var(--stack-lg);
+  padding: 32px 36px;
 }
 
 .section-heading {
@@ -3110,14 +3110,6 @@ textarea:focus {
 .holdings-editor input { width: 100%; min-width: 4rem; }
 .holdings-note { font-size: 0.85rem; opacity: 0.8; margin: 0; }
 .holdings-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.event-briefings { display: grid; gap: 1rem; }
-.event-briefings__head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
-.event-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
-.event-card { display: grid; gap: 0.5rem; }
-.event-card__meta { font-size: 0.85rem; opacity: 0.75; margin: 0; }
-.event-clients { display: grid; gap: 0.75rem; }
-.event-actions { display: flex; gap: 1rem; flex-wrap: wrap; border: 0; padding: 0; }
-.event-outcomes { margin: 0; padding-left: 1.25rem; }
 .client-alert-list { margin-top: 1.5rem; }
 .search-sources { display: grid; gap: 1rem; margin-top: 1.5rem; }
 .source-card { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid var(--border, rgba(127, 127, 127, 0.35)); border-radius: 0.5rem; }
@@ -3136,3 +3128,25 @@ textarea:focus {
 .holders-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .holders-table th, .holders-table td { padding: 0.3rem 0.5rem; text-align: left; border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25)); }
 .holders-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Event alerts: the combined report, the sources it combines, and sending it (ADR-0084). */
+.alerts-page .detail-section { font-size: 16px; line-height: 1.55; }
+.alerts-page .section-heading h3 { font-size: 18px; }
+.event-report { display: grid; gap: 0.9rem; }
+.event-report__bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.event-report__version { margin: 0; font-size: 0.9rem; opacity: 0.75; }
+.event-report__headline { margin: 0; font-size: 1.35rem; line-height: 1.25; }
+.event-report__summary { margin: 0; font-size: 1.05rem; line-height: 1.65; }
+.event-report h5 { margin: 0.4rem 0 0; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; }
+.event-report ul { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.4rem; }
+.combined-sources { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--outline-variant); display: grid; gap: 0.6rem; }
+.combined-sources h4 { margin: 0; font-size: 1rem; }
+.combined-sources__count { margin: 0; font-size: 0.9rem; opacity: 0.8; }
+.combined-sources ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.85rem; }
+.combined-sources li { display: grid; gap: 0.15rem; }
+.combined-sources li a { font-weight: 600; overflow-wrap: anywhere; }
+.combined-sources li span { font-size: 0.85rem; opacity: 0.75; }
+.combined-sources li em { font-size: 0.8rem; font-style: normal; opacity: 0.85; }
+.send-report { display: grid; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--outline-variant); }
+.send-report h4 { margin: 0; }
+.send-report__confirm { display: flex; gap: 0.5rem; align-items: flex-start; }

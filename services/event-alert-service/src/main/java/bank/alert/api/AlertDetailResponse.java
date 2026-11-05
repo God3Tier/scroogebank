@@ -9,6 +9,8 @@ import java.util.UUID;
 
 public record AlertDetailResponse(
         UUID id,
+        /** The event this alert belongs to; the event carries the combined report and its sources. */
+        UUID eventId,
         String clientRef,
         String instrumentId,
         String headline,

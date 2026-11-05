@@ -26,6 +26,7 @@ class AlertQueryServiceTest {
 
     private static final Instant CREATED_AT = Instant.parse("2026-09-27T00:01:00Z");
     private static final UUID FIRST_ID = UUID.fromString("50000000-0000-4000-8000-000000000002");
+    private static final UUID EVENT_ID = UUID.fromString("10000000-0000-4000-8000-000000000001");
     private static final UUID SECOND_ID = UUID.fromString("50000000-0000-4000-8000-000000000001");
 
     private final AlertListRepository repository = mock(AlertListRepository.class);
@@ -67,7 +68,7 @@ class AlertQueryServiceTest {
                 "Synthetic summary", true, "fixture-model", "prompt-v1", null);
         when(repository.findVisibleDetail(FIRST_ID, "syn-agent-001", false))
                 .thenReturn(Optional.of(new AlertListRepository.DetailRow(
-                        summary, new BigDecimal("2500.0000"), new BigDecimal("25.0000"),
+                        summary, EVENT_ID, new BigDecimal("2500.0000"), new BigDecimal("25.0000"),
                         CREATED_AT, ValuationFreshness.FRESH, "syn-account-001", evidence, briefing)));
         when(repository.findFactors(FIRST_ID)).thenReturn(List.of(
                 new ExplanationFactorResponse(
@@ -76,6 +77,7 @@ class AlertQueryServiceTest {
         var detail = service.getAlert(FIRST_ID, "syn-agent-001", false);
 
         assertThat(detail.id()).isEqualTo(FIRST_ID);
+        assertThat(detail.eventId()).isEqualTo(EVENT_ID);
         assertThat(detail.exposure().amountSgd()).isEqualTo("2500.00");
         assertThat(detail.evidence()).containsExactly(evidence);
         assertThat(detail.briefing()).isEqualTo(briefing);

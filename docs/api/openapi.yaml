@@ -915,6 +915,10 @@ components:
       required: [id, clientRef, instrumentId, headline, status, score, createdAt, version, exposure, explanationFactors, evidence, briefing]
       properties:
         id: {type: string, format: uuid}
+        eventId:
+          type: string
+          format: uuid
+          description: The event this alert belongs to. Its combined report and sources are read from the events endpoint.
         clientRef: {type: string, pattern: '^syn-client-[0-9]{3}$'}
         instrumentId: {type: string, maxLength: 32}
         headline: {type: string, maxLength: 300}
