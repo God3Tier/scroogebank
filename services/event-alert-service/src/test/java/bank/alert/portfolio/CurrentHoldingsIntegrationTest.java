@@ -508,6 +508,7 @@ class CurrentHoldingsIntegrationTest {
     void eventPagesUseAStableCursorAndRecheckCurrentOwnership() {
         put(ACCOUNT_1, "key-82500001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
         generate("agent-a", 2);
+        reportEveryEvent(); // a ticker's event is closed by its report, so the next article starts a new one
         generate("agent-a", 3, EventType.CREDIT);
 
         var first = eventQueries.list("agent-a", false, null, 1);
@@ -628,7 +629,18 @@ class CurrentHoldingsIntegrationTest {
         return generate(agent, sourceNumber, EventType.EARNINGS);
     }
 
-    /** A source of another event type is a different event; the same type, instruments and direction would group (ADR-0084). */
+    /** An empty report for every event that has none: the pass that writes a ticker's report is what closes its event (ADR-0084). */
+    private void reportEveryEvent() {
+        jdbc.update("""
+                INSERT INTO event_report (id, public_event_id, version, schema_version, report, source_ids, model_version,
+                                          prompt_version, ai_generated, created_at, expires_at)
+                SELECT gen_random_uuid(), pe.id, 1, 'alert-client-report-v2', '{}'::jsonb, '[]'::jsonb, 'fixture', 'fixture',
+                       TRUE, now(), now() + interval '90 days'
+                  FROM public_event pe WHERE NOT EXISTS (SELECT 1 FROM event_report r WHERE r.public_event_id = pe.id)
+                """);
+    }
+
+    /** The type does not decide the event any more: one ticker's open event takes every article (ADR-0084). */
     private AlertGenerationOutcome generate(String agent, int sourceNumber, EventType eventType) {
         jdbc.update("""
                 INSERT INTO search_run (id, window_from, window_to, status, created_at)

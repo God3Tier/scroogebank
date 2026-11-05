@@ -1,7 +1,5 @@
 package bank.alert.report;
 
-import bank.alert.ai.EventDirection;
-import bank.alert.ai.EventType;
 import bank.alert.ai.PublicEvidence;
 import bank.alert.domain.AuditOutbox;
 import bank.alert.domain.Instrument;
@@ -40,6 +38,8 @@ public class EventReportService {
 
     static final int MINIMUM_ALERT_SCORE = 60;
     static final int MAX_FAILED_ATTEMPTS = 3;
+    /** An earlier report on the same company this recent is given to the model so it is not repeated. */
+    static final java.time.Duration REPEAT_GUARD = java.time.Duration.ofHours(72);
     /** Not a failure of the report: it is tried again when the model or the budget is available. */
     private static final Set<String> NOT_A_FAILURE = Set.of("MODEL_DISABLED", "CONFIG_DISABLED", "OPERATOR_DISABLED",
             "MODEL_TOKEN_QUOTA_REACHED", "MONTHLY_BUDGET_REACHED");
@@ -108,7 +108,7 @@ public class EventReportService {
         List<ReportInput.InstrumentRef> instrumentRefs = instrumentsOf(eventId);
         List<String> instrumentIds = instrumentRefs.stream().map(ReportInput.InstrumentRef::instrumentId).toList();
         List<PublicEvidence> evidence = chosenIds.stream().map(byId::get).map(row -> toEvidence(row, instrumentIds)).toList();
-        ReportInput input = new ReportInput(eventType(eventId), direction(eventId), instrumentRefs, evidence);
+        ReportInput input = new ReportInput(instrumentRefs, evidence, alreadyReported(eventId, instrumentRefs));
         ReportOutcome outcome = generator.generate(input);
         if (outcome.status() != ReportOutcome.Status.GENERATED) {
             recordAttempt(eventId, outcome);
@@ -184,12 +184,30 @@ public class EventReportService {
         }
     }
 
-    private EventType eventType(UUID eventId) {
-        return EventType.valueOf(jdbc.queryForObject("SELECT classification FROM public_event WHERE id = ?", String.class, eventId));
+    /**
+     * What the ticker's most recent report from the last 72 hours said, as public text. Only for an event that belongs
+     * to one ticker; an older event that spans several has nothing to compare against.
+     */
+    private List<ReportInput.PriorReport> alreadyReported(UUID eventId, List<ReportInput.InstrumentRef> instrumentRefs) {
+        if (instrumentRefs.size() != 1) return List.of();
+        return jdbc.query("""
+                SELECT r.report::text FROM event_report r JOIN public_event pe ON pe.id = r.public_event_id
+                 WHERE pe.instrument_id = ? AND pe.id <> ? AND r.created_at >= ?
+                 ORDER BY r.created_at DESC LIMIT 1
+                """, (rs, row) -> priorReport(rs.getString(1)), instrumentRefs.getFirst().instrumentId(), eventId,
+                Timestamp.from(clock.instant().minus(REPEAT_GUARD))).stream().filter(java.util.Objects::nonNull).toList();
     }
 
-    private EventDirection direction(UUID eventId) {
-        return EventDirection.valueOf(jdbc.queryForObject("SELECT direction FROM public_event WHERE id = ?", String.class, eventId));
+    private ReportInput.PriorReport priorReport(String reportJson) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode report = mapper.readTree(reportJson);
+            List<String> summary = new java.util.ArrayList<>();
+            report.path("executiveSummary").forEach(sentence -> summary.add(sentence.path("text").asText()));
+            String headline = report.path("headline").asText("");
+            return headline.isBlank() && summary.isEmpty() ? null : new ReportInput.PriorReport(headline, summary);
+        } catch (JsonProcessingException unreadable) {
+            return null;
+        }
     }
 
     private List<ReportInput.InstrumentRef> instrumentsOf(UUID eventId) {

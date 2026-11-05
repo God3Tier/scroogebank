@@ -4,8 +4,6 @@ import bank.alert.ai.AiModelGateway;
 import bank.alert.ai.AiModelRequest;
 import bank.alert.ai.AiProviderException;
 import bank.alert.ai.AiSafetyScreen;
-import bank.alert.ai.EventDirection;
-import bank.alert.ai.EventType;
 import bank.alert.ai.PublicEvidence;
 import bank.alert.config.AiProperties;
 import bank.alert.operations.OutboundControlService;
@@ -67,8 +65,30 @@ class SafeClientReportGeneratorTest {
         PublicEvidence evidence = new PublicEvidence("source-1", "Microsoft announces first quarter results",
                 "Revenue was $92,279 million, up 19% from a year earlier.", "https://news.example/a", "news.example",
                 Instant.parse("2026-11-04T00:00:00Z"), List.of("NASDAQ-MSFT"));
-        return new ReportInput(EventType.EARNINGS, EventDirection.POSITIVE,
+        return new ReportInput(
                 List.of(new ReportInput.InstrumentRef("NASDAQ-MSFT", "MSFT", "Microsoft Corporation")), List.of(evidence));
+    }
+
+    @Test
+    void theModelIsToldWhatAnEarlierReportAlreadySaidAndIsAskedToWriteOnlyWhatIsNew() {
+        ReportInput withEarlier = new ReportInput(input().instruments(), input().evidence(),
+                List.of(new ReportInput.PriorReport("Microsoft earlier headline", List.of("Microsoft guided revenue higher."))));
+
+        ReportOutcome outcome = generator((request, timeout) -> GOOD, true).generate(withEarlier);
+
+        assertThat(outcome.status()).isEqualTo(ReportOutcome.Status.GENERATED);
+        assertThat(sent.get().promptVersion()).isEqualTo("alert-client-report-v2.1");
+        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2.1");
+        assertThat(sent.get().systemInstruction()).contains("alreadyReported").contains("write only what is new")
+                .contains("several different developments");
+        assertThat(sent.get().publicInputJson()).contains("Microsoft earlier headline").contains("Microsoft guided revenue higher.");
+    }
+
+    @Test
+    void withNothingEarlierTheModelIsToldNothingAboutAPriorReport() {
+        generator((request, timeout) -> GOOD, true).generate(input());
+
+        assertThat(sent.get().publicInputJson()).contains("\"alreadyReported\":[]");
     }
 
     @Test
@@ -79,7 +99,7 @@ class SafeClientReportGeneratorTest {
         assertThat(outcome.report().headline()).isEqualTo("Microsoft reports first quarter results");
         assertThat(outcome.report().executiveSummary()).hasSize(2);
         assertThat(outcome.report().marketContext()).isNull();
-        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2");
+        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2.1");
         assertThat(outcome.generatedAt()).isEqualTo(NOW);
     }
 

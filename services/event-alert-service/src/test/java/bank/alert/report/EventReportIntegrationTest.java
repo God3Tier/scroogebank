@@ -53,7 +53,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -93,7 +95,18 @@ class EventReportIntegrationTest {
     @Autowired AuditOutboxRepository outbox;
     @Autowired JdbcTemplate jdbc;
 
+    private final AtomicReference<Instant> now = new AtomicReference<>(NOW);
+    private final Clock clock = new Clock() {
+        @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+        @Override public Instant instant() { return now.get(); }
+    };
     private final AtomicReference<EventDirection> direction = new AtomicReference<>(EventDirection.POSITIVE);
+    /** The direction the classifier gives to each source in turn; when empty it uses {@code direction}. */
+    private final Deque<EventDirection> directions = new ArrayDeque<>();
+    private final AtomicReference<List<String>> affectedTickers = new AtomicReference<>(List.of("SYN-SGX-001"));
+    /** The tickers the classifier names for a source from this domain; other sources use {@code affectedTickers}. */
+    private final java.util.Map<String, List<String>> tickersByDomain = new java.util.HashMap<>();
     private final AtomicReference<ReportOutcome> reportOutcome = new AtomicReference<>();
     private final List<ReportInput> reportRequests = new ArrayList<>();
     private SourcePipeline pipeline;
@@ -103,7 +116,6 @@ class EventReportIntegrationTest {
     @BeforeEach
     void seed() {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         jdbc.update("""
                 INSERT INTO search_run (id, window_from, window_to, status, created_at)
                 VALUES (?, '2026-09-26T20:00:00Z', '2026-09-27T00:00:00Z', 'SUCCEEDED', '2026-09-27T00:00:00Z')
@@ -122,20 +134,23 @@ class EventReportIntegrationTest {
                 new MaterialityScorer(), holdings, alerts, outbox, jdbc, mapper, clock, 1000);
         SourceResultProcessor processor = new SourceResultProcessor(sourceResults,
                 evidence -> new ClassificationOutcome(ClassificationStatus.MODEL_ACCEPTED,
-                        new EventClassification("Synthetic earnings event", EventType.EARNINGS, direction.get(),
-                                new BigDecimal("0.90"), List.of(new AffectedInstrument("SYN-SGX-001", "ref")),
-                                List.of("ref"), "fixture-model-v1", "prompt-v1", NOW), null, 1),
+                        new EventClassification("Synthetic earnings event", EventType.EARNINGS,
+                                directions.isEmpty() ? direction.get() : directions.poll(),
+                                new BigDecimal("0.90"),
+                                tickersByDomain.getOrDefault(evidence.sourceDomain(), affectedTickers.get()).stream()
+                                        .map(id -> new AffectedInstrument(id, "ref")).toList(),
+                                List.of("ref"), "fixture-model-v1", "prompt-v1", clock.instant()), null, 1),
                 input -> new BriefingOutcome(BriefingStatus.GENERATED,
                         new AgentBriefing("Synthetic issuer update", "The issuer reported synthetic earnings.",
                                 "Synthetic.", input.evidence().stream().map(e -> e.referenceId()).toList(),
-                                List.of("Review."), true, "fixture-model-v1", "prompt-v1", NOW), null, 1),
+                                List.of("Review."), true, "fixture-model-v1", "prompt-v1", clock.instant()), null, 1),
                 generation, provider, new EventSeverityPolicy());
         ClientReportGenerator generator = input -> {
             reportRequests.add(input);
             ReportOutcome outcome = reportOutcome.get();
             return outcome.status() == ReportOutcome.Status.GENERATED
                     ? new ReportOutcome(ReportOutcome.Status.GENERATED, report("v" + reportRequests.size()), null, 1,
-                            "fixture-model-v1", "alert-client-report-v2", NOW)
+                            "fixture-model-v1", "alert-client-report-v2.1", clock.instant())
                     : outcome;
         };
         reports = new EventReportService(jdbc, instruments, generator, outbox, mapper, clock, 1000);
@@ -172,66 +187,83 @@ class EventReportIntegrationTest {
     }
 
     @Test
-    void aSourceAboutTheSameEventFromAnotherDomainJoinsTheEventAndMakesTheNextReportVersion() {
-        SourceResult first = store("one.example", "2026-09-26T22:00:00Z", "a");
+    void everythingFoundForATickerInOnePassIsOneEventAndOneReportWhateverItsDirection() {
+        directions.addAll(List.of(EventDirection.POSITIVE, EventDirection.NEGATIVE, EventDirection.UNCERTAIN));
+        SourceResult first = store("one.example", "2026-09-26T20:00:00Z", "a");
+        SourceResult second = store("two.example", "2026-09-26T21:00:00Z", "b");
+        SourceResult third = store("three.example", "2026-09-26T22:00:00Z", "c");
+
+        pipeline.processPending();
+
+        assertThat(count("public_event")).as("one event for the ticker").isOne();
+        assertThat(count("public_event_source")).isEqualTo(3);
+        assertThat(count("event_report")).isOne();
+        assertThat(reportRequests).hasSize(1);
+        assertThat(reportRequests.getFirst().evidence()).hasSize(3);
+        assertThat(reportSources(1)).containsExactlyInAnyOrder(
+                first.getId().toString(), second.getId().toString(), third.getId().toString());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM alert", Long.class)).isPositive();
+        assertThat(jdbc.queryForObject("SELECT count(*) = count(DISTINCT client_ref) FROM alert", Boolean.class))
+                .as("one alert per client, not one per article").isTrue();
+        assertThat(jdbc.queryForObject("SELECT instrument_id FROM public_event", String.class)).isEqualTo("SYN-SGX-001");
+    }
+
+    @Test
+    void theNextRunsNewArticlesStartANewEventAndTheReportDoesNotRepeatTheFirst() {
+        store("one.example", "2026-09-26T22:00:00Z", "a");
+        pipeline.processPending();
+        assertThat(count("event_report")).isOne();
+
+        store("two.example", "2026-09-26T23:00:00Z", "b");
+        pipeline.processPending();
+
+        assertThat(count("public_event")).as("the first event was closed by its report").isEqualTo(2);
+        assertThat(count("event_report")).isEqualTo(2);
+        assertThat(jdbc.queryForList("SELECT count(*) FROM public_event_source GROUP BY public_event_id", Long.class))
+                .containsExactly(1L, 1L);
+        assertThat(reportRequests.get(0).alreadyReported()).isEmpty();
+        assertThat(reportRequests.get(1).alreadyReported()).singleElement().satisfies(prior -> {
+            assertThat(prior.headline()).isEqualTo("v1");
+            assertThat(prior.summary()).containsExactly("One.", "Two.");
+        });
+    }
+
+    @Test
+    void theFirstReportIsWrittenOncePerEventEvenIfThePipelineRunsAgain() {
+        store("one.example", "2026-09-26T22:00:00Z", "a");
+
+        pipeline.processPending();
+        pipeline.processPending();
+
+        assertThat(reportRequests).hasSize(1);
+        assertThat(count("event_report")).isOne();
+    }
+
+    @Test
+    void anEventWithNoReportYetKeepsTakingNewArticlesAndTheReportCoversThemAll() {
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.ABSTAINED, null, "MODEL_ABSTAINED", 1));
+        store("one.example", "2026-09-26T22:00:00Z", "a");
         pipeline.processPending();
         assertThat(count("public_event")).isOne();
-        assertThat(count("event_report")).isOne();
-        assertThat(reportSources(1)).containsExactly(first.getId().toString());
-        long alertsAfterFirst = alerts.count();
+        assertThat(count("event_report")).isZero();
 
-        SourceResult second = store("two.example", "2026-09-26T23:00:00Z", "b");
-        pipeline.processPending();
-
-        assertThat(count("public_event")).as("one event, not two").isOne();
-        assertThat(count("public_event_source")).isEqualTo(2);
-        assertThat(alerts.count()).as("a corroborating source adds no duplicate alert").isEqualTo(alertsAfterFirst);
-        assertThat(count("event_report")).isEqualTo(2);
-        assertThat(reportSources(2)).containsExactly(first.getId().toString(), second.getId().toString());
-        assertThat(reportRequests.get(1).evidence()).hasSize(2);
-    }
-
-    @Test
-    void theFirstReportDoesNotWaitForMoreSourcesAndIsWrittenOncePerEvent() {
-        store("one.example", "2026-09-26T22:00:00Z", "a");
-
-        pipeline.processPending();
-        pipeline.processPending();
-
-        assertThat(reportRequests).hasSize(1);
-        assertThat(count("event_report")).isOne();
-    }
-
-    @Test
-    void aLaterSourceFromTheSameDomainDoesNotChangeTheChosenSourcesSoThereIsNoNewVersion() {
-        store("one.example", "2026-09-26T22:00:00Z", "a");
-        pipeline.processPending();
-
-        store("one.example", "2026-09-26T23:00:00Z", "b");
-        pipeline.processPending();
-
-        assertThat(count("public_event_source")).isEqualTo(2);
-        assertThat(count("event_report")).isOne();
-        assertThat(reportRequests).hasSize(1);
-    }
-
-    @Test
-    void aConflictingDirectionStaysASeparateEvent() {
-        store("one.example", "2026-09-26T22:00:00Z", "a");
-        pipeline.processPending();
-
-        direction.set(EventDirection.NEGATIVE);
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.GENERATED, report("x"), null, 1));
         store("two.example", "2026-09-26T23:00:00Z", "b");
         pipeline.processPending();
 
-        assertThat(count("public_event")).isEqualTo(2);
-        assertThat(count("event_report")).isEqualTo(2);
+        assertThat(count("public_event")).as("the second article joined the open event").isOne();
+        assertThat(count("public_event_source")).isEqualTo(2);
+        assertThat(count("event_report")).isOne();
+        assertThat(reportRequests.getLast().evidence()).hasSize(2);
     }
 
     @Test
-    void aSourceMoreThanSeventyTwoHoursApartIsAnotherEvent() {
-        store("one.example", "2026-09-22T22:00:00Z", "a");
+    void anOpenEventOlderThanSeventyTwoHoursTakesNoMoreArticles() {
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.ABSTAINED, null, "MODEL_ABSTAINED", 1));
+        store("one.example", "2026-09-26T22:00:00Z", "a");
         pipeline.processPending();
+        jdbc.update("UPDATE public_event SET created_at = created_at - interval '73 hours'");
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.GENERATED, report("x"), null, 1));
 
         store("two.example", "2026-09-26T23:00:00Z", "b");
         pipeline.processPending();
@@ -240,25 +272,35 @@ class EventReportIntegrationTest {
     }
 
     @Test
-    void ambiguousMatchesAreNotMerged() {
-        store("one.example", "2026-09-26T22:00:00Z", "a");
-        pipeline.processPending();
-        // A second event of the same kind exists, so a new source cannot tell which one it belongs to.
-        jdbc.update("""
-                INSERT INTO public_event (id, source_result_id, classification, direction, confidence, classifier_version,
-                                          model_version, prompt_version, occurred_at, created_at)
-                SELECT gen_random_uuid(), source_result_id, classification, direction, confidence, 'twin-v1',
-                       model_version, prompt_version, occurred_at, created_at FROM public_event
-                """);
-        jdbc.update("""
-                INSERT INTO public_event_instrument (public_event_id, instrument_id, match_reason, confidence)
-                SELECT pe.id, 'SYN-SGX-001', 'twin', 0.9 FROM public_event pe WHERE pe.classifier_version = 'twin-v1'
-                """);
+    void anArticleNamingTwoTickersFeedsBothTickersEvents() {
+        now.set(Instant.parse("2026-10-30T00:00:00Z")); // the holdings of the real tickers are valued late in October
+        affectedTickers.set(List.of("NASDAQ-AAPL", "SGX-D05"));
+        store("one.example", "2026-10-29T22:00:00Z", "a");
 
-        store("two.example", "2026-09-26T23:00:00Z", "b");
         pipeline.processPending();
 
-        assertThat(count("public_event")).isEqualTo(3);
+        assertThat(jdbc.queryForList("SELECT instrument_id FROM public_event ORDER BY 1", String.class))
+                .containsExactly("NASDAQ-AAPL", "SGX-D05");
+        assertThat(count("public_event_source")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(DISTINCT source_result_id) FROM public_event_source", Long.class)).isOne();
+    }
+
+    @Test
+    void severalTickersEachGetOneEventNotOnePerArticle() {
+        now.set(Instant.parse("2026-10-30T00:00:00Z"));
+        tickersByDomain.put("one.example", List.of("NASDAQ-AAPL"));
+        tickersByDomain.put("two.example", List.of("NASDAQ-AAPL"));
+        tickersByDomain.put("three.example", List.of("SGX-D05"));
+        tickersByDomain.put("four.example", List.of("SGX-D05"));
+        store("one.example", "2026-10-29T20:00:00Z", "a");
+        store("two.example", "2026-10-29T21:00:00Z", "b");
+        store("three.example", "2026-10-29T22:00:00Z", "c");
+        store("four.example", "2026-10-29T23:00:00Z", "d");
+
+        pipeline.processPending();
+
+        assertThat(count("public_event")).as("two tickers, two events, four articles").isEqualTo(2);
+        assertThat(count("public_event_source")).isEqualTo(4);
     }
 
     @Test
@@ -346,23 +388,27 @@ class EventReportIntegrationTest {
     @Test
     void theCardSaysWhatTheReportSaysAndTheDetailCarriesTheReportItsSourcesAndTheFixedText() {
         store("one.example", "2026-09-26T22:00:00Z", "a");
-        pipeline.processPending();
         store("two.example", "2026-09-26T23:00:00Z", "b");
         pipeline.processPending();
 
         List<AgentEventModels.EventCard> cards = eventQueries.list("syn-agent-001", false, 25).items();
 
-        assertThat(cards).as("one card for one event").hasSize(1);
+        assertThat(cards).as("one card for the ticker").hasSize(1);
         AgentEventModels.EventCard card = cards.getFirst();
-        assertThat(card.headline()).isEqualTo("v2");
+        assertThat(card.instrumentId()).isEqualTo("SYN-SGX-001");
+        assertThat(card.ticker()).isEqualTo("SYN1");
+        assertThat(card.issuer()).isEqualTo("Synthetic Issuer One");
+        assertThat(card.sourceCount()).isEqualTo(2);
+        assertThat(card.reportVersion()).isEqualTo(1);
+        assertThat(card.headline()).isEqualTo("v1");
         assertThat(card.summary()).isEqualTo("One. Two.");
         assertThat(card.uncertainty()).isEqualTo("Uncertain.");
         assertThat(card.aiGenerated()).isTrue();
         AgentEventModels.ReportView report = eventQueries.detail(card.eventId(), "syn-agent-001").report();
-        assertThat(report.version()).isEqualTo(2);
-        assertThat(report.versionCount()).isEqualTo(2);
+        assertThat(report.version()).isEqualTo(1);
+        assertThat(report.versionCount()).isEqualTo(1);
         assertThat(report.schemaVersion()).isEqualTo("alert-client-report-v2");
-        assertThat(report.report().get("headline").asText()).isEqualTo("v2");
+        assertThat(report.report().get("headline").asText()).isEqualTo("v1");
         assertThat(report.sources()).extracting(AgentEventModels.ReportSource::domain).containsExactly("one.example", "two.example");
         assertThat(report.sources()).allMatch(AgentEventModels.ReportSource::usedInReport);
         assertThat(report.sources()).allMatch(source -> source.id() != null && source.retrievedAt() != null);
@@ -372,6 +418,19 @@ class EventReportIntegrationTest {
         assertThat(report.report().toString()).as("nothing about a client in what the model wrote")
                 .doesNotContain("syn-client").doesNotContain("syn-account");
         assertThatThrownBy(() -> eventQueries.detail(card.eventId(), "someone-else")).isInstanceOf(AlertNotFoundException.class);
+    }
+
+    @Test
+    void anOlderEventWithNoTickerColumnStillListsWithItsTickerFromItsInstrumentRow() {
+        store("one.example", "2026-09-26T22:00:00Z", "a");
+        pipeline.processPending();
+        jdbc.update("UPDATE public_event SET instrument_id = NULL"); // the state of an event written before V16
+
+        AgentEventModels.EventCard card = eventQueries.list("syn-agent-001", false, 25).items().getFirst();
+
+        assertThat(card.instrumentId()).isEqualTo("SYN-SGX-001");
+        assertThat(card.ticker()).isEqualTo("SYN1");
+        assertThat(card.sourceCount()).isOne();
     }
 
     @Test
@@ -464,7 +523,7 @@ class EventReportIntegrationTest {
     }
 
     @Test
-    void aStaleReportVersionIsAConflictAndANewSourceMovesTheVersionOn() {
+    void aStaleReportVersionIsAConflictAndALaterArticleDoesNotChangeAnEarlierReport() {
         UUID[] ids = eventWithInformedCrmClient();
         String agent = agentOf(ids[2]);
 
@@ -474,8 +533,8 @@ class EventReportIntegrationTest {
         store("two.example", "2026-09-26T23:00:00Z", "b");
         pipeline.processPending();
 
-        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
-                () -> packages().build(ids[0], agent, 1, List.of(ids[2])));
-        assertThat(packages().build(ids[0], agent, 2, List.of(ids[2])).sources()).hasSize(2);
+        assertThat(count("public_event")).as("the later article starts the next event").isEqualTo(2);
+        assertThat(packages().build(ids[0], agent, 1, List.of(ids[2])).sources())
+                .as("the earlier event's report still rests on its own source only").hasSize(1);
     }
 }

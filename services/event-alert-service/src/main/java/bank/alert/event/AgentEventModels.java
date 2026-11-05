@@ -32,7 +32,14 @@ public final class AgentEventModels {
             int affectedClientCount,
             int openClientCount,
             BigDecimal topScore,
-            Instant latestAlertAt) {
+            Instant latestAlertAt,
+            /** The ticker this event is about (ADR-0084): one event is one ticker's new news for one run. */
+            String instrumentId,
+            String ticker,
+            String issuer,
+            int sourceCount,
+            /** Null until the report is written. */
+            Integer reportVersion) {
     }
 
     public record EventPage(List<EventCard> items, String nextCursor) {

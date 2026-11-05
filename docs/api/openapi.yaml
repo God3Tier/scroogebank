@@ -775,9 +775,14 @@ components:
     EventCard:
       type: object
       additionalProperties: false
-      required: [eventId, headline, summary, aiGenerated, uncertainty, evidence, affectedClientCount, openClientCount, topScore, latestAlertAt]
+      required: [eventId, headline, summary, aiGenerated, uncertainty, evidence, affectedClientCount, openClientCount, topScore, latestAlertAt, instrumentId, ticker, issuer, sourceCount, reportVersion]
       properties:
         eventId: {type: string, format: uuid}
+        instrumentId: {type: string, nullable: true, description: The ticker this event is about. One event is one ticker's new news for one search run.}
+        ticker: {type: string, nullable: true}
+        issuer: {type: string, nullable: true}
+        sourceCount: {type: integer, minimum: 0, description: How many sources are linked to the event.}
+        reportVersion: {type: integer, nullable: true, description: Null until the report is written.}
         headline: {type: string}
         summary: {type: string, nullable: true}
         aiGenerated: {type: boolean}

@@ -68,7 +68,15 @@ public class AgentEventQueryService {
                        (SELECT b.uncertainty FROM briefing b JOIN alert a2 ON a2.id = b.alert_id
                          WHERE a2.public_event_id = pe.id ORDER BY b.created_at, b.id LIMIT 1) AS uncertainty,
                        (SELECT r.report::text FROM event_report r
-                         WHERE r.public_event_id = pe.id ORDER BY r.version DESC LIMIT 1) AS report_json
+                         WHERE r.public_event_id = pe.id ORDER BY r.version DESC LIMIT 1) AS report_json,
+                       (SELECT max(r.version) FROM event_report r WHERE r.public_event_id = pe.id) AS report_version,
+                       (SELECT count(*) FROM public_event_source s WHERE s.public_event_id = pe.id) AS source_count,
+                       COALESCE(pe.instrument_id, (SELECT min(i.instrument_id) FROM public_event_instrument i
+                                                    WHERE i.public_event_id = pe.id)) AS instrument_id,
+                       (SELECT ins.ticker FROM instrument ins WHERE ins.id = COALESCE(pe.instrument_id,
+                            (SELECT min(i.instrument_id) FROM public_event_instrument i WHERE i.public_event_id = pe.id))) AS ticker,
+                       (SELECT ins.issuer_name FROM instrument ins WHERE ins.id = COALESCE(pe.instrument_id,
+                            (SELECT min(i.instrument_id) FROM public_event_instrument i WHERE i.public_event_id = pe.id))) AS issuer
                   FROM alert a
                   JOIN public_event pe ON pe.id = a.public_event_id
                   JOIN source_result sr ON sr.id = pe.source_result_id
@@ -114,7 +122,15 @@ public class AgentEventQueryService {
                        (SELECT b.uncertainty FROM briefing b JOIN alert a2 ON a2.id = b.alert_id
                          WHERE a2.public_event_id = pe.id ORDER BY b.created_at, b.id LIMIT 1) AS uncertainty,
                        (SELECT r.report::text FROM event_report r
-                         WHERE r.public_event_id = pe.id ORDER BY r.version DESC LIMIT 1) AS report_json
+                         WHERE r.public_event_id = pe.id ORDER BY r.version DESC LIMIT 1) AS report_json,
+                       (SELECT max(r.version) FROM event_report r WHERE r.public_event_id = pe.id) AS report_version,
+                       (SELECT count(*) FROM public_event_source s WHERE s.public_event_id = pe.id) AS source_count,
+                       COALESCE(pe.instrument_id, (SELECT min(i.instrument_id) FROM public_event_instrument i
+                                                    WHERE i.public_event_id = pe.id)) AS instrument_id,
+                       (SELECT ins.ticker FROM instrument ins WHERE ins.id = COALESCE(pe.instrument_id,
+                            (SELECT min(i.instrument_id) FROM public_event_instrument i WHERE i.public_event_id = pe.id))) AS ticker,
+                       (SELECT ins.issuer_name FROM instrument ins WHERE ins.id = COALESCE(pe.instrument_id,
+                            (SELECT min(i.instrument_id) FROM public_event_instrument i WHERE i.public_event_id = pe.id))) AS issuer
                   FROM alert a
                   JOIN public_event pe ON pe.id = a.public_event_id
                   JOIN source_result sr ON sr.id = pe.source_result_id
@@ -240,6 +256,8 @@ public class AgentEventQueryService {
                         rs.getString("source_domain"), published == null ? null : published.toInstant(),
                         rs.getTimestamp("retrieved_at").toInstant()),
                 rs.getInt("client_count"), rs.getInt("open_count"), top,
-                rs.getTimestamp("latest").toInstant());
+                rs.getTimestamp("latest").toInstant(),
+                rs.getString("instrument_id"), rs.getString("ticker"), rs.getString("issuer"),
+                rs.getInt("source_count"), (Integer) rs.getObject("report_version"));
     }
 }
