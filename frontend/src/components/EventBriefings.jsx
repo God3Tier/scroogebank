@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
 import { followUpLink, isCrmClientId, sendAlertReport } from '../api/engagement.js'
+import { downloadReportPdf } from '../utils/reportPdf.js'
 
 // "This happened; these clients may be affected." One card per public event with
 // one shared summary. The agent picks Inform, Monitor or Dismiss for the clients
@@ -40,12 +41,17 @@ function formatDate(value) {
 }
 
 function ReportPanel({ report }) {
+  const [pdfError, setPdfError] = useState('')
   if (!report) return null
   const body = report.report
   const cited = (list) => (list || []).map((item) => item.text)
   return (
     <section className="event-report" aria-label="Event report">
       <h3>{body.headline}</h3>
+      <button type="button" onClick={() => downloadReportPdf(report).then(() => setPdfError(''), () => setPdfError('The PDF could not be made. Try again.'))}>
+        Download report as PDF
+      </button>
+      {pdfError && <p className="error-text" role="alert">{pdfError}</p>}
       <p className="holdings-note">Version {report.version} of {report.versionCount}. {report.schemaVersion === 'briefing-v1-legacy' ? 'Migrated from an earlier briefing.' : 'AI-written from public sources; checked before it is shown.'}</p>
       {cited(body.executiveSummary).map((text) => <p key={text}>{text}</p>)}
       {(body.keyFacts || []).length > 0 && (
