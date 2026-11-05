@@ -16,6 +16,7 @@ vi.mock('../api/searchSources.js', () => ({
 vi.mock('../api/clients.js', () => ({ getClient: vi.fn() }))
 vi.mock('../api/users.js', () => ({ listUsers: vi.fn() }))
 vi.mock('../components/AlertWorkspace.jsx', () => ({ default: ({ readOnly }) => <section>Alert workspace {readOnly ? 'read only' : 'editable'}</section> }))
+vi.mock('../components/TickerReports.jsx', () => ({ default: () => <section>Ticker reports</section> }))
 
 // Synthetic data only.
 const MINE = { id: 'w1', domain: 'businesstimes.com.sg', addedAt: '2026-11-04T04:00:00Z', addedByYou: true }
@@ -259,7 +260,7 @@ describe('the event alerts page', () => {
     const { container } = render(<EventAlerts />)
 
     expect(screen.queryByText('Events that may affect your clients')).not.toBeInTheDocument()
-    expect(screen.getByText('Alert workspace editable')).toBeInTheDocument()
+    expect(screen.getByText('Ticker reports')).toBeInTheDocument()
     expect(container.querySelector('details')).toBeNull()
     expect(await screen.findByText('Search sources')).toBeInTheDocument()
   })

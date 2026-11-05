@@ -3150,3 +3150,5 @@ textarea:focus {
 .send-report { display: grid; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--outline-variant); }
 .send-report h4 { margin: 0; }
 .send-report__confirm { display: flex; gap: 0.5rem; align-items: flex-start; }
+.ticker-why { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: 0.4rem; }
+.event-outcomes { margin: 0.75rem 0 0; padding-left: 1.25rem; }
