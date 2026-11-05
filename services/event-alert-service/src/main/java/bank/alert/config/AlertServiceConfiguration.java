@@ -17,6 +17,7 @@ import java.time.Clock;
         IngestionProperties.class,
         AiProperties.class,
         BedrockAiProperties.class,
+        AnthropicAiProperties.class,
         OperationalProperties.class,
         ReplayProperties.class,
         ResearchProperties.class,

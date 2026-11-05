@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-11-05 - Claude through the Anthropic API as a model for a developer machine
+
+- Human owner: Hayyun; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Add `AnthropicAiModelGateway`, a second implementation of the model gateway chosen by `alert.ai.provider=anthropic`, so the pipeline from search to alert can be tried on a laptop (ADR-0083, Proposed). It is never set by the Terraform stacks.
+- Files/components affected: `ai/AnthropicAiModelGateway`, `AnthropicAiGatewayConfiguration`, `config/AnthropicAiProperties`, `application.yml` (`alert.ai.model` from `ALERT_AI_MODEL`, `alert.ai.anthropic.api-key`), their unit tests and a key-gated live test; `docs/adr/ADR-0083`.
+- Data/calls: public news excerpts only; a few real calls to `claude-sonnet-5-5` from a developer machine on the owner's key; no client data; no AWS calls.
+- Verification: unit tests against a local stand-in for the API pass; one real call classified a headline correctly; a local run stored 7 real articles, 5 became alerts with summaries and 3 were held back for low confidence.
+- Human verification required: review of ADR-0083; that article text leaving the Singapore and AWS boundary is acceptable for development only; the owner to rotate the API key, which was shared in a chat; classification quality has not been run against the ADR-0010 benchmark.
+
 ## 2026-11-05 - Searches by hand and on adding a website; one shared list of websites; fixed schedule
 
 - Human owner: Hayyun; review pending.

@@ -123,6 +123,7 @@ ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 an
 
 - [ADR-0081](ADR-0081-search-starts-when-an-agent-adds-a-domain.md) — Proposed 2026-11-05 (owner Hayyun; review pending): a search starts when an agent adds a website or presses Search now (15-minute cooldown per company, no small cap on searches per run, monthly quota stays); the automatic schedule runs at fixed Singapore times every 4 hours and the page shows the next one; off unless `alert_search_on_add` is set.
 - [ADR-0082](ADR-0082-one-shared-list-of-search-websites.md) — Proposed 2026-11-05 (owner Hayyun; review pending): one shared list of websites that agents add and that is searched for every company, replacing ADR-0079's per-company websites; any agent adds, any agent or admin removes, at most 20, with the format and blocklist rules, audit events, and a holdings overview of which clients hold each company.
+- [ADR-0083](ADR-0083-claude-through-the-anthropic-api-for-development.md) — Proposed 2026-11-05 (owner Hayyun; review pending): Claude through the Anthropic API as a second model gateway, for a developer machine only (`alert.ai.provider=anthropic`, key from the environment, never deployed), so a search can be taken to an alert on the page without AWS; public text only; Bedrock stays the deployed model.
 
 ## Maintenance rule
 
