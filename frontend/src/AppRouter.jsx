@@ -62,8 +62,8 @@ function AppRouter() {
       <Route path="/agent/calendar" element={<RequireAuth groups={[AGENT]}><AgentCalendar /></RequireAuth>} />
       <Route path="/agent/drafts" element={<RequireAuth groups={[AGENT]}><AgentDrafts /></RequireAuth>} />
       <Route path="/admin" element={<RequireAuth groups={[ADMIN]}><AdminDashboard /></RequireAuth>} />
-      <Route path="/agent/client/:clientId/transactions" element={<RequireAuth groups={[ADMIN, AGENT]}><ClientTransactions /></RequireAuth>} />
-      <Route path="/agent/client/:clientId/accounts/:accountId/transactions" element={<RequireAuth groups={[ADMIN, AGENT]}><AccountTransactions /></RequireAuth>} />
+      <Route path="/agent/client/:clientId/transactions" element={<RequireAuth groups={[AGENT]}><ClientTransactions /></RequireAuth>} />
+      <Route path="/agent/client/:clientId/accounts/:accountId/transactions" element={<RequireAuth groups={[AGENT]}><AccountTransactions /></RequireAuth>} />
       <Route path="/clients/:clientId" element={<RequireAuth groups={[ADMIN, AGENT]}><ClientProfile /></RequireAuth>} />
       <Route path="/agent/client-health" element={<RequireAuth groups={[AGENT]}><ClientHealthMonitor /></RequireAuth>} />
       <Route path="/admin/client-health" element={<RequireAuth groups={[ADMIN]}><ClientHealthMonitor /></RequireAuth>} />
