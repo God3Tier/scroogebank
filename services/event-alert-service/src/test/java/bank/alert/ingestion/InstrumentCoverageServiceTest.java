@@ -23,11 +23,11 @@ class InstrumentCoverageServiceTest {
     private static final Instant TO = Instant.parse("2026-10-28T12:00:00Z");
 
     @Test
-    void selectsAtMostTwoAndResumesFromOldestCoverageWithOverlap() {
+    void selectsEveryInstrumentAndResumesFromOldestCoverageWithOverlap() {
         InstrumentSearchCoverageRepository repository = mock(InstrumentSearchCoverageRepository.class);
         List<String> ids = java.util.stream.IntStream.range(0, 40)
                 .mapToObj(i -> "I%02d".formatted(i)).toList();
-        List<String> selected = ids.subList(14, 16); // slot 124527 selects batch 7 of 20: four searches a run, two per instrument
+        List<String> selected = ids; // every eligible instrument is searched on every run (ADR-0084)
         when(repository.findAllById(selected)).thenReturn(selected.stream()
                 .map(id -> new InstrumentSearchCoverage(id, TO.minus(Duration.ofHours(3)), TO)).toList());
         InstrumentCoverageService service = service(repository);
@@ -67,18 +67,15 @@ class InstrumentCoverageServiceTest {
     }
 
     @Test
-    void rotatesOneHundredEligibleInstrumentsAcrossFiftySlots() {
+    void searchesEveryEligibleInstrumentOnEveryRunWithNoRotation() {
         InstrumentCoverageService service = service(mock(InstrumentSearchCoverageRepository.class));
         List<String> ids = IntStream.range(0, 100).mapToObj(i -> "I%03d".formatted(i)).toList();
 
-        List<List<String>> batches = IntStream.range(0, 50)
+        List<List<String>> runs = IntStream.range(0, 6)
                 .mapToObj(slot -> service.replay(ids, TO.plus(Duration.ofHours(4L * slot))))
                 .toList();
 
-        assertThat(batches).allSatisfy(batch -> assertThat(batch).hasSize(2));
-        assertThat(batches.stream().flatMap(List::stream).toList())
-                .containsExactlyInAnyOrderElementsOf(ids);
-        assertThat(service.replay(ids, TO)).isEqualTo(batches.getFirst());
+        assertThat(runs).allSatisfy(run -> assertThat(run).containsExactlyElementsOf(ids));
     }
 
     private static InstrumentCoverageService service(InstrumentSearchCoverageRepository repository) {

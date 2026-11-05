@@ -48,6 +48,8 @@ import java.util.stream.Collectors;
 public class AlertGenerationService {
 
     private static final int DAILY_ALERT_LIMIT = 10;
+    /** Sources this close in time, about the same instruments, type and direction, are one event (ADR-0084). */
+    static final java.time.Duration GROUPING_WINDOW = java.time.Duration.ofHours(72);
     private static final Collection<String> PENDING_AUDIT_STATUSES = List.of("PENDING", "FAILED");
 
     private final SourceResultRepository sourceResults;
@@ -97,7 +99,12 @@ public class AlertGenerationService {
                 affectedIds, request.asOf(), request.assignedAgentSubject())).positions();
         Map<PortfolioKey, List<HoldingSnapshot>> portfolios = positions.stream()
                 .collect(Collectors.groupingBy(PortfolioKey::from, LinkedHashMap::new, Collectors.toList()));
-        UUID existingPublicEventId = findPublicEventId(source.getId(), classification.modelVersion());
+        Instant occurredAt = source.getPublishedAt() == null ? classification.classifiedAt() : source.getPublishedAt();
+        // The same source seen again keeps its event; otherwise a source about the same thing joins the event that
+        // already covers it (ADR-0084). Anything ambiguous or conflicting stays a separate event.
+        UUID sameSourceEventId = findPublicEventId(source.getId(), classification.modelVersion());
+        final UUID existingPublicEventId = sameSourceEventId != null ? sameSourceEventId
+                : findGroupableEvent(classification, affectedIds, occurredAt);
         // One candidate per held affected instrument, scored against that account's whole portfolio.
         // A client holding the same instrument in several accounts yields only its best account.
         Map<AlertKey, Candidate> evaluated = new LinkedHashMap<>();
@@ -140,6 +147,7 @@ public class AlertGenerationService {
                 + newPortfolioAlerts * (request.briefing() == null ? 1 : 2));
         UUID publicEventId = existingPublicEventId == null
                 ? persistPublicEvent(source, classification) : existingPublicEventId;
+        linkSource(publicEventId, source.getId());
         persistClassificationAudit(publicEventId, source.getId(), classification);
 
         int created = 0;
@@ -223,6 +231,40 @@ public class AlertGenerationService {
                     "Model classification cites " + affected.evidenceRef(), classification.confidence());
         }
         return persistedId;
+    }
+
+    /** Every source an event rests on, the first and any that later corroborate it. */
+    private void linkSource(UUID publicEventId, UUID sourceResultId) {
+        jdbc.update("""
+                INSERT INTO public_event_source (public_event_id, source_result_id, linked_at)
+                VALUES (?, ?, ?) ON CONFLICT (public_event_id, source_result_id) DO NOTHING
+                """, publicEventId, sourceResultId, Timestamp.from(clock.instant()));
+    }
+
+    /**
+     * The one existing event a new source belongs to, or null. Sources are about the same event only if the sorted
+     * set of affected instruments, the event type and the direction all match within a rolling 72 hours. If more
+     * than one event matches, or an event with the same instruments and type but another direction exists in the
+     * window, the classifications are ambiguous or in conflict and the source starts its own event.
+     */
+    private UUID findGroupableEvent(EventClassification classification, Set<String> affectedIds, Instant occurredAt) {
+        String instrumentSet = affectedIds.stream().sorted().collect(Collectors.joining(","));
+        List<Map.Entry<UUID, String>> candidates = jdbc.query("""
+                SELECT pe.id, pe.direction FROM public_event pe
+                 WHERE pe.classification = ?
+                   AND pe.occurred_at BETWEEN ? AND ?
+                   AND (SELECT string_agg(pei.instrument_id, ',' ORDER BY pei.instrument_id)
+                          FROM public_event_instrument pei WHERE pei.public_event_id = pe.id) = ?
+                 ORDER BY pe.created_at ASC
+                """, (resultSet, row) -> Map.entry(resultSet.getObject(1, UUID.class), resultSet.getString(2)),
+                classification.eventType().name(), Timestamp.from(occurredAt.minus(GROUPING_WINDOW)),
+                Timestamp.from(occurredAt.plus(GROUPING_WINDOW)), instrumentSet);
+        List<UUID> sameDirection = candidates.stream()
+                .filter(candidate -> candidate.getValue().equals(classification.direction().name()))
+                .map(Map.Entry::getKey).toList();
+        boolean conflicting = candidates.stream()
+                .anyMatch(candidate -> !candidate.getValue().equals(classification.direction().name()));
+        return sameDirection.size() == 1 && !conflicting ? sameDirection.getFirst() : null;
     }
 
     private UUID findPublicEventId(UUID sourceResultId, String classifierVersion) {

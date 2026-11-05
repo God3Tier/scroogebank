@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
-import { followUpLink, isCrmClientId } from '../api/engagement.js'
+import { followUpLink, isCrmClientId, sendAlertReport } from '../api/engagement.js'
 
 // "This happened; these clients may be affected." One card per public event with
 // one shared summary. The agent picks Inform, Monitor or Dismiss for the clients
@@ -17,6 +17,9 @@ const ACTIONS = [
 ]
 
 const STATUS_LABELS = { NEW: 'New', MONITORING: 'Monitoring', INFORMED: 'Inform planned', DISMISSED: 'Dismissed' }
+
+const DELIVERY_LABELS = { QUEUED: 'Queued', SENT: 'Sent', FAILED: 'Failed', NOT_AUTHORISED: 'Not authorised' }
+const MAX_CONTINUES = 5
 
 const OUTCOME_LABELS = {
   APPLIED: 'Done',
@@ -36,6 +39,48 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('en-SG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore' }).format(new Date(value))
 }
 
+function ReportPanel({ report }) {
+  if (!report) return null
+  const body = report.report
+  const cited = (list) => (list || []).map((item) => item.text)
+  return (
+    <section className="event-report" aria-label="Event report">
+      <h3>{body.headline}</h3>
+      <p className="holdings-note">Version {report.version} of {report.versionCount}. {report.schemaVersion === 'briefing-v1-legacy' ? 'Migrated from an earlier briefing.' : 'AI-written from public sources; checked before it is shown.'}</p>
+      {cited(body.executiveSummary).map((text) => <p key={text}>{text}</p>)}
+      {(body.keyFacts || []).length > 0 && (
+        <>
+          <h4>Key facts</h4>
+          <ul>{body.keyFacts.map((fact) => <li key={fact.label}><strong>{fact.label}:</strong> {fact.value}. {fact.context}</li>)}</ul>
+        </>
+      )}
+      {(body.whyItMatters || []).length > 0 && (
+        <>
+          <h4>Why it matters</h4>
+          <ul>{body.whyItMatters.map((item) => <li key={item.text}>{item.kind === 'POTENTIAL_IMPLICATION' ? `Potential implication: ${item.text}` : item.text}</li>)}</ul>
+        </>
+      )}
+      {(body.whatToMonitor || []).length > 0 && (
+        <>
+          <h4>What to monitor</h4>
+          <ul>{body.whatToMonitor.map((item) => <li key={item}>{item}</li>)}</ul>
+        </>
+      )}
+      {body.uncertainty && <p><strong>Uncertainty:</strong> {body.uncertainty}</p>}
+      <h4>Sources</h4>
+      <ul>
+        {report.sources.map((source) => (
+          <li key={source.url}>
+            <a href={source.url} target="_blank" rel="noreferrer">{source.title}</a> ({source.domain}){source.usedInReport ? '' : ' - linked, not used in the summary'}
+          </li>
+        ))}
+      </ul>
+      {Object.values(report.portfolioLines || {}).map((line) => <p key={line}>{line}</p>)}
+      <p className="holdings-note">{report.disclaimer}</p>
+    </section>
+  )
+}
+
 function EventDetailPanel({ eventId, onChanged }) {
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
@@ -44,6 +89,9 @@ function EventDetailPanel({ eventId, onChanged }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+  const [agentNote, setAgentNote] = useState('')
+  const [approved, setApproved] = useState(false)
+  const [deliveries, setDeliveries] = useState(null)
 
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -79,6 +127,31 @@ function EventDetailPanel({ eventId, onChanged }) {
     }
   }
 
+  async function sendReport() {
+    const alertIds = detail.clients
+      .filter((client) => selected[client.alertId] && client.status === 'INFORMED' && isCrmClientId(client.clientRef))
+      .map((client) => client.alertId)
+    if (alertIds.length === 0 || !approved) return
+    setBusy(true)
+    setError('')
+    const key = crypto.randomUUID()
+    const request = { eventId, expectedReportVersion: detail.report.version, alertIds, agentNote: agentNote.trim() }
+    try {
+      let outcome = await sendAlertReport(request, key)
+      // Recipients not reached within one request stay QUEUED; the same request carries on with them.
+      for (let round = 0; round < MAX_CONTINUES && outcome.recipients.some((r) => r.status === 'QUEUED'); round += 1) {
+        outcome = await sendAlertReport(request, key)
+      }
+      setDeliveries(outcome.recipients)
+      setApproved(false)
+    } catch (e) {
+      setError(e.status === 409 ? 'The report changed since you looked. Reload and review it again.'
+        : e.status === 503 ? 'Sending is switched off or a service is unavailable. Nothing more was sent.' : problemText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (error && !detail) return <p className="error-text" role="alert">{error}</p>
   if (!detail) return <p className="empty-note" role="status">Loading clients…</p>
 
@@ -86,6 +159,37 @@ function EventDetailPanel({ eventId, onChanged }) {
   return (
     <form className="event-clients" onSubmit={submit} aria-label="Affected clients">
       {error && <p className="error-text" role="alert">{error}</p>}
+      <ReportPanel report={detail.report} />
+      {detail.report && (
+        <div className="event-report-actions">
+          <p className="holdings-note">
+            To email this report, tick clients you have marked as informed, add an optional note, confirm you have
+            reviewed it, and send. Each client gets their own email. The report text cannot be edited; your note is sent
+            under its own label.
+          </p>
+          <label>Note to the selected clients (optional)
+            <textarea maxLength={500} rows={2} value={agentNote} onChange={(e) => setAgentNote(e.target.value)} />
+          </label>
+          <label>
+            <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} />
+            I have reviewed version {detail.report.version} of this report and approve sending it
+          </label>
+          <button type="button" onClick={sendReport}
+            disabled={busy || !approved || !detail.clients.some((c) => selected[c.alertId] && c.status === 'INFORMED' && isCrmClientId(c.clientRef))}>
+            {busy ? 'Sending…' : 'Send report to selected clients'}
+          </button>
+          {deliveries && (
+            <ul role="status">
+              {deliveries.map((d) => (
+                <li key={d.alertId}>
+                  Client {detail.clients.find((c) => c.alertId === d.alertId)?.clientRef.slice(0, 8)}: {DELIVERY_LABELS[d.status] || d.status}
+                  {d.errorCode ? ` (${d.errorCode})` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className="table-wrap">
         <table className="data-table">
           <thead>

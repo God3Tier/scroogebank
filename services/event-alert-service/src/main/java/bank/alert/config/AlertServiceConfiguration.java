@@ -15,6 +15,7 @@ import java.time.Clock;
 @EnableConfigurationProperties({
         AlertModeProperties.class,
         IngestionProperties.class,
+        SearchFilterProperties.class,
         AiProperties.class,
         BedrockAiProperties.class,
         AnthropicAiProperties.class,

@@ -112,8 +112,7 @@ public class IngestionCoordinator {
     private IngestionOutcome executeLocked(Instant windowFrom, Instant windowTo,
             List<InstrumentSearchTerms> catalogue, boolean advanceWatermark, List<String> sharedDomains) {
         List<IssuerSearchQuery> queries = queryBuilder.build(
-                catalogue, sharedDomains,
-                Math.max(properties.maxQueriesPerRun(), catalogue.size() * IssuerQueryBuilder.QUERIES_PER_INSTRUMENT));
+                catalogue, sharedDomains);
         if (queries.isEmpty()) return IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, windowTo);
 
         Instant now = clock.instant();

@@ -144,3 +144,19 @@ is the agent's and its `clientRef` equals the email's client
 It reads `clientRef` only and treats 401, 403 and 404 as "not yours". The
 headline, holdings and briefing are never read, stored or sent to a model.
 Inform still sends nothing: the agent writes and sends the email themselves.
+
+## Client reports and their delivery (ADR-0084)
+
+`GET /api/alerts/events/{eventId}` carries `report`: the latest validated `alert-client-report-v2` (or a
+migrated `briefing-v1-legacy`), every source linked to the event with the ones the model saw marked
+`usedInReport`, the fixed portfolio line per affected instrument, and the disclaimer.
+
+- `POST /api/alerts/events/{eventId}/report/delivery-package` (called by the engagement service with the agent
+  token) takes `expectedReportVersion` and 1 to 200 `alertIds`. It returns the report, its sources with
+  publication and retrieval times, and for each alert `OK` with the client reference, instrument and issuer, or
+  `NOT_AUTHORISED` with nothing else. A client is released only if the alert is still the agent's, linked to a CRM
+  client and INFORMED. 409 if the report is not at the expected version. It changes and sends nothing.
+- `POST /api/engagement/alert-report-deliveries` (engagement service) takes `eventId`, `expectedReportVersion`,
+  `alertIds`, an optional `agentNote` and an `Idempotency-Key`. It returns the batch and a status per recipient:
+  `QUEUED`, `SENT`, `FAILED` or `NOT_AUTHORISED`. Repeating the request with the same key carries on with
+  `QUEUED` recipients and never resends one already sent. Off by default (`ENGAGEMENT_ALERT_REPORTS_ENABLED`).

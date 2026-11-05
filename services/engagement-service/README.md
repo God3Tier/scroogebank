@@ -68,6 +68,7 @@ ENGAGEMENT_MAIL_PROVIDER=log \
 | `ENGAGEMENT_MAIL_DOMAIN` | The sending domain (the sender address's domain without a custom domain), also the calendar `UID` suffix |
 | `CRM_APP_URL` | The CRM's address, linked from invites and reminders |
 | `ENGAGEMENT_AI_ENABLED` | The kill switch. Default `false`: every draft is a template |
+| `ENGAGEMENT_ALERT_REPORTS_ENABLED` | The rollout kill switch for emailing event reports to clients (ADR-0084). Default `false`: `POST /api/engagement/alert-report-deliveries` answers 503 and nothing is queued or sent |
 | `ENGAGEMENT_HOLIDAY_SYNC_ENABLED` | Add newly published Singapore holidays from data.gov.sg (ADR-0057). Default `false`; `true` in AWS |
 | `BEDROCK_REGION`, `BEDROCK_MODEL_ID` | Default `ap-southeast-1` and `apac.amazon.nova-lite-v1:0` (ADR-0067). A `global.` profile is refused at startup |
 | `ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT`, `ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA` | Caps. Default 20 and 300,000 |

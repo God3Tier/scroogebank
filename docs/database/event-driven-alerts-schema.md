@@ -95,3 +95,14 @@ fixture-only foreign key from `holding_snapshot.client_ref` to
 `holding_snapshot` and every alert are untouched; legacy detail keeps its original
 grouping (client, source version, valuation time), new detail uses the snapshot
 group. CRM IDs are references checked through the directory, never foreign keys.
+
+`V12__event_reports.sql` (ADR-0084) is additive. It adds `public_event_source` (every source linked to an event,
+backfilled from `public_event`), `event_report` (one versioned report per event, with the source IDs the model saw,
+model and prompt versions, and an expiry; existing briefings are copied in as `briefing-v1-legacy` version 1) and
+`event_report_attempt` (failed generation attempts). The `briefing` table is kept for rollback. V13 is skipped on
+purpose: the search-on-add branch uses V14 and V15.
+
+Engagement service `V3__alert_report_deliveries.sql` adds `alert_report_batch` (one approval: immutable report
+snapshot, note, hashes, idempotency key) and `alert_report_delivery` (one row per client with its status). Client
+addresses are never stored; the snapshot and note are cleared once nothing is left to send, and a partial unique
+index stops a report version reaching a client twice.

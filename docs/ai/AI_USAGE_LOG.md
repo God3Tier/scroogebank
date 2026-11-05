@@ -1,5 +1,24 @@
 # AI usage log
 
+## 2026-11-05 - Multi-source client report and its delivery (parts 2 and 3 of the plan by Azeez)
+
+- Human owner: Hayyun, from the plan by Azeez.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Group sources into one event, write one cited `alert-client-report-v2` report per event (the application adds the portfolio line, disclaimer and contact details), show it to the agent, and email it to the clients the agent chose after the agent approves it.
+- Files/components affected: event-alert-service `report/` package, `AlertGenerationService`, `SourcePipeline`, event card and detail queries, migration V12, the delivery-package endpoint; engagement-service `alertreports/` package, `ReportPackages`, migration V3, audit actions; the auditor allow-list; the Event Briefings page; OpenAPI and contract documents; the `agent-engagement` Terraform stack switch.
+- Data/calls: no live model, Tavily or SES calls; unit and Testcontainers tests with the model and mail mocked. The model sees only public evidence, never client, account or holding data.
+- Verification: Maven tests for event-alert-service and engagement-service, Vitest, ESLint and the Vite build pass. The auditor change was not run because Go is not installed on this machine.
+- Human verification required: a keyed Tavily test for one named instrument; one SES-sandbox end-to-end send to a verified recipient; the auditor Go tests; review of the sending design in ADR-0084 decision 16.
+
+## 2026-11-05 - Full-coverage search (part 1 of Azeez's plan)
+
+- Human owner: Hayyun, from the plan by Azeez; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Search every eligible instrument on every run with exactly two searches each, reserve the whole run against the monthly quota and the USD 25 budget, and add `ALERT_SEARCH_ONLY_INSTRUMENT_ID` for lower environments (ADR-0084, Proposed). Parts 2 (one report per event) and 3 (delivery) are not yet built.
+- Files/components affected: `IssuerQueryBuilder` (two query groups, no cap), `InstrumentCoverageService` (no rotation), `IngestionJob` and `SearchFilterProperties` (the single-instrument setting), `OutboundControlService` and `OperationalProperties` (the budget check and `estimatedSearchCostUsd`), `IngestionStatus.INVALID_FILTER`, `application.yml`; their unit tests; the operations runbook.
+- Data/calls: none to Tavily or a model; unit tests only.
+- Verification: `mvn test` for event-alert-service passes.
+- Human verification required: review of ADR-0084; a live billed-credit benchmark before the quota is raised; Azeez's approval before ingestion is enabled.
 ## 2026-11-05 - Claude through the Anthropic API as a model for a developer machine
 
 - Human owner: Hayyun; review pending.

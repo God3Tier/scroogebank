@@ -315,6 +315,35 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}/report/delivery-package:
+    post:
+      tags: [Alerts]
+      operationId: buildReportDeliveryPackage
+      summary: The current report and the chosen clients, for the engagement service to email (ADR-0084)
+      description: >-
+        Called by the engagement service with the agent's token. Rechecks current ownership and the
+        report version, and releases a client only if the alert is still the agent's, linked to a CRM
+        client, and marked INFORMED. A client that fails any check comes back NOT_AUTHORISED with no
+        client details. Changes and sends nothing. 409 if the report is not at the expected version.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReportPackageRequest'}
+      responses:
+        '200':
+          description: The report, its sources and each chosen client's outcome.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportPackage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   /alerts/search-websites:
     get:
       tags: [Alerts]
@@ -661,6 +690,86 @@ components:
         positions:
           type: array
           items: {$ref: '#/components/schemas/PortfolioPosition'}
+    ReportPackageRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedReportVersion, alertIds]
+      properties:
+        expectedReportVersion: {type: integer, minimum: 1}
+        alertIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: {type: string, format: uuid}
+    ReportPackage:
+      type: object
+      additionalProperties: false
+      required: [eventId, reportId, version, schemaVersion, report, reportHash, sources, recipients]
+      properties:
+        eventId: {type: string, format: uuid}
+        reportId: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        schemaVersion: {type: string}
+        report: {type: object, additionalProperties: true}
+        reportHash: {type: string, description: "SHA-256 of the version, report and linked source IDs."}
+        sources:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, title, url, domain, publishedAt, retrievedAt, usedInReport]
+            properties:
+              id: {type: string}
+              title: {type: string}
+              url: {type: string}
+              domain: {type: string}
+              publishedAt: {type: string, format: date-time, nullable: true}
+              retrievedAt: {type: string, format: date-time, nullable: true}
+              usedInReport: {type: boolean}
+        recipients:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [alertId, outcome, clientRef, instrumentId, issuer]
+            properties:
+              alertId: {type: string, format: uuid}
+              outcome: {type: string, enum: [OK, NOT_AUTHORISED]}
+              clientRef: {type: string, nullable: true}
+              instrumentId: {type: string, nullable: true}
+              issuer: {type: string, nullable: true}
+    EventReportSource:
+      type: object
+      additionalProperties: false
+      required: [title, url, domain, publishedAt, usedInReport]
+      properties:
+        title: {type: string}
+        url: {type: string}
+        domain: {type: string}
+        publishedAt: {type: string, format: date-time, nullable: true}
+        usedInReport: {type: boolean, description: "True for the (at most five) distinct-domain sources the model was shown."}
+    EventReport:
+      type: object
+      additionalProperties: false
+      required: [reportId, version, versionCount, schemaVersion, report, sources, portfolioLines, disclaimer, createdAt]
+      properties:
+        reportId: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        versionCount: {type: integer, minimum: 1}
+        schemaVersion: {type: string, description: "alert-client-report-v2, or briefing-v1-legacy for a migrated briefing."}
+        report:
+          type: object
+          description: "The validated model output: headline, executiveSummary, keyFacts, whyItMatters, marketContext (always null), whatToMonitor, uncertainty, sourceRefs."
+          additionalProperties: true
+        sources:
+          type: array
+          items: {$ref: '#/components/schemas/EventReportSource'}
+        portfolioLines:
+          type: object
+          description: "Per affected instrument, the fixed line that ties the report to a portfolio. It says nothing about what is held."
+          additionalProperties: {type: string}
+        disclaimer: {type: string}
+        createdAt: {type: string, format: date-time}
     EventCard:
       type: object
       additionalProperties: false
@@ -748,7 +857,7 @@ components:
     EventDetail:
       type: object
       additionalProperties: false
-      required: [card, clients, latestAction]
+      required: [card, clients, latestAction, report]
       properties:
         card: {$ref: '#/components/schemas/EventCard'}
         clients:
@@ -757,6 +866,10 @@ components:
         latestAction:
           anyOf:
             - {$ref: '#/components/schemas/EventActionResult'}
+            - {$ref: '#/components/schemas/NullValue'}
+        report:
+          anyOf:
+            - {$ref: '#/components/schemas/EventReport'}
             - {$ref: '#/components/schemas/NullValue'}
     NullValue:
       description: JSON null. OpenAPI 3.0 has no null type, so a nullable reference is anyOf the schema and this.

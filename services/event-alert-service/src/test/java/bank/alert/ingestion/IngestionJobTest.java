@@ -3,6 +3,7 @@ package bank.alert.ingestion;
 import bank.alert.config.AlertMode;
 import bank.alert.config.AlertModeProperties;
 import bank.alert.config.IngestionProperties;
+import bank.alert.config.SearchFilterProperties;
 import bank.alert.domain.Instrument;
 import bank.alert.domain.SearchWebsite;
 import bank.alert.repository.InstrumentRepository;
@@ -38,8 +39,8 @@ class IngestionJobTest {
     private final InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
 
     private IngestionJob job(AlertMode mode) {
-        return new IngestionJob(new AlertModeProperties(mode), properties(), searchUniverse, instruments, websites,
-                coordinator, coverage);
+        return new IngestionJob(new AlertModeProperties(mode), properties(), new SearchFilterProperties(null),
+                searchUniverse, instruments, websites, coordinator, coverage);
     }
 
     private static Instrument dbs() {
@@ -162,6 +163,115 @@ class IngestionJobTest {
     void researchRefusesToRunInsideTheApiProcess() {
         assertThatThrownBy(() -> job(AlertMode.API).researchCompanies(List.of("SGX-D05"), null, FROM, TO))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("WORKER mode");
+    }
+
+    // ---- ALERT_SEARCH_ONLY_INSTRUMENT_ID (ADR-0084) ------------------------------------------------
+
+    private static Instrument eligible(String id, String ticker) {
+        Instrument instrument = mock(Instrument.class);
+        when(instrument.getId()).thenReturn(id);
+        when(instrument.getTicker()).thenReturn(ticker);
+        when(instrument.getIssuerName()).thenReturn("Issuer " + ticker);
+        when(instrument.getSector()).thenReturn("Sector");
+        when(instrument.getSearchAliases()).thenReturn(List.of());
+        when(instrument.getOfficialDomains()).thenReturn(List.of("example.com"));
+        when(instrument.isActive()).thenReturn(true);
+        return instrument;
+    }
+
+    private IngestionJob filteredJob(String onlyId, SearchUniverseProvider universe, InstrumentRepository instruments,
+            IngestionCoordinator coordinator, InstrumentCoverageService coverage) {
+        return new IngestionJob(new AlertModeProperties(AlertMode.WORKER), properties(),
+                new SearchFilterProperties(onlyId), universe, instruments,
+                mock(SearchWebsiteRepository.class), coordinator, coverage);
+    }
+
+    @Test
+    void anUnsetFilterSearchesEveryEligibleInstrument() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        SearchUniverseProvider universe = mock(SearchUniverseProvider.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
+        Instant to = Instant.parse("2026-11-05T04:00:00Z");
+        Instrument a = eligible("A", "AAA");
+        Instrument b = eligible("B", "BBB");
+        when(universe.eligibleInstrumentIds()).thenReturn(List.of("A", "B"));
+        when(instruments.findAllById(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(a, b));
+        when(coverage.scheduled(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(to)))
+                .thenReturn(new InstrumentCoverageService.CoverageBatch(List.of("A", "B"), to.minusSeconds(3600), to));
+        when(coordinator.run(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, to));
+
+        filteredJob(null, universe, instruments, coordinator, coverage).runScheduledWindow(to);
+
+        verify(coverage).scheduled(org.mockito.ArgumentMatchers.eq(List.of("A", "B")), org.mockito.ArgumentMatchers.eq(to));
+    }
+
+    @Test
+    void aSetFilterSearchesOnlyThatEligibleInstrument() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        SearchUniverseProvider universe = mock(SearchUniverseProvider.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
+        Instant to = Instant.parse("2026-11-05T04:00:00Z");
+        Instrument a = eligible("A", "AAA");
+        Instrument b = eligible("B", "BBB");
+        when(universe.eligibleInstrumentIds()).thenReturn(List.of("A", "B"));
+        when(instruments.findAllById(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(a, b));
+        when(coverage.scheduled(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(to)))
+                .thenReturn(new InstrumentCoverageService.CoverageBatch(List.of("B"), to.minusSeconds(3600), to));
+        when(coordinator.run(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(IngestionOutcome.skipped(IngestionStatus.NO_QUERIES, to));
+
+        filteredJob("B", universe, instruments, coordinator, coverage).runScheduledWindow(to);
+
+        verify(coverage).scheduled(org.mockito.ArgumentMatchers.eq(List.of("B")), org.mockito.ArgumentMatchers.eq(to));
+        verify(coordinator).run(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(to),
+                org.mockito.ArgumentMatchers.argThat(terms -> terms.size() == 1 && terms.getFirst().ticker().equals("BBB")));
+    }
+
+    @Test
+    void aFilterNamingAnUnknownInactiveOrIneligibleInstrumentIsRefusedBeforeAnyQuotaIsUsed() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        SearchUniverseProvider universe = mock(SearchUniverseProvider.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
+        Instrument inactive = mock(Instrument.class);
+        when(inactive.getId()).thenReturn("OLD");
+        when(inactive.isActive()).thenReturn(false);
+        Instrument a = eligible("A", "AAA");
+        // OLD is inactive, INELIGIBLE is not in the eligible set, and NOPE does not exist at all.
+        when(universe.eligibleInstrumentIds()).thenReturn(List.of("A", "OLD"));
+        when(instruments.findAllById(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(a, inactive));
+        Instant to = Instant.parse("2026-11-05T04:00:00Z");
+
+        for (String wanted : List.of("OLD", "INELIGIBLE", "NOPE")) {
+            IngestionOutcome outcome = filteredJob(wanted, universe, instruments, coordinator, coverage).runScheduledWindow(to);
+
+            org.assertj.core.api.Assertions.assertThat(outcome.status()).isEqualTo(IngestionStatus.INVALID_FILTER);
+        }
+        verify(coverage, never()).scheduled(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(coordinator, never()).run(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void aReplayHonoursTheSameFilter() {
+        InstrumentRepository instruments = mock(InstrumentRepository.class);
+        SearchUniverseProvider universe = mock(SearchUniverseProvider.class);
+        IngestionCoordinator coordinator = mock(IngestionCoordinator.class);
+        InstrumentCoverageService coverage = mock(InstrumentCoverageService.class);
+        Instrument only = eligible("A", "AAA");
+        when(universe.eligibleInstrumentIds()).thenReturn(List.of("A"));
+        when(instruments.findAllById(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(only));
+        Instant to = Instant.parse("2026-11-05T04:00:00Z");
+
+        IngestionOutcome outcome = filteredJob("ZZZ", universe, instruments, coordinator, coverage)
+                .replayWindow(to.minusSeconds(3600), to);
+
+        org.assertj.core.api.Assertions.assertThat(outcome.status()).isEqualTo(IngestionStatus.INVALID_FILTER);
+        verify(coordinator, never()).replay(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     private static IngestionProperties properties() {

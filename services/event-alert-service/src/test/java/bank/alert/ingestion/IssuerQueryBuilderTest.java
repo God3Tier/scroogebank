@@ -17,13 +17,15 @@ class IssuerQueryBuilderTest {
         List<IssuerSearchQuery> queries = builder.build(List.of(
                 new InstrumentSearchTerms("D05", "DBS Group Holdings Ltd", "Financials",
                         List.of("DBS"), List.of("earnings", "appointment"),
-                        List.of("sgx.com", "dbs.com"))), List.of("reuters.com"), 4);
+                        List.of("sgx.com", "dbs.com"))), List.of("reuters.com"));
 
         assertThat(queries).hasSize(IssuerQueryBuilder.QUERIES_PER_INSTRUMENT).hasSize(2);
-        assertThat(queries.get(0).query()).contains("D05", "DBS Group Holdings Ltd", "DBS", "earnings", "results")
-                .doesNotContain("merger", "buyback", "default");
-        assertThat(queries.get(1).query()).contains("D05", "DBS Group Holdings Ltd", "DBS", "acquisition", "buyback")
-                .doesNotContain("earnings", "results");
+        assertThat(queries.get(0).query()).contains("D05", "DBS Group Holdings Ltd", "DBS", "earnings", "results",
+                        "dividend", "credit rating", "downgrade", "upgrade", "default", "credit outlook")
+                .doesNotContain("merger", "buyback", "steps down");
+        assertThat(queries.get(1).query()).contains("D05", "DBS Group Holdings Ltd", "DBS", "acquisition", "buyback",
+                        "regulatory action", "investigation", "fine", "filing", "approval", "appointment", "resignation", "steps down")
+                .doesNotContain("earnings", "results", "dividend", "default");
         assertThat(queries).allSatisfy(query -> {
             assertThat(query.query()).doesNotContain("Financials", "syn-client", "account", "holding", " OR ");
             assertThat(query.approvedDomains()).containsExactly("sgx.com", "dbs.com", "reuters.com");
@@ -39,7 +41,7 @@ class IssuerQueryBuilderTest {
                         List.of("global.toyota", "jpx.co.jp")),
                 terms("TSM", "Taiwan Semiconductor Manufacturing Company Limited",
                         List.of("TSMC", "Taiwan Semiconductor"), List.of("tsmc.com", "nyse.com"))),
-                List.of("reuters.com"), 4);
+                List.of("reuters.com"));
 
         assertThat(queries).hasSize(4);
         assertThat(queries.get(0).query()).contains("7203", "Toyota Motor Corporation", "Toyota");
@@ -56,7 +58,7 @@ class IssuerQueryBuilderTest {
         List<IssuerSearchQuery> queries = builder.build(List.of(
                 new InstrumentSearchTerms("D05", "DBS Group Holdings Ltd", "Financials", List.of("DBS"),
                         List.of("earnings"), List.of("sgx.com", "dbs.com"), List.of("businesstimes.com.sg"))),
-                List.of("reuters.com"), 4);
+                List.of("reuters.com"));
 
         assertThat(queries).hasSize(2).allSatisfy(query -> {
             assertThat(query.approvedDomains())
@@ -73,15 +75,32 @@ class IssuerQueryBuilderTest {
     }
 
     @Test
-    void refusesToSilentlyDropMoreInstrumentsThanQueries() {
-        List<InstrumentSearchTerms> catalogue = IntStream.range(0, 3)
+    void everyInstrumentGetsExactlyTwoSearchesWithNoCap() {
+        List<InstrumentSearchTerms> catalogue = IntStream.range(0, 25)
                 .mapToObj(index -> new InstrumentSearchTerms("T" + index, "Issuer " + index,
                         "Sector " + index, List.of(), List.of("earnings")))
                 .toList();
 
-        assertThatThrownBy(() -> builder.build(catalogue, List.of("reuters.com"), 4))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("bounded query capacity");
+        assertThat(builder.build(catalogue, List.of("reuters.com"))).hasSize(50);
+    }
+
+    @Test
+    void theTwoQueryGroupsAreExactlyThePlannedVocabulary() {
+        assertThat(IssuerQueryBuilder.PERFORMANCE_AND_CREDIT).containsExactly(
+                "earnings", "results", "profit", "revenue", "guidance", "dividend",
+                "credit rating", "downgrade", "upgrade", "default", "credit outlook");
+        assertThat(IssuerQueryBuilder.CORPORATE_AND_EXTERNAL_EVENTS).containsExactly(
+                "merger", "acquisition", "takeover", "divestment", "buyback", "regulatory action",
+                "investigation", "fine", "filing", "approval", "appointment", "resignation", "steps down");
+    }
+
+    @Test
+    void moreDomainsNeverMeanMoreSearches() {
+        InstrumentSearchTerms terms = new InstrumentSearchTerms("D05", "DBS Group Holdings Ltd", "Financials",
+                List.of("DBS"), List.of("earnings"), List.of("sgx.com", "dbs.com"),
+                List.of("a.example.com", "b.example.com", "c.example.com"));
+
+        assertThat(builder.build(List.of(terms), List.of("reuters.com", "cnbc.com", "ft.com"))).hasSize(2);
     }
 
     private static InstrumentSearchTerms terms(

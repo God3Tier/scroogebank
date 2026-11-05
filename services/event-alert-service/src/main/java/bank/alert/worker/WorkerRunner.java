@@ -124,7 +124,7 @@ public class WorkerRunner implements ApplicationRunner, ExitCodeGenerator {
         Object[] fields = {outcome.status(), outcome.runId(), outcome.windowFrom(), outcome.windowTo(),
                 outcome.searchAttempts(), outcome.acceptedResults(), outcome.duplicateResults(),
                 outcome.rejectedResults(), outcome.errorCode()};
-        if (outcome.status() == IngestionStatus.FAILED) {
+        if (outcome.status() == IngestionStatus.FAILED || outcome.status() == IngestionStatus.INVALID_FILTER) {
             exitCode = 1;
             log.error(SUMMARY, fields);
         } else {

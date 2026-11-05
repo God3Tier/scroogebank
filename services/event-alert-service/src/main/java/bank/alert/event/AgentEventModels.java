@@ -10,7 +10,9 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Request and response shapes of the agent-event briefing (one card per agent and public event). */
@@ -52,7 +54,24 @@ public final class AgentEventModels {
             long version) {
     }
 
-    public record EventDetail(EventCard card, List<AffectedClient> clients, ActionResult latestAction) {
+    /** A source the event rests on. {@code usedInReport} is true for the (at most five) the model was shown. */
+    public record ReportSource(String title, String url, String domain, Instant publishedAt, boolean usedInReport) {
+    }
+
+    /**
+     * The event's latest client report (ADR-0084): the validated model output, every source linked to the event, and
+     * the fixed text the application adds. {@code portfolioLines} gives, per affected instrument, the line that
+     * ties the report to a portfolio; it says nothing about what is held.
+     */
+    public record ReportView(UUID reportId, int version, int versionCount, String schemaVersion, JsonNode report,
+            List<ReportSource> sources, Map<String, String> portfolioLines, String disclaimer, Instant createdAt) {
+        public ReportView {
+            sources = List.copyOf(sources);
+            portfolioLines = Map.copyOf(portfolioLines);
+        }
+    }
+
+    public record EventDetail(EventCard card, List<AffectedClient> clients, ActionResult latestAction, ReportView report) {
         public EventDetail {
             clients = List.copyOf(clients);
         }

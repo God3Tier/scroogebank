@@ -78,9 +78,9 @@ alert:
     provider: ${ALERT_SEARCH_PROVIDER:tavily}
     overlap: 5m
     initial-lookback: 4h
-    # No fixed cap on companies per run: every eligible company is searched each time (ADR-0081). The
-    # monthly search quota below still stops all searching if the Tavily plan would be exceeded.
-    max-queries-per-run: ${ALERT_MAX_QUERIES_PER_RUN:200}
+    # No small cap: every eligible instrument is searched on every run (ADR-0084). The monthly quota and the
+    # monthly budget below still stop all searching before a run that they cannot cover.
+    max-queries-per-run: ${ALERT_MAX_QUERIES_PER_RUN:1000}
     max-results-per-query: 10
     max-attempts: 3
     retention: 90d
@@ -145,12 +145,17 @@ alert:
       region: ${ALERT_AI_BEDROCK_REGION:ap-southeast-1}
     anthropic:
       api-key: ${ALERT_ANTHROPIC_API_KEY:}
+  # Lower environments only: search just this one eligible instrument, to test a report (ADR-0084). Unset searches all.
+  search:
+    only-instrument-id: ${ALERT_SEARCH_ONLY_INSTRUMENT_ID:}
   operations:
     # Independent outbound controls remain fail-closed until explicitly enabled.
     ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
     model-enabled: ${ALERT_AI_ENABLED:false}
     monthly-search-quota: ${ALERT_MONTHLY_SEARCH_QUOTA:1000}
-    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:200}
+    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:1000}
+    # What one Tavily search is counted as costing, for the monthly budget (ADR-0084).
+    estimated-search-cost-usd: ${ALERT_ESTIMATED_SEARCH_COST_USD:0.008}
     monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}
     max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
     monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}

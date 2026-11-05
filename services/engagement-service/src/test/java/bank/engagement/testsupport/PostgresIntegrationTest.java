@@ -4,6 +4,7 @@ import bank.engagement.integration.clients.ClientDirectory;
 import bank.engagement.integration.identity.AgentDirectory;
 import bank.engagement.integration.identity.AgentProfile;
 import bank.engagement.integration.sources.FollowUpSources;
+import bank.engagement.integration.sources.ReportPackages;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -71,6 +72,9 @@ public abstract class PostgresIntegrationTest {
     @MockitoBean
     protected FollowUpSources sources;
 
+    @MockitoBean
+    protected ReportPackages reportPackages;
+
     @Autowired
     protected MockMvc mvc;
 
@@ -85,7 +89,7 @@ public abstract class PostgresIntegrationTest {
 
     @BeforeEach
     void resetState() {
-        jdbc.execute("TRUNCATE events, mail_queue, email_drafts, preferences, ai_usage, audit_outbox");
+        jdbc.execute("TRUNCATE events, mail_queue, email_drafts, preferences, ai_usage, audit_outbox, alert_report_delivery, alert_report_batch");
         clock.set(TestBeans.NOW);
         channel.reset();
         when(agents.find(Tokens.AGENT)).thenReturn(Optional.of(AGENT_PROFILE));

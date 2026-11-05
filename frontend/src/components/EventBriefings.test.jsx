@@ -3,9 +3,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { sendAlertReport } from '../api/engagement.js'
 import EventBriefings from './EventBriefings.jsx'
 
-vi.mock('../api/alertEvents.js', () => ({ listEvents: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn() }))
+vi.mock('../api/alertEvents.js', () => ({
+  listEvents: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn(),
+}))
+vi.mock('../api/engagement.js', async (original) => ({ ...(await original()), sendAlertReport: vi.fn() }))
 
 // The briefings link to Follow-up Emails, so they need a router.
 const render = (ui) => renderInto(<MemoryRouter>{ui}</MemoryRouter>)
@@ -40,6 +44,72 @@ describe('event briefings', () => {
     expect(screen.getByText('The issuer reported synthetic earnings.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Source: example.invalid' }))
       .toHaveAttribute('href', CARD.evidence.url)
+  })
+
+  it('shows the event report with every linked source and the fixed text', async () => {
+    listEvents.mockResolvedValue({ items: [CARD] })
+    getEvent.mockResolvedValue({
+      ...DETAIL,
+      report: {
+        reportId: 'r1', version: 2, versionCount: 2, schemaVersion: 'alert-client-report-v2',
+        report: {
+          headline: 'Synthetic report headline',
+          executiveSummary: [{ text: 'First cited sentence.', sourceRefs: ['s1'] }, { text: 'Second cited sentence.', sourceRefs: ['s1'] }],
+          keyFacts: [{ label: 'Revenue', value: '$10 million', context: 'Up on the year', sourceRefs: ['s1'] }],
+          whyItMatters: [{ text: 'Demand may grow.', kind: 'POTENTIAL_IMPLICATION', sourceRefs: [] }],
+          marketContext: null, whatToMonitor: ['Next quarter', 'Guidance'], uncertainty: 'One source.', sourceRefs: ['s1'],
+        },
+        sources: [
+          { title: 'Used source', url: 'https://a.invalid/x', domain: 'a.invalid', publishedAt: null, usedInReport: true },
+          { title: 'Extra source', url: 'https://b.invalid/y', domain: 'b.invalid', publishedAt: null, usedInReport: false },
+        ],
+        portfolioLines: { 'SYN-SGX-001': 'Your portfolio has exposure to Synthetic Ltd, which may be affected by this event.' },
+        disclaimer: 'This report is for information only.', createdAt: '2026-10-30T02:00:00Z',
+      },
+    })
+    render(<EventBriefings />)
+
+    fireEvent.click(await screen.findByText('Review affected clients'))
+
+    expect(await screen.findByText('Synthetic report headline')).toBeInTheDocument()
+    expect(screen.getByText('Potential implication: Demand may grow.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Extra source' })).toHaveAttribute('href', 'https://b.invalid/y')
+    expect(screen.getByText(/Your portfolio has exposure to Synthetic Ltd/)).toBeInTheDocument()
+    expect(screen.getByText('This report is for information only.')).toBeInTheDocument()
+  })
+
+  it('sends the report only to selected INFORMED CRM clients after the agent confirms, and carries on with queued ones', async () => {
+    const crm = '11111111-2222-4333-8444-555555555555'
+    const other = '99999999-2222-4333-8444-555555555555'
+    const report = {
+      reportId: 'r1', version: 3, versionCount: 3, schemaVersion: 'alert-client-report-v2',
+      report: { headline: 'H', executiveSummary: [{ text: 'A.', sourceRefs: [] }, { text: 'B.', sourceRefs: [] }], keyFacts: [], whyItMatters: [], whatToMonitor: [], uncertainty: null },
+      sources: [], portfolioLines: {}, disclaimer: 'D', createdAt: '2026-10-30T02:00:00Z',
+    }
+    const clients = [
+      { ...DETAIL.clients[0], clientRef: crm, status: 'INFORMED' },
+      { ...DETAIL.clients[1], clientRef: other, status: 'NEW' },
+    ]
+    listEvents.mockResolvedValue({ items: [CARD] })
+    getEvent.mockResolvedValue({ ...DETAIL, clients, report })
+    sendAlertReport
+      .mockResolvedValueOnce({ recipients: [{ alertId: 'alert-aaaaaaaa', status: 'QUEUED', errorCode: null }] })
+      .mockResolvedValueOnce({ recipients: [{ alertId: 'alert-aaaaaaaa', status: 'SENT', errorCode: null }] })
+    render(<EventBriefings />)
+
+    fireEvent.click(await screen.findByText('Review affected clients'))
+    fireEvent.click(await screen.findByLabelText(`Select client ${crm}`))
+    const send = screen.getByRole('button', { name: 'Send report to selected clients' })
+    expect(send).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/Note to the selected clients/), { target: { value: 'Call me' } })
+    fireEvent.click(screen.getByLabelText(/I have reviewed version 3/))
+    fireEvent.click(send)
+
+    await waitFor(() => expect(sendAlertReport).toHaveBeenCalledTimes(2))
+    const [request, key] = sendAlertReport.mock.calls[0]
+    expect(request).toEqual({ eventId: 'event-1', expectedReportVersion: 3, alertIds: ['alert-aaaaaaaa'], agentNote: 'Call me' })
+    expect(sendAlertReport.mock.calls[1][1]).toBe(key)
+    expect(await screen.findByText(/Sent/)).toBeInTheDocument()
   })
 
   it('loads the next event page without replacing the first', async () => {

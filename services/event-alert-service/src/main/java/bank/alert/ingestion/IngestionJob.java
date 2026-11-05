@@ -3,6 +3,7 @@ package bank.alert.ingestion;
 import bank.alert.config.AlertMode;
 import bank.alert.config.AlertModeProperties;
 import bank.alert.config.IngestionProperties;
+import bank.alert.config.SearchFilterProperties;
 import bank.alert.domain.Instrument;
 import bank.alert.domain.SearchWebsite;
 import bank.alert.repository.InstrumentRepository;
@@ -21,17 +22,19 @@ public class IngestionJob {
 
     private final AlertModeProperties mode;
     private final IngestionProperties properties;
+    private final SearchFilterProperties filter;
     private final SearchUniverseProvider searchUniverse;
     private final InstrumentRepository instruments;
     private final SearchWebsiteRepository websites;
     private final IngestionCoordinator coordinator;
     private final InstrumentCoverageService coverage;
 
-    public IngestionJob(AlertModeProperties mode, IngestionProperties properties,
+    public IngestionJob(AlertModeProperties mode, IngestionProperties properties, SearchFilterProperties filter,
             SearchUniverseProvider searchUniverse, InstrumentRepository instruments,
             SearchWebsiteRepository websites, IngestionCoordinator coordinator, InstrumentCoverageService coverage) {
         this.mode = mode;
         this.properties = properties;
+        this.filter = filter;
         this.searchUniverse = searchUniverse;
         this.instruments = instruments;
         this.websites = websites;
@@ -43,6 +46,8 @@ public class IngestionJob {
     public IngestionOutcome runScheduledWindow(Instant windowTo) {
         requireWorkerMode();
         List<CatalogueEntry> catalogue = catalogue();
+        if (!filterAllows(catalogue)) return IngestionOutcome.skipped(IngestionStatus.INVALID_FILTER, windowTo);
+        catalogue = restrict(catalogue);
         InstrumentCoverageService.CoverageBatch batch = coverage.scheduled(
                 catalogue.stream().map(CatalogueEntry::id).toList(), windowTo);
         if (batch.instrumentIds().isEmpty()) {
@@ -60,6 +65,8 @@ public class IngestionJob {
     public IngestionOutcome replayWindow(Instant windowFrom, Instant windowTo) {
         requireWorkerMode();
         List<CatalogueEntry> catalogue = catalogue();
+        if (!filterAllows(catalogue)) return IngestionOutcome.skipped(IngestionStatus.INVALID_FILTER, windowTo);
+        catalogue = restrict(catalogue);
         List<String> selected = coverage.replay(catalogue.stream().map(CatalogueEntry::id).toList(), windowTo);
         return coordinator.replay(windowFrom, windowTo, terms(catalogue, selected));
     }
@@ -101,6 +108,16 @@ public class IngestionJob {
     /** The websites agents added; they are searched for every company (ADR-0082). */
     private List<String> addedWebsites() {
         return websites.findByActiveTrueOrderByAddedAtAsc().stream().map(SearchWebsite::getDomain).toList();
+    }
+
+    /** With ALERT_SEARCH_ONLY_INSTRUMENT_ID set, the instrument must be eligible, or nothing is searched or reserved. */
+    private boolean filterAllows(List<CatalogueEntry> catalogue) {
+        return !filter.restricted() || catalogue.stream().anyMatch(entry -> entry.id().equals(filter.onlyInstrumentId()));
+    }
+
+    private List<CatalogueEntry> restrict(List<CatalogueEntry> catalogue) {
+        if (!filter.restricted()) return catalogue;
+        return catalogue.stream().filter(entry -> entry.id().equals(filter.onlyInstrumentId())).toList();
     }
 
     private static List<InstrumentSearchTerms> terms(List<CatalogueEntry> catalogue, List<String> selected) {

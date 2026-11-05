@@ -62,7 +62,8 @@ class WorkerRunnerTest {
 
         verify(job).runScheduledWindow(NOW);
         verify(audit, never()).record(any(), any());
-        assertThat(runner.getExitCode()).isEqualTo(status == IngestionStatus.FAILED ? 1 : 0);
+        assertThat(runner.getExitCode()).isEqualTo(
+                status == IngestionStatus.FAILED || status == IngestionStatus.INVALID_FILTER ? 1 : 0);
         assertThat(meters.counter("alert.worker.runs", "status", status.name().toLowerCase()).count())
                 .isEqualTo(1.0);
     }
