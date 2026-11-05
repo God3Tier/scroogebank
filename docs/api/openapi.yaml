@@ -315,98 +315,35 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /alerts/events/{eventId}/report/approval:
+  /alerts/events/{eventId}/report/delivery-package:
     post:
       tags: [Alerts]
-      operationId: approveEventReport
-      summary: Approve the event report for chosen clients (ADR-0084)
+      operationId: buildReportDeliveryPackage
+      summary: The current report and the chosen clients, for the engagement service to email (ADR-0084)
       description: >-
-        The assigned agent approves one report version for the listed alerts. Nothing is sent
-        here; sending is a separate step in the engagement service. 409 if the report changed.
+        Called by the engagement service with the agent's token. Rechecks current ownership and the
+        report version, and releases a client only if the alert is still the agent's, linked to a CRM
+        client, and marked INFORMED. A client that fails any check comes back NOT_AUTHORISED with no
+        client details. Changes and sends nothing. 409 if the report is not at the expected version.
       parameters:
         - $ref: '#/components/parameters/EventId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/ReportApprovalRequest'}
+            schema: {$ref: '#/components/schemas/ReportPackageRequest'}
       responses:
         '200':
-          description: Every client approved for this report and where its email stands.
+          description: The report, its sources and each chosen client's outcome.
           content:
             application/json:
-              schema:
-                type: array
-                items: {$ref: '#/components/schemas/ReportRecipient'}
+              schema: {$ref: '#/components/schemas/ReportPackage'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /alerts/report-deliveries/{reportId}/{alertId}:
-    get:
-      tags: [Alerts]
-      operationId: getReportDelivery
-      summary: The approved report for one client, for the engagement service to email
-      parameters:
-        - {name: reportId, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: alertId, in: path, required: true, schema: {type: string, format: uuid}}
-      responses:
-        '200':
-          description: The report with the fixed portfolio line and disclaimer.
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReportDelivery'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-  /alerts/report-deliveries/{reportId}/{alertId}/claim:
-    post:
-      tags: [Alerts]
-      operationId: claimReportDelivery
-      summary: Claim one approved client before sending, so it is sent at most once
-      parameters:
-        - {name: reportId, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: alertId, in: path, required: true, schema: {type: string, format: uuid}}
-      responses:
-        '204': {description: Claimed.}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '409': {$ref: '#/components/responses/Conflict'}
-  /alerts/report-deliveries/{reportId}/{alertId}/sent:
-    post:
-      tags: [Alerts]
-      operationId: completeReportDelivery
-      summary: Record that the email was accepted by the mail service
-      parameters:
-        - {name: reportId, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: alertId, in: path, required: true, schema: {type: string, format: uuid}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/ReportSentRequest'}
-      responses:
-        '204': {description: Recorded.}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-  /alerts/report-deliveries/{reportId}/{alertId}/release:
-    post:
-      tags: [Alerts]
-      operationId: releaseReportDelivery
-      summary: The send failed; allow it to be tried again
-      parameters:
-        - {name: reportId, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: alertId, in: path, required: true, schema: {type: string, format: uuid}}
-      responses:
-        '204': {description: Released.}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
   /alerts/search-sources:
     get:
       tags: [Alerts]
@@ -703,55 +640,54 @@ components:
         positions:
           type: array
           items: {$ref: '#/components/schemas/PortfolioPosition'}
-    ReportRecipient:
+    ReportPackageRequest:
       type: object
       additionalProperties: false
-      required: [alertId, status]
+      required: [expectedReportVersion, alertIds]
       properties:
-        alertId: {type: string, format: uuid}
-        status: {type: string, enum: [APPROVED, SENDING, SENT]}
-    ReportApprovalRequest:
-      type: object
-      additionalProperties: false
-      required: [reportId, alertIds]
-      properties:
-        reportId: {type: string, format: uuid}
+        expectedReportVersion: {type: integer, minimum: 1}
         alertIds:
           type: array
           minItems: 1
           maxItems: 200
           items: {type: string, format: uuid}
-    ReportSentRequest:
+    ReportPackage:
       type: object
       additionalProperties: false
-      required: [messageId]
+      required: [eventId, reportId, version, schemaVersion, report, reportHash, sources, recipients]
       properties:
-        messageId: {type: string, minLength: 1, maxLength: 256}
-    ReportDelivery:
-      type: object
-      additionalProperties: false
-      required: [reportId, alertId, clientRef, instrumentId, status, report, sources, portfolioLine, disclaimer]
-      properties:
+        eventId: {type: string, format: uuid}
         reportId: {type: string, format: uuid}
-        alertId: {type: string, format: uuid}
-        clientRef: {type: string}
-        instrumentId: {type: string}
-        status: {type: string, enum: [APPROVED, SENDING, SENT]}
+        version: {type: integer, minimum: 1}
+        schemaVersion: {type: string}
         report: {type: object, additionalProperties: true}
+        reportHash: {type: string, description: "SHA-256 of the version, report and linked source IDs."}
         sources:
           type: array
-          description: The sources the report cites, by the id its sourceRefs use.
           items:
             type: object
             additionalProperties: false
-            required: [id, title, url, domain]
+            required: [id, title, url, domain, publishedAt, retrievedAt, usedInReport]
             properties:
               id: {type: string}
               title: {type: string}
               url: {type: string}
               domain: {type: string}
-        portfolioLine: {type: string}
-        disclaimer: {type: string}
+              publishedAt: {type: string, format: date-time, nullable: true}
+              retrievedAt: {type: string, format: date-time, nullable: true}
+              usedInReport: {type: boolean}
+        recipients:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [alertId, outcome, clientRef, instrumentId, issuer]
+            properties:
+              alertId: {type: string, format: uuid}
+              outcome: {type: string, enum: [OK, NOT_AUTHORISED]}
+              clientRef: {type: string, nullable: true}
+              instrumentId: {type: string, nullable: true}
+              issuer: {type: string, nullable: true}
     EventReportSource:
       type: object
       additionalProperties: false
@@ -765,7 +701,7 @@ components:
     EventReport:
       type: object
       additionalProperties: false
-      required: [reportId, version, versionCount, schemaVersion, report, sources, portfolioLines, disclaimer, createdAt, recipients]
+      required: [reportId, version, versionCount, schemaVersion, report, sources, portfolioLines, disclaimer, createdAt]
       properties:
         reportId: {type: string, format: uuid}
         version: {type: integer, minimum: 1}
@@ -784,9 +720,6 @@ components:
           additionalProperties: {type: string}
         disclaimer: {type: string}
         createdAt: {type: string, format: date-time}
-        recipients:
-          type: array
-          items: {$ref: '#/components/schemas/ReportRecipient'}
     EventCard:
       type: object
       additionalProperties: false

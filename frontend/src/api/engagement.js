@@ -187,7 +187,12 @@ export const MAIL_STATUS_LABELS = {
   DISABLED: 'Off',
 }
 
-// Emails an approved client report to one client. The alerts service only releases it for a client the agent approved.
-export function sendReportEmail({ reportId, alertId }) {
-  return requestJson('/api/engagement/report-emails', { method: 'POST', body: { reportId, alertId } })
+// One approval: emails the event report to the INFORMED clients the agent chose (ADR-0084). The same key repeats
+// the same request, so sending it again carries on with any recipient still QUEUED and never resends one already sent.
+export function sendAlertReport({ eventId, expectedReportVersion, alertIds, agentNote }, idempotencyKey) {
+  return requestJson('/api/engagement/alert-report-deliveries', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: { eventId, expectedReportVersion, alertIds, agentNote: agentNote || null },
+  })
 }

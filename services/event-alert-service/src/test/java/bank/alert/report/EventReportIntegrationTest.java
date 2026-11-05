@@ -400,16 +400,15 @@ class EventReportIntegrationTest {
 
     private static final String CRM_CLIENT = "11111111-2222-4333-8444-555555555555";
 
-    private ReportDeliveryService delivery() {
-        return new ReportDeliveryService(jdbc, eventQueries, outbox, new ObjectMapper().findAndRegisterModules(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+    private ReportPackageService packages() {
+        return new ReportPackageService(jdbc, eventQueries, new ObjectMapper().findAndRegisterModules());
     }
 
-    /** One event with a report whose first alert now belongs to a CRM-style client, as in production. */
-    private UUID[] eventWithCrmClient() {
+    /** One event with a report whose first alert now belongs to an INFORMED CRM-style client, as in production. */
+    private UUID[] eventWithInformedCrmClient() {
         store("one.example", "2026-09-26T22:00:00Z", "a");
         pipeline.processPending();
-        jdbc.update("UPDATE alert SET client_ref = ? WHERE id = (SELECT id FROM alert ORDER BY id LIMIT 1)", CRM_CLIENT);
+        jdbc.update("UPDATE alert SET client_ref = ?, status = 'INFORMED' WHERE id = (SELECT id FROM alert ORDER BY id LIMIT 1)", CRM_CLIENT);
         UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);
         UUID reportId = jdbc.queryForObject("SELECT id FROM event_report", UUID.class);
         UUID alertId = jdbc.queryForObject("SELECT id FROM alert WHERE client_ref = ?", UUID.class, CRM_CLIENT);
@@ -421,60 +420,61 @@ class EventReportIntegrationTest {
     }
 
     @Test
-    void approvingAReportRecordsTheChosenClientOnceAndAuditsIt() {
-        UUID[] ids = eventWithCrmClient();
+    void thePackageHoldsTheReportItsSourcesAndOnlyTheChosenClients() {
+        UUID[] ids = eventWithInformedCrmClient();
         String agent = agentOf(ids[2]);
 
-        var first = delivery().approve(ids[0], agent, ids[1], List.of(ids[2]));
-        var again = delivery().approve(ids[0], agent, ids[1], List.of(ids[2]));
+        var pack = packages().build(ids[0], agent, 1, List.of(ids[2]));
 
-        assertThat(first).singleElement().satisfies(r -> assertThat(r.status()).isEqualTo("APPROVED"));
-        assertThat(again).hasSize(1);
-        assertThat(count("event_report_recipient")).isOne();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_outbox WHERE event_type = 'alert.report-approved'", Long.class)).isOne();
-        assertThat(eventQueries.detail(ids[0], agent).report().recipients()).hasSize(1);
+        assertThat(pack.reportId()).isEqualTo(ids[1]);
+        assertThat(pack.version()).isOne();
+        assertThat(pack.reportHash()).hasSize(64);
+        assertThat(pack.sources()).singleElement().satisfies(s -> {
+            assertThat(s.usedInReport()).isTrue();
+            assertThat(s.retrievedAt()).isNotNull();
+        });
+        assertThat(pack.recipients()).singleElement().satisfies(r -> {
+            assertThat(r.outcome()).isEqualTo("OK");
+            assertThat(r.clientRef()).isEqualTo(CRM_CLIENT);
+            assertThat(r.issuer()).isNotBlank();
+        });
     }
 
     @Test
-    void anotherAgentAnOldReportAndASyntheticClientCannotBeApproved() {
-        UUID[] ids = eventWithCrmClient();
+    void aClientIsReleasedOnlyWhenInformedCrmLinkedAndStillTheAgents() {
+        UUID[] ids = eventWithInformedCrmClient();
         String agent = agentOf(ids[2]);
         UUID other = jdbc.queryForObject("SELECT id FROM alert WHERE id <> ? LIMIT 1", UUID.class, ids[2]);
 
+        var notMine = packages().build(ids[0], agent, 1, List.of(UUID.randomUUID()));
+        assertThat(notMine.recipients()).singleElement().satisfies(r -> {
+            assertThat(r.outcome()).isEqualTo("NOT_AUTHORISED");
+            assertThat(r.clientRef()).isNull();
+        });
+        // A synthetic client reference is not a CRM client, so it never receives mail.
+        assertThat(packages().build(ids[0], agent, 1, List.of(other)).recipients().getFirst().outcome())
+                .isEqualTo("NOT_AUTHORISED");
+        jdbc.update("UPDATE alert SET status = 'MONITORING' WHERE id = ?", ids[2]);
+        assertThat(packages().build(ids[0], agent, 1, List.of(ids[2])).recipients().getFirst().outcome())
+                .isEqualTo("NOT_AUTHORISED");
+        jdbc.update("UPDATE alert SET status = 'INFORMED' WHERE id = ?", ids[2]);
         org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertNotFoundException.class,
-                () -> delivery().approve(ids[0], "someone-else", ids[1], List.of(ids[2])));
-        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
-                () -> delivery().approve(ids[0], agent, UUID.randomUUID(), List.of(ids[2])));
-        if (agentOf(other).equals(agent)) {
-            org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
-                    () -> delivery().approve(ids[0], agent, ids[1], List.of(other)));
-        }
-        assertThat(count("event_report_recipient")).isZero();
+                () -> packages().build(ids[0], "someone-else", 1, List.of(ids[2])));
     }
 
     @Test
-    void anUnapprovedClientHasNothingToSendAndAnApprovedOneIsSentAtMostOnce() {
-        UUID[] ids = eventWithCrmClient();
+    void aStaleReportVersionIsAConflictAndANewSourceMovesTheVersionOn() {
+        UUID[] ids = eventWithInformedCrmClient();
         String agent = agentOf(ids[2]);
-        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertNotFoundException.class,
-                () -> delivery().delivery(ids[1], ids[2], agent));
-        delivery().approve(ids[0], agent, ids[1], List.of(ids[2]));
 
-        var pack = delivery().delivery(ids[1], ids[2], agent);
-        assertThat(pack.clientRef()).isEqualTo(CRM_CLIENT);
-        assertThat(pack.portfolioLine()).startsWith("Your portfolio has exposure to ");
-        assertThat(pack.disclaimer()).isEqualTo(ReportText.DISCLAIMER);
+        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
+                () -> packages().build(ids[0], agent, 2, List.of(ids[2])));
 
-        delivery().claim(ids[1], ids[2], agent);
+        store("two.example", "2026-09-26T23:00:00Z", "b");
+        pipeline.processPending();
+
         org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
-                () -> delivery().claim(ids[1], ids[2], agent));
-        delivery().release(ids[1], ids[2], agent);
-        delivery().claim(ids[1], ids[2], agent);
-        delivery().complete(ids[1], ids[2], agent, "ses-1");
-        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
-                () -> delivery().claim(ids[1], ids[2], agent));
-        assertThat(delivery().recipients(ids[1], agent)).singleElement()
-                .satisfies(r -> assertThat(r.status()).isEqualTo("SENT"));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_outbox WHERE event_type = 'alert.report-sent'", Long.class)).isOne();
+                () -> packages().build(ids[0], agent, 1, List.of(ids[2])));
+        assertThat(packages().build(ids[0], agent, 2, List.of(ids[2])).sources()).hasSize(2);
     }
 }

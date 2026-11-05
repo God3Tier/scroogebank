@@ -23,7 +23,7 @@ Search every eligible instrument every run, combine corroborating sources into o
 | FC-08 | Citation and figure checks; application-added text | FC-07 | Done |
 | FC-09 | Agent approves a report and chooses recipients (API and page) | FC-07 | Done |
 | FC-10 | Deliver individually addressed emails through the engagement service and SES | FC-09 | Done |
-| FC-11 | Documentation, runbook, API contract | all | In progress |
+| FC-11 | Documentation, runbook, API contract | all | Done, except the cost register, which needs the live benchmark |
 
 ## Open items and risks
 

@@ -118,7 +118,7 @@ assigns replacement identifiers.
 Every ADR up to ADR-0068 was accepted on 2026-11-01, after the target architecture was checked against the code on `dev`; ADRs the code had overtaken name the later ADR that supersedes them in part.
 
 ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 and ADR-0076 on 2026-11-03. ADR-0077 and ADR-0078 were accepted by Neo Jia Wen on 2026-11-03, with Feature 2 and transaction-service owners to review the code. None is proposed at present.
-- [ADR-0084](ADR-0084-full-coverage-search-and-client-event-reports.md) — Proposed 2026-11-05 (owner Hayyun, plan by Azeez; review pending): every eligible instrument is searched on every run with exactly two searches each (no rotation, no four-query cap), the whole run reserved atomically against the quota and the USD 25 budget, `ALERT_SEARCH_ONLY_INSTRUMENT_ID` for lower environments; then one multi-source report per event and delivery through the engagement service after the agent approves (parts 2 and 3, not yet built).
+- [ADR-0084](ADR-0084-full-coverage-search-and-client-event-reports.md) — Accepted 2026-11-05 (owner Hayyun, plan by Azeez): every eligible instrument is searched on every run with exactly two searches each (no rotation, no four-query cap), the whole run reserved atomically against the quota and the USD 25 budget, `ALERT_SEARCH_ONLY_INSTRUMENT_ID` for lower environments; then one multi-source report per event and delivery through the engagement service after the agent approves (parts 2 and 3 built).
 
 ## Maintenance rule
 

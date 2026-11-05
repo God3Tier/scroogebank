@@ -19,6 +19,10 @@ public enum AuditAction {
     DRAFT_DISCARD,
     EMAIL_SEND,
     EMAIL_SEND_FAILED,
+    ALERT_REPORT_APPROVED,
+    ALERT_REPORT_QUEUED,
+    ALERT_REPORT_SENT,
+    ALERT_REPORT_FAILED,
     PREFERENCES_UPDATE;
 
     static final String PREFIX = "engagement.";

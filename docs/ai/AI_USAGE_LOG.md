@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-11-05 - Multi-source client report and its delivery (parts 2 and 3 of the plan by Azeez)
+
+- Human owner: Hayyun, from the plan by Azeez.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Group sources into one event, write one cited `alert-client-report-v2` report per event (the application adds the portfolio line, disclaimer and contact details), show it to the agent, and email it to the clients the agent chose after the agent approves it.
+- Files/components affected: event-alert-service `report/` package, `AlertGenerationService`, `SourcePipeline`, event card and detail queries, migration V12, the delivery-package endpoint; engagement-service `alertreports/` package, `ReportPackages`, migration V3, audit actions; the auditor allow-list; the Event Briefings page; OpenAPI and contract documents; the `agent-engagement` Terraform stack switch.
+- Data/calls: no live model, Tavily or SES calls; unit and Testcontainers tests with the model and mail mocked. The model sees only public evidence, never client, account or holding data.
+- Verification: Maven tests for event-alert-service and engagement-service, Vitest, ESLint and the Vite build pass. The auditor change was not run because Go is not installed on this machine.
+- Human verification required: a keyed Tavily test for one named instrument; one SES-sandbox end-to-end send to a verified recipient; the auditor Go tests; review of the sending design in ADR-0084 decision 16.
+
 ## 2026-11-05 - Full-coverage search (part 1 of Azeez's plan)
 
 - Human owner: Hayyun, from the plan by Azeez; review pending.

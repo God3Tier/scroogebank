@@ -1,6 +1,6 @@
 # ADR-0084: Full-coverage search and client event reports
 
-- Status: Proposed (2026-11-05; review pending)
+- Status: Accepted (2026-11-05; approved by Hayyun)
 - Decision date/time: 2026-11-05 (Asia/Singapore)
 - Decision owner(s): Hayyun (proposer and owner); reviewers: Azeez (author of the plan), Neo Jia Wen
 - Drafted/assisted by AI: Yes; Claude Code (Anthropic)
@@ -46,7 +46,13 @@ This ADR records the plan written by Azeez: search every eligible instrument on 
 
 ### Part 3: delivery (built)
 
-12. Reports are delivered as individually addressed emails through the existing engagement service and SES, only after the assigned agent selects the recipients and approves the shared report. A newly linked corroborating source creates a new report version for the agent to review; it is never sent on its own.
+12. Reports are delivered as individually addressed emails through the existing engagement service and SES, only after the assigned agent selects the recipients and approves the shared report. A newly linked corroborating source makes a new report version; an unsent report is regenerated, a stale approval returns 409, and a report already delivered is never resent on its own.
+13. The agent selects clients already marked INFORMED, may add one optional note, confirms once, and sends one batch of 1 to 200 clients. `POST /api/engagement/alert-report-deliveries` takes `eventId`, `expectedReportVersion`, `alertIds`, an optional `agentNote` and a required `Idempotency-Key`. The verified report body is never edited; the note is sent under its own label and audited by hash.
+14. event-alert-service rechecks current ownership and the report version and releases, for each chosen alert, only the client reference, instrument and issuer (`POST /api/alerts/events/{eventId}/report/delivery-package`). Anything else comes back NOT_AUTHORISED.
+15. The engagement service stores one immutable batch snapshot and one delivery row per client. A report version reaches a client at most once. It returns QUEUED, SENT, FAILED or NOT_AUTHORISED for each recipient, so a reassigned client, a missing address, a stale version or an unavailable service fails only that recipient. Each email has HTML and plain text, the fixed sections, the fixed disclaimer, Reply-To and a Bcc copy to the agent, and no scores, confidence, portfolio values or other clients.
+16. The engagement service can read a client address only with the agent's own token, so it cannot do so from a background job. Sending therefore happens while the agent's request is open, one recipient at a time within a time budget. A recipient not reached, or whose send failed in a way that may pass, stays QUEUED, and sending the same request again (same key) carries on with it. The address is read for each message and never stored. This replaces a queue worked by the mail dispatcher; a crash between SES accepting a message and the row being updated can send it a second time once the lease runs out.
+17. After the last recipient is final, the stored report text and note are cleared; the report and note hashes, IDs, statuses and audit events remain. `ENGAGEMENT_ALERT_REPORTS_ENABLED` (default false) is the rollout kill switch. There is no automatic sending.
+18. Audit: `alert.report-generated` (event-alert-service) and `ALERT_REPORT_APPROVED`, `ALERT_REPORT_QUEUED`, `ALERT_REPORT_SENT`, `ALERT_REPORT_FAILED` (engagement-service). The auditor allow-list gains these five.
 
 ## Consequences
 
