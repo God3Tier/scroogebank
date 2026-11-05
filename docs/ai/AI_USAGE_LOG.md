@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-11-05 - Full-coverage search (part 1 of Azeez's plan)
+
+- Human owner: Hayyun, from the plan by Azeez; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Search every eligible instrument on every run with exactly two searches each, reserve the whole run against the monthly quota and the USD 25 budget, and add `ALERT_SEARCH_ONLY_INSTRUMENT_ID` for lower environments (ADR-0084, Proposed). Parts 2 (one report per event) and 3 (delivery) are not yet built.
+- Files/components affected: `IssuerQueryBuilder` (two query groups, no cap), `InstrumentCoverageService` (no rotation), `IngestionJob` and `SearchFilterProperties` (the single-instrument setting), `OutboundControlService` and `OperationalProperties` (the budget check and `estimatedSearchCostUsd`), `IngestionStatus.INVALID_FILTER`, `application.yml`; their unit tests; the operations runbook.
+- Data/calls: none to Tavily or a model; unit tests only.
+- Verification: `mvn test` for event-alert-service passes.
+- Human verification required: review of ADR-0084; a live billed-credit benchmark before the quota is raised; Azeez's approval before ingestion is enabled.
+
 ## 2026-11-04 - Agent-added search domains per company
 
 - Human owner: Hayyun; Azeez review pending.

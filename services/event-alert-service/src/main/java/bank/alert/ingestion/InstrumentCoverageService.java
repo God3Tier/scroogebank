@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 
 @Service
 public class InstrumentCoverageService {
-    private static final Duration SLOT = Duration.ofHours(4);
 
     private final InstrumentSearchCoverageRepository repository;
     private final IngestionProperties properties;
@@ -72,11 +71,8 @@ public class InstrumentCoverageService {
 
     private List<String> select(List<String> sortedIds, Instant windowTo) {
         if (sortedIds.isEmpty()) return List.of();
-        int batchSize = Math.max(1, properties.maxQueriesPerRun() / IssuerQueryBuilder.QUERIES_PER_INSTRUMENT);
-        int batches = (sortedIds.size() + batchSize - 1) / batchSize;
-        int batch = Math.floorMod(windowTo.getEpochSecond() / SLOT.toSeconds(), batches);
-        int start = batch * batchSize;
-        return List.copyOf(sortedIds.subList(start, Math.min(start + batchSize, sortedIds.size())));
+        // Every eligible instrument is searched on every run; there is no rotation (ADR-0084).
+        return List.copyOf(sortedIds);
     }
 
     public record CoverageBatch(List<String> instrumentIds, Instant windowFrom, Instant windowTo) {}
