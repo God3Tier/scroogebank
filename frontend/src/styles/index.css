@@ -526,6 +526,11 @@ textarea:focus {
   color: #fff;
 }
 
+.row-list button:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .plain-rows > li {
   font-family: var(--mono);
   font-size: 13px;
@@ -2877,6 +2882,38 @@ textarea:focus {
 
 .spin {
   animation: spin 1s linear infinite;
+}
+
+
+/* ---------- Audit activity ---------- */
+
+.audit-log-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Cell spacing and borders */
+.audit-log-table th,
+.audit-log-table td {
+  padding: 12px 16px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+/* Header colours */
+.audit-log-table th {
+  background: var(--surface-low);
+  color: var(--primary-container);
+}
+
+/* Expanded event details */
+.audit-log-payload {
+  max-width: 420px;
+  padding: 12px;
+  background: var(--surface-low);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Loading spinner (components/Spinner.jsx) ---------- */

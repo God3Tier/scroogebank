@@ -53,10 +53,12 @@ function NavBar() {
         <p className="sidebar-subtitle">Staff Portal</p>
       </div>
       <nav className="navbar sidebar-nav">
-        <NavLink to="/">
-          <span className="material-symbols-outlined" aria-hidden="true">home</span>
-          Home
-        </NavLink>
+        {!auth.isLoading && !signedIn &&(
+          <NavLink to="/">
+            <span className="material-symbols-outlined" aria-hidden="true">home</span>
+            Home
+          </NavLink>
+        )}
         {!signedIn && (
           <NavLink to="/login">
             <span className="material-symbols-outlined" aria-hidden="true">login</span>
@@ -79,10 +81,10 @@ function NavBar() {
         )}
         {isAdmin && (
           <>
-            <NavLink to="/admin">
+            <HomeLink to="/admin" others={['/admin/client-health', '/admin/audit-logs']}>
               <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
               Admin Home
-            </NavLink>
+            </HomeLink>
             <NavLink to="/admin/client-health">
               <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
               Client Health
@@ -90,6 +92,10 @@ function NavBar() {
             <NavLink to="/insights/admin">
               <span className="material-symbols-outlined" aria-hidden="true">insights</span>
               Admin Dashboard
+            </NavLink>
+            <NavLink to="/admin/audit-logs">
+              <span className="material-symbols-outlined" aria-hidden="true">history</span>
+              Audit Activity
             </NavLink>
           </>
         )}
