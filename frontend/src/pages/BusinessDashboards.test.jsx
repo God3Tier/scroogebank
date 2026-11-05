@@ -69,8 +69,7 @@ describe('business dashboards', () => {
     expect(screen.queryByRole('link', { name: 'View all agents' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open client' })).toHaveAttribute('href', '/clients/client-9')
     expect(screen.getByText('3')).toBeInTheDocument()
-    // Left out by ADR-0038: named only in the "Not shown, and why" list.
-    expect(screen.getByText('Ingestion freshness').closest('.definitions-omitted')).not.toBeNull()
+    expect(screen.queryByText(/Ingestion freshness/)).not.toBeInTheDocument()
     expect(getDashboard).toHaveBeenCalledWith('action-items', expect.objectContaining({ staleDays: 7 }))
   })
 

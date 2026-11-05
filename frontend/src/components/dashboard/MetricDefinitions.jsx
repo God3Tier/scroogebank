@@ -1,4 +1,4 @@
-import { DEFINITIONS, NOT_SHOWN } from './definitions.js'
+import { DEFINITIONS } from './definitions.js'
 
 // Collapsed by default: the definitions are reference material, and each tile
 // already carries its own definition as a tooltip.
@@ -25,17 +25,6 @@ function MetricDefinitions({ keys }) {
           )
         })}
       </dl>
-      <div className="definitions-omitted">
-        <h3>Not shown, and why</h3>
-        <dl>
-          {NOT_SHOWN.map(({ term, reason }) => (
-            <div key={term}>
-              <dt>{term}</dt>
-              <dd>{reason}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
     </details>
   )
 }

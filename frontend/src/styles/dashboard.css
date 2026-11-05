@@ -628,7 +628,7 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px var(--stack-md);
   margin: 0;
-  padding: 12px 16px 0;
+  padding: 12px 16px;
 }
 
 .definitions dt {
@@ -642,27 +642,6 @@
 
 .definitions .caveat {
   color: var(--warning);
-}
-
-/* The figures ADR-0038 leaves out, under the definitions. */
-.definitions-omitted {
-  margin: 12px 16px 0;
-  padding: 12px 0;
-  border-top: 1px solid var(--outline-variant);
-}
-
-.definitions-omitted h3 {
-  margin: 0;
-  color: var(--on-surface-variant);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 16px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.definitions .definitions-omitted dl {
-  padding: 8px 0 0;
 }
 
 /* ---------- Narrow screens ---------- */

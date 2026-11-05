@@ -56,17 +56,6 @@ export const DEFINITIONS = {
   },
 }
 
-// Figures ADR-0038 leaves out because the data cannot support them honestly,
-// listed so nobody reads their absence as an oversight.
-export const NOT_SHOWN = [
-  { term: 'Time-to-verify', reason: 'Only the last update time is stored, which is wrong after any later edit.' },
-  { term: 'Agent score or rating', reason: 'Any weighting would be invented; agents are compared by one explicit figure.' },
-  { term: 'Client lifecycle (active, dormant, churned)', reason: 'Clients have no such state.' },
-  { term: 'Rejected or pending verifications', reason: 'Nothing sets these statuses.' },
-  { term: 'Ingestion freshness', reason: 'The transaction import keeps no record of its last successful poll.' },
-  { term: 'Clients without an account', reason: 'Needs clients and accounts joined across two services.' },
-]
-
 // Tooltip text for a tile: definition plus caveat.
 export function hintFor(key) {
   const definition = DEFINITIONS[key]
