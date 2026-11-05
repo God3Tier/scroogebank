@@ -66,12 +66,12 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
             + "Every factual claim must cite the supplied source IDs, and every number in a key fact must appear in a "
             + "cited source. Mark anything that is not stated in the sources as a POTENTIAL_IMPLICATION. Do not give "
             + "investment advice, do not mention any client or portfolio, do not state prices or market data, state "
-            + "what is uncertain, and return only the closed schema.";
+            + "what is uncertain, keep every field short and plain, and return only the closed schema.";
 
     private final AiProperties properties;
     private static final Logger log = LoggerFactory.getLogger(SafeClientReportGenerator.class);
     /** A full cited report needs more room than a classification: at 1,200 tokens the answer was cut off before its last fields. */
-    static final int MINIMUM_REPORT_OUTPUT_TOKENS = 2_000;
+    static final int MINIMUM_REPORT_OUTPUT_TOKENS = 3_000;
     private final AiModelGateway gateway;
     private final AiSafetyScreen safety;
     private final ObjectMapper mapper;

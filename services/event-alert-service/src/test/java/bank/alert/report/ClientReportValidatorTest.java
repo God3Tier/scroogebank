@@ -161,6 +161,14 @@ class ClientReportValidatorTest {
     }
 
     @Test
+    void wrappingQuotesAroundAModelsTextAreNotPartOfTheText() {
+        assertThat(ClientReportValidator.tidy("=\"Only one source was supplied.\"")).isEqualTo("Only one source was supplied.");
+        assertThat(ClientReportValidator.tidy("  \"Quoted headline\" ")).isEqualTo("Quoted headline");
+        assertThat(ClientReportValidator.tidy("Revenue rose \"strongly\" this year")).isEqualTo("Revenue rose \"strongly\" this year");
+        assertThat(ClientReportValidator.tidy("=")).isEqualTo("=");
+    }
+
+    @Test
     void numbersAreReadWithoutTheirSeparators() {
         assertThat(ClientReportValidator.numbers("$92,279 million, up 19% and 3.5x")).containsExactly("92279", "19", "3.5");
     }

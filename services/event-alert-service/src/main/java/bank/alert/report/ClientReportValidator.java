@@ -77,18 +77,30 @@ public final class ClientReportValidator {
     }
 
     /** Builds the stored report: citations by URL are turned into the sources' reference ids. */
+    /** Some models wrap a string in quotes, or in {@code ="..."}; the wrapping is not part of the text. */
+    static String tidy(String text) {
+        String trimmed = text.strip();
+        if (trimmed.length() > 3 && trimmed.startsWith("=\"") && trimmed.endsWith("\"")) {
+            return trimmed.substring(2, trimmed.length() - 1).strip();
+        }
+        if (trimmed.length() > 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+            return trimmed.substring(1, trimmed.length() - 1).strip();
+        }
+        return trimmed;
+    }
+
     public static ClientReport accepted(ClientReportModelOutput output, List<PublicEvidence> evidence) {
         Map<String, PublicEvidence> byRef = references(evidence);
         List<ClientReport.CitedText> summary = output.executiveSummary().stream()
-                .map(sentence -> new ClientReport.CitedText(sentence.text().strip(), ids(sentence.sourceRefs(), byRef))).toList();
+                .map(sentence -> new ClientReport.CitedText(tidy(sentence.text()), ids(sentence.sourceRefs(), byRef))).toList();
         List<ClientReport.KeyFact> facts = output.keyFacts().stream()
-                .map(fact -> new ClientReport.KeyFact(fact.label().strip(), fact.value().strip(), fact.context().strip(),
+                .map(fact -> new ClientReport.KeyFact(tidy(fact.label()), tidy(fact.value()), tidy(fact.context()),
                         ids(fact.sourceRefs(), byRef))).toList();
         List<ClientReport.Implication> why = output.whyItMatters().stream()
-                .map(item -> new ClientReport.Implication(item.text().strip(), item.kind(),
+                .map(item -> new ClientReport.Implication(tidy(item.text()), item.kind(),
                         ids(item.sourceRefs() == null ? List.of() : item.sourceRefs(), byRef))).toList();
-        return new ClientReport(output.headline().strip(), summary, facts, why, null,
-                output.whatToMonitor().stream().map(String::strip).toList(), output.uncertainty().strip(),
+        return new ClientReport(tidy(output.headline()), summary, facts, why, null,
+                output.whatToMonitor().stream().map(ClientReportValidator::tidy).toList(), tidy(output.uncertainty()),
                 ids(output.sourceRefs(), byRef));
     }
 

@@ -25,17 +25,18 @@ class EventSourceSelectorTest {
 
         List<Candidate> chosen = EventSourceSelector.select(linked);
 
-        assertThat(chosen).hasSize(5).extracting(Candidate::sourceId).containsExactly("s0", "s1", "s2", "s3", "s4");
+        assertThat(chosen).as("the five newest domains, oldest first").hasSize(5)
+                .extracting(Candidate::sourceId).containsExactly("s3", "s4", "s5", "s6", "s7");
     }
 
     @Test
-    void takesOneSourcePerDomainTheEarliestPublished() {
+    void takesOneSourcePerDomainTheNewestPublished() {
         List<Candidate> linked = List.of(
                 source("late", "news.example", "2026-11-03T00:00:00Z", "https://news.example/late"),
                 source("early", "news.example", "2026-11-01T00:00:00Z", "https://news.example/early"),
                 source("other", "other.example", "2026-11-02T00:00:00Z", "https://other.example/x"));
 
-        assertThat(EventSourceSelector.select(linked)).extracting(Candidate::sourceId).containsExactly("early", "other");
+        assertThat(EventSourceSelector.select(linked)).extracting(Candidate::sourceId).containsExactly("other", "late");
     }
 
     @Test
@@ -44,7 +45,7 @@ class EventSourceSelectorTest {
                 source("a", "News.Example", "2026-11-01T00:00:00Z", "https://news.example/a"),
                 source("b", "news.example", "2026-11-02T00:00:00Z", "https://news.example/b"));
 
-        assertThat(EventSourceSelector.select(linked)).extracting(Candidate::sourceId).containsExactly("a");
+        assertThat(EventSourceSelector.select(linked)).extracting(Candidate::sourceId).containsExactly("b");
     }
 
     @Test

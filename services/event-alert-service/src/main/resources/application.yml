@@ -157,7 +157,7 @@ alert:
     # What one Tavily search is counted as costing, for the monthly budget (ADR-0084).
     estimated-search-cost-usd: ${ALERT_ESTIMATED_SEARCH_COST_USD:0.008}
     monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}
-    max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:2000}
+    max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:3000}
     monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}
 
   pipeline:

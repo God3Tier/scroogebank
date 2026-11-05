@@ -36,7 +36,7 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
 | `ALERT_MINIMUM_ACCOUNT_CONCENTRATION` | `0.50` | Inclusive per-account share of positive SGD portfolio value for the concentration rule |
 | `ALERT_MONTHLY_MODEL_TOKEN_QUOTA` | `200000` | Model-token reservations per UTC month |
-| `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `2000` | Tokens per model reservation |
+| `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `3000` | Tokens per model reservation; a multi-source report needs about 3000 |
 | `ALERT_MONTHLY_BUDGET_USD` | `25.00` | Estimated-cost stop threshold |
 | `ALERT_AUDIT_PUBLISHER_ENABLED` | `false` | Enables leased delivery to the auditor SQS queue |
 | `AUDIT_QUEUE_URL` | empty | Required SQS queue URL when audit publishing is enabled |

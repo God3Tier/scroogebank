@@ -18,7 +18,7 @@ public record OperationalProperties(boolean ingestionEnabled, boolean modelEnabl
         }
         monthlyModelTokenQuota = monthlyModelTokenQuota == 0 ? 200_000 : monthlyModelTokenQuota;
         maxModelTokensPerInvocation = positiveOrDefault(
-                maxModelTokensPerInvocation, 2_000, "maxModelTokensPerInvocation");
+                maxModelTokensPerInvocation, 3_000, "maxModelTokensPerInvocation");
         monthlyBudgetUsd = monthlyBudgetUsd == null ? new BigDecimal("25.00") : monthlyBudgetUsd;
         estimatedSearchCostUsd = estimatedSearchCostUsd == null ? new BigDecimal("0.008") : estimatedSearchCostUsd;
         if (estimatedSearchCostUsd.signum() < 0) {
