@@ -186,3 +186,8 @@ export const MAIL_STATUS_LABELS = {
   CANCELLED: 'Cancelled',
   DISABLED: 'Off',
 }
+
+// Emails an approved client report to one client. The alerts service only releases it for a client the agent approved.
+export function sendReportEmail({ reportId, alertId }) {
+  return requestJson('/api/engagement/report-emails', { method: 'POST', body: { reportId, alertId } })
+}

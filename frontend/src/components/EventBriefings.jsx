@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
-import { followUpLink, isCrmClientId } from '../api/engagement.js'
+import { approveEventReport, getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { followUpLink, isCrmClientId, sendReportEmail } from '../api/engagement.js'
 
 // "This happened; these clients may be affected." One card per public event with
 // one shared summary. The agent picks Inform, Monitor or Dismiss for the clients
@@ -17,6 +17,8 @@ const ACTIONS = [
 ]
 
 const STATUS_LABELS = { NEW: 'New', MONITORING: 'Monitoring', INFORMED: 'Inform planned', DISMISSED: 'Dismissed' }
+
+const RECIPIENT_LABELS = { APPROVED: 'Approved, not sent', SENDING: 'Sending', SENT: 'Sent' }
 
 const OUTCOME_LABELS = {
   APPLIED: 'Done',
@@ -86,6 +88,7 @@ function EventDetailPanel({ eventId, onChanged }) {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
+  const [reportNote, setReportNote] = useState('')
 
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -121,6 +124,39 @@ function EventDetailPanel({ eventId, onChanged }) {
     }
   }
 
+  async function approveReport() {
+    const alertIds = detail.clients.filter((client) => selected[client.alertId] && isCrmClientId(client.clientRef))
+      .map((client) => client.alertId)
+    if (alertIds.length === 0) return
+    setBusy(true)
+    try {
+      await approveEventReport(eventId, detail.report.reportId, alertIds)
+      setReportNote(`Report version ${detail.report.version} approved for ${alertIds.length} client${alertIds.length === 1 ? '' : 's'}. Nothing has been sent yet.`)
+      setReloadKey((key) => key + 1)
+    } catch (e) {
+      setError(e.status === 409 ? 'The report changed or a client cannot receive it. Reload and review it again.' : problemText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function sendApproved() {
+    setBusy(true)
+    let sent = 0
+    let failed = 0
+    for (const recipient of detail.report.recipients.filter((r) => r.status === 'APPROVED')) {
+      try {
+        await sendReportEmail({ reportId: detail.report.reportId, alertId: recipient.alertId })
+        sent += 1
+      } catch {
+        failed += 1
+      }
+    }
+    setReportNote(`${sent} email${sent === 1 ? '' : 's'} sent${failed ? `, ${failed} could not be sent. Try again.` : '.'}`)
+    setReloadKey((key) => key + 1)
+    setBusy(false)
+  }
+
   if (error && !detail) return <p className="error-text" role="alert">{error}</p>
   if (!detail) return <p className="empty-note" role="status">Loading clients…</p>
 
@@ -129,6 +165,32 @@ function EventDetailPanel({ eventId, onChanged }) {
     <form className="event-clients" onSubmit={submit} aria-label="Affected clients">
       {error && <p className="error-text" role="alert">{error}</p>}
       <ReportPanel report={detail.report} />
+      {detail.report && (
+        <div className="event-report-actions">
+          <p className="holdings-note">
+            Review the report, tick the clients below, then approve it for them. Approving sends nothing; each approved
+            client gets an individually addressed email only when you choose to send.
+          </p>
+          <button type="button" onClick={approveReport}
+            disabled={busy || !detail.clients.some((c) => selected[c.alertId] && isCrmClientId(c.clientRef))}>
+            Approve report for selected clients
+          </button>
+          {detail.report.recipients.length > 0 && (
+            <>
+              <ul>
+                {detail.report.recipients.map((r) => (
+                  <li key={r.alertId}>Client {detail.clients.find((c) => c.alertId === r.alertId)?.clientRef.slice(0, 8)}: {RECIPIENT_LABELS[r.status] || r.status}</li>
+                ))}
+              </ul>
+              <button type="button" onClick={sendApproved}
+                disabled={busy || !detail.report.recipients.some((r) => r.status === 'APPROVED')}>
+                Send approved emails
+              </button>
+            </>
+          )}
+          {reportNote && <p role="status">{reportNote}</p>}
+        </div>
+      )}
       <div className="table-wrap">
         <table className="data-table">
           <thead>

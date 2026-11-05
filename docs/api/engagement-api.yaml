@@ -449,6 +449,50 @@ paths:
               schema: { $ref: '#/components/schemas/Problem' }
         '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
 
+  /api/engagement/report-emails:
+    post:
+      tags: [drafts]
+      summary: Send an approved client report to one client through SES (ADR-0084)
+      description: |
+        Sends only a report the caller approved for that client in event-alert-service.
+        Reads the client's address and first name from client-service with the caller's
+        token, writes the email from the approved report with the fixed portfolio line,
+        disclaimer and the agent's contact details, and sends it with `Reply-To` and a
+        Bcc copy to the agent. Nothing is stored. A report goes to a client at most once.
+      operationId: sendReportEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reportId, alertId]
+              properties:
+                reportId: { type: string, format: uuid }
+                alertId: { type: string, format: uuid }
+      responses:
+        '204': { description: Sent. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: The report was not approved for that client, or the client is no longer the caller's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: The alert is not linked to a client record, or the client has no email address.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '502':
+          description: SES refused or failed the message. The report can be sent again.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+
   /api/engagement/preferences:
     get:
       tags: [preferences]

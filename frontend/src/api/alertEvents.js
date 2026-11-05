@@ -20,3 +20,11 @@ export function recordEventAction(eventId, { decision, note, members }, idempote
     body: { decision, note: note || null, members },
   })
 }
+
+// The assigned agent approves one report version for the chosen clients. Nothing is sent here (ADR-0084).
+export function approveEventReport(eventId, reportId, alertIds) {
+  return requestJson(`/api/alerts/events/${encodeURIComponent(eventId)}/report/approval`, {
+    method: 'POST',
+    body: { reportId, alertIds },
+  })
+}

@@ -7,6 +7,7 @@ import bank.alert.domain.AlertStatus;
 import bank.alert.event.AgentEventModels.ActionResult;
 import bank.alert.event.AgentEventModels.AffectedClient;
 import bank.alert.event.AgentEventModels.EventCard;
+import bank.alert.event.AgentEventModels.ReportRecipient;
 import bank.alert.event.AgentEventModels.EventDetail;
 import bank.alert.event.AgentEventModels.EventPage;
 import bank.alert.event.AgentEventModels.MemberOutcome;
@@ -153,11 +154,11 @@ public class AgentEventQueryService {
                  ORDER BY created_at DESC, id DESC LIMIT 1
                 """, UUID.class, eventId, agentSubject);
         ActionResult latest = actions.isEmpty() ? null : loadAction(actions.getFirst());
-        return new EventDetail(cards.getFirst(), clients, latest, loadReport(eventId, clients));
+        return new EventDetail(cards.getFirst(), clients, latest, loadReport(eventId, clients, agentSubject));
     }
 
     /** The latest report with every source linked to the event, or null before one has been written. */
-    private ReportView loadReport(UUID eventId, List<AffectedClient> clients) {
+    private ReportView loadReport(UUID eventId, List<AffectedClient> clients, String agentSubject) {
         List<Object[]> rows = jdbc.query("""
                 SELECT r.id, r.version, r.schema_version, r.report::text, r.source_ids::text, r.created_at,
                        (SELECT count(*) FROM event_report r2 WHERE r2.public_event_id = r.public_event_id)
@@ -183,7 +184,9 @@ public class AgentEventQueryService {
                 if (!issuer.isEmpty()) lines.put(instrumentId, ReportText.portfolioLine(issuer.getFirst()));
             }
             return new ReportView((UUID) row[0], (Integer) row[1], (Integer) row[6], (String) row[2],
-                    MAPPER.readTree((String) row[3]), sources, lines, ReportText.DISCLAIMER, (java.time.Instant) row[5]);
+                    MAPPER.readTree((String) row[3]), sources, lines, ReportText.DISCLAIMER, (java.time.Instant) row[5],
+                    jdbc.query("SELECT alert_id, status FROM event_report_recipient WHERE report_id = ? AND agent_subject = ? ORDER BY alert_id",
+                            (rs, n) -> new ReportRecipient(rs.getObject(1, UUID.class), rs.getString(2)), row[0], agentSubject));
         } catch (com.fasterxml.jackson.core.JsonProcessingException unreadable) {
             return null;
         }

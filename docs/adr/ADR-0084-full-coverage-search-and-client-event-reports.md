@@ -44,7 +44,7 @@ This ADR records the plan written by Azeez: search every eligible instrument on 
 10. Every factual claim must cite the supplied evidence, and every number in a key fact must appear in a cited title or excerpt after normalisation. An invalid citation, an unsupported figure, advice language or malformed output makes the model abstain.
 11. Application code, not the model, adds the portfolio line "Your portfolio has exposure to {issuer}, which may be affected by this event.", the fixed informational-purpose disclaimer and the relationship manager's contact details.
 
-### Part 3: delivery (not yet built)
+### Part 3: delivery (built)
 
 12. Reports are delivered as individually addressed emails through the existing engagement service and SES, only after the assigned agent selects the recipients and approves the shared report. A newly linked corroborating source creates a new report version for the agent to review; it is never sent on its own.
 

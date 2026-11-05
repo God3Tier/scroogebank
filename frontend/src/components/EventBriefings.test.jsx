@@ -2,10 +2,14 @@ import { fireEvent, render as renderInto, screen, waitFor } from '@testing-libra
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { approveEventReport, getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { sendReportEmail } from '../api/engagement.js'
 import EventBriefings from './EventBriefings.jsx'
 
-vi.mock('../api/alertEvents.js', () => ({ listEvents: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn() }))
+vi.mock('../api/alertEvents.js', () => ({
+  listEvents: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn(), approveEventReport: vi.fn(),
+}))
+vi.mock('../api/engagement.js', async (original) => ({ ...(await original()), sendReportEmail: vi.fn() }))
 
 // The briefings link to Follow-up Emails, so they need a router.
 const render = (ui) => renderInto(<MemoryRouter>{ui}</MemoryRouter>)
@@ -60,7 +64,7 @@ describe('event briefings', () => {
           { title: 'Extra source', url: 'https://b.invalid/y', domain: 'b.invalid', publishedAt: null, usedInReport: false },
         ],
         portfolioLines: { 'SYN-SGX-001': 'Your portfolio has exposure to Synthetic Ltd, which may be affected by this event.' },
-        disclaimer: 'This report is for information only.', createdAt: '2026-10-30T02:00:00Z',
+        disclaimer: 'This report is for information only.', createdAt: '2026-10-30T02:00:00Z', recipients: [],
       },
     })
     render(<EventBriefings />)
@@ -72,6 +76,31 @@ describe('event briefings', () => {
     expect(screen.getByRole('link', { name: 'Extra source' })).toHaveAttribute('href', 'https://b.invalid/y')
     expect(screen.getByText(/Your portfolio has exposure to Synthetic Ltd/)).toBeInTheDocument()
     expect(screen.getByText('This report is for information only.')).toBeInTheDocument()
+  })
+
+  it('approves the report for the chosen CRM client, then sends only on request', async () => {
+    const crm = '11111111-2222-4333-8444-555555555555'
+    const report = {
+      reportId: 'r1', version: 1, versionCount: 1, schemaVersion: 'alert-client-report-v2',
+      report: { headline: 'H', executiveSummary: [{ text: 'A.', sourceRefs: [] }, { text: 'B.', sourceRefs: [] }], keyFacts: [], whyItMatters: [], whatToMonitor: [], uncertainty: null },
+      sources: [], portfolioLines: {}, disclaimer: 'D', createdAt: '2026-10-30T02:00:00Z', recipients: [],
+    }
+    const clients = [{ ...DETAIL.clients[0], clientRef: crm }]
+    listEvents.mockResolvedValue({ items: [CARD] })
+    getEvent.mockResolvedValueOnce({ ...DETAIL, clients, report })
+      .mockResolvedValue({ ...DETAIL, clients, report: { ...report, recipients: [{ alertId: 'alert-aaaaaaaa', status: 'APPROVED' }] } })
+    approveEventReport.mockResolvedValue([{ alertId: 'alert-aaaaaaaa', status: 'APPROVED' }])
+    sendReportEmail.mockResolvedValue(undefined)
+    render(<EventBriefings />)
+
+    fireEvent.click(await screen.findByText('Review affected clients'))
+    fireEvent.click(await screen.findByLabelText(`Select client ${crm}`))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve report for selected clients' }))
+
+    await waitFor(() => expect(approveEventReport).toHaveBeenCalledWith('event-1', 'r1', ['alert-aaaaaaaa']))
+    expect(sendReportEmail).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Send approved emails' }))
+    await waitFor(() => expect(sendReportEmail).toHaveBeenCalledWith({ reportId: 'r1', alertId: 'alert-aaaaaaaa' }))
   })
 
   it('loads the next event page without replacing the first', async () => {

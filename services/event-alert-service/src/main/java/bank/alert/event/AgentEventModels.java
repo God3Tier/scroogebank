@@ -64,11 +64,17 @@ public final class AgentEventModels {
      * ties the report to a portfolio; it says nothing about what is held.
      */
     public record ReportView(UUID reportId, int version, int versionCount, String schemaVersion, JsonNode report,
-            List<ReportSource> sources, Map<String, String> portfolioLines, String disclaimer, Instant createdAt) {
+            List<ReportSource> sources, Map<String, String> portfolioLines, String disclaimer, Instant createdAt,
+            List<ReportRecipient> recipients) {
         public ReportView {
             sources = List.copyOf(sources);
             portfolioLines = Map.copyOf(portfolioLines);
+            recipients = List.copyOf(recipients);
         }
+    }
+
+    /** A client the agent approved the report for, and where its email stands: APPROVED, SENDING or SENT. */
+    public record ReportRecipient(UUID alertId, String status) {
     }
 
     public record EventDetail(EventCard card, List<AffectedClient> clients, ActionResult latestAction, ReportView report) {

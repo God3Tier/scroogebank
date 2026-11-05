@@ -21,8 +21,8 @@ Search every eligible instrument every run, combine corroborating sources into o
 | FC-06 | Group sources into one event; `public_event_source`; backfill | FC-02 | Done |
 | FC-07 | `event_report` and `alert-client-report-v2`; generate after a score of 60 or more | FC-06 | Done |
 | FC-08 | Citation and figure checks; application-added text | FC-07 | Done |
-| FC-09 | Agent approves a report and chooses recipients (API and page) | FC-07 | Not started |
-| FC-10 | Deliver individually addressed emails through the engagement service and SES | FC-09 | Not started |
+| FC-09 | Agent approves a report and chooses recipients (API and page) | FC-07 | Done |
+| FC-10 | Deliver individually addressed emails through the engagement service and SES | FC-09 | Done |
 | FC-11 | Documentation, runbook, API contract | all | In progress |
 
 ## Open items and risks

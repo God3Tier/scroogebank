@@ -141,3 +141,18 @@ is the agent's and its `clientRef` equals the email's client
 It reads `clientRef` only and treats 401, 403 and 404 as "not yours". The
 headline, holdings and briefing are never read, stored or sent to a model.
 Inform still sends nothing: the agent writes and sends the email themselves.
+
+## Client reports and their delivery (ADR-0084)
+
+`GET /api/alerts/events/{eventId}` now carries `report`: the latest validated `alert-client-report-v2`
+(or a migrated `briefing-v1-legacy`), every source linked to the event with the ones the model saw marked
+`usedInReport`, the fixed portfolio line per affected instrument, the disclaimer, and the agent's approved
+`recipients`.
+
+- `POST /api/alerts/events/{eventId}/report/approval` approves one report version for chosen alerts. It sends
+  nothing. 409 if the report has a newer version, or the client cannot receive it.
+- `GET /api/alerts/report-deliveries/{reportId}/{alertId}` and `POST .../claim`, `.../sent`, `.../release` are
+  called by the engagement service with the agent's token. A client is claimed before sending, so each
+  report version reaches a client at most once.
+- `POST /api/engagement/report-emails` (engagement service) sends the approved report to one client through SES,
+  individually addressed, with the portfolio line, disclaimer and the relationship manager's contact details.
