@@ -81,7 +81,7 @@ function NavBar() {
         )}
         {isAdmin && (
           <>
-            <HomeLink to="/admin" others={['/admin/client-health']}>
+            <HomeLink to="/admin" others={['/admin/client-health', '/admin/audit-logs']}>
               <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
               Admin Home
             </HomeLink>
@@ -92,6 +92,10 @@ function NavBar() {
             <NavLink to="/insights/admin">
               <span className="material-symbols-outlined" aria-hidden="true">insights</span>
               Admin Dashboard
+            </NavLink>
+            <NavLink to="/admin/audit-logs">
+              <span className="material-symbols-outlined" aria-hidden="true">history</span>
+              Audit Activity
             </NavLink>
           </>
         )}

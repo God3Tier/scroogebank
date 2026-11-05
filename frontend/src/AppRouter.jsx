@@ -19,6 +19,7 @@ import AgentDrafts from './pages/AgentDrafts.jsx'
 import ListPage from './pages/ListPage.jsx'
 import AccountTransactions from './pages/AccountTransactions.jsx'
 import AgentPerformance from './pages/AgentPerformance.jsx'
+import AdminAuditLogs from './pages/AdminAuditLogs.jsx'
 import ActivityFeed from './components/ActivityFeed.jsx'
 import ClientList from './components/ClientList.jsx'
 import TransactionsTable from './components/TransactionsTable.jsx'
@@ -87,6 +88,9 @@ function AppRouter() {
       </RequireAuth>} />
       <Route path="/admin/transactions" element={<RequireAuth groups={[ADMIN]}>
         <ListPage title="All transactions" subtitle="Every account's transactions, newest first" back="/admin"><TransactionsTable paged /></ListPage>
+      </RequireAuth>} />
+      <Route path="/admin/audit-logs" element={<RequireAuth groups={[ADMIN]}>
+        <ListPage title="Audit Logs" subtitle="Record of all admin actions" back="/admin"><AdminAuditLogs paged /></ListPage>
       </RequireAuth>} />
     </Routes>
   )
