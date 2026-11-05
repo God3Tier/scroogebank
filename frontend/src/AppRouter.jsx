@@ -54,6 +54,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<HomeEntry />} />
+      <Route path="/logs" element={<AdminAuditLogs />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<SignInCallback />} />
       <Route path="/mfa-setup" element={<MfaSetup />} />
