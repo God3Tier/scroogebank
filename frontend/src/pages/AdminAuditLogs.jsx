@@ -1,8 +1,11 @@
 import { useMemo } from 'react'
 
 import { listActivities } from '../api/activities.js'
-import { cursorSource, usePagedList } from '../components/paging.js'
+import { AuditAction, AuditPayload, AuditTime } from '../components/AuditLogParts.jsx'
 import CorruptedAuditLogs from '../components/CorruptedAuditLogs.jsx'
+import { Pager } from '../components/ListFooter.jsx'
+import Spinner from '../components/Spinner.jsx'
+import { cursorSource, usePagedList } from '../components/paging.js'
 
 function errorMessage(error) {
   if (error.status === 401) return 'Your session has expired. Sign in again.'
@@ -11,6 +14,8 @@ function errorMessage(error) {
   return 'Audit activity could not be loaded.'
 }
 
+// The audit trail and its integrity findings. ListPage supplies the page
+// title; each table is a flush card like the other admin lists.
 export default function AdminAuditLogs() {
   const source = useMemo(
     () => cursorSource(
@@ -21,38 +26,31 @@ export default function AdminAuditLogs() {
   )
 
   const list = usePagedList(source)
+  const empty = !list.loading && !list.error && list.rows.length === 0
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <h1>Audit Activity</h1>
-        <p className="page-subtitle">
-          Successful changes recorded across the CRM, newest first.
-          Reads, sign-ins, sign-outs, and failures are not included.
-        </p>
-      </header>
-
-      <section className="card">
-        {list.loading && (
-          <p role="status">Loading audit activity…</p>
-        )}
+    <>
+      <section className="card card-flush audit-log" aria-labelledby="audit-activity-heading">
+        <header className="audit-log__header">
+          <div>
+            <h2 id="audit-activity-heading">Audit Activity</h2>
+            <p className="audit-log__note">
+              Successful changes only. Reads, sign-ins, sign-outs, and failures are not included.
+            </p>
+          </div>
+        </header>
 
         {list.error && (
-          <div role="alert">
+          <div className="audit-log__problem" role="alert">
+            <span className="material-symbols-outlined" aria-hidden="true">warning</span>
             <p>{errorMessage(list.error)}</p>
-            <button type="button" onClick={list.reload}>
-              Try again
-            </button>
+            <button type="button" onClick={list.reload}>Try again</button>
           </div>
-        )}
-
-        {!list.loading && !list.error && list.rows.length === 0 && (
-          <p>No audit activity found.</p>
         )}
 
         {list.rows.length > 0 && (
           <div className="table-wrap">
-            <table className="audit-log-table">
+            <table className="data-table audit-log-table">
               <thead>
                 <tr>
                   <th scope="col">Time</th>
@@ -62,28 +60,18 @@ export default function AdminAuditLogs() {
                   <th scope="col">Details</th>
                 </tr>
               </thead>
-
               <tbody>
                 {list.rows.map((entry) => (
                   <tr key={entry.id}>
+                    <td><AuditTime value={entry.timestamp} /></td>
                     <td>
-                      <time dateTime={entry.timestamp}>
-                        {new Date(entry.timestamp).toLocaleString('en-SG')}
-                      </time>
+                      {entry.actorName
+                        ? <span className="audit-log__actor" title={entry.actorId}>{entry.actorName}</span>
+                        : <span className="mono">{entry.actorId || 'Unknown'}</span>}
                     </td>
-                    <td>{entry.actorName || entry.actorId || 'Unknown'}</td>
-                    <td>{entry.sourceService}</td>
-                    <td>{entry.action}</td>
-                    <td>
-                      <details>
-                        <summary>View details</summary>
-                        <pre className="audit-log-payload">
-                          {typeof entry.payload === 'string'
-                            ? entry.payload
-                            : JSON.stringify(entry.payload, null, 2)}
-                        </pre>
-                      </details>
-                    </td>
+                    <td className="mono">{entry.sourceService}</td>
+                    <td><AuditAction action={entry.action} /></td>
+                    <td><AuditPayload label="View details" value={entry.payload} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -91,28 +79,21 @@ export default function AdminAuditLogs() {
           </div>
         )}
 
-        <nav className="list-footer pager" aria-label="Audit activity pages">
-          <button
-            type="button"
-            disabled={list.loading || list.page === 0}
-            onClick={() => list.go(list.page - 1)}
-          >
-            Previous
-          </button>
+        {list.loading && (
+          <div className="audit-log__status"><Spinner label="Loading audit activity…" /></div>
+        )}
 
-          <span aria-live="polite">Page {list.page + 1}</span>
+        {empty && (
+          <p className="audit-log__status">
+            <span className="material-symbols-outlined" aria-hidden="true">history</span>
+            No audit activity found.
+          </p>
+        )}
 
-          <button
-            type="button"
-            disabled={list.loading || !list.hasNext}
-            onClick={() => list.go(list.page + 1)}
-          >
-            Next
-          </button>
-        </nav>
+        {!empty && !list.error && <Pager list={list} label="Audit activity pages" />}
       </section>
 
       <CorruptedAuditLogs />
-    </div>
+    </>
   )
 }
