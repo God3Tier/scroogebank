@@ -302,7 +302,6 @@ function TickerReports() {
 
   useEffect(() => {
     // The list is server-owned; fetching it is the external synchronization for this view.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
 
