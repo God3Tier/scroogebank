@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useAuth } from 'react-oidc-context'
 
-import { downloadReportPdf } from '../utils/reportPdf.js'
+import { cited, downloadReportPdf } from '../utils/reportPdf.js'
 
 // The combined report for one event: written once from every source linked to the event, shared by all the
 // clients who hold the stock. It never holds client or portfolio details (ADR-0084).
@@ -14,9 +15,12 @@ function formatDateTime(value) {
 
 export function EventReport({ report }) {
   const [pdfError, setPdfError] = useState('')
+  const auth = useAuth()
   if (!report) return null
   const body = report.report
-  const cited = (list) => (list || []).map((item) => item.text)
+  const profile = auth?.user?.profile || {}
+  const agent = { name: profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(' '), email: profile.email }
+  const mark = (item) => cited(item.text, item.sourceRefs, report.sources || [])
   return (
     <div className="event-report" aria-label="Combined event report">
       <div className="event-report__bar">
@@ -25,23 +29,23 @@ export function EventReport({ report }) {
           {report.schemaVersion === 'briefing-v1-legacy' ? 'migrated from an earlier single-article briefing' : 'AI-written from public sources, checked before it is shown'}
         </p>
         <button className="button button--secondary" type="button"
-          onClick={() => downloadReportPdf(report).then(() => setPdfError(''), () => setPdfError('The PDF could not be made. Try again.'))}>
+          onClick={() => downloadReportPdf(report, agent).then(() => setPdfError(''), () => setPdfError('The PDF could not be made. Try again.'))}>
           Download report as PDF
         </button>
       </div>
       {pdfError && <p className="error-text" role="alert">{pdfError}</p>}
       <h4 className="event-report__headline">{body.headline}</h4>
-      {cited(body.executiveSummary).map((text) => <p key={text} className="event-report__summary">{text}</p>)}
+      {(body.executiveSummary || []).map(mark).map((text) => <p key={text} className="event-report__summary">{text}</p>)}
       {(body.keyFacts || []).length > 0 && (
         <>
           <h5>Key facts</h5>
-          <ul>{body.keyFacts.map((fact) => <li key={fact.label}><strong>{fact.label}:</strong> {fact.value}. {fact.context}</li>)}</ul>
+          <ul>{body.keyFacts.map((fact) => <li key={fact.label}><strong>{fact.label}:</strong> {fact.value}. {cited(fact.context, fact.sourceRefs, report.sources || [])}</li>)}</ul>
         </>
       )}
       {(body.whyItMatters || []).length > 0 && (
         <>
           <h5>Why it matters</h5>
-          <ul>{body.whyItMatters.map((item) => <li key={item.text}>{item.kind === 'POTENTIAL_IMPLICATION' ? `Potential implication: ${item.text}` : item.text}</li>)}</ul>
+          <ul>{body.whyItMatters.map((item) => <li key={item.text}>{item.kind === 'POTENTIAL_IMPLICATION' ? `Potential implication: ${mark(item)}` : mark(item)}</li>)}</ul>
         </>
       )}
       {(body.whatToMonitor || []).length > 0 && (

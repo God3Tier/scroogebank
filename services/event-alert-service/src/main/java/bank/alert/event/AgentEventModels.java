@@ -55,7 +55,8 @@ public final class AgentEventModels {
     }
 
     /** A source the event rests on. {@code usedInReport} is true for the (at most five) the model was shown. */
-    public record ReportSource(String title, String url, String domain, Instant publishedAt, boolean usedInReport) {
+    public record ReportSource(String id, String title, String url, String domain, Instant publishedAt, Instant retrievedAt,
+            boolean usedInReport) {
     }
 
     /**

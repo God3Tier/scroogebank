@@ -170,12 +170,13 @@ public class AgentEventQueryService {
             java.util.Set<String> used = new java.util.HashSet<>();
             MAPPER.readTree((String) row[4]).forEach(id -> used.add(id.asText()));
             List<ReportSource> sources = jdbc.query("""
-                    SELECT sr.id, sr.title, sr.canonical_url, sr.source_domain, sr.published_at
+                    SELECT sr.id, sr.title, sr.canonical_url, sr.source_domain, sr.published_at, sr.retrieved_at
                       FROM public_event_source s JOIN source_result sr ON sr.id = s.source_result_id
                      WHERE s.public_event_id = ?
                      ORDER BY sr.published_at NULLS LAST, sr.canonical_url
-                    """, (rs, n) -> new ReportSource(rs.getString(2), rs.getString(3), rs.getString(4),
+                    """, (rs, n) -> new ReportSource(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
                     rs.getTimestamp(5) == null ? null : rs.getTimestamp(5).toInstant(),
+                    rs.getTimestamp(6) == null ? null : rs.getTimestamp(6).toInstant(),
                     used.contains(rs.getString(1))), eventId);
             java.util.Map<String, String> lines = new java.util.LinkedHashMap<>();
             for (String instrumentId : clients.stream().map(AffectedClient::instrumentId).distinct().sorted().toList()) {

@@ -7,8 +7,9 @@ import { sendAlertReport } from '../api/engagement.js'
 import AlertWorkspace from './AlertWorkspace.jsx'
 
 vi.mock('../api/alertEvents.js', () => ({ getEvent: vi.fn() }))
+vi.mock('react-oidc-context', () => ({ useAuth: () => ({ user: { profile: { name: 'Alice Agent', email: 'agent1@example.test' } } }) }))
 vi.mock('../api/engagement.js', () => ({ isCrmClientId: (value) => /^[0-9a-f-]{36}$/.test(value), sendAlertReport: vi.fn() }))
-vi.mock('../utils/reportPdf.js', () => ({ downloadReportPdf: vi.fn().mockResolvedValue() }))
+vi.mock('../utils/reportPdf.js', async (importOriginal) => ({ ...(await importOriginal()), downloadReportPdf: vi.fn().mockResolvedValue() }))
 vi.mock('../api/alerts.js', () => ({
   listAlerts: vi.fn(),
   getAlert: vi.fn(),

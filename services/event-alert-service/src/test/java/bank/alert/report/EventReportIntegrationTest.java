@@ -365,6 +365,7 @@ class EventReportIntegrationTest {
         assertThat(report.report().get("headline").asText()).isEqualTo("v2");
         assertThat(report.sources()).extracting(AgentEventModels.ReportSource::domain).containsExactly("one.example", "two.example");
         assertThat(report.sources()).allMatch(AgentEventModels.ReportSource::usedInReport);
+        assertThat(report.sources()).allMatch(source -> source.id() != null && source.retrievedAt() != null);
         assertThat(report.disclaimer()).isEqualTo(ReportText.DISCLAIMER);
         assertThat(report.portfolioLines().get("SYN-SGX-001"))
                 .startsWith("Your portfolio has exposure to ").endsWith(", which may be affected by this event.");

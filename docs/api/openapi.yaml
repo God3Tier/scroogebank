@@ -741,12 +741,14 @@ components:
     EventReportSource:
       type: object
       additionalProperties: false
-      required: [title, url, domain, publishedAt, usedInReport]
+      required: [id, title, url, domain, publishedAt, retrievedAt, usedInReport]
       properties:
+        id: {type: string, description: "The source's ID; the report's citations refer to it."}
         title: {type: string}
         url: {type: string}
         domain: {type: string}
         publishedAt: {type: string, format: date-time, nullable: true}
+        retrievedAt: {type: string, format: date-time, nullable: true}
         usedInReport: {type: boolean, description: "True for the (at most five) distinct-domain sources the model was shown."}
     EventReport:
       type: object

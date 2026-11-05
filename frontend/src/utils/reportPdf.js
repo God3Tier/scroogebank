@@ -1,5 +1,6 @@
-// Builds the event report as a PDF in the browser, for the agent to keep or share. It holds only what the
-// report itself holds: no client names, accounts or holdings. jsPDF is loaded only when Download is pressed.
+// Builds the event report as a PDF in the browser, for the agent to keep or share. It follows the layout of the
+// client email in the report plan (ADR-0084), in the same order, and holds only what the report itself holds:
+// no client names, accounts, holdings or scores. jsPDF is loaded only when Download is pressed.
 
 const MARGIN = 48
 const LINE = 1.35
@@ -9,42 +10,75 @@ const PLAIN = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—
 const printable = (text) => [...text].map((ch) => PLAIN[ch] ?? (ch.charCodeAt(0) <= 0xFF ? ch : '?')).join('')
 const clean = (value) => printable(String(value ?? '').replace(/\s+/g, ' ').trim())
 
-/** The text of the report as ordered blocks, so the page and the tests share one definition of the layout. */
-export function reportBlocks(report) {
+const STAMP = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore',
+})
+const stamp = (value) => (value ? `${STAMP.format(new Date(value))} SGT` : 'not supplied')
+
+/** The cited text with its [n] marks: the number is the source's place in the linked-sources list. */
+export function cited(text, refs, sources) {
+  const marks = (refs || [])
+    .map((ref) => sources.findIndex((source) => source.id === ref))
+    .filter((index) => index >= 0)
+    .map((index) => ` [${index + 1}]`)
+    .join('')
+  return `${clean(text)}${marks}`
+}
+
+/**
+ * The report as ordered blocks, in the order of the client email: label, headline, summary, key facts, why it matters,
+ * market context (only when present), what to monitor, why you received this, linked sources, disclaimer, contact.
+ * {@code agent} is the signed-in relationship manager's {name, email}.
+ */
+export function reportBlocks(report, agent = {}) {
   const body = report.report || {}
-  const cited = (list) => (list || []).map((item) => clean(item.text)).filter(Boolean)
-  const blocks = [{ type: 'title', text: clean(body.headline) || 'Event report' }]
-  blocks.push({
-    type: 'note',
-    text: `Version ${report.version}${report.versionCount ? ` of ${report.versionCount}` : ''} - `
-      + (report.schemaVersion === 'briefing-v1-legacy' ? 'migrated from an earlier briefing' : 'AI-written from public sources, checked before it is shown'),
-  })
-  const summary = cited(body.executiveSummary)
-  if (summary.length) blocks.push({ type: 'heading', text: 'Summary' }, ...summary.map((text) => ({ type: 'paragraph', text })))
+  const sources = report.sources || []
+  const blocks = [
+    { type: 'kicker', text: 'PORTFOLIO INTELLIGENCE / COMPANY EVENT' },
+    { type: 'title', text: clean(body.headline) || 'Company event' },
+  ]
+  const summary = (body.executiveSummary || []).map((item) => cited(item.text, item.sourceRefs, sources)).filter(Boolean)
+  if (summary.length) blocks.push({ type: 'paragraph', text: summary.join(' ') })
+
   if ((body.keyFacts || []).length) {
-    blocks.push({ type: 'heading', text: 'Key facts' })
-    body.keyFacts.forEach((fact) => blocks.push({ type: 'bullet', text: `${clean(fact.label)}: ${clean(fact.value)}. ${clean(fact.context)}`.trim() }))
+    blocks.push({ type: 'heading', text: 'Key facts and numbers' })
+    body.keyFacts.forEach((fact) => blocks.push({
+      type: 'bullet', text: `${clean(fact.label)}: ${clean(fact.value)}. ${cited(fact.context, fact.sourceRefs, sources)}`,
+    }))
   }
   if ((body.whyItMatters || []).length) {
     blocks.push({ type: 'heading', text: 'Why it matters' })
     body.whyItMatters.forEach((item) => blocks.push({
-      type: 'bullet', text: item.kind === 'POTENTIAL_IMPLICATION' ? `Potential implication: ${clean(item.text)}` : clean(item.text),
+      type: 'bullet',
+      text: `${item.kind === 'POTENTIAL_IMPLICATION' ? 'Potential implication: ' : ''}${cited(item.text, item.sourceRefs, sources)}`,
     }))
+  }
+  if (body.marketContext && clean(body.marketContext)) {
+    blocks.push({ type: 'heading', text: 'Market context' }, { type: 'paragraph', text: clean(body.marketContext) })
   }
   if ((body.whatToMonitor || []).length) {
     blocks.push({ type: 'heading', text: 'What to monitor' })
     body.whatToMonitor.forEach((item) => blocks.push({ type: 'bullet', text: clean(item) }))
   }
-  if (body.uncertainty) blocks.push({ type: 'heading', text: 'Uncertainty' }, { type: 'paragraph', text: clean(body.uncertainty) })
-  if ((report.sources || []).length) {
-    blocks.push({ type: 'heading', text: 'Sources' })
-    report.sources.forEach((source, index) => blocks.push({
-      type: 'bullet',
-      text: `[${index + 1}] ${clean(source.title)} (${clean(source.domain)})${source.usedInReport ? '' : ' - linked, not used in the summary'}`,
+  if (body.uncertainty && clean(body.uncertainty)) blocks.push({ type: 'paragraph', text: `Uncertainty: ${clean(body.uncertainty)}` })
+
+  const lines = [...new Set(Object.values(report.portfolioLines || {}).map(clean).filter(Boolean))]
+  if (lines.length) {
+    blocks.push({ type: 'heading', text: 'Why you received this' })
+    lines.forEach((line) => blocks.push({ type: 'paragraph', text: line }))
+  }
+  if (sources.length) {
+    blocks.push({ type: 'heading', text: 'Linked sources' })
+    sources.forEach((source, index) => blocks.push({
+      type: 'source',
+      text: `[${index + 1}] ${clean(source.title)}`,
       link: source.url,
+      detail: `Published ${stamp(source.publishedAt)}; retrieved ${stamp(source.retrievedAt)}`,
     }))
   }
   if (report.disclaimer) blocks.push({ type: 'note', text: clean(report.disclaimer) })
+  const contact = [clean(agent.name), clean(agent.email)].filter(Boolean).join(', ')
+  if (contact) blocks.push({ type: 'note', text: `Your relationship manager: ${contact}.` })
   return blocks
 }
 
@@ -54,7 +88,7 @@ export function reportFileName(report) {
 }
 
 /** The PDF document for a report; the caller saves it. */
-export async function buildReportPdf(report) {
+export async function buildReportPdf(report, agent = {}) {
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const width = doc.internal.pageSize.getWidth() - MARGIN * 2
@@ -65,9 +99,8 @@ export async function buildReportPdf(report) {
     doc.setFont('helvetica', style)
     doc.setFontSize(size)
     doc.setTextColor(...colour)
-    const lines = doc.splitTextToSize(text, width - indent)
     const height = size * LINE
-    lines.forEach((line) => {
+    doc.splitTextToSize(text, width - indent).forEach((line) => {
       if (y + height > bottom) { doc.addPage(); y = MARGIN }
       if (link) doc.textWithLink(line, MARGIN + indent, y + size, { url: link })
       else doc.text(line, MARGIN + indent, y + size)
@@ -76,11 +109,15 @@ export async function buildReportPdf(report) {
     y += gap
   }
 
-  reportBlocks(report).forEach((block) => {
-    if (block.type === 'title') write(block.text, { size: 18, style: 'bold', gap: 4 })
+  reportBlocks(report, agent).forEach((block) => {
+    if (block.type === 'kicker') write(block.text, { size: 9, style: 'bold', gap: 8, colour: [90, 90, 90] })
+    else if (block.type === 'title') write(block.text, { size: 18, style: 'bold', gap: 8 })
     else if (block.type === 'heading') { y += 6; write(block.text, { size: 12, style: 'bold', gap: 3 }) }
-    else if (block.type === 'bullet') write(`- ${block.text}`, { indent: 10, gap: 3, link: block.link, colour: block.link ? [20, 70, 160] : [20, 20, 20] })
-    else if (block.type === 'note') write(block.text, { size: 9, colour: [90, 90, 90] })
+    else if (block.type === 'bullet') write(`- ${block.text}`, { indent: 10, gap: 3 })
+    else if (block.type === 'source') {
+      write(block.text, { indent: 10, gap: 0, link: block.link, colour: [20, 70, 160] })
+      write(block.detail, { size: 9, indent: 10, gap: 4, colour: [90, 90, 90] })
+    } else if (block.type === 'note') write(block.text, { size: 9, colour: [90, 90, 90], gap: 3 })
     else write(block.text, {})
   })
 
@@ -89,12 +126,13 @@ export async function buildReportPdf(report) {
     doc.setPage(page)
     doc.setFontSize(8)
     doc.setTextColor(120, 120, 120)
+    doc.text(`Report version ${report.version}`, MARGIN, doc.internal.pageSize.getHeight() - 24)
     doc.text(`Page ${page} of ${pages}`, doc.internal.pageSize.getWidth() - MARGIN, doc.internal.pageSize.getHeight() - 24, { align: 'right' })
   }
   return doc
 }
 
-export async function downloadReportPdf(report) {
-  const doc = await buildReportPdf(report)
+export async function downloadReportPdf(report, agent = {}) {
+  const doc = await buildReportPdf(report, agent)
   doc.save(reportFileName(report))
 }
