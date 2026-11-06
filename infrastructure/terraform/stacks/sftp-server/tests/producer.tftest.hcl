@@ -38,3 +38,36 @@ run "producer_reads_the_synced_accounts" {
     error_message = "No fixed account list is passed to the producer."
   }
 }
+
+run "producer_publishes_every_5_minutes_by_default" {
+  assert {
+    condition     = strcontains(aws_instance.sftp.user_data, "-e INTERVAL_SECONDS=\"300\"")
+    error_message = "The producer writes a report file every 300 seconds unless publish_interval_seconds is set."
+  }
+}
+
+run "producer_interval_comes_from_the_variable" {
+  variables {
+    publish_interval_seconds = 60
+  }
+  assert {
+    condition     = strcontains(aws_instance.sftp.user_data, "-e INTERVAL_SECONDS=\"60\"")
+    error_message = "publish_interval_seconds is passed to the producer as INTERVAL_SECONDS."
+  }
+}
+
+run "producer_interval_must_be_positive" {
+  command = plan
+  variables {
+    publish_interval_seconds = 0
+  }
+  expect_failures = [var.publish_interval_seconds]
+}
+
+run "producer_interval_must_be_whole_seconds" {
+  command = plan
+  variables {
+    publish_interval_seconds = 1.5
+  }
+  expect_failures = [var.publish_interval_seconds]
+}
