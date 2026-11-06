@@ -13,31 +13,25 @@ class IssuerQueryBuilderTest {
     private final IssuerQueryBuilder builder = new IssuerQueryBuilder();
 
     @Test
-    void buildsTwoShortQueriesLedByTheCompanyNameWithoutTickerSectorOrPrivateTerms() {
+    void buildsOneFocusedQueryPerTopicWithoutSectorOrPrivateTerms() {
         List<IssuerSearchQuery> queries = builder.build(List.of(
                 new InstrumentSearchTerms("D05", "DBS Group Holdings Ltd", "Financials",
-                        List.of("DBS", "DBS Group"), List.of("earnings", "appointment"),
+                        List.of("DBS"), List.of("earnings", "appointment"),
                         List.of("sgx.com", "dbs.com"))), List.of("reuters.com"));
 
         assertThat(queries).hasSize(IssuerQueryBuilder.QUERIES_PER_INSTRUMENT).hasSize(2);
-        assertThat(queries.get(0).query()).isEqualTo("DBS DBS Group quarterly results net profit");
-        assertThat(queries.get(1).query()).isEqualTo("DBS DBS Group");
+        assertThat(queries.get(0).query()).contains("D05", "DBS Group Holdings Ltd", "DBS", "earnings", "results",
+                        "dividend", "credit rating", "downgrade", "upgrade", "default", "credit outlook")
+                .doesNotContain("merger", "buyback", "steps down");
+        assertThat(queries.get(1).query()).contains("D05", "DBS Group Holdings Ltd", "DBS", "acquisition", "buyback",
+                        "regulatory action", "investigation", "fine", "filing", "approval", "appointment", "resignation", "steps down")
+                .doesNotContain("earnings", "results", "dividend", "default");
         assertThat(queries).allSatisfy(query -> {
-            assertThat(query.query()).doesNotContain("D05", "Financials", "syn-client", "account", "holding", " OR ");
+            assertThat(query.query()).doesNotContain("Financials", "syn-client", "account", "holding", " OR ");
             assertThat(query.approvedDomains()).containsExactly("sgx.com", "dbs.com", "reuters.com");
-            assertThat(query.issuerTerms()).containsExactly("DBS Group Holdings Ltd", "DBS", "DBS Group");
+            assertThat(query.issuerTerms()).containsExactly("DBS Group Holdings Ltd", "DBS");
             assertThat(query.eventTerms()).containsExactly("earnings", "appointment");
         });
-    }
-
-    @Test
-    void aCompanyWithNoNicknamesIsSearchedByItsFullName() {
-        List<IssuerSearchQuery> queries = builder.build(List.of(
-                new InstrumentSearchTerms("ALPHA", "ALPHA Holdings", "Synthetic", List.of(), List.of("earnings"),
-                        List.of("sgx.com"))), List.of("reuters.com"));
-
-        assertThat(queries).extracting(IssuerSearchQuery::query)
-                .containsExactly("ALPHA Holdings quarterly results net profit", "ALPHA Holdings");
     }
 
     @Test
@@ -50,11 +44,11 @@ class IssuerQueryBuilderTest {
                 List.of("reuters.com"));
 
         assertThat(queries).hasSize(4);
-        assertThat(queries.get(0).query()).contains("Toyota");
-        assertThat(queries.get(1).query()).contains("Toyota");
+        assertThat(queries.get(0).query()).contains("7203", "Toyota Motor Corporation", "Toyota");
+        assertThat(queries.get(1).query()).contains("7203", "Toyota Motor Corporation", "Toyota");
         assertThat(queries.get(0).approvedDomains())
                 .containsExactly("global.toyota", "jpx.co.jp", "reuters.com");
-        assertThat(queries.get(2).query()).contains("TSMC", "Taiwan Semiconductor");
+        assertThat(queries.get(2).query()).contains("TSM", "Taiwan Semiconductor");
         assertThat(queries.get(3).issuerTerms()).containsExactly(
                 "Taiwan Semiconductor Manufacturing Company Limited", "TSMC", "Taiwan Semiconductor");
     }
@@ -91,8 +85,13 @@ class IssuerQueryBuilderTest {
     }
 
     @Test
-    void theResultsWordsAreTheOnesTheExperimentChose() {
-        assertThat(IssuerQueryBuilder.RESULTS_WORDS).isEqualTo("quarterly results net profit");
+    void theTwoQueryGroupsAreExactlyThePlannedVocabulary() {
+        assertThat(IssuerQueryBuilder.PERFORMANCE_AND_CREDIT).containsExactly(
+                "earnings", "results", "profit", "revenue", "guidance", "dividend",
+                "credit rating", "downgrade", "upgrade", "default", "credit outlook");
+        assertThat(IssuerQueryBuilder.CORPORATE_AND_EXTERNAL_EVENTS).containsExactly(
+                "merger", "acquisition", "takeover", "divestment", "buyback", "regulatory action",
+                "investigation", "fine", "filing", "approval", "appointment", "resignation", "steps down");
     }
 
     @Test
