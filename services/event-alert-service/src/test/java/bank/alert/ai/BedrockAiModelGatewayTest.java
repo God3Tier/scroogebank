@@ -74,6 +74,29 @@ class BedrockAiModelGatewayTest {
     }
 
     @Test
+    void aReplyCutOffByTheTokenLimitIsRefusedNotHandedOnIncomplete() {
+        BedrockRuntimeClient client = mock(BedrockRuntimeClient.class);
+        Message message = Message.builder().content(ContentBlock.fromToolUse(tool -> tool
+                        .toolUseId("tool-1")
+                        .name("classify-public-event")
+                        .input(Document.mapBuilder().putString("headline", "cut o").build())))
+                .build();
+        when(client.converse(any(ConverseRequest.class))).thenReturn(ConverseResponse.builder()
+                .output(ConverseOutput.builder().message(message).build())
+                .usage(TokenUsage.builder().inputTokens(41).outputTokens(3000).totalTokens(3041).build())
+                .metrics(ConverseMetrics.builder().latencyMs(245L).build())
+                .stopReason("max_tokens")
+                .build());
+        BedrockAiModelGateway gateway = new BedrockAiModelGateway(client, properties(true));
+
+        assertThatThrownBy(() -> gateway.invoke(request(MODEL), Duration.ofSeconds(12)))
+                .isInstanceOfSatisfying(AiProviderException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo("MODEL_OUTPUT_TRUNCATED");
+                    assertThat(exception.retryable()).isFalse();
+                });
+    }
+
+    @Test
     void disabledGatewayFailsClosedWithoutCallingAws() {
         BedrockRuntimeClient client = mock(BedrockRuntimeClient.class);
         BedrockAiModelGateway gateway = new BedrockAiModelGateway(client, properties(false));

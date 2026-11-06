@@ -1,7 +1,7 @@
 # Full-coverage search and client event reports
 
-Owner: Hayyun, from the plan by Azeez. Reviewers: Azeez, Neo Jia Wen. Status: Part 1 built and tested; parts 2 and 3 not started. Last updated: 2026-11-05.
-Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Decision: [ADR-0084](../adr/ADR-0084-full-coverage-search-and-client-event-reports.md) (Proposed).
+Owner: Hayyun, from the plan by Azeez. Reviewers: Azeez, Neo Jia Wen. Status: Parts 1 to 3 built and tested locally and in automated tests. Not done: a real SES send, the live billed-credit benchmark, the cost register, and a real-model report run on Bedrock. Last updated: 2026-11-06.
+Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Decision: [ADR-0084](../adr/ADR-0084-full-coverage-search-and-client-event-reports.md) (Accepted).
 Branch: `feat/event-driven-alerts`, after merging `task/event-driven-alerts/custom-source-domains` into it.
 Estimate in the plan: 10 to 15 developer-days, two to three calendar weeks for three people in parallel.
 
