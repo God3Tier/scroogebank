@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link } from 'react-router-dom'
 
@@ -13,6 +13,8 @@ import {
 import { followUpLink } from '../api/engagement.js'
 import { ADMIN, inAnyGroup } from '../auth/roles.js'
 import StatCard from '../components/StatCard.jsx'
+import { getClient } from '../api/clients.js'
+import { listUsers } from '../api/users.js'
 
 const labelSignal = (signal) => signal.toLowerCase().split('_').map((word) => word[0].toUpperCase() + word.slice(1)).join(' ')
 const labelStatus = (status) => status.toLowerCase().replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
@@ -38,6 +40,10 @@ function ClientHealthMonitor() {
   const [actionError, setActionError] = useState('')
   const [acting, setActing] = useState(false)
   const [note, setNote] = useState('')
+  const [clientNames, setClientNames] = useState({})
+  const [agentNames, setAgentNames] = useState({})
+
+  const clientNameRequests = useRef(new Map())
 
   useEffect(() => {
     let current = true
@@ -93,6 +99,97 @@ function ClientHealthMonitor() {
     )
     return () => { current = false }
   }, [selectedId, detailRequest])
+
+  useEffect(() => {
+    let current = true
+
+    const clientIds = [
+      ...new Set(
+        [...tasks.map((task) => task.clientId), detail?.clientId]
+          .filter(Boolean),
+      ),
+    ]
+
+    if (clientIds.length === 0) return undefined
+
+    const requests = clientIds.map(async (clientId) => {
+      if (!clientNameRequests.current.has(clientId)) {
+        const request = getClient(clientId)
+          .then((client) =>
+            [client.first_name, client.last_name]
+              .filter(Boolean)
+              .join(' ')
+              .trim() || clientId,
+          )
+          .catch(() => clientId)
+
+        clientNameRequests.current.set(clientId, request)
+      }
+
+      const name = await clientNameRequests.current.get(clientId)
+      return [clientId, name]
+    })
+
+    Promise.all(requests).then((entries) => {
+      if (current) {
+        setClientNames((previous) => ({
+          ...previous,
+          ...Object.fromEntries(entries),
+        }))
+      }
+    })
+
+    return () => {
+      current = false
+    }
+  }, [tasks, detail])
+
+  useEffect(() => {
+    if (!readOnly) return undefined
+
+    let current = true
+
+    async function loadAgentNames() {
+      const names = {}
+      let page = 0
+      let totalPages
+
+      do {
+        const response = await listUsers({
+          role: 'AGENT',
+          page,
+          size: 100,
+        })
+
+        if (!current) return
+
+        for (const user of response.content) {
+          if (user.idpSub) {
+            names[user.idpSub] =
+              [user.firstName, user.lastName]
+                .filter(Boolean)
+                .join(' ')
+                .trim() || user.idpSub
+          }
+        }
+
+        totalPages = response.totalPages
+        page += 1
+      } while (page < totalPages)
+
+      if (current) {
+        setAgentNames(names)
+      }
+    }
+
+    loadAgentNames().catch(() => {
+      // Keep showing the original subjects if the lookup fails.
+    })
+
+    return () => {
+      current = false
+    }
+  }, [readOnly])
 
   const counts = useMemo(() => ({
     active: tasks.filter((task) => ['OPEN', 'IN_REVIEW'].includes(task.status)).length,
@@ -230,10 +327,15 @@ function ClientHealthMonitor() {
           <div className="health-task-list">
             {tasks.map((task) => (
               <button key={task.taskId} className={`health-task ${selectedId === task.taskId ? 'is-selected' : ''}`} onClick={() => selectTask(task.taskId)} aria-pressed={selectedId === task.taskId}>
-                <span className="health-task-top"><strong>{task.clientId}</strong><Badge type="severity" value={task.severity} /></span>
+                <span className="health-task-top"><strong>{clientNames[task.clientId] || task.clientId}</strong><Badge type="severity" value={task.severity} /></span>
                 <span className="health-task-signals">{task.evidence.map((item) => labelSignal(item.type)).join(' · ') || 'No evidence available'}</span>
                 <span className="health-task-bottom"><Badge type="status" value={task.status} /><span>{formatTime(task.updatedAt)}</span></span>
-                <span className="health-task-agent"><span className="material-symbols-outlined" aria-hidden="true">person</span>{task.assignedAgentSubject}</span>
+                <span className="health-task-agent">
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    person
+                  </span>
+                  {agentNames[task.assignedAgentSubject] || task.assignedAgentSubject}
+                </span>
               </button>
             ))}
           </div>
@@ -250,7 +352,21 @@ function ClientHealthMonitor() {
           {!detailLoading && detail && (
             <>
               <header className="health-detail-header">
-                <div><div className="health-detail-badges"><Badge type="severity" value={detail.severity} /><Badge type="status" value={detail.status} /></div><h2>{detail.clientId}</h2><p>{detail.taskId} · Assigned to {detail.assignedAgentSubject}</p></div>
+                <div>
+                  <div className="health-detail-badges">
+                    <Badge type="severity" value={detail.severity} />
+                    <Badge type="status" value={detail.status} />
+                  </div>
+
+                  <h2>{clientNames[detail.clientId] || detail.clientId}</h2>
+
+                  <p>
+                    {detail.taskId}
+                    {' · Assigned to '}
+                    {agentNames[detail.assignedAgentSubject] ||
+                      detail.assignedAgentSubject}
+                  </p>
+                </div>
                 <div className="health-task-version"><strong>v{detail.version}</strong><span>Task version</span></div>
               </header>
 
