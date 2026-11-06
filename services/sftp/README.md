@@ -5,7 +5,7 @@
 | Service | What it is |
 |---|---|
 | `sftp` | The external SFTP server. Files wait in `/home/reportuser/reports`. |
-| `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. Its transactions use the accounts in `CRM_ACCOUNT_IDS`, or random `ACC-000123` references when it is empty. Each entry is an account ID, in SGD, or `<id>:<currency>` for an account in another currency. |
+| `producer` | The bank's file generator. Every `PUBLISH_INTERVAL_SECONDS` (default 300; `publish_interval_seconds` in the sftp-server stack on AWS) it writes a synthetic `report-<time>-<id>.json`, first as `.tmp` and then renamed. Its transactions use the accounts in `CRM_ACCOUNT_IDS`, or random `ACC-000123` references when it is empty. Each entry is an account ID, in SGD, or `<id>:<currency>` for an account in another currency. |
 | `db` | transactions-db. |
 | `db-migrate` | Applies `receiver/data/` to `db` with Flyway, from the image that transaction-service's db-migrate container runs in AWS, then exits. `receiver-api` starts after it, and `make db-up` runs it too ([Schema migrations](../../docs/database/migrations.md)). |
 | `receiver-api` | transaction-service's internal read API, run with `go run` in the development image. The receiver's Dockerfile builds the production image by default; [the deployment runbook](../../docs/runbooks/deploy-aws.md) pushes it. |

@@ -59,7 +59,12 @@ variable "producer_image" {
 }
 
 variable "publish_interval_seconds" {
-  description = "How often the producer writes a report file."
+  description = "How often the producer writes a report file, in seconds. A change replaces the instance, because the value is in its user data."
   type        = number
   default     = 300
+
+  validation {
+    condition     = var.publish_interval_seconds >= 1 && floor(var.publish_interval_seconds) == var.publish_interval_seconds
+    error_message = "publish_interval_seconds must be a whole number of seconds, 1 or more."
+  }
 }

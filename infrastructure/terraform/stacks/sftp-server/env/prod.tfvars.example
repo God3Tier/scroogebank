@@ -11,5 +11,9 @@ crm_ingest_public_key = "ssh-ed25519 AAAA... "  # sftp_client_public_key
 # host_key_file = "../../../../secrets/sftp_host_key"
 
 # producer_image = "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/core-banking-sftp-prod/producer:<tag>"
+# How often the producer writes a report file, in seconds (default 300). A
+# change replaces the instance: run scripts/sync-producer-accounts.sh again
+# after the apply.
+# publish_interval_seconds = 300
 # The producer's accounts are not set here: scripts/sync-producer-accounts.sh
 # copies them from the CRM (ADR-0045).

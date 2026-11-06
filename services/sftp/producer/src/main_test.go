@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"producer/src/accounts"
 	"producer/src/transaction"
@@ -94,5 +95,21 @@ func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGetenvDurationFallsBackOnAnIntervalThatIsNotPositive(t *testing.T) {
+	for _, v := range []string{"0", "-5", "abc"} {
+		t.Setenv("INTERVAL_SECONDS", v)
+		if got := getenvDuration("INTERVAL_SECONDS", 300); got != 300*time.Second {
+			t.Fatalf("INTERVAL_SECONDS=%q gave %s, want the 300s fallback", v, got)
+		}
+	}
+}
+
+func TestGetenvDurationReadsSeconds(t *testing.T) {
+	t.Setenv("INTERVAL_SECONDS", "60")
+	if got := getenvDuration("INTERVAL_SECONDS", 300); got != time.Minute {
+		t.Fatalf("got %s, want 1m0s", got)
 	}
 }

@@ -116,7 +116,7 @@ Stands in for the bank's core banking system, Feature 3's external server. It ha
 
 - a `t4g.micro` EC2 instance running OpenSSH, with a fixed Elastic IP;
 - one SFTP-only account that accepts key sign-in from the CRM's NAT address only, with a pinned host key. Terraform generates the host key, or takes one you were given from `host_key_file` ([runbook §9.1](../../docs/runbooks/deploy-aws.md#91-create-the-sftp-server));
-- an ECR repository for the producer container, which writes a synthetic transaction file every 5 minutes once `producer_image` is set.
+- an ECR repository for the producer container, which writes a synthetic transaction file every `publish_interval_seconds` (default 300, 5 minutes) once `producer_image` is set. A change to `publish_interval_seconds` replaces the instance, so run `scripts/sync-producer-accounts.sh` again after the apply.
 
 ### Deployed but not working yet
 
