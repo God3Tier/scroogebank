@@ -16,6 +16,12 @@ type Service interface {
 	VerifyChain(ctx context.Context, anchor *models.ChainAnchor) (models.ChainReport, error)
 	// ListActivities returns the activity feed's entries matching filter, newest first.
 	ListActivities(ctx context.Context, filter models.ActivityFilter) ([]models.AuditLog, error)
+	// ListAuditLogs returns every audit entry, newest first, for the admin log viewer.
+	ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, error)
+}
+
+func (i impl) ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, error) {
+	return i.repo.ListAuditLogs(ctx, filter)
 }
 
 // verifyPageSize is how many entries VerifyChain reads at a time.
