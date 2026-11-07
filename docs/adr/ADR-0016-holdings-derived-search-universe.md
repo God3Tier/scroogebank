@@ -83,3 +83,7 @@ scoring still happen after results return to Singapore.
   but failed the usefulness gate (one of 12 eligible instruments represented and
   no actionable taxonomy event in the expanded pass). Ingestion remains off.
 - Hayyun must review the holdings/domain behavior before this ADR is accepted.
+
+## Addendum, 2026-11-07
+
+The second selection rule in decision 4, "or it represents at least 50% of one account's positive SGD portfolio value", was removed so that a company one client holds heavily is not searched on its own. Only the first rule remains: at least two distinct clients, and at least 20% of the clients with a positive position. A manual Search now is not limited by either rule. See ADR-0084, addendum 2026-11-07.

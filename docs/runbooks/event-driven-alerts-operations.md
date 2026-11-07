@@ -35,7 +35,6 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_SEARCH_ONLY_INSTRUMENT_ID` | unset | Lower environments only: search just this eligible instrument. An unknown, inactive or ineligible id is refused before any quota is used |
 | `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.20` | Inclusive fraction of distinct positive-position clients for the common-holding rule |
 | `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
-| `ALERT_MINIMUM_ACCOUNT_CONCENTRATION` | `0.50` | Inclusive per-account share of positive SGD portfolio value for the concentration rule |
 | `ALERT_MONTHLY_MODEL_TOKEN_QUOTA` | `200000` | Model-token reservations per UTC month |
 | `ALERT_MAX_MODEL_TOKENS_PER_INVOCATION` | `3000` | Tokens per model reservation; a multi-source report needs about 3000 |
 | `ALERT_MONTHLY_BUDGET_USD` | `25.00` | Estimated-cost stop threshold |
