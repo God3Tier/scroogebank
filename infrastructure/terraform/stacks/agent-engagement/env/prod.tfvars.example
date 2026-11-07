@@ -1,0 +1,25 @@
+# Copy to prod.tfvars (git-ignored). Apply the mail-identity stack once, then
+# the CRM stack, then this one: it reads the CRM stack's engagement_inputs
+# output from its state (ADR-0051). Tasks start and stop with the CRM stack's
+# running variable, so apply this stack again after every CRM apply that
+# changes it.
+
+legal_entity = "sg"
+environment  = "prod"
+
+# The bootstrap stack's state_bucket output, the same bucket as in
+# env/prod.s3.tfbackend.
+state_bucket = "crm-tfstate-123456789012"
+
+# The tag you pushed engagement-service with, for example the commit SHA.
+image_tag = "replace-with-the-pushed-tag"
+
+# Only when the CRM stack has no domain_name: the mail-identity stack's
+# sender_address, which mail comes from (ADR-0055). Runbook step 4a copies it
+# from mail-identity's prod.tfvars. A real address goes only in the
+# git-ignored prod.tfvars.
+# sender_address = "synthetic.sender@example.test"
+
+# The AI drafting kill switch (ADR-0054 decision 7). On in prod with Nova Lite
+# (ADR-0067); false makes every draft a template.
+ai_enabled = true

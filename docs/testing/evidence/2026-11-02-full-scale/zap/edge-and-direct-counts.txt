@@ -1,0 +1,12 @@
+Request counts around the active scans, 2026-11-02 (UTC).
+
+Edge active scan, 09:49:28 to 10:04:36 (local ZAP -> CloudFront -> WAF -> API Gateway -> ALB):
+  API Gateway $default stage, 09:49-10:06: Count 17282, 4xx 17083, 5xx 0
+  WAF blocked samples by rule (sampled requests, weighted): see waf-sampled-blocks.csv
+  WAF CloudWatch metrics: not readable (the account's SCP denies CloudWatch in us-east-1)
+
+Direct scans (in-VPC ZAP task -> internal ALB, no CloudFront, WAF or API Gateway):
+  anonymous, passive: 09:50 to 10:45 (4 specs re-run 10:44 after a scan.sh fix)
+  active, agent token: 10:45 to 10:54
+  internal ALB, 10:44-11:12: RequestCount 19000, target 2xx 180, target 4xx 18797, target 5xx 0,
+  ALB 4xx 2277 (paths with no listener rule), ALB 5xx 0

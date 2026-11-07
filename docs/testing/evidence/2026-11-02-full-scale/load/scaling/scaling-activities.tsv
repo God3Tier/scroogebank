@@ -1,0 +1,208 @@
+2026-10-16T18:55:37.029000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T18:55:37.052000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T18:55:37.796000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T18:55:37.840000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T18:55:37.841000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T18:55:38.017000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T18:55:38.034000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:21:47.027000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:22:38.418000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:22:38.440000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:22:38.455000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:22:39.541000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:22:39.541000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:22:39.555000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T19:49:21.735000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:49:21.752000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:49:22.541000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:49:22.560000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:49:22.592000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:49:22.603000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T19:49:22.607000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 2.	minimum capacity was set to 2
+2026-10-16T20:46:22.266000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T20:47:13.971000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T20:47:13.979000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T20:47:13.983000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T20:47:14.768000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T20:47:14.857000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-16T20:47:14.858000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T15:25:00.566000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T15:25:01.303000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T15:25:01.315000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T15:25:01.330000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T15:25:01.337000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T15:25:01.347000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T15:27:28.215000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-20T16:22:15.705000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T16:22:16.324000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T16:22:16.559000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T16:22:16.569000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T16:22:16.606000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T16:22:52.871000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:16:20.407000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:16:20.530000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:16:20.558000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:16:20.559000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:16:20.559000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:16:20.560000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-20T17:19:36.231000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T00:33:04.125000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T00:33:04.878000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T00:33:04.917000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T00:33:04.939000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T00:33:04.947000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T00:33:05.006000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T00:35:01.153000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T01:03:54.842000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T01:03:55.507000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T01:03:55.679000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T01:03:55.729000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T01:03:55.846000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T01:03:55.882000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T01:04:43.908000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T15:09:21.705000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T15:09:22.282000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T15:09:22.558000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T15:09:22.560000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T15:09:22.625000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T15:09:22.681000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T20:56:06.904000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T20:56:07.210000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T20:56:07.479000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T20:56:07.484000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T20:56:07.484000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T20:56:07.577000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T21:02:14.252000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-22T22:22:08.693000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T22:22:08.814000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T22:22:08.831000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T22:22:08.867000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T22:22:08.912000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T22:22:08.971000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-22T22:24:23.632000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T01:20:54.158000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T01:20:54.785000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T01:20:55.076000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T01:20:55.103000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T01:20:55.103000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T01:20:55.117000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T10:04:00.708000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:04:00.897000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:04:01.011000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:04:01.093000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:04:01.141000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:04:01.160000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:06:51.677000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T10:06:55.964000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-23T11:16:48.210000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:16:48.390000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:16:48.447000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:16:48.486000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:16:48.496000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:16:48.578000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:17:21.022000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-23T11:18:45.010000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-10-30T23:49:18.194000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-30T23:49:18.413000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-30T23:49:19.555000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-30T23:49:19.898000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-30T23:49:26.019000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-10-30T23:49:28.471000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.176000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.206000+08:00	service/crm-sg-prod/client-health-monitor-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.420000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.436000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.444000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.464000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:23:54.491000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:25:48.053000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:25:48.084000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T13:52:13.616000+08:00	service/crm-sg-prod/client-service	Overridden	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-a2a8abbc-b55c-494d-83e9-933955b9465a in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T13:53:13.642000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-a2a8abbc-b55c-494d-83e9-933955b9465a in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T13:53:24.175000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-d5d7598d-3b8c-4383-86e1-4569fa0a3e94 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T13:54:00.015000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/dashboard-service-AlarmHigh-1e3b0ef2-f33c-48f7-b404-05ad54842d93 in state ALARM triggered policy crm-sg-prod-dashboard-service-requests
+2026-11-02T13:56:13.601000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-a2a8abbc-b55c-494d-83e9-933955b9465a in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T13:56:24.171000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-d5d7598d-3b8c-4383-86e1-4569fa0a3e94 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T13:57:00.007000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/dashboard-service-AlarmHigh-1e3b0ef2-f33c-48f7-b404-05ad54842d93 in state ALARM triggered policy crm-sg-prod-dashboard-service-requests
+2026-11-02T14:14:22.818000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-98d98a54-cf24-4195-b857-66c7be4ba73b in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:14:38.482000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-bd0c24e2-77a9-4d04-96a7-66d8d4f49073 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T14:15:55.645000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/dashboard-service-AlarmLow-4dc6e921-d8e8-46a0-b0f8-b179f4255dd8 in state ALARM triggered policy crm-sg-prod-dashboard-service-requests
+2026-11-02T14:17:22.785000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-98d98a54-cf24-4195-b857-66c7be4ba73b in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:18:05.386000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-ee9160ac-116c-4753-b758-1dcef19d31f3 in state ALARM triggered policy crm-sg-prod-transaction-service-cpu
+2026-11-02T14:19:07.114000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/dashboard-service-AlarmLow-dcfbae1b-f951-42ad-b120-f008063765fd in state ALARM triggered policy crm-sg-prod-dashboard-service-cpu
+2026-11-02T14:20:22.821000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-98d98a54-cf24-4195-b857-66c7be4ba73b in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:23:22.800000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-98d98a54-cf24-4195-b857-66c7be4ba73b in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:26:22.808000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-98d98a54-cf24-4195-b857-66c7be4ba73b in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:51:13.639000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-a2a8abbc-b55c-494d-83e9-933955b9465a in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:51:24.195000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-d5d7598d-3b8c-4383-86e1-4569fa0a3e94 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T14:52:00.002000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/dashboard-service-AlarmHigh-1e3b0ef2-f33c-48f7-b404-05ad54842d93 in state ALARM triggered policy crm-sg-prod-dashboard-service-requests
+2026-11-02T14:54:13.608000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-a2a8abbc-b55c-494d-83e9-933955b9465a in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T14:54:24.161000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-d5d7598d-3b8c-4383-86e1-4569fa0a3e94 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T14:55:00.014000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/dashboard-service-AlarmHigh-1e3b0ef2-f33c-48f7-b404-05ad54842d93 in state ALARM triggered policy crm-sg-prod-dashboard-service-requests
+2026-11-02T14:58:47.025000+08:00	service/crm-sg-prod/client-health-monitor-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:58:47.069000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:58:47.188000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:58:47.197000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:58:47.250000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:58:47.259000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:58:47.308000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T14:59:16.171000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T15:00:37.293000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 0.	maximum capacity was set to 0
+2026-11-02T16:31:45.517000+08:00	service/crm-sg-prod/event-alert-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:31:45.544000+08:00	service/crm-sg-prod/client-health-monitor-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:31:45.577000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:31:45.602000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:31:45.616000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:31:45.634000+08:00	service/crm-sg-prod/user-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:31:45.718000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:33:58.480000+08:00	service/crm-sg-prod/dashboard-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:33:58.664000+08:00	service/crm-sg-prod/engagement-service	Successful	Setting desired count to 1.	minimum capacity was set to 1
+2026-11-02T16:44:11.363000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmHigh-3c7cb4aa-8a00-499a-9660-f91fc11c6021 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T16:44:22.684000+08:00	service/crm-sg-prod/client-service	Overridden	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-ad0282cb-505b-4952-a563-eeb50c04f804 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T16:45:22.654000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-ad0282cb-505b-4952-a563-eeb50c04f804 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T16:50:06.246000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmHigh-8e1cac62-6a44-4482-a789-3ee55a063103 in state ALARM triggered policy crm-sg-prod-auditor-queue
+2026-11-02T17:02:45.385000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T17:03:09.745000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-73d97015-551d-4683-9b3e-3f998c78f762 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T17:05:45.376000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T17:06:11.218000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T17:08:12.965000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-49664d27-d366-4f7a-b227-bf1ca8104c9c in state ALARM triggered policy crm-sg-prod-auditor-queue
+2026-11-02T17:08:45.383000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T17:09:11.197000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T17:11:45.373000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T17:12:11.205000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T17:14:17.305000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T17:17:17.318000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T17:20:17.323000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T17:23:17.302000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T17:28:09.738000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-73d97015-551d-4683-9b3e-3f998c78f762 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T17:36:11.369000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmHigh-3c7cb4aa-8a00-499a-9660-f91fc11c6021 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T17:36:17.252000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-171268c9-24f3-4e53-87ed-a4863754410c in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T17:36:22.675000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-ad0282cb-505b-4952-a563-eeb50c04f804 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T17:39:11.395000+08:00	service/crm-sg-prod/account-service	Overridden	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmHigh-3c7cb4aa-8a00-499a-9660-f91fc11c6021 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T17:39:17.226000+08:00	service/crm-sg-prod/transaction-service	Overridden	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-171268c9-24f3-4e53-87ed-a4863754410c in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T17:39:22.640000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmHigh-ad0282cb-505b-4952-a563-eeb50c04f804 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T17:40:11.334000+08:00	service/crm-sg-prod/account-service	Overridden	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmHigh-3c7cb4aa-8a00-499a-9660-f91fc11c6021 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T17:40:17.234000+08:00	service/crm-sg-prod/transaction-service	Overridden	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-171268c9-24f3-4e53-87ed-a4863754410c in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T17:41:11.325000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmHigh-3c7cb4aa-8a00-499a-9660-f91fc11c6021 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T17:41:17.233000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmHigh-171268c9-24f3-4e53-87ed-a4863754410c in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T17:43:06.261000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 6.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmHigh-8e1cac62-6a44-4482-a789-3ee55a063103 in state ALARM triggered policy crm-sg-prod-auditor-queue
+2026-11-02T18:03:50.786000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-fcb03fd9-f199-4fb3-8533-2c096c892600 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T18:06:50.777000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-fcb03fd9-f199-4fb3-8533-2c096c892600 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T18:07:09.725000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-73d97015-551d-4683-9b3e-3f998c78f762 in state ALARM triggered policy crm-sg-prod-account-service-requests
+2026-11-02T18:09:12.953000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-49664d27-d366-4f7a-b227-bf1ca8104c9c in state ALARM triggered policy crm-sg-prod-auditor-queue
+2026-11-02T18:09:50.776000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-fcb03fd9-f199-4fb3-8533-2c096c892600 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T18:10:11.225000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T18:12:50.794000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-fcb03fd9-f199-4fb3-8533-2c096c892600 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T18:13:11.222000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T18:15:17.323000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T18:15:45.367000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 5.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T18:15:50.812000+08:00	service/crm-sg-prod/transaction-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/transaction-service-AlarmLow-fcb03fd9-f199-4fb3-8533-2c096c892600 in state ALARM triggered policy crm-sg-prod-transaction-service-requests
+2026-11-02T18:16:11.205000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T18:18:17.310000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T18:18:45.361000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 4.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T18:19:11.214000+08:00	service/crm-sg-prod/account-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/account-service-AlarmLow-8d63c4ec-b7ff-42db-b8c8-6e175d391350 in state ALARM triggered policy crm-sg-prod-account-service-cpu
+2026-11-02T18:21:17.303000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T18:21:45.370000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 3.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T18:24:17.298000+08:00	service/crm-sg-prod/auditor	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/auditor-AlarmLow-03ba197e-bf7b-4af0-9f1c-2db00f6857ea in state ALARM triggered policy crm-sg-prod-auditor-cpu
+2026-11-02T18:24:45.378000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 2.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests
+2026-11-02T18:27:45.391000+08:00	service/crm-sg-prod/client-service	Successful	Setting desired count to 1.	monitor alarm TargetTracking-service/crm-sg-prod/client-service-AlarmLow-4c177fe2-8a03-441b-ada5-00641f4987e6 in state ALARM triggered policy crm-sg-prod-client-service-requests

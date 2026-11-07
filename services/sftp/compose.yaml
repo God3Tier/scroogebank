@@ -1,0 +1,217 @@
+services:
+  # Transactions only. Clients and accounts live in their own services'
+  # databases; the poller links rows through account-service (ADR-0037).
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-transactions}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+    ports:
+      # 5432 is client-profile-management-service's database, 5436 account-service's.
+      - "${POSTGRES_PORT:-5437}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-transactions}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Applies receiver/data/ to db with Flyway, from the image transaction-service's
+  # db-migrate container runs in AWS (docs/database/migrations.md), and creates
+  # transaction-service's and the poller's logins. It runs and exits before
+  # receiver-api starts; make db-up and the poller targets run it too. The
+  # passwords are for this local database only: receiver-api and the poller
+  # connect as POSTGRES_USER.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-transactions}
+      FLYWAY_USER: ${POSTGRES_USER:-crm}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/transactions
+      FLYWAY_PLACEHOLDERS_TRANSACTION_SERVICE_PASSWORD: transaction_service
+      FLYWAY_PLACEHOLDERS_TRANSACTION_INGEST_PASSWORD: transaction_ingest
+    networks:
+      - backend
+
+  # Loads V1 init.sql followed by V2 directly: it starts empty every time, so
+  # there is no applied migration for Flyway to check.
+  test-db:
+    image: postgres:17-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: transactions
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./receiver/data/init.sql:/docker-entrypoint-initdb.d/001-transactions.sql:ro
+      - ./receiver/data/V2_client_health_transaction_fields.sql:/docker-entrypoint-initdb.d/002-client-health-transaction-fields.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U crm -d transactions"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  go-tools:
+    build:
+      context: ./receiver
+      dockerfile: Dockerfile
+      target: tools
+    working_dir: /workspace
+    volumes:
+      - ./receiver:/workspace
+      # The OpenAPI contracts the tests check responses against (ADR-0063).
+      - ../../docs/api:/openapi:ro
+    environment:
+      OPENAPI_DIR: /openapi
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-crm}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      DB_NAME: ${POSTGRES_DB:-transactions}
+      SFTP_ADDR: ${SFTP_ADDR:-sftp:22}
+      SFTP_USER: ${SFTP_USER:-reportuser}
+      SFTP_REMOTE_DIR: ${SFTP_REMOTE_DIR:-/reports}
+      SFTP_POLL_INTERVAL: ${SFTP_POLL_INTERVAL:-30s}
+      # Linking imported rows to accounts (ADR-0037): account-service runs on
+      # the host, and the poller signs in with its own Cognito app client.
+      ACCOUNT_SERVICE_BASE_URL: ${ACCOUNT_SERVICE_BASE_URL:-http://host.docker.internal:8083}
+      COGNITO_TOKEN_URL: ${COGNITO_TOKEN_URL:-}
+      COGNITO_INGEST_CLIENT_ID: ${COGNITO_INGEST_CLIENT_ID:-}
+      COGNITO_INGEST_CLIENT_SECRET: ${COGNITO_INGEST_CLIENT_SECRET:-}
+      COGNITO_INGEST_SCOPE: ${COGNITO_INGEST_SCOPE:-crm-accounts/lookup}
+      AWS_REGION: ${AWS_REGION:-}
+      AUDIT_QUEUE_URL: ${AUDIT_QUEUE_URL:-}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - backend
+    profiles: ["tools"]
+
+  sftp:
+    image: atmoz/sftp:alpine  # pin a specific version, not :latest
+    platform: linux/amd64
+    ports:
+      - "2222:22"
+    volumes:
+      - reports:/home/reportuser/reports
+      - sftp_ssh:/etc/ssh
+      - ../../keys/authorized/:/home/reportuser/.ssh/keys/
+    command: "reportuser::${SFTP_UID:-1000}:${SFTP_GID:-1000}:reports"
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  receiver-api:
+    build:
+      context: ./receiver
+      target: tools
+    working_dir: /workspace
+    volumes:
+      - ./receiver:/workspace
+    command: ["go", "run", "./src/serverd"]
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-crm}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      DB_NAME: ${POSTGRES_DB:-transactions}
+      APP_ENV: local
+      APP_ADDR: ":8080"
+      # It checks each caller's token and asks account-service, on the host,
+      # about ownership with it (ADR-0064).
+      COGNITO_ISSUER_URI: ${COGNITO_ISSUER_URI:-}
+      COGNITO_APP_CLIENT_ID: ${COGNITO_APP_CLIENT_ID:-}
+      ACCOUNT_SERVICE_BASE_URL: ${ACCOUNT_SERVICE_BASE_URL:-http://host.docker.internal:8083}
+      AWS_REGION: ${AWS_REGION:-}
+      AUDIT_QUEUE_URL: ${AUDIT_QUEUE_URL:-}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${TRANSACTION_API_PORT:-8082}:8080"
+    networks:
+      - backend
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  producer:
+    build: ./producer
+    volumes:
+      - reports:/output
+      - ../../data:/app/data:ro
+    environment:
+      - OUTPUT_DIR=/output
+      - SOURCE_FILE=/app/data/report.json
+      - INTERVAL_SECONDS=${PUBLISH_INTERVAL_SECONDS:-300}
+      - CRM_ACCOUNT_IDS=${CRM_ACCOUNT_IDS:-}
+    networks:
+      - backend
+    restart: unless-stopped
+    depends_on:
+      sftp:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  reports:
+  postgres_data:
+  sftp_ssh:

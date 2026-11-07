@@ -1,0 +1,102 @@
+{
+  "fixtureVersion": "draft-screen-v2",
+  "labelStatus": "SYNTHETIC",
+  "description": "Model outputs, written by hand, that the safety screen must accept or reject (ADR-0054 decision 4). A case without a purpose is a check-in; the follow-ups from another feature need their details slot (ADR-0068). The live Nova Lite evaluation (90% pass gate, ADR-0067) uses its own run in AE-T11.",
+  "cases": [
+    {
+      "name": "holiday greeting, warm",
+      "output": "{\"subject\":\"Happy Chinese New Year, {{client_first_name}}!\",\"body\":\"Hi {{client_first_name}},\\n\\nWishing you and your family good health and happiness this Chinese New Year.\\n\\nBest wishes,\\n{{agent_name}}\"}",
+      "expected": "accepted"
+    },
+    {
+      "name": "pre-holiday review, formal",
+      "output": "{\"subject\":\"Meeting before National Day\",\"body\":\"Dear {{client_first_name}},\\n\\nBefore National Day, would you like to meet to look back on the year so far and plan ahead?\\n\\nKind regards,\\n{{agent_name}}\"}",
+      "expected": "accepted"
+    },
+    {
+      "name": "check-in in a Markdown fence",
+      "output": "```json\n{\"subject\":\"Checking in\",\"body\":\"Dear {{client_first_name}},\\n\\nI hope you are well.\\n\\n{{agent_name}}\"}\n```",
+      "expected": "accepted"
+    },
+    {
+      "name": "text before the JSON",
+      "output": "Here is your email: {\"subject\":\"Hi\",\"body\":\"Hi {{client_first_name}}\"}",
+      "expected": "invalid_json"
+    },
+    {
+      "name": "invented client name",
+      "output": "{\"subject\":\"Hello Mr Tan\",\"body\":\"Dear Mr Tan, hope you are well. {{agent_name}}\"}",
+      "expected": "missing_placeholder"
+    },
+    {
+      "name": "extra placeholder",
+      "output": "{\"subject\":\"Hi\",\"body\":\"Dear {{client_first_name}} {{client_last_name}},\"}",
+      "expected": "unknown_placeholder"
+    },
+    {
+      "name": "product pitch",
+      "output": "{\"subject\":\"A new savings plan\",\"body\":\"Dear {{client_first_name}}, our fixed deposit pays well this season.\"}",
+      "expected": "blocked_term"
+    },
+    {
+      "name": "rate promise",
+      "output": "{\"subject\":\"Year-end\",\"body\":\"Dear {{client_first_name}}, lock in 3.5% before the holiday.\"}",
+      "expected": "figure"
+    },
+    {
+      "name": "link",
+      "output": "{\"subject\":\"Year-end\",\"body\":\"Dear {{client_first_name}}, book at www.example.test/book\"}",
+      "expected": "url"
+    },
+    {
+      "name": "phone number",
+      "output": "{\"subject\":\"Call me\",\"body\":\"Dear {{client_first_name}}, call me on 9123 4567.\"}",
+      "expected": "phone"
+    },
+    {
+      "name": "mentions the client's balance",
+      "output": "{\"subject\":\"Hello\",\"body\":\"Dear {{client_first_name}}, I noticed your balance has grown.\"}",
+      "expected": "blocked_term"
+    },
+    {
+      "name": "subject too long",
+      "output": "{\"subject\":\"Wishing you and your whole family a very happy, healthy, prosperous and peaceful Deepavali this year and always, {{client_first_name}}\",\"body\":\"Hi {{client_first_name}}\"}",
+      "expected": "length"
+    },
+    {
+      "name": "Client Health follow-up with the details slot, formal",
+      "purpose": "HEALTH_CHECK_IN",
+      "output": "{\"subject\":\"Keeping in touch, {{client_first_name}}\",\"body\":\"Dear {{client_first_name}},\\n\\nI hope you are well. I wanted to get in touch about the following:\\n\\n{{agent_details}}\\n\\nKind regards,\\n{{agent_name}}\"}",
+      "expected": "accepted"
+    },
+    {
+      "name": "alert follow-up with the details slot, warm",
+      "purpose": "ALERT_FOLLOW_UP",
+      "output": "{\"subject\":\"Something to discuss, {{client_first_name}}\",\"body\":\"Hi {{client_first_name}},\\n\\nSomething has come up that you might like to talk about:\\n\\n{{agent_details}}\\n\\nBest wishes,\\n{{agent_name}}\"}",
+      "expected": "accepted"
+    },
+    {
+      "name": "Client Health follow-up without the slot",
+      "purpose": "HEALTH_CHECK_IN",
+      "output": "{\"subject\":\"Keeping in touch\",\"body\":\"Dear {{client_first_name}},\\n\\nI hope you are well.\\n\\n{{agent_name}}\"}",
+      "expected": "missing_details_slot"
+    },
+    {
+      "name": "Client Health follow-up saying what was noticed",
+      "purpose": "HEALTH_CHECK_IN",
+      "output": "{\"subject\":\"A quick check\",\"body\":\"Dear {{client_first_name}},\\n\\nWe noticed your regular credits have stopped.\\n\\n{{agent_details}}\\n\\n{{agent_name}}\"}",
+      "expected": "blocked_term"
+    },
+    {
+      "name": "alert follow-up naming the news",
+      "purpose": "ALERT_FOLLOW_UP",
+      "output": "{\"subject\":\"About the news\",\"body\":\"Hi {{client_first_name}},\\n\\nThere is news about your DBS shares.\\n\\n{{agent_details}}\\n\\n{{agent_name}}\"}",
+      "expected": "blocked_term"
+    },
+    {
+      "name": "details slot on a check-in",
+      "output": "{\"subject\":\"Checking in\",\"body\":\"Dear {{client_first_name}},\\n\\n{{agent_details}}\\n\\n{{agent_name}}\"}",
+      "expected": "unknown_placeholder"
+    }
+  ]
+}

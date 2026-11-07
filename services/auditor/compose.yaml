@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sqlboiler-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: myapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  # Applies data/schema.sql with Flyway, from the image each task's db-migrate
+  # container runs in AWS (docs/database/migrations.md), and creates the
+  # auditor's and chain-verify's logins. make run and make migrate run it. The
+  # passwords are for this local database only: make run and make
+  # chain-verify connect as postgres.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/myapp
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: postgres
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/audit
+      FLYWAY_PLACEHOLDERS_AUDITOR_APP_PASSWORD: auditor_app
+      FLYWAY_PLACEHOLDERS_CHAIN_VERIFY_PASSWORD: chain_verify
+
+  # LocalStack stands in for AWS SQS and S3 locally. See ADR-0004 for why the
+  # auditor moved from Kafka to SQS. init-queues.sh creates the
+  # audit-insert / audit-insert-dlq queues on startup, and
+  # init-anchor-bucket.sh chain-verify's anchor bucket (ADR-0022).
+  localstack:
+    image: localstack/localstack:3
+    container_name: localstack
+    ports:
+      - "4566:4566"   # edge port for every LocalStack AWS API, including SQS and S3
+    environment:
+      SERVICES: sqs,s3
+      DEFAULT_REGION: us-east-1
+    volumes:
+      - ./localstack/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
+      - ./localstack/init-anchor-bucket.sh:/etc/localstack/init/ready.d/init-anchor-bucket.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pgdata:

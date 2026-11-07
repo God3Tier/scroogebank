@@ -1,0 +1,13 @@
+# mockery v3 configuration, in the same layout as the other Go services.
+# Mocks are written next to their interface as mocks.go (git-ignored).
+dir: "{{.InterfaceDir}}"
+filename: mocks.go
+include-auto-generated: false
+
+packages:
+  receiver/src/cronjob:
+    interfaces:
+      SecretReader: {}
+  receiver/src/internal/repository:
+    interfaces:
+      Transaction: {}

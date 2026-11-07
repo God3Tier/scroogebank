@@ -1,0 +1,20 @@
+spring:
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://example.invalid
+          jwk-set-uri: https://example.invalid/jwks.json
+
+idp:
+  cognito:
+    app-client-id: test-crm-app-client
+
+alert:
+  mode: API

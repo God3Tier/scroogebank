@@ -1,0 +1,151 @@
+diff --git a/infrastructure/terraform/stacks/alert-worker/main.tf b/infrastructure/terraform/stacks/alert-worker/main.tf
+index 3532f61..4ac8474 100644
+--- a/infrastructure/terraform/stacks/alert-worker/main.tf
++++ b/infrastructure/terraform/stacks/alert-worker/main.tf
+@@ -111,6 +111,7 @@ module "event_alert_worker" {
+     ALERT_MODE                          = "WORKER"
+     ALERT_HOLDINGS_MODE                 = local.crm.holdings_mode
+     EVENT_ALERT_DB_URL                  = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
++    SPRING_FLYWAY_ENABLED               = "false" # db-migrate applies the migrations, as for the API (found by the AWS test)
+     AWS_REGION                          = var.aws_region
+     ALERT_INGESTION_ENABLED             = tostring(var.ingestion_enabled)
+     ALERT_SEARCH_PROVIDER               = "tavily"
+diff --git a/services/event-alert-service/src/main/java/bank/alert/ai/SafeBriefingGenerator.java b/services/event-alert-service/src/main/java/bank/alert/ai/SafeBriefingGenerator.java
+index bd34c11..1200b07 100644
+--- a/services/event-alert-service/src/main/java/bank/alert/ai/SafeBriefingGenerator.java
++++ b/services/event-alert-service/src/main/java/bank/alert/ai/SafeBriefingGenerator.java
+@@ -11,6 +11,7 @@ import bank.alert.operations.ReservationResult;
+ 
+ import java.time.Clock;
+ import java.util.HashSet;
++import java.util.List;
+ import java.util.Locale;
+ import java.util.Set;
+ 
+@@ -105,7 +106,8 @@ public class SafeBriefingGenerator implements BriefingGenerator {
+                     return outcome(BriefingStatus.ABSTAINED, null, "MODEL_ABSTAINED", attempt);
+                 }
+                 AgentBriefing briefing = new AgentBriefing(output.headline(), output.summary(),
+-                        output.uncertainty(), output.sourceRefs(), output.suggestedReviewActions(), true,
++                        output.uncertainty(), referenceIds(output.sourceRefs(), input),
++                        output.suggestedReviewActions(), true,
+                         properties.model(), properties.promptVersion(), clock.instant());
+                 return outcome(BriefingStatus.GENERATED, briefing, null, attempt);
+             } catch (AiProviderException exception) {
+@@ -132,7 +134,11 @@ public class SafeBriefingGenerator implements BriefingGenerator {
+                 || output.sourceRefs().isEmpty() || output.suggestedReviewActions() == null
+                 || output.suggestedReviewActions().isEmpty()) return "INVALID_MODEL_SCHEMA";
+         Set<String> supplied = new HashSet<>();
+-        input.evidence().forEach(evidence -> supplied.add(evidence.referenceId()));
++        // A model may cite a supplied source by its URL as well as by its reference ID; both name the same source.
++        input.evidence().forEach(evidence -> {
++            supplied.add(evidence.referenceId());
++            supplied.add(evidence.canonicalUrl());
++        });
+         if (!supplied.containsAll(output.sourceRefs())) return "MISSING_OR_UNKNOWN_CITATION";
+         String combined = (output.headline() + " " + output.summary() + " "
+                 + String.join(" ", output.suggestedReviewActions())).toLowerCase(Locale.ROOT);
+@@ -142,6 +148,19 @@ public class SafeBriefingGenerator implements BriefingGenerator {
+         return null;
+     }
+ 
++    /** The reference IDs of the cited sources, in order and without repeats, whether the model cited IDs or URLs. */
++    private static List<String> referenceIds(List<String> refs, BriefingInput input) {
++        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
++        for (String ref : refs) {
++            String id = ref;
++            for (PublicEvidence evidence : input.evidence()) {
++                if (evidence.canonicalUrl().equals(ref)) id = evidence.referenceId();
++            }
++            ids.add(id);
++        }
++        return List.copyOf(ids);
++    }
++
+     private static boolean blankOrTooLong(String value, int maximum) {
+         return value == null || value.isBlank() || value.length() > maximum;
+     }
+diff --git a/services/event-alert-service/src/main/java/bank/alert/processing/SourceResultProcessor.java b/services/event-alert-service/src/main/java/bank/alert/processing/SourceResultProcessor.java
+index cc855ab..33120d1 100644
+--- a/services/event-alert-service/src/main/java/bank/alert/processing/SourceResultProcessor.java
++++ b/services/event-alert-service/src/main/java/bank/alert/processing/SourceResultProcessor.java
+@@ -1,5 +1,7 @@
+ package bank.alert.processing;
+ 
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ import bank.alert.ai.BriefingGenerator;
+ import bank.alert.ai.BriefingInput;
+ import bank.alert.ai.BriefingOutcome;
+@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
+ 
+ @Service
+ public class SourceResultProcessor {
++    private static final Logger log = LoggerFactory.getLogger(SourceResultProcessor.class);
+ 
+     private final SourceResultRepository sourceResults;
+     private final EventClassifier classifier;
+@@ -67,6 +70,9 @@ public class SourceResultProcessor {
+         ClassificationOutcome classification = classifier.classify(evidence);
+         if (classification.status() != ClassificationStatus.MODEL_ACCEPTED
+                 || classification.classification() == null) {
++            // Reason codes are fixed enumerated values, never model or article text.
++            log.info("source not classified source_id={} status={} reason_code={}",
++                    source.getId(), classification.status(), classification.reasonCode());
+             return SourceFanOutOutcome.notAccepted(classification.status(), classification.reasonCode());
+         }
+ 
+@@ -80,6 +86,10 @@ public class SourceResultProcessor {
+ 
+         BriefingOutcome briefing = briefingGenerator.generate(new BriefingInput(
+                 classification.classification(), List.of(evidence)));
++        if (briefing.briefing() == null) {
++            log.warn("briefing not generated source_id={} status={} reason_code={} attempts={}",
++                    source.getId(), briefing.status(), briefing.reasonCode(), briefing.attempts());
++        }
+         BigDecimal severity = severityPolicy.severity(classification.classification());
+         BigDecimal relevance = affected.stream()
+                 .map(id -> request.candidateRelevance().getOrDefault(id, InstrumentMatcher.SECTOR_ONLY))
+diff --git a/services/event-alert-service/src/test/java/bank/alert/ai/SafeBriefingGeneratorTest.java b/services/event-alert-service/src/test/java/bank/alert/ai/SafeBriefingGeneratorTest.java
+index b2ad609..8f7eb69 100644
+--- a/services/event-alert-service/src/test/java/bank/alert/ai/SafeBriefingGeneratorTest.java
++++ b/services/event-alert-service/src/test/java/bank/alert/ai/SafeBriefingGeneratorTest.java
+@@ -33,6 +33,38 @@ class SafeBriefingGeneratorTest {
+         assertThat(outcome.briefing().generatedAt()).isEqualTo(NOW);
+     }
+ 
++    @Test
++    void acceptsACitationByTheSourcesUrlAndStoresItsReferenceId() {
++        SafeBriefingGenerator generator = generator((request, timeout) -> """
++                {"abstain":false,"abstentionReason":null,"headline":"Synthetic issuer update",
++                "summary":"The issuer reported a synthetic earnings change.",
++                "uncertainty":"The filing does not provide forward guidance.",
++                "sourceRefs":["https://example.invalid/source"],
++                "suggestedReviewActions":["Review the cited filing and current alert factors."]}
++                """, true);
++
++        BriefingOutcome outcome = generator.generate(input());
++
++        assertThat(outcome.status()).isEqualTo(BriefingStatus.GENERATED);
++        assertThat(outcome.briefing().sourceRefs()).containsExactly("source-1");
++    }
++
++    @Test
++    void stillRejectsACitationOfASourceThatWasNotSupplied() {
++        SafeBriefingGenerator generator = generator((request, timeout) -> """
++                {"abstain":false,"abstentionReason":null,"headline":"Synthetic issuer update",
++                "summary":"The issuer reported a synthetic earnings change.",
++                "uncertainty":"The filing does not provide forward guidance.",
++                "sourceRefs":["https://elsewhere.invalid/other"],
++                "suggestedReviewActions":["Review the cited filing and current alert factors."]}
++                """, true);
++
++        BriefingOutcome outcome = generator.generate(input());
++
++        assertThat(outcome.status()).isEqualTo(BriefingStatus.PENDING);
++        assertThat(outcome.reasonCode()).isEqualTo("MISSING_OR_UNKNOWN_CITATION");
++    }
++
+     @Test
+     void rejectsAdviceLanguageAndLeavesBriefPending() {
+         SafeBriefingGenerator generator = generator((request, timeout) -> """

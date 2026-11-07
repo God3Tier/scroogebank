@@ -1,0 +1,1090 @@
+openapi: 3.0.3
+
+# The API engagement-service serves. This file is the source of truth for the
+# contract; the service's controller tests (EventApiTest, DraftApiTest,
+# PreferencesAndHolidaysApiTest) check its statuses and shapes.
+#
+# Decisions: ADR-0051 to ADR-0054, accepted 2026-10-21; ADR-0056 (drafts
+# edited as plain text) and ADR-0057 (holiday sync), accepted 2026-10-21. Implemented by
+# services/engagement-service.
+
+info:
+  title: Scrooge CRM - Agent Engagement
+  description: |
+    Calendar events, meeting reminders and AI-drafted follow-up emails for
+    agents (feature plan `docs/feature-plans/agent-engagement_plan.md`).
+
+    Properties of this API worth reading before integrating:
+
+    **Agents only.** Every route requires the `AGENT` group. Admins receive
+    403. The owner of every event, draft and preference is the token's `sub`;
+    no route takes an agent ID, and another agent's records return 404.
+
+    **Mail is queued, not sent in the request.** Creating, updating or
+    cancelling an event queues a calendar invite, update or cancellation to
+    the agent (ADR-0052) and schedules reminders. The dispatcher sends them
+    while the stack is running (ADR-0051). The `invite` and `reminders`
+    fields report their delivery status.
+
+    **Drafts are stored with placeholders, edited as plain text.**
+    `subjectTemplate` and `bodyTemplate` are the stored form, with
+    `{{client_first_name}}` and `{{agent_name}}`; the model never sees who the
+    client is (ADR-0054). `subject` and `body` are the same text with the
+    names filled in, which is what the agent edits and the client receives.
+    `PUT` takes plain text and marks the names as placeholders again before
+    storing it, so no names are stored (ADR-0056). Nothing is sent to a
+    client until the agent calls `POST /api/engagement/drafts/{draftId}/send`.
+
+    **Client details are not returned.** Responses carry client IDs only. The
+    frontend reads names from client-service as it already does.
+
+    **Times** are ISO 8601 with an offset and are stored in UTC. The UI shows
+    Singapore time.
+  version: v1
+
+servers:
+  - url: /
+    description: Reached through CloudFront's /api/* behaviour, never directly.
+
+tags:
+  - name: events
+    description: The agent's calendar events, invites and reminders.
+  - name: holidays
+    description: Public holidays used by the calendar view and drafts.
+  - name: drafts
+    description: AI or template follow-up email drafts and sending.
+  - name: preferences
+    description: The agent's notification preferences.
+
+paths:
+  /api/engagement/events:
+    get:
+      tags: [events]
+      summary: The caller's events that overlap a window
+      operationId: listEvents
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: Start of the window, inclusive.
+          schema: { type: string, format: date-time }
+          example: '2026-10-20T00:00:00+08:00'
+        - name: to
+          in: query
+          required: true
+          description: End of the window, exclusive. At most 92 days after `from`.
+          schema: { type: string, format: date-time }
+          example: '2026-11-20T00:00:00+08:00'
+        - name: includeCancelled
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Events ordered by `startsAt`. At most 500 are returned.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [events]
+      summary: Create an event, queue its invite and schedule its reminders
+      description: |
+        When `clientId` is given, client-service is asked with the caller's
+        token whether the caller owns that client. A refusal returns 404; an
+        unavailable client-service returns 503 and nothing is saved.
+      operationId: createEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventInput' }
+      responses:
+        '201':
+          description: Created.
+          headers:
+            Location:
+              schema: { type: string }
+              description: '`/api/engagement/events/{eventId}`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ClientNotFound' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+
+  /api/engagement/events/{eventId}:
+    parameters:
+      - $ref: '#/components/parameters/EventId'
+    get:
+      tags: [events]
+      summary: One of the caller's events
+      operationId: getEvent
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [events]
+      summary: Replace an event, queue an invite update and reschedule reminders
+      description: |
+        Optimistic locking: `version` must match the stored version. An update
+        that changes the time, title, location or description queues an
+        invite with a higher `SEQUENCE`. Pending reminders are replaced.
+        A cancelled event cannot be updated (409).
+      operationId: updateEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventUpdate' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+    delete:
+      tags: [events]
+      summary: Cancel an event
+      description: |
+        Sets `status` to `CANCELLED`, queues an invite cancellation and
+        cancels pending reminders. The event stays readable. Cancelling a
+        cancelled event returns 204 and changes nothing.
+      operationId: cancelEvent
+      responses:
+        '204': { description: Cancelled. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/engagement/holidays:
+    get:
+      tags: [holidays]
+      summary: Public holidays for a country in a date range
+      operationId: listHolidays
+      parameters:
+        - name: country
+          in: query
+          required: true
+          description: ISO 3166-1 alpha-2 code.
+          schema: { type: string, pattern: '^[A-Z]{2}$' }
+          example: SG
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: '2026-10-01'
+        - name: to
+          in: query
+          required: true
+          description: Inclusive. At most 366 days after `from`.
+          schema: { type: string, format: date }
+          example: '2026-12-31'
+      responses:
+        '200':
+          description: Holidays ordered by date. Empty for a country with no data.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Holiday' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/engagement/holidays/coverage:
+    get:
+      tags: [holidays]
+      summary: How far a country's holiday list reaches
+      description: |
+        The calendar offers no month after `coveredThrough`, so it never shows
+        a year without its holidays (ADR-0057). The list grows when MOM
+        publishes a new year.
+      operationId: getHolidayCoverage
+      parameters:
+        - name: country
+          in: query
+          required: true
+          description: ISO 3166-1 alpha-2 code.
+          schema: { type: string, pattern: '^[A-Z]{2}$' }
+          example: SG
+      responses:
+        '200':
+          description: The coverage. `coveredThrough` is null for a country with no data.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HolidayCoverage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/engagement/drafts:
+    get:
+      tags: [drafts]
+      summary: The caller's drafts, newest first
+      operationId: listDrafts
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/DraftStatus' }
+        - name: clientId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: |
+            Drafts without `subject` and `body`, so listing makes no call
+            to client-service or Cognito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [drafts]
+      summary: Generate a follow-up draft for one of the caller's clients
+      description: |
+        Checks ownership through client-service with the caller's token,
+        then asks Bedrock for a draft from placeholders and public holiday
+        data only (ADR-0054). When AI is disabled, over a cap, times out or
+        fails the safety screen, a template draft is returned instead, still
+        with 201; `source` and `sourceReason` say which.
+
+        `HEALTH_CHECK_IN` and `ALERT_FOLLOW_UP` name the Client Health task
+        or alert they came from. It is read with the caller's token and must
+        be theirs and about this client (ADR-0068); only its client is read,
+        and nothing from it reaches the model. Their text has a details slot
+        the agent fills in before sending.
+      operationId: createDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftInput' }
+      responses:
+        '201':
+          description: Draft created with `status` `DRAFT`.
+          headers:
+            Location:
+              schema: { type: string }
+              description: '`/api/engagement/drafts/{draftId}`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ClientNotFound' }
+        '422':
+          description: |
+            A holiday purpose was requested, but the client's country has no
+            holiday in the next 30 days or cannot be mapped to a country code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: |
+            client-service could not answer, or, for a follow-up from another
+            feature, Client Health or event-alert-service could not. Nothing
+            was saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/engagement/drafts/{draftId}:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    get:
+      tags: [drafts]
+      summary: One draft, with the names filled in
+      operationId: getDraft
+      responses:
+        '200':
+          description: |
+            The draft. `subject` and `body` are present when client-service
+            still returns the client and Cognito the agent's name; otherwise
+            they are null, and the draft cannot be edited until they are. A
+            sent or discarded draft has no text left (ADR-0068).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [drafts]
+      summary: Edit a draft's subject and body
+      description: |
+        Only a `DRAFT` can be edited. Optimistic locking on `version`. Takes
+        plain text with the names written out. Each whole-word, exact
+        occurrence of the client's first name and of the agent's name is
+        stored as its placeholder again (ADR-0056), so a later change of name
+        is used when the draft is sent. An untouched `[Add your details here]`
+        is stored as its slot again (ADR-0068). Needs client-service and
+        Cognito; without them nothing is saved.
+      operationId: updateDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftUpdate' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: The draft does not exist for the caller, or client-service no longer returns its client. Nothing was saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: The text is too long once the names are marked as placeholders.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: client-service or Cognito could not supply the names. Nothing was saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    delete:
+      tags: [drafts]
+      summary: Discard a draft
+      description: |
+        Sets `status` to `DISCARDED` and clears the subject and body
+        (ADR-0068). A sent draft cannot be discarded (409). An open draft not
+        changed for 14 days is discarded the same way by a daily job.
+      operationId: discardDraft
+      responses:
+        '204': { description: Discarded. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/engagement/drafts/{draftId}/send:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [drafts]
+      summary: Send a draft to the client through SES
+      description: |
+        Reads the client's email address and first name from client-service
+        with the caller's token, fills in the placeholders and sends through
+        SES with `Reply-To` set to the agent (ADR-0053) and a Bcc copy to the
+        agent. The address and the filled-in text are not stored, and the
+        draft's subject and body are cleared once SES accepts the message
+        (ADR-0068). Text the agent added is sent as written. A draft is sent
+        at most once.
+      operationId: sendDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  description: Must match the draft's current version, so the agent sends what they last saw.
+      responses:
+        '200':
+          description: Sent. The subject, body and templates are null.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller, or the client is no longer theirs or has been deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422':
+          description: |
+            The subject or body is empty, still contains a placeholder that
+            cannot be filled in, or still has the untouched details slot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '502':
+          description: SES refused or failed the message. The draft stays `DRAFT`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
+
+  /api/engagement/drafts/news:
+    post:
+      tags: [drafts]
+      summary: Put an approved report on each chosen client's News Alert draft (news-alert-drafts plan 5.5)
+      description: |
+        "Notify selected clients of news" on Event Alerts. engagement-service reads each chosen
+        client's approved report from event-alert-service with the caller's token
+        (`POST /api/alerts/approved-reports/package`), which releases a client only when the alert
+        is still the agent's, in Plan client briefing and covered by a valid approval. Each client's
+        report goes on that client's open News Alert draft, or a new one. A report already on an open
+        or sent draft is not added again, and a draft holds at most
+        `engagement.news.max-reports-per-email` reports (default 30). No model is called: the subject
+        and summary are built from the reports. Purpose `NEWS_ALERT`, tone `NONE` and source `NEWS`
+        are fixed.
+      operationId: createNewsDrafts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, alertIds]
+              properties:
+                eventId: { type: string, format: uuid }
+                alertIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The drafts made or extended, and the reports skipped with the reason.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [drafts, skipped]
+                properties:
+                  drafts:
+                    type: array
+                    items:
+                      type: object
+                      required: [draftId, clientId, created, reportCount, added]
+                      properties:
+                        draftId: { type: string, format: uuid }
+                        clientId: { type: string, format: uuid }
+                        created: { type: boolean }
+                        reportCount: { type: integer }
+                        added: { type: array, items: { type: string, format: uuid } }
+                  skipped:
+                    type: array
+                    items:
+                      type: object
+                      required: [alertId, reason]
+                      properties:
+                        alertId: { type: string, format: uuid }
+                        clientRef: { type: string, nullable: true }
+                        reason:
+                          type: string
+                          enum: [NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, ALREADY_ON_DRAFT, DRAFT_BEING_SENT, LIMIT_REACHED]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: The event is not one of the caller's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: event-alert-service is unavailable. No draft was made.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/engagement/drafts/news/open-alerts:
+    get:
+      tags: [drafts]
+      summary: The alerts on the caller's open News Alert drafts
+      description: Event Alerts uses this to stop a client on an open news draft being dismissed there (plan 5.1).
+      operationId: listOpenNewsAlerts
+      responses:
+        '200':
+          description: Alert IDs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alertIds]
+                properties:
+                  alertIds: { type: array, items: { type: string, format: uuid } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/engagement/drafts/{draftId}/reports/{alertId}:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+      - name: alertId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [drafts]
+      summary: Take one report off an open News Alert draft
+      description: |
+        The client stays in Plan client briefing. The summary and subject are rebuilt unless the
+        agent changed them (then `news.rebuildSuggested` is true). Removing the last report discards
+        the draft. Audited as `DRAFT_REPORT_REMOVED`.
+      operationId: removeNewsReport
+      responses:
+        '200':
+          description: The draft as it is now.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft or report for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/engagement/drafts/{draftId}/summary/rebuild:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [drafts]
+      summary: Build a News Alert draft's summary and subject again from its reports (no model call)
+      description: With `keep=true` the agent's text is kept and the "Rebuild summary?" prompt is cleared.
+      operationId: rebuildNewsSummary
+      parameters:
+        - name: keep
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: The draft as it is now.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/engagement/drafts/{draftId}/pdf:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    get:
+      tags: [drafts]
+      summary: Preview a News Alert draft's combined PDF
+      description: |
+        Exactly the file the client gets: rendered by event-alert-service from the draft's
+        approvals (`POST /api/alerts/approved-reports/pdf`), with the caller's name on the cover.
+        It holds no client data and is not stored.
+      operationId: previewNewsPdf
+      responses:
+        '200':
+          description: The PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503':
+          description: event-alert-service could not make the PDF.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/engagement/drafts/{draftId}/news-status:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [drafts]
+      summary: Retry moving a sent News Alert draft's clients to Sent Out
+      description: |
+        After SES accepted the email, engagement-service calls `POST /api/alerts/sent-out`. If that
+        failed, the draft is still `SENT` with `news.sentOutSynced` false, and this retries it. The
+        call is idempotent and never sends the email again.
+      operationId: retryNewsStatus
+      responses:
+        '200':
+          description: The draft with `news.sentOutSynced` true.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503':
+          description: event-alert-service is unavailable; try again later.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/engagement/preferences:
+    get:
+      tags: [preferences]
+      summary: The caller's notification preferences
+      operationId: getPreferences
+      responses:
+        '200':
+          description: Preferences. Defaults apply until the agent saves them.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preferences' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [preferences]
+      summary: Replace the caller's notification preferences
+      description: |
+        Turning invites off stops new invites, updates and cancellations;
+        entries already in the agent's calendar stay. Turning reminders off
+        cancels pending reminders and schedules none until turned on again.
+      operationId: updatePreferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Preferences' }
+      responses:
+        '200':
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preferences' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+
+  securitySchemes:
+    bearer-jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito access token for the CRM app client. Validated at API Gateway and again by this service.
+
+  parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DraftId:
+      name: draftId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: The request does not match the schema or breaks a rule stated on the field.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing, expired or invalid token. Normally returned by API Gateway's authorizer before this service is reached.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: The caller is not in the `AGENT` group.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: No such record for the caller. Another agent's records also return 404.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ClientNotFound:
+      description: client-service refused the client for the caller (not theirs, deleted or unknown). Nothing was saved.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: |
+        `version` does not match the stored version, or the record's status
+        does not allow the change (for example, an already sent draft).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ClientServiceUnavailable:
+      description: client-service could not be reached. Nothing was saved or sent (fail closed).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    EventInput:
+      type: object
+      required: [title, startsAt, endsAt]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Shown in the agent's calendar and reminders. Never sent to a model.
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        location:
+          type: string
+          maxLength: 200
+          nullable: true
+        startsAt:
+          type: string
+          format: date-time
+          description: Must be in the future when the event is created.
+        endsAt:
+          type: string
+          format: date-time
+          description: After `startsAt` and at most 24 hours later.
+        clientId:
+          type: string
+          format: uuid
+          nullable: true
+          description: One of the caller's clients, checked with client-service.
+        reminderOffsetsMinutes:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          description: Minutes before `startsAt` to send a reminder email. Empty means no reminders.
+          items:
+            type: integer
+            enum: [15, 30, 60, 1440]
+          default: []
+
+    EventUpdate:
+      allOf:
+        - $ref: '#/components/schemas/EventInput'
+        - type: object
+          required: [version]
+          properties:
+            version: { type: integer, minimum: 0 }
+
+    Event:
+      type: object
+      required: [id, title, startsAt, endsAt, status, invite, reminders, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        clientId: { type: string, format: uuid, nullable: true }
+        status:
+          type: string
+          enum: [SCHEDULED, CANCELLED]
+        invite:
+          type: object
+          description: The latest invite, update or cancellation queued for this event.
+          required: [status, sequence]
+          properties:
+            status:
+              $ref: '#/components/schemas/MailStatus'
+            sequence:
+              type: integer
+              description: The iCalendar `SEQUENCE` of the latest invite.
+        reminders:
+          type: array
+          items: { $ref: '#/components/schemas/Reminder' }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Reminder:
+      type: object
+      required: [offsetMinutes, dueAt, status]
+      properties:
+        offsetMinutes: { type: integer, enum: [15, 30, 60, 1440] }
+        dueAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/MailStatus' }
+
+    MailStatus:
+      type: string
+      description: |
+        `PENDING` queued; `SENT` accepted by SES; `FAILED` after 3 attempts or
+        no usable address; `MISSED` a reminder whose meeting had already
+        started (for example, the stack was stopped); `CANCELLED` replaced or
+        cancelled; `DISABLED` not queued because the agent turned it off.
+      enum: [PENDING, SENT, FAILED, MISSED, CANCELLED, DISABLED]
+
+    Holiday:
+      type: object
+      required: [id, countryCode, date, name, observed]
+      properties:
+        id: { type: string, format: uuid }
+        countryCode: { type: string, example: SG }
+        date: { type: string, format: date, example: '2026-12-25' }
+        name: { type: string, example: Christmas Day }
+        observed:
+          type: boolean
+          description: True for a day in lieu of a holiday that falls on a Sunday.
+
+    HolidayCoverage:
+      type: object
+      required: [countryCode]
+      properties:
+        countryCode: { type: string, example: SG }
+        coveredThrough:
+          type: string
+          format: date
+          nullable: true
+          description: 31 December of the latest year with holidays. Null or absent when there are none.
+          example: '2027-12-31'
+
+    DraftPurpose:
+      type: string
+      enum: [CHECK_IN, MEETING_FOLLOW_UP, HOLIDAY_GREETING, PRE_HOLIDAY_REVIEW, HEALTH_CHECK_IN, ALERT_FOLLOW_UP, NEWS_ALERT]
+      description: |
+        `HEALTH_CHECK_IN` is a follow-up from Client Health (ADR-0068).
+        `NEWS_ALERT` is a client's email with the reports the agent approved on
+        Event Alerts; it is made only by `POST /api/engagement/drafts/news`,
+        never through `POST /api/engagement/drafts` (400). `ALERT_FOLLOW_UP`
+        appears only on older drafts: it was replaced by `NEWS_ALERT`, and a
+        new one is refused (400).
+
+    DraftTone:
+      type: string
+      enum: [FORMAL, WARM, NONE]
+      description: '`NONE` only with `NEWS_ALERT`, whose text comes from the reports.'
+
+    DraftStatus:
+      type: string
+      enum: [DRAFT, SENT, DISCARDED]
+
+    DraftInput:
+      type: object
+      required: [clientId, purpose, tone]
+      properties:
+        clientId: { type: string, format: uuid }
+        purpose: { $ref: '#/components/schemas/DraftPurpose' }
+        tone: { $ref: '#/components/schemas/DraftTone' }
+        eventId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            One of the caller's events with this client. Required for
+            `MEETING_FOLLOW_UP`; must have ended.
+        healthTaskId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          nullable: true
+          description: |
+            The caller's Client Health task about this client. Required for
+            `HEALTH_CHECK_IN` and allowed only there.
+          example: task-000001
+        alertId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Not accepted any more: alert follow-ups were replaced by News Alert
+            drafts (400).
+
+    DraftUpdate:
+      type: object
+      required: [subject, body, version]
+      description: Plain text with the client's and agent's names written out (ADR-0056).
+      properties:
+        subject: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, minLength: 1, maxLength: 5000 }
+        version: { type: integer, minimum: 0 }
+
+    Draft:
+      type: object
+      required: [id, clientId, purpose, tone, subjectTemplate, bodyTemplate, edited, source, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid, nullable: true }
+        healthTaskId:
+          type: string
+          nullable: true
+          description: The Client Health task a `HEALTH_CHECK_IN` came from.
+        alertId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The alert an `ALERT_FOLLOW_UP` came from.
+        purpose: { $ref: '#/components/schemas/DraftPurpose' }
+        tone: { $ref: '#/components/schemas/DraftTone' }
+        subject:
+          type: string
+          nullable: true
+          description: |
+            The subject with the names filled in: what the agent edits and
+            the client receives. Null in lists and when the names cannot be
+            looked up.
+          example: 'Season''s greetings, Synthetic'
+        body:
+          type: string
+          nullable: true
+          description: The body with the names filled in. Null as for `subject`.
+        subjectTemplate:
+          type: string
+          nullable: true
+          description: |
+            The stored form. May contain `{{client_first_name}}` and
+            `{{agent_name}}`; a follow-up's body may also contain
+            `{{agent_details}}`, shown as `[Add your details here]`. Null once
+            the draft is sent or discarded (ADR-0068).
+          example: 'Season''s greetings, {{client_first_name}}'
+        bodyTemplate:
+          type: string
+          nullable: true
+          description: The stored body. Null as for `subjectTemplate`.
+          example: |
+            Dear {{client_first_name}},
+
+            With Christmas Day coming up on 25 December, I wanted to wish you
+            and your family a restful holiday season. If you would like to
+            catch up before the year ends, I would be glad to find a time
+            that suits you.
+
+            Warm regards,
+            {{agent_name}}
+        source:
+          type: string
+          enum: [AI, TEMPLATE, NEWS]
+          description: '`NEWS` for a News Alert draft, built from approved reports with no model call.'
+        sourceReason:
+          type: string
+          nullable: true
+          description: Why a template was used. Null when `source` is `AI`.
+          enum: [ai_disabled, daily_cap_reached, monthly_quota_reached, model_timeout, model_error, screen_rejected, null]
+        edited:
+          type: boolean
+          description: Whether the agent changed the generated text. Also in the send's audit event.
+        holiday:
+          anyOf:
+            - $ref: '#/components/schemas/Holiday'
+            - $ref: '#/components/schemas/NullValue'
+          description: The holiday the draft refers to, if any.
+        status: { $ref: '#/components/schemas/DraftStatus' }
+        sentAt: { type: string, format: date-time, nullable: true }
+        version: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        news:
+          anyOf:
+            - $ref: '#/components/schemas/NewsDraft'
+            - $ref: '#/components/schemas/NullValue'
+          description: A News Alert draft's reports and what is added at send time; null for other drafts.
+
+    NewsDraft:
+      type: object
+      required: [reports, summaryEdited, rebuildSuggested, guide, fixedText, sentOutSynced, maxReports, unmarkedReports]
+      properties:
+        reports:
+          type: array
+          items:
+            type: object
+            required: [alertId, approvalId, eventId, issuer, headline, newsDate, validUntil]
+            properties:
+              alertId: { type: string, format: uuid }
+              approvalId: { type: string, format: uuid }
+              eventId: { type: string, format: uuid }
+              issuer: { type: string }
+              headline: { type: string }
+              newsDate: { type: string, format: date-time }
+              validUntil: { type: string, format: date-time, description: The approval can be used to send until then. }
+        summaryEdited: { type: boolean, description: The agent changed the summary the service built. }
+        rebuildSuggested: { type: boolean, description: 'The reports changed after the agent edited the summary: offer "Rebuild summary?".' }
+        guide:
+          type: string
+          description: The read-only "Where to find each report" guide. Page numbers are added from the PDF when it is sent.
+        fixedText:
+          type: string
+          description: The portfolio line, disclaimer and relationship manager's details added to every email. The agent cannot change them.
+        sentOutSynced: { type: boolean, description: 'After sending: true when nothing is left to retry (every report is Sent Out, or refused for good and listed in unmarkedReports).' }
+        maxReports: { type: integer }
+        unmarkedReports:
+          type: array
+          description: |
+            Reports that could not be marked Sent Out after sending and never can be (the client was reassigned, or is not in
+            Plan client briefing). They no longer keep the retry alive; the page says which they are.
+          items:
+            type: object
+            required: [alertId, issuer, reason]
+            properties:
+              alertId: { type: string, format: uuid }
+              issuer: { type: string }
+              reason: { type: string, enum: [NOT_AUTHORISED, INVALID_STATUS] }
+
+    Preferences:
+      type: object
+      required: [invitesEnabled, remindersEnabled]
+      properties:
+        invitesEnabled: { type: boolean, default: true }
+        remindersEnabled: { type: boolean, default: true }
+
+    NullValue:
+      description: JSON null. OpenAPI 3.0 has no null type, so a nullable reference is anyOf the schema and this.
+      type: object
+      nullable: true
+      enum: [null]
+
+    Problem:
+      type: object
+      description: Error body, matching the shape the other CRM services return.
+      properties:
+        status: { type: integer, example: 404 }
+        error: { type: string, example: 'Not Found' }
+        message: { type: string, example: 'Event not found' }
+        timestamp: { type: string, format: date-time }
+
+security:
+  - bearer-jwt: []

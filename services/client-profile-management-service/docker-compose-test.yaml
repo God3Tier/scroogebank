@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: myapp
+    healthcheck:
+      # Over TCP: the image's first-start setup server listens on the Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d myapp"]
+      interval: 2s
+      timeout: 5s
+      retries: 2
+
+  # KMS and DynamoDB for the encryption package's LocalStack test, and S3 for
+  # the documents package's.
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      SERVICES: kms,dynamodb,s3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  tools:
+    platform: linux/amd64
+    build:
+      context: .
+      target: tools
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+
+  test-runner:
+    platform: linux/amd64
+    image: golang:1.27.1-bookworm
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ./sqlboiler.docker.toml:/workspace/sqlboiler.toml:ro
+      # The OpenAPI contracts the tests check responses against (ADR-0063).
+      - ../../docs/api:/openapi:ro
+    environment:
+      OPENAPI_DIR: /openapi
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: myapp
+      ENCRYPTION_TEST_ENDPOINT: http://localstack:4566
+      DOCUMENTS_TEST_ENDPOINT: http://localstack:4566
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy

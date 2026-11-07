@@ -1,0 +1,81 @@
+package account
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"uuid"
+
+	"account-service/src/internal/clients"
+	accounterrors "account-service/src/internal/errors"
+	"account-service/src/internal/models"
+	repomock "account-service/src/internal/repository/account"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestCreateAccount(t *testing.T) {
+	ctx := context.Background()
+	const authorization = "Bearer caller-token"
+	databaseErr := errors.New("database unavailable")
+	agent := models.Caller{Subject: "agent-sub"}
+	admin := models.Caller{Subject: "admin-sub", Admin: true}
+	input := models.CreateAccountInput{
+		ClientID:       uuid.New(),
+		Type:           models.AccountType("SAVINGS"),
+		Status:         models.AccountStatus("ACTIVE"),
+		InitialDeposit: 100,
+		Currency:       "SGD",
+		BranchID:       "SG-001",
+	}
+	stored := input
+	stored.OwnerAgentID = "client-owner-sub"
+	verified := clients.Client{OwnerAgentID: "client-owner-sub", Verified: true}
+	unverified := clients.Client{OwnerAgentID: "client-owner-sub"}
+
+	tests := map[string]struct {
+		caller    models.Caller
+		client    clients.Client
+		pending   bool
+		lookupErr error
+		repoErr   error
+		wantErr   error
+		callRepo  bool
+	}{
+		"stores the client's owner, not the caller": {caller: agent, client: verified, callRepo: true},
+		"returns repository error":                  {caller: agent, client: verified, repoErr: databaseErr, wantErr: databaseErr, callRepo: true},
+		"refuses a missing or foreign client":       {caller: agent, lookupErr: accounterrors.ErrClientNotFound, wantErr: accounterrors.ErrClientNotFound},
+		"fails closed when the client service is down": {
+			caller: agent, lookupErr: accounterrors.ErrClientServiceUnavailable, wantErr: accounterrors.ErrClientServiceUnavailable,
+		},
+		// An unverified client's accounts open as pending (ADR-0050).
+		"refuses an agent an active account for an unverified client":   {caller: agent, client: unverified, wantErr: accounterrors.ErrClientNotVerified},
+		"lets an agent open a pending account for an unverified client": {caller: agent, client: unverified, pending: true, callRepo: true},
+		// Admins only read client data (ADR-0059), so nothing is looked up.
+		"refuses an admin": {caller: admin, client: verified, wantErr: accounterrors.ErrForbidden},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			in, want := input, stored
+			if test.pending {
+				in.Status, want.Status = models.AccountStatusPending, models.AccountStatusPending
+			}
+			directory := clients.NewMockDirectory(t)
+			if !test.caller.Admin {
+				directory.On("Lookup", ctx, input.ClientID.String(), authorization).Return(test.client, test.lookupErr).Once()
+			}
+			repo := repomock.NewMockRepository(t)
+			if test.callRepo {
+				repo.On("CreateAccount", ctx, want).Return(test.repoErr).Once()
+			}
+
+			err := NewAccountService(repo, directory).CreateAccount(ctx, in, test.caller, authorization)
+
+			if test.wantErr != nil {
+				assert.ErrorIs(t, err, test.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}

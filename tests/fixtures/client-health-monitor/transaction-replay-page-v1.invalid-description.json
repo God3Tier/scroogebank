@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1",
+  "items": [
+    {
+      "transactionId": "txn-description-001",
+      "clientId": "client-1",
+      "accountId": "account-1",
+      "type": "Deposit",
+      "amount": "4250.00",
+      "currency": "SGD",
+      "transactionDate": "2026-04-01T01:00:00Z",
+      "status": "Completed",
+      "activityKind": "Automated",
+      "sourceFingerprint": "synthetic-employer-001",
+      "description": "This field must not cross the Client Health boundary"
+    }
+  ],
+  "nextCursor": null
+}

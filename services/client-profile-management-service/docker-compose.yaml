@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sqlboiler-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: myapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  # Applies data/ with Flyway, from the image each task's db-migrate container
+  # runs in AWS (docs/database/migrations.md), and creates the service's own
+  # login. make run and make migrate run it. The password is for this local
+  # database only: make run connects as postgres.
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: infrastructure/db-migrate/Dockerfile
+    image: crm/db-migrate:local
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/myapp
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: postgres
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql/clients
+      FLYWAY_PLACEHOLDERS_APP_LOGIN: client_service
+      FLYWAY_PLACEHOLDERS_APP_PASSWORD: client_service
+
+  # The auditor's messaging moved from Kafka to SQS (ADR-0004). Local SQS
+  # is provided by the localstack service in compose.yaml, not here.
+
+  # KMS and DynamoDB for client data encryption (ADR-0030), and S3 for the
+  # identity documents (ADR-0041). Port 4567, so it can run beside the
+  # auditor's LocalStack on 4566. Keys and documents live only as long as this
+  # container: after a restart, clients created before it cannot be read, so
+  # run make db-reset.
+  localstack:
+    image: localstack/localstack:3
+    container_name: client-keys-localstack
+    ports:
+      - "4567:4566"
+    environment:
+      SERVICES: kms,dynamodb,s3
+      DEFAULT_REGION: ap-southeast-1
+    volumes:
+      - ./localstack/init-client-keys.sh:/etc/localstack/init/ready.d/init-client-keys.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pgdata:

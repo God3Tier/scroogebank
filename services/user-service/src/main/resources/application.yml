@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${USER_DB_NAME}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  # The client that calls the Auditor's HTTP API. HttpURLConnection rather
+  # than the JDK HttpClient: in AWS, after about 30 s without a call, the JDK
+  # client received an HTTP/1.1 response's headers but never finished reading
+  # the body, which had been sent in full (ADR-0033). The timeouts make any such
+  # stall fail fast instead of holding a request thread.
+  http:
+    client:
+      factory: simple
+      connect-timeout: 2s
+      read-timeout: 3s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI}
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# Off unless the `local` profile is active (application-local.yml). Opt-in
+# rather than opt-out, so a deployment that forgets to set a profile keeps the
+# API spec unpublished instead of exposing it.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    path: /swagger-ui.html
+
+idp:
+  cognito:
+    user-pool-id: ${COGNITO_USER_POOL_ID}
+    app-client-id: ${COGNITO_APP_CLIENT_ID}
+    region: ${AWS_REGION}
+
+audit:
+  sqs:
+    queue-url: ${AUDIT_QUEUE_URL:}
+
+auditor:
+  base-url: ${AUDITOR_BASE_URL:http://localhost:8080}
+  # The auditor's internal gRPC endpoint (host:port via ECS Service Connect), read by the activity feed.
+  grpc-target: ${AUDITOR_GRPC_TARGET}
+  # PEM file of the CA that signed the auditor's certificate (ADR-0021). Empty
+  # means plaintext, for local development only.
+  grpc-tls-ca: ${AUDITOR_GRPC_TLS_CA:}
+
+root-admin:
+  email: ${ROOT_ADMIN_EMAIL}
+
+logging:
+  level:
+    bank.user: INFO

@@ -1,0 +1,521 @@
+openapi: 3.0.3
+
+# client-profile-management-service's REST API (ADR-0017). Written from the
+# code when contract tests were added (ADR-0063), so it records what the
+# service does today, including its mix of JSON and plain-text errors:
+# handlers that use http.Error answer text/plain, while the authentication,
+# role and ownership middleware answer JSON.
+#
+# The dashboard's /aggregates routes are in dashboard-aggregates.yaml.
+
+info:
+  title: Scrooge CRM - Client profiles
+  version: v1
+  description: |
+    Client profiles and their identity documents. Each client belongs to the
+    agent who created it, until an admin reassigns it (ADR-0060). Agents
+    create, read, update, verify and delete their own clients; admins read
+    every client and may only reassign (ADR-0059). Deleted clients are kept
+    but never returned (ADR-0036).
+
+    The ownership check answers 404 for another agent's client, so client
+    IDs cannot be probed.
+
+servers:
+  - url: /
+
+tags:
+  - name: clients
+  - name: documents
+    description: Identity documents, the evidence for verifying a client (ADR-0041).
+
+security:
+  - bearerAuth: []
+
+paths:
+  /internal/v1/clients/{clientId}/assignment:
+    get:
+      tags: [clients]
+      summary: Resolve the active Agent assignment for Client Health
+      description: Machine-only endpoint for the configured Client Health Cognito client; it accepts no Agent identifier.
+      operationId: getClientAssignment
+      security:
+        - assignmentMachineAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Current active assignment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientAssignment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Client does not exist or is deleted. }
+        '410': { description: Client exists without an active assignment. }
+        '503': { description: Assignment storage is unavailable. }
+  /api/clients:
+    post:
+      tags: [clients]
+      summary: Create a client for the calling agent
+      operationId: createClient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientInput' }
+      responses:
+        '201':
+          description: Created; the client is the caller's and unverified.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_id, status]
+                properties:
+                  client_id: { type: string, format: uuid }
+                  status: { type: string, example: Client profile created successfully }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: A client with this email or phone number exists.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+    get:
+      tags: [clients]
+      summary: The caller's clients, a page at a time
+      description: An agent gets their own clients; an admin gets every client (ADR-0043).
+      operationId: listClients
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: One page of clients.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientPage' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: The caller lacks a CRM role (JSON), or the service refused the caller (text).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /api/clients/reassignments:
+    post:
+      tags: [clients]
+      summary: Move clients, with their accounts, to another agent
+      description: |
+        Admins only (ADR-0060). Names the receiving user and exactly one of
+        `from_user_id` (every client of that user, at most 1000) or
+        `client_ids` (at most 100). Users are user-service IDs. Each client
+        moved is audited with the agent before and after.
+      operationId: reassignClients
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_user_id]
+              properties:
+                to_user_id: { type: string, format: uuid }
+                from_user_id: { type: string, format: uuid }
+                client_ids:
+                  type: array
+                  maxItems: 100
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The clients moved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reassigned, client_ids]
+                properties:
+                  reassigned: { type: integer }
+                  client_ids:
+                    type: array
+                    items: { type: string, format: uuid }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such user or client.
+          content:
+            text/plain:
+              schema: { type: string }
+        '409':
+          description: The user has more than 1000 clients; name them with client_ids.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503':
+          description: user-service or account-service did not answer.
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/clients/{clientId}:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+    get:
+      tags: [clients]
+      summary: One client
+      operationId: getClient
+      responses:
+        '200':
+          description: The client.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    put:
+      tags: [clients]
+      summary: Replace a client's details
+      description: Agents only, on their own clients. Verification and timestamps are not changed here.
+      operationId: updateClient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientDetails' }
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Another client has this email or phone number.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+    delete:
+      tags: [clients]
+      summary: Delete a client
+      description: |
+        Agents only, on their own clients, and only once the client has no
+        accounts: account-service is asked with the caller's token. The row
+        is kept but never returned again (ADR-0036).
+      operationId: deleteClient
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The client still has accounts.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '503':
+          description: account-service did not answer.
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /api/clients/{clientId}/verify:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+    post:
+      tags: [clients]
+      summary: Mark a client's identity as verified
+      description: |
+        Agents only, on their own clients. The body is optional: without
+        `document_ids`, the client is verified without a document and the
+        audit event says so (ADR-0041 decision 5).
+      operationId: verifyClient
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document_ids:
+                  type: array
+                  description: Documents of this client that the agent checked.
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Verified.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Already verified.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /api/clients/{clientId}/documents:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+    post:
+      tags: [documents]
+      summary: Upload an identity document
+      description: |
+        Agents only, on their own clients. One PDF, JPEG or PNG of at most
+        5 MB, as the multipart field `file`; its type is read from the
+        content, not the file name, and the file name is not kept.
+      operationId: uploadClientDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored.
+          headers:
+            Location:
+              schema: { type: string }
+              description: '`/api/clients/{clientId}/documents/{documentId}`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientDocument' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: Larger than 5 MB.
+          content:
+            text/plain:
+              schema: { type: string }
+        '415':
+          description: Not a PDF, JPEG or PNG.
+          content:
+            text/plain:
+              schema: { type: string }
+        '500': { $ref: '#/components/responses/ServerError' }
+    get:
+      tags: [documents]
+      summary: A client's documents, newest first, without their content
+      operationId: listClientDocuments
+      responses:
+        '200':
+          description: The documents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ClientDocument' }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /api/clients/{clientId}/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [documents]
+      summary: One document's content
+      description: 'Sent with its stored type, `Cache-Control: no-store` and `X-Content-Type-Options: nosniff` (ADR-0041 decision 4).'
+      operationId: getClientDocument
+      responses:
+        '200':
+          description: The document.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/TextError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A Cognito access token from the CRM app client, with the ADMIN or AGENT group.
+    assignmentMachineAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Client-credentials token from the configured Client Health app client with exactly the assignment-read scope.
+
+  parameters:
+    ClientId:
+      name: clientId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: No valid access token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The caller's role may not use this route; admins only read client data (ADR-0059).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: No such client, or another agent's (JSON, from the ownership check), or no such document (text).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+        text/plain:
+          schema: { type: string }
+    ServerError:
+      description: Unexpected failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+        text/plain:
+          schema: { type: string }
+    TextError:
+      description: The request was refused.
+      content:
+        text/plain:
+          schema: { type: string }
+
+  schemas:
+    ClientAssignment:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, clientId, assignedAgentSubject, active, assignmentVersion, updatedAt]
+      properties:
+        schemaVersion: { type: string, enum: ['1'] }
+        clientId: { type: string, format: uuid }
+        assignedAgentSubject: { type: string, minLength: 1, maxLength: 128 }
+        active: { type: boolean, enum: [true] }
+        assignmentVersion: { type: integer, format: int64, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Message:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string }
+
+    ClientDetails:
+      type: object
+      properties:
+        first_name: { type: string }
+        last_name: { type: string }
+        date_of_birth: { type: string, format: date-time }
+        gender: { type: string }
+        email: { type: string }
+        phone_number: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string }
+        postal_code: { type: string }
+
+    ClientInput:
+      description: The client's details. The owning agent is the caller; `agent_id` is accepted but ignored.
+      allOf:
+        - $ref: '#/components/schemas/ClientDetails'
+        - type: object
+          properties:
+            agent_id: { type: string }
+
+    Client:
+      type: object
+      required: [client_id, first_name, last_name, date_of_birth, gender, email, phone_number, address, city, state, country, postal_code, verification_status, assigned_agent_id, created_at, updated_at]
+      properties:
+        client_id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        date_of_birth: { type: string, format: date-time }
+        gender: { type: string }
+        email: { type: string }
+        phone_number: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string }
+        postal_code: { type: string }
+        verification_status: { type: string, description: '`VERIFIED` once verified; clients verified before ADR-0041 hold `verified`.' }
+        verified_by_agent_id: { type: string, description: 'Absent until verified, and for clients verified before ADR-0041.' }
+        verified_at: { type: string, format: date-time }
+        verified_with_documents: { type: boolean, description: 'False when verified without a document.' }
+        assigned_agent_id: { type: string, description: 'The owning agent''s Cognito sub.' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ClientPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items: { $ref: '#/components/schemas/Client' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    ClientDocument:
+      type: object
+      required: [document_id, client_id, content_type, size_bytes, uploaded_by_agent_id, uploaded_at, verification_evidence]
+      properties:
+        document_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        content_type: { type: string, enum: [application/pdf, image/jpeg, image/png] }
+        size_bytes: { type: integer }
+        uploaded_by_agent_id: { type: string }
+        uploaded_at: { type: string, format: date-time }
+        verification_evidence: { type: boolean, description: 'True for the documents named when the client was verified.' }

@@ -1,0 +1,46 @@
+package account
+
+import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"account-service/src/internal/contract"
+	clienterrors "account-service/src/internal/errors"
+	servicemock "account-service/src/internal/service/account"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+func TestDeleteAccount(t *testing.T) {
+	const id = "00000000-0000-0000-0000-000000000123"
+	tests := map[string]struct {
+		query      string
+		serviceErr error
+		wantStatus int
+		callSvc    bool
+	}{
+		"deletes account":               {query: "id=" + id, wantStatus: http.StatusOK, callSvc: true},
+		"rejects missing ID":            {wantStatus: http.StatusBadRequest},
+		"rejects a malformed ID":        {query: "id=not-a-uuid", wantStatus: http.StatusBadRequest},
+		"maps invalid account":          {query: "id=" + id, serviceErr: clienterrors.ErrBadInput, wantStatus: http.StatusBadRequest, callSvc: true},
+		"maps missing account":          {query: "id=" + id, serviceErr: clienterrors.ErrNotFound, wantStatus: http.StatusNotFound, callSvc: true},
+		"maps unexpected service error": {query: "id=" + id, serviceErr: errors.New("database unavailable"), wantStatus: http.StatusInternalServerError, callSvc: true},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			svc := servicemock.NewMockAccountService(t)
+			if test.callSvc {
+				svc.On("DeleteAccount", mock.Anything, id).Return(test.serviceErr).Once()
+			}
+			req := httptest.NewRequest(http.MethodDelete, "/api/accounts?"+test.query, nil)
+			res := httptest.NewRecorder()
+			NewAccountController(svc).DeleteAccount(res, req)
+			contract.Check(t, "accounts-api.yaml", http.MethodDelete, "/api/accounts/{accountId}", res)
+			assert.Equal(t, test.wantStatus, res.Code)
+			assert.NotContains(t, res.Body.String(), "database unavailable", "a 500 does not send the error's text")
+		})
+	}
+}
