@@ -12,7 +12,12 @@ import java.util.List;
 public class MaterialityScorer {
 
     public static final String RULE_VERSION = "materiality-v1";
-    public static final BigDecimal ALERT_THRESHOLD = new BigDecimal("60.00");
+    /**
+     * The least score that makes an alert. It was 60 until 2026-11-07; now every client whose exposure can be worked out gets an
+     * alert, and the score only ranks them (a small holding scores low but is still shown). A client with no evaluable
+     * holding still gets none.
+     */
+    public static final BigDecimal ALERT_THRESHOLD = new BigDecimal("0.00");
 
     /** The most the event severity can add to a client's score. */
     public static final BigDecimal SEVERITY_WEIGHT = new BigDecimal("30.00");

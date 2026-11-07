@@ -27,6 +27,16 @@ class MaterialityScorerTest {
     }
 
     @Test
+    void aSmallHoldingScoresLowButStillMakesAnAlert() {
+        MaterialityScore small = scorer.score(new MaterialityInputs(new BigDecimal("0.60"), new BigDecimal("0.10"),
+                new BigDecimal("0.80"), new BigDecimal("0.90"), ValuationFreshness.FRESH));
+
+        assertThat(small.score()).isLessThan(new BigDecimal("60.00"));
+        assertThat(small.alertEligible()).isTrue();
+        assertThat(small.threshold()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
     void appliesDeterministicStalePenalty() {
         MaterialityScore result = scorer.score(inputs(ValuationFreshness.STALE));
 
