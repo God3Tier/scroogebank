@@ -16,7 +16,7 @@ function formatDateTime(value) {
 
 // body: the text to show, when it is not the AI's original (the agent's saved edit or approved text).
 // label: says which text is shown. The PDF is rendered on the server, in the layout the client receives.
-// editor: the Edit / Preview toggle (useReportEditor). In Edit the report is one text box, in the same place.
+// editor: the Edit / Save and preview toggle (useReportEditor). In Edit the report is one text box, in the same place.
 export function EventReport({ report, eventId, body: shown, label, editor }) {
   const [pdfError, setPdfError] = useState('')
   const [downloading, setDownloading] = useState(false)
@@ -47,14 +47,14 @@ export function EventReport({ report, eventId, body: shown, label, editor }) {
           {editor?.canEdit && (
             <button className="button button--primary" type="button" onClick={editor.toggle} disabled={editor.saving}
               aria-pressed={editor.editing}>
-              {editor.editing ? (editor.saving ? 'Checking…' : 'Preview') : 'Edit'}
+              {editor.editing ? (editor.saving ? 'Checking…' : 'Save and preview') : 'Edit'}
             </button>
           )}
           {eventId && (
             <button className="button button--secondary" type="button" onClick={download}
               disabled={downloading || Boolean(editor?.editing)}
-              title={editor?.editing ? 'Click Preview first, so your edit is saved and goes into the PDF' : undefined}>
-              {downloading ? 'Preparing PDF…' : editor?.editing ? 'Preview first to download' : 'Download report as PDF'}
+              title={editor?.editing ? 'Click Save and preview first, so your edit is saved and goes into the PDF' : undefined}>
+              {downloading ? 'Preparing PDF…' : editor?.editing ? 'Save and preview to download' : 'Download report as PDF'}
             </button>
           )}
         </div>
@@ -65,7 +65,7 @@ export function EventReport({ report, eventId, body: shown, label, editor }) {
         <div className="event-report__edit">
           <p className="holdings-note">
             Editing. The headline and sources stay as they are. One line per item: key facts are Label | Value | Context.
-            You can add or remove lines only under WHAT TO MONITOR (2 to 4). Click Preview to check and save.
+            You can add or remove lines only under WHAT TO MONITOR (2 to 4). Click Save and preview to check and save.
             Your edit is checked again: a figure you add must be in the sources, and advice wording is refused.
           </p>
           <textarea className="event-report__text" aria-label="Report text" spellCheck rows={Math.max(18, editor.text.split('\n').length + 2)}

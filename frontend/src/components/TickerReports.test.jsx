@@ -141,14 +141,40 @@ describe('TickerReports', () => {
     expect(box.value).toContain('EXECUTIVE SUMMARY')
     expect(screen.getByRole('heading', { name: 'Apple beats revenue estimates' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Approve report/ })).toBeDisabled()
-    expect(screen.getByText('Switch to Preview to save your edits first.')).toBeInTheDocument()
+    expect(screen.getByText('Click Save and preview to save your edits first.')).toBeInTheDocument()
 
     fireEvent.change(box, { target: { value: box.value.replace('Partial excerpts.', 'Changed.') } })
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save and preview' }))
 
     await waitFor(() => expect(saveReportEdit).toHaveBeenCalledWith('e1', 1, { ...sections, uncertainty: 'Changed.' }))
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Report text' })).not.toBeInTheDocument()
+  })
+
+  it('asks before saving a changed edit, and No keeps the agent in Edit with nothing saved', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const box = screen.getByRole('textbox', { name: 'Report text' })
+    fireEvent.change(box, { target: { value: box.value.replace('Partial excerpts.', 'Changed.') } })
+    window.confirm.mockReturnValue(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save and preview' }))
+
+    expect(window.confirm).toHaveBeenCalledWith('Save your changes and preview the report?')
+    expect(saveReportEdit).not.toHaveBeenCalled()
+    expect(screen.getByRole('textbox', { name: 'Report text' }).value).toContain('Changed.')
+  })
+
+  it('goes straight back to the preview, without asking, when nothing was changed', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    window.confirm.mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save and preview' }))
+
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(saveReportEdit).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
   it('stays in Edit and names the line when the text or the server refuses an edit', async () => {
@@ -161,12 +187,12 @@ describe('TickerReports', () => {
     const original = box.value
 
     fireEvent.change(box, { target: { value: original.replace('2. Services grew.\n', '') } })
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save and preview' }))
     expect(await screen.findByText(/Line 1: Executive summary must keep exactly 2 items; there is 1/)).toBeInTheDocument()
     expect(saveReportEdit).not.toHaveBeenCalled()
 
     fireEvent.change(box, { target: { value: original.replace('Apple reported higher revenue.', 'Revenue rose 42%.') } })
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save and preview' }))
     expect(await screen.findByText(/Line 2: Executive summary, item 1: The figure 42 is not in the sources/)).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Report text' })).toBeInTheDocument()
   })
@@ -200,8 +226,8 @@ describe('TickerReports', () => {
     createNewsDrafts.mockResolvedValue({ drafts: [{ draftId: 'd1', clientId: DANIEL, created: true, reportCount: 1, added: ['a2'] }], skipped: [] })
     renderPage()
     expect(await screen.findByText(/Approved version 1, with your edits/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Daniel Lim' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Chloe Tan' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Notify selected clients of news' }))
 
@@ -394,7 +420,7 @@ describe('TickerReports', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
 
-    expect(screen.getByRole('button', { name: 'Preview first to download' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save and preview to download' })).toBeDisabled()
   })
 
   it('lists sent reports, read-only, in the Sent out tab', async () => {

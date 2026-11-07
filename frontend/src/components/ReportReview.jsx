@@ -102,7 +102,7 @@ export function ReportReview({ eventId, report, review, clients, selected, editi
               {approval ? 'Approve again' : `Approve report for ${count} selected client${count === 1 ? '' : 's'}`}
             </button>
           </div>
-          {editing && <p className="holdings-note">Switch to Preview to save your edits first.</p>}
+          {editing && <p className="holdings-note">Click Save and preview to save your edits first.</p>}
           <p className="holdings-note">
             {anyInformed
               ? 'Approval is final: you cannot edit the report afterwards. It can be sent for 7 days.'

@@ -26,7 +26,10 @@ export function useReportEditor({ eventId, review, onSaved }) {
     setEditing(true)
   }
 
+  // "Save and preview": when the text was changed the agent is asked first. Yes saves and previews; No keeps them
+  // in Edit with nothing saved, so no typing is lost. Unchanged text just goes back to the preview.
   async function preview() {
+    if (text !== toText(base) && !window.confirm('Save your changes and preview the report?')) return
     const parsed = fromText(text, review.originalSections)
     if (parsed.errors) {
       setErrors(parsed.errors)
