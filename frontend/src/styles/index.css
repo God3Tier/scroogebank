@@ -3405,3 +3405,13 @@ textarea:focus {
 /* Nothing found by the search: said plainly and highlighted, like the "need a decision" label. */
 .queue-empty__notice { display: inline-flex; align-items: center; gap: var(--stack-sm); margin: 0 0 0.75rem; padding: 10px 14px; color: var(--primary); background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); font-size: 14px; }
 .event-outcomes__done { display: inline-flex; align-items: center; gap: var(--stack-sm); margin: 0.5rem 0; padding: 10px 14px; color: var(--primary); background: var(--surface-container); border-radius: var(--radius-lg); font-size: 14px; }
+/* Added websites: five at a time with a search box, and an inline Edit. */
+.source-search { margin: 0.6rem 0 0.4rem; }
+.source-actions { grid-column: 3; display: inline-flex; align-items: center; gap: 0.4rem; justify-self: end; }
+.source-edit__open { display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem; min-width: 5rem; padding: 0.25rem 0.7rem 0.25rem 0.5rem; font-size: 0.82rem; font-weight: 500; color: var(--primary); background: transparent; border: 1px solid var(--outline-variant); border-radius: 999px; cursor: pointer; }
+.source-edit__open .material-symbols-outlined { font-size: 1rem; }
+.source-edit__open:hover:not(:disabled), .source-edit__open:focus-visible { background: var(--surface-container); border-color: var(--primary); }
+.source-edit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.source-edit input { flex: 1 1 14rem; min-width: 12rem; }
+.source-edit button { padding: 0.25rem 0.9rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500; cursor: pointer; }
+
