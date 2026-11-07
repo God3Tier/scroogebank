@@ -151,33 +151,43 @@ class SafeClientReportGeneratorTest {
     }
 
     @Test
-    void aOneSentenceSummaryIsAcceptedOnceThreeDraftsOfTheEventHaveBeenRefused() {
-        ReportOutcome afterTwo = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 2);
-        // Two refused drafts so far: the first try of this call is still strict, the second (the third refusal) relaxes.
-        assertThat(afterTwo.status()).isEqualTo(ReportOutcome.Status.GENERATED);
-        assertThat(afterTwo.attempts()).isEqualTo(2);
+    void aOneSentenceSummaryIsAcceptedOnceFiveDraftsOfTheEventHaveBeenRefused() {
+        ReportOutcome afterFour = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 4);
+        // Four refused drafts so far: the first try of this call is still strict, the second (the fifth refusal) is relaxed.
+        assertThat(afterFour.status()).isEqualTo(ReportOutcome.Status.GENERATED);
+        assertThat(afterFour.attempts()).isEqualTo(2);
 
         calls.set(0);
-        ReportOutcome afterThree = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 3);
-        assertThat(afterThree.status()).isEqualTo(ReportOutcome.Status.GENERATED);
-        assertThat(afterThree.attempts()).as("accepted at the first try").isEqualTo(1);
-        assertThat(afterThree.report().executiveSummary()).hasSize(1);
+        ReportOutcome afterFive = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 5);
+        assertThat(afterFive.status()).isEqualTo(ReportOutcome.Status.GENERATED);
+        assertThat(afterFive.attempts()).as("accepted at the first try").isEqualTo(1);
+        assertThat(afterFive.report().executiveSummary()).hasSize(1);
     }
 
     @Test
-    void theRefusedDraftsOfOneEventNeverAddUpToMoreThanFive() {
+    void theFirstFiveDraftsAreStrictSoAOneSentenceSummaryIsRefusedUntilThen() {
+        ReportOutcome afterThree = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 3);
+
+        // Draft 4 is strict (3 refused so far); draft 5 is strict too (4 refused so far): both refused, one call made two drafts.
+        assertThat(afterThree.status()).isEqualTo(ReportOutcome.Status.ABSTAINED);
+        assertThat(afterThree.reasonCode()).isEqualTo("INVALID_MODEL_SCHEMA");
+        assertThat(afterThree.attempts()).isEqualTo(2);
+    }
+
+    @Test
+    void theRefusedDraftsOfOneEventNeverAddUpToMoreThanEight() {
         calls.set(0);
-        ReportOutcome fourSoFar = generator((request, timeout) -> "{}", true).generate(input(), 4);
+        ReportOutcome sevenSoFar = generator((request, timeout) -> "{}", true).generate(input(), 7);
 
         assertThat(calls.get()).as("one draft left, not two").isEqualTo(1);
-        assertThat(fourSoFar.attempts()).isEqualTo(1);
+        assertThat(sevenSoFar.attempts()).isEqualTo(1);
     }
 
     @Test
     void relaxingOnlyAllowsTheShortSummaryAndNothingElse() {
         String invented = ONE_SENTENCE.replace("$92,279 million\",\"context", "$99,999 million\",\"context");
 
-        ReportOutcome outcome = generator((request, timeout) -> invented, true).generate(input(), 4);
+        ReportOutcome outcome = generator((request, timeout) -> invented, true).generate(input(), 6);
 
         assertThat(outcome.status()).isEqualTo(ReportOutcome.Status.ABSTAINED);
         assertThat(outcome.reasonCode()).isEqualTo("UNSUPPORTED_FIGURE");
