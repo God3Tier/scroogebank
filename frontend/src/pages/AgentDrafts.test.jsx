@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -111,6 +111,22 @@ describe('AgentDrafts', () => {
     expect(purposes).not.toContain('HEALTH_CHECK_IN')
     expect(purposes).not.toContain('ALERT_FOLLOW_UP')
     expect(purposes).toContain('NEWS_ALERT')
+  })
+
+  it('says Client Health emails start on the Client Health page', async () => {
+    renderDrafts()
+
+    const notice = await screen.findByRole('note')
+    expect(notice).toHaveTextContent('Client Health emails cannot be written from here.')
+    expect(within(notice).getByRole('link', { name: 'Client Health' })).toHaveAttribute('href', '/agent/client-health')
+  })
+
+  it('hides the Client Health notice when opened from a task', async () => {
+    listDrafts.mockResolvedValueOnce([])
+    renderDrafts('/agent/drafts?purpose=HEALTH_CHECK_IN&clientId=client-1&healthTaskId=task-1')
+
+    expect(await screen.findByText('From Client Health task task-1')).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 
   it('fills the form in from a Client Health task and sends the task with the request', async () => {

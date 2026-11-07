@@ -745,12 +745,60 @@
   background: var(--ae-surface);
 }
 
-.draft-generate__hint {
+/* A short label in the context box's top right corner. */
+.draft-generate__tag {
   position: absolute;
   top: 12px;
   right: 12px;
   color: var(--ae-text-faint);
   font-size: 10px;
+}
+
+/* Help text in the normal flow, under what it explains. */
+.draft-generate__hint {
+  display: block;
+  margin: 6px 0 0;
+  color: var(--ae-text-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.draft-generate__notice {
+  margin-bottom: var(--stack-md);
+}
+
+.draft-generate__source-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--ae-text);
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.draft-generate__source-title .material-symbols-outlined {
+  flex: none;
+  color: var(--secondary);
+  font-size: 16px;
+}
+
+.engagement-info--notice {
+  border-color: var(--ae-amber-line);
+  background: var(--ae-amber-bg);
+  color: var(--ae-amber-text);
+  font-size: 12px;
+}
+
+.engagement-info--notice .material-symbols-outlined {
+  color: var(--ae-amber-note);
+}
+
+.engagement-info--notice a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
 }
 
 .main .engagement-page .draft-generate__submit {
