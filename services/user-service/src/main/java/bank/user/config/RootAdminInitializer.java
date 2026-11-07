@@ -60,12 +60,12 @@ public class RootAdminInitializer implements CommandLineRunner {
         // contract. AdminAddUserToGroup is idempotent, so repeating it is safe.
         identityProviderClient.addToGroup(rootAdminEmail, Role.ADMIN);
 
-        User rootAdmin = new User(UUID.randomUUID(), "Root", "Admin", rootAdminEmail, Role.ADMIN, idpSub);
+        User rootAdmin = new User(UUID.randomUUID(), "Root", "Admin", rootAdminEmail, Role.ROOT_ADMIN, idpSub);
         rootAdmin.setDeletable(false);
         try {
             userRepository.save(rootAdmin);
             auditEventPublisher.publish("CREATE", "system:root-admin-initializer", "USER",
-                    rootAdmin.getId().toString(), "/internal/root-admin", "SYSTEM", 201, Role.ADMIN.name());
+                    rootAdmin.getId().toString(), "/internal/root-admin", "SYSTEM", 201, Role.ROOT_ADMIN.name());
         } catch (DataIntegrityViolationException e) {
             // The other replica committed the same root admin first. The
             // desired end state is reached either way, so this is not a

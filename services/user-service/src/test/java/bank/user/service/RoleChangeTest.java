@@ -35,21 +35,28 @@ class RoleChangeTest {
     private UserService userService;
 
     @Test
-    void promotesAgentByAddingNewGroupBeforeRemovingOld() {
+    void cannotPromoteAgentToAdmin() {
         User user = user(Role.AGENT);
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
-        User result = userService.changeRole(user.getId(), Role.ADMIN);
-
-        assertThat(result.getRole()).isEqualTo(Role.ADMIN);
-        InOrder order = inOrder(identityProviderClient);
-        order.verify(identityProviderClient).addToGroup("alice@scroogebank.com", Role.ADMIN);
-        order.verify(identityProviderClient).removeFromGroup("alice@scroogebank.com", Role.AGENT);
-        order.verifyNoMoreInteractions();
+        assertThatThrownBy(() -> userService.changeRole(user.getId(), Role.ADMIN))
+                .isInstanceOf(ForbiddenOperationException.class);
+        assertThat(user.getRole()).isEqualTo(Role.AGENT);
+        verifyNoInteractions(identityProviderClient);
     }
 
     @Test
-    void demotesAdmin() {
+    void cannotGrantRootAdminRoleThroughRoleChange() {
+        User user = user(Role.AGENT);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.changeRole(user.getId(), Role.ROOT_ADMIN))
+                .isInstanceOf(ForbiddenOperationException.class);
+        verifyNoInteractions(identityProviderClient);
+    }
+
+    @Test
+    void demotesAdminToAgent() {
         User user = user(Role.ADMIN);
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
@@ -70,13 +77,13 @@ class RoleChangeTest {
 
     @Test
     void rootAdminRoleCannotBeChanged() {
-        User root = user(Role.ADMIN);
+        User root = user(Role.ROOT_ADMIN);
         root.setDeletable(false);
         when(userRepository.findById(root.getId())).thenReturn(Optional.of(root));
 
         assertThatThrownBy(() -> userService.changeRole(root.getId(), Role.AGENT))
                 .isInstanceOf(ForbiddenOperationException.class);
-        assertThat(root.getRole()).isEqualTo(Role.ADMIN);
+        assertThat(root.getRole()).isEqualTo(Role.ROOT_ADMIN);
         verifyNoInteractions(identityProviderClient);
     }
 

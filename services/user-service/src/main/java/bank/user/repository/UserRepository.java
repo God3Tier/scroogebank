@@ -35,7 +35,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     default Page<User> search(Role role, Boolean enabled, int page, int size) {
         Specification<User> spec = (root, query, cb) -> cb.conjunction();
         if (role != null) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("role"), role));
+            spec = spec.and((root, query, cb) -> role == Role.ADMIN
+                    ? root.get("role").in(Role.ADMIN, Role.ROOT_ADMIN)
+                    : cb.equal(root.get("role"), role));
         }
         if (enabled != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("enabled"), enabled));
