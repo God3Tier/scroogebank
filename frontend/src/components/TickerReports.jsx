@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { getEvent, getReportReview, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { getEvent, getReportReview, listApprovedReports, listEvents, recordEventAction } from '../api/alertEvents.js'
 import { getClient } from '../api/clients.js'
 import { isCrmClientId, listOpenNewsAlerts } from '../api/engagement.js'
-import { CombinedSources, EventReport } from './EventReport.jsx'
 import { mergeSections } from '../utils/newsReports.js'
+import { useReportEditor } from '../utils/useReportEditor.js'
+import { BatchNotify, FloatingBatchHint } from './BatchNotify.jsx'
+import { CombinedSources, EventReport } from './EventReport.jsx'
 import { ReportReview } from './ReportReview.jsx'
 import SentOutList from './SentOutList.jsx'
 
@@ -18,7 +20,7 @@ function Icon({ name, className = '' }) {
 }
 
 const STATUS_LABELS = {
-  NEW: 'New', MONITORING: 'Monitoring (earlier)', INFORMED: 'Plan client briefing', DISMISSED: 'Dismissed', SENT_OUT: 'Sent Out',
+  NEW: 'New', MONITORING: 'Monitoring (old option)', INFORMED: 'Plan client briefing', DISMISSED: 'Dismissed', SENT_OUT: 'Sent Out',
 }
 const OUTCOME_LABELS = {
   APPLIED: 'Done',
@@ -52,12 +54,12 @@ function clientLabel(client, names) {
   return names[client.clientRef] || `${client.clientRef.slice(0, 8)}`
 }
 
-function TickerDetail({ eventId, onChanged }) {
+// selected: { alertId: true } for the ticked clients, kept by the page so the ticks survive switching ticker.
+function TickerDetail({ eventId, selected, setSelected, onChanged }) {
   const [detail, setDetail] = useState(null)
   const [review, setReview] = useState(null)
   const [error, setError] = useState('')
   const [names, setNames] = useState({})
-  const [selected, setSelected] = useState({})
   const [decision, setDecision] = useState('INFORM_CLIENT')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -65,6 +67,8 @@ function TickerDetail({ eventId, onChanged }) {
   const [announce, setAnnounce] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const reportPanel = useRef(null)
+  const reload = () => setReloadKey((key) => key + 1)
+  const editor = useReportEditor({ eventId, review, onSaved: reload })
 
   useEffect(() => {
     let current = true
@@ -131,7 +135,7 @@ function TickerDetail({ eventId, onChanged }) {
         setAnnounce('Saved. Review and approve the report next.')
         reportPanel.current?.focus()
       } else {
-        setSelected({})
+        setSelected((s) => Object.fromEntries(Object.entries(s).filter(([id]) => !chosen.some((client) => client.alertId === id))))
         setAnnounce('Saved.')
       }
     } catch (e) {
@@ -183,9 +187,9 @@ function TickerDetail({ eventId, onChanged }) {
           </div>
           {report ? (
             <>
-              <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} />
+              <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} editor={editor} />
               <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
-                onReviewChanged={() => setReloadKey((key) => key + 1)} />
+                editing={editor.editing} onReviewChanged={() => { reload(); onChanged() }} />
             </>
           ) : (
             <div className="inline-empty"><Icon name="autorenew" /> The report for this ticker is still being written. {card.summary}</div>
@@ -274,6 +278,9 @@ function TickerDetail({ eventId, onChanged }) {
 
 function TickerReports() {
   const [view, setView] = useState('open')
+  const [selected, setSelected] = useState({})
+  const [ready, setReady] = useState([])
+  const panelRef = useRef(null)
   const [onlyOpen, setOnlyOpen] = useState(false)
   const [state, setState] = useState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
   const [selectedId, setSelectedId] = useState(null)
@@ -288,10 +295,25 @@ function TickerReports() {
     }
   }, [onlyOpen])
 
+  // The agent's approved reports for clients in Plan client briefing: what the batch buttons would make drafts for.
+  const loadReady = useCallback(async () => {
+    try {
+      setReady(await listApprovedReports())
+    } catch {
+      setReady([])
+    }
+  }, [])
+
   useEffect(() => {
     // The list is server-owned; fetching it is the external synchronization for this view.
     void load()
-  }, [load])
+    void loadReady()
+  }, [load, loadReady])
+
+  const refresh = useCallback(() => {
+    void load()
+    void loadReady()
+  }, [load, loadReady])
 
   async function loadMore() {
     if (!state.nextCursor || state.loadingMore) return
@@ -321,6 +343,9 @@ function TickerReports() {
           <span><strong>{needDecision}</strong> need a decision</span>
         </div>
       </header>
+
+      {view === 'open' && <BatchNotify ready={ready} selected={selected} panelRef={panelRef} />}
+      {view === 'open' && <FloatingBatchHint panelRef={panelRef} readyCount={ready.length} />}
 
       <div className="drafts-tabs alerts-tabs" role="tablist" aria-label="Open reports or sent out">
         <button type="button" role="tab" aria-selected={view === 'open'} onClick={() => setView('open')}>Open reports</button>
@@ -376,7 +401,7 @@ function TickerReports() {
 
           <article className="alert-detail" aria-live="polite">
             {selectedId
-              ? <TickerDetail key={selectedId} eventId={selectedId} onChanged={() => load()} />
+              ? <TickerDetail key={selectedId} eventId={selectedId} selected={selected} setSelected={setSelected} onChanged={refresh} />
               : <div className="detail-empty"><Icon name="find_in_page" /><h2>Select a ticker to review</h2><p>Its report, sources and affected clients will open here.</p></div>}
           </article>
         </section>

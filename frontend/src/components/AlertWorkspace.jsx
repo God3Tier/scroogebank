@@ -8,7 +8,7 @@ function Icon({ name, className = '' }) {
 
 const STATUS_LABELS = {
   NEW: 'New',
-  MONITORING: 'Monitoring (earlier)',
+  MONITORING: 'Monitoring (old option)',
   INFORMED: 'Plan client briefing',
   DISMISSED: 'Dismissed',
   SENT_OUT: 'Sent Out',

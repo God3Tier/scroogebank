@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  approveReport, getEvent, getReportReview, listEvents, listSentOut, recordEventAction, saveReportEdit,
+  approveReport, getEvent, getReportReview, listApprovedReports, listEvents, listSentOut, recordEventAction, saveReportEdit,
 } from '../api/alertEvents.js'
 import { getClient } from '../api/clients.js'
 import { createNewsDrafts, listOpenNewsAlerts } from '../api/engagement.js'
@@ -11,7 +11,7 @@ import TickerReports, { ON_DRAFT_MESSAGE } from './TickerReports.jsx'
 
 vi.mock('../api/alertEvents.js', () => ({
   listEvents: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn(), getReportReview: vi.fn(), saveReportEdit: vi.fn(),
-  discardReportEdit: vi.fn(), approveReport: vi.fn(), downloadReportPdf: vi.fn(), listSentOut: vi.fn(),
+  discardReportEdit: vi.fn(), approveReport: vi.fn(), downloadReportPdf: vi.fn(), listSentOut: vi.fn(), listApprovedReports: vi.fn(),
 }))
 vi.mock('../api/clients.js', () => ({ getClient: vi.fn() }))
 vi.mock('../api/engagement.js', () => ({
@@ -85,6 +85,7 @@ describe('TickerReports', () => {
     getClient.mockImplementation(async (id) => (id === CHLOE ? { first_name: 'Chloe', last_name: 'Tan' } : { first_name: 'Daniel', last_name: 'Lim' }))
     recordEventAction.mockResolvedValue({ members: [{ alertId: 'a1', outcome: 'APPLIED' }] })
     listOpenNewsAlerts.mockResolvedValue({ alertIds: [] })
+    listApprovedReports.mockResolvedValue([])
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
@@ -130,20 +131,44 @@ describe('TickerReports', () => {
     expect(recordEventAction).not.toHaveBeenCalled()
   })
 
-  it('saves an edit and names the section an edit failed in', async () => {
+  it('edits the report in one text box in place, then previews it, checking and saving the edit', async () => {
+    saveReportEdit.mockResolvedValue(review(null, { editedSections: { ...sections, uncertainty: 'Changed.' } }))
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+
+    const box = screen.getByRole('textbox', { name: 'Report text' })
+    expect(screen.queryByLabelText('Sentence 1')).not.toBeInTheDocument()
+    expect(box.value).toContain('EXECUTIVE SUMMARY')
+    expect(screen.getByRole('heading', { name: 'Apple beats revenue estimates' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Approve report/ })).toBeDisabled()
+    expect(screen.getByText('Switch to Preview to save your edits first.')).toBeInTheDocument()
+
+    fireEvent.change(box, { target: { value: box.value.replace('Partial excerpts.', 'Changed.') } })
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+
+    await waitFor(() => expect(saveReportEdit).toHaveBeenCalledWith('e1', 1, { ...sections, uncertainty: 'Changed.' }))
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Report text' })).not.toBeInTheDocument()
+  })
+
+  it('stays in Edit and names the line when the text or the server refuses an edit', async () => {
     saveReportEdit.mockRejectedValueOnce(Object.assign(new Error('The figure 42 is not in the sources this sentence cites'), {
       status: 422, problem: { section: 'executiveSummary', index: 0 },
     }))
     renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit report' }))
-    fireEvent.change(screen.getByLabelText('Sentence 1'), { target: { value: 'Revenue rose 42%.' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const box = screen.getByRole('textbox', { name: 'Report text' })
+    const original = box.value
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save edits' }))
+    fireEvent.change(box, { target: { value: original.replace('2. Services grew.\n', '') } })
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(await screen.findByText(/Line 1: Executive summary must keep exactly 2 items; there is 1/)).toBeInTheDocument()
+    expect(saveReportEdit).not.toHaveBeenCalled()
 
-    expect(await screen.findByText(/Executive summary, item 1: The figure 42 is not in the sources/)).toBeInTheDocument()
-    expect(saveReportEdit).toHaveBeenCalledWith('e1', 1, expect.objectContaining({
-      executiveSummary: ['Revenue rose 42%.', 'Services grew.'],
-    }))
+    fireEvent.change(box, { target: { value: original.replace('Apple reported higher revenue.', 'Revenue rose 42%.') } })
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(await screen.findByText(/Line 2: Executive summary, item 1: The figure 42 is not in the sources/)).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Report text' })).toBeInTheDocument()
   })
 
   it('warns that approval is final, then replaces the approve button with Notify', async () => {
@@ -205,6 +230,111 @@ describe('TickerReports', () => {
 
     expect(await screen.findByRole('heading', { name: 'DBS Group (D05)' })).toBeInTheDocument()
     expect(screen.getByText(/still being written/)).toBeInTheDocument()
+  })
+
+  describe('notifying several tickers', () => {
+    const READY = [
+      { alertId: 'a2', clientRef: DANIEL, eventId: 'e1', approvalId: 'p1', issuer: 'Apple Inc' },
+      { alertId: 'a3', clientRef: CHLOE, eventId: 'e2', approvalId: 'p2', issuer: 'DBS Group' },
+    ]
+
+    it('makes drafts for every ready client across tickers, then opens the Follow-up Emails list', async () => {
+      listApprovedReports.mockResolvedValue(READY)
+      createNewsDrafts.mockResolvedValueOnce({ drafts: [{ draftId: 'd1' }], skipped: [] })
+        .mockResolvedValueOnce({ drafts: [{ draftId: 'd2' }], skipped: [{ alertId: 'x', reason: 'ALREADY_ON_DRAFT' }] })
+      renderPage()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Notify all ready clients (2 clients, 2 reports)' }))
+
+      await waitFor(() => expect(createNewsDrafts).toHaveBeenCalledTimes(2))
+      expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e1', alertIds: ['a2'] })
+      expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e2', alertIds: ['a3'] })
+      expect(await screen.findByText('Follow-up Emails page')).toBeInTheDocument()
+    })
+
+    it('describes what each button does', async () => {
+      renderPage()
+      expect(await screen.findByText(/Makes a draft for every client who is in Plan client briefing and whose report you have approved/)).toBeInTheDocument()
+      expect(screen.getByText(/Your ticks are kept when you switch ticker/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Notify all ready clients (0 clients, 0 reports)' })).toBeDisabled()
+    })
+
+    it('keeps the ticks when switching ticker and notifies only the ticked clients', async () => {
+      listApprovedReports.mockResolvedValue(READY)
+      createNewsDrafts.mockResolvedValue({ drafts: [{ draftId: 'd1' }], skipped: [] })
+      renderPage()
+      expect(await screen.findByRole('button', { name: 'Notify ticked clients (0 clients, 0 reports)' })).toBeDisabled()
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
+      fireEvent.click(screen.getByRole('button', { name: /DBS Group \(D05\)/ }))
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
+      fireEvent.click(screen.getByRole('button', { name: /Apple Inc \(AAPL\)/ }))
+      expect(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' })).toBeChecked()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Notify ticked clients (2 clients, 2 reports)' }))
+
+      await waitFor(() => expect(createNewsDrafts).toHaveBeenCalledTimes(2))
+      expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e1', alertIds: ['a2'] })
+      expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e2', alertIds: ['a3'] })
+    })
+
+    it('says why no draft was made', async () => {
+      listApprovedReports.mockResolvedValue(READY.slice(0, 1))
+      createNewsDrafts.mockResolvedValue({ drafts: [], skipped: [{ alertId: 'a2', reason: 'DRAFT_BEING_SENT' }] })
+      renderPage()
+      fireEvent.click(await screen.findByRole('button', { name: /Notify all ready clients/ }))
+      expect(await screen.findByText('No draft was made: their draft is being sent.')).toBeInTheDocument()
+    })
+
+    it('explains the per-ticker Notify, which still opens that client draft', async () => {
+      getReportReview.mockResolvedValue(review(approval()))
+      renderPage()
+      expect(await screen.findByText(/Working through several tickers\? Use "Notify all ready clients" at the top of this page/)).toBeInTheDocument()
+    })
+
+    describe('the floating helper', () => {
+      let observe
+      beforeEach(() => {
+        observe = null
+        vi.stubGlobal('IntersectionObserver', class {
+          constructor(callback) { observe = callback }
+          observe() {}
+          disconnect() {}
+        })
+        Element.prototype.scrollIntoView = vi.fn()
+      })
+      afterEach(() => vi.unstubAllGlobals())
+
+      it('appears only when the buttons are out of view and two reports are ready, and scrolls back to them', async () => {
+        listApprovedReports.mockResolvedValue(READY)
+        renderPage()
+        await screen.findByRole('button', { name: /Notify all ready clients \(2/ })
+        expect(screen.queryByRole('button', { name: /Several tickers\? Notify them all at once/ })).not.toBeInTheDocument()
+
+        act(() => observe([{ isIntersecting: false }]))
+        const hint = await screen.findByRole('button', { name: /Several tickers\? Notify them all at once/ })
+        expect(hint).toHaveAttribute('title', expect.stringContaining('Click to jump to the buttons at the top'))
+        fireEvent.click(hint)
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+
+        act(() => observe([{ isIntersecting: true }]))
+        expect(screen.queryByRole('button', { name: /Several tickers\? Notify them all at once/ })).not.toBeInTheDocument()
+      })
+
+      it('stays hidden with fewer than two ready reports', async () => {
+        listApprovedReports.mockResolvedValue(READY.slice(0, 1))
+        renderPage()
+        await screen.findByRole('button', { name: /Notify all ready clients \(1/ })
+        act(() => observe([{ isIntersecting: false }]))
+        expect(screen.queryByRole('button', { name: /Several tickers\? Notify them all at once/ })).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  it('reads an old Monitoring status as history, not a choice', async () => {
+    getEvent.mockImplementation(async () => appleDetail([client('a1', CHLOE, 'MONITORING')]))
+    renderPage()
+    expect(await screen.findByText('Monitoring (old option)', { selector: 'td' })).toBeInTheDocument()
   })
 
   it('lists sent reports, read-only, in the Sent out tab', async () => {

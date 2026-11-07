@@ -1,6 +1,16 @@
 // Shared by the Event Alerts report panel and Follow-up Emails (news-alert-drafts plan 5.2 and 5.5).
 
 const DAY = 24 * 60 * 60 * 1000
+
+/** Why a report was not put on a client's News Alert draft, in words for the agent. */
+export const SKIP_REASONS = {
+  NOT_AUTHORISED: 'no longer one of your clients',
+  NOT_INFORMED: 'not in Plan client briefing',
+  NOT_APPROVED: 'the approval is missing or expired',
+  ALREADY_ON_DRAFT: 'already on a news draft',
+  DRAFT_BEING_SENT: 'their draft is being sent',
+  LIMIT_REACHED: 'their draft is full',
+}
 export const APPROVAL_DAYS = 7
 export const STALE_AFTER_DAYS = 5
 

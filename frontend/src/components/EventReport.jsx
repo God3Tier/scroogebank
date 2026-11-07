@@ -16,7 +16,8 @@ function formatDateTime(value) {
 
 // body: the text to show, when it is not the AI's original (the agent's saved edit or approved text).
 // label: says which text is shown. The PDF is rendered on the server, in the layout the client receives.
-export function EventReport({ report, eventId, body: shown, label }) {
+// editor: the Edit / Preview toggle (useReportEditor). In Edit the report is one text box, in the same place.
+export function EventReport({ report, eventId, body: shown, label, editor }) {
   const [pdfError, setPdfError] = useState('')
   const [downloading, setDownloading] = useState(false)
   if (!report) return null
@@ -42,14 +43,41 @@ export function EventReport({ report, eventId, body: shown, label }) {
           Version {report.version}{report.versionCount ? ` of ${report.versionCount}` : ''} ·{' '}
           {label || (report.schemaVersion === 'briefing-v1-legacy' ? 'migrated from an earlier single-article briefing' : 'AI-written from public sources, checked before it is shown')}
         </p>
-        {eventId && (
-          <button className="button button--secondary" type="button" onClick={download} disabled={downloading}>
-            {downloading ? 'Preparing PDF…' : 'Download report as PDF'}
-          </button>
-        )}
+        <div className="event-report__buttons">
+          {editor?.canEdit && (
+            <button className="button button--primary" type="button" onClick={editor.toggle} disabled={editor.saving}
+              aria-pressed={editor.editing}>
+              {editor.editing ? (editor.saving ? 'Checking…' : 'Preview') : 'Edit'}
+            </button>
+          )}
+          {eventId && !editor?.editing && (
+            <button className="button button--secondary" type="button" onClick={download} disabled={downloading}>
+              {downloading ? 'Preparing PDF…' : 'Download report as PDF'}
+            </button>
+          )}
+        </div>
       </div>
       {pdfError && <p className="error-text" role="alert">{pdfError}</p>}
       <h4 className="event-report__headline">{body.headline}</h4>
+      {editor?.editing ? (
+        <div className="event-report__edit">
+          <p className="holdings-note">
+            Editing. The headline and sources stay as they are. One line per item: key facts are Label | Value | Context.
+            You can add or remove lines only under WHAT TO MONITOR (2 to 4). Click Preview to check and save.
+            Your edit is checked again: a figure you add must be in the sources, and advice wording is refused.
+          </p>
+          <textarea className="event-report__text" aria-label="Report text" spellCheck rows={Math.max(18, editor.text.split('\n').length + 2)}
+            value={editor.text} onChange={(e) => editor.setText(e.target.value)} disabled={editor.saving} />
+          {editor.errors.length > 0 && (
+            <ul className="event-report__errors" role="alert">
+              {editor.errors.map((error) => (
+                <li key={`${error.line}-${error.message}`}>{error.line > 0 ? `Line ${error.line}: ` : ''}{error.message}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <>
       {(body.executiveSummary || []).map(mark).map((text) => <p key={text} className="event-report__summary">{text}</p>)}
       {(body.keyFacts || []).length > 0 && (
         <>
@@ -70,6 +98,8 @@ export function EventReport({ report, eventId, body: shown, label }) {
         </>
       )}
       {body.uncertainty && <p className="uncertainty"><strong>Uncertainty:</strong> {body.uncertainty}</p>}
+        </>
+      )}
       <p className="holdings-note">{report.disclaimer}</p>
     </div>
   )

@@ -315,7 +315,7 @@ describe('AgentDrafts', () => {
       subject: 'Your portfolio update: Apple Inc and Shell plc',
       body: 'Dear Synthetic,\n\nHere is an update on 2 companies in your portfolio.',
       news: { reports: REPORTS, summaryEdited: false, rebuildSuggested: false, maxReports: 30, sentOutSynced: false,
-        guide: 'Where to find each report in the attached PDF (the attached PDF):', fixedText: 'Your portfolio has exposure to Apple Inc and Shell plc' },
+        unmarkedReports: [], guide: 'Where to find each report in the attached PDF (the attached PDF):', fixedText: 'Your portfolio has exposure to Apple Inc and Shell plc' },
     }
 
     it('opens the draft made by Notify, with its reports, the guide and the fixed text', async () => {
@@ -362,6 +362,18 @@ describe('AgentDrafts', () => {
 
       await vi.waitFor(() => expect(retryNewsStatus).toHaveBeenCalledWith('news-1'))
       expect(await screen.findByText('The clients are now Sent Out.')).toBeInTheDocument()
+    })
+
+    it('lists reports that could not be marked Sent Out and offers no retry for them', async () => {
+      const sent = { ...NEWS_DRAFT, status: 'SENT', subject: null, body: null, sentAt: '2026-10-21T03:00:00Z',
+        news: { ...NEWS_DRAFT.news, sentOutSynced: true,
+          unmarkedReports: [{ alertId: 'a1', issuer: 'Apple Inc', reason: 'NOT_AUTHORISED' }] } }
+      listDrafts.mockResolvedValue([sent])
+      getDraft.mockResolvedValue(sent)
+      renderDrafts('/agent/drafts?openDraft=news-1')
+
+      expect(await screen.findByText(/these reports could not be marked Sent Out: Apple Inc \(the client is no longer yours\)/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry status update' })).not.toBeInTheDocument()
     })
 
     it('makes a News Alert draft from a client and the approved reports chosen on this page', async () => {

@@ -3178,3 +3178,19 @@ textarea:focus {
   .report-editor__fact { grid-template-columns: 1fr; }
   .report-review__buttons .button, .report-review__notify.button { width: 100%; }
 }
+
+/* Edit in place, batch Notify and its floating helper (news-alert-drafts plan, round 2). */
+.event-report__buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.event-report__edit { display: grid; gap: 0.6rem; margin-top: 0.5rem; }
+.event-report__text { width: 100%; box-sizing: border-box; min-height: 22rem; padding: 0.75rem; font: 0.9rem/1.5 var(--mono); color: var(--on-surface); background: var(--surface-lowest); border: 2px solid var(--secondary); border-radius: var(--radius-lg); resize: vertical; }
+.event-report__text:disabled { opacity: 0.6; }
+.event-report__errors { margin: 0; padding: 0.6rem 0.75rem 0.6rem 1.75rem; color: var(--on-error-container); background: var(--error-container); border-radius: var(--radius); }
+.report-review__hint { margin: 0; }
+.batch-notify { display: grid; gap: 0.6rem; margin: 0 0 1rem; padding: 1rem; background: var(--surface-low); border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); }
+.batch-notify h2 { margin: 0; font-size: 1.05rem; }
+.batch-notify__options { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+.batch-notify__what { margin: 0.35rem 0 0; font-size: 0.85rem; color: var(--on-surface-variant); }
+.batch-notify--flash { outline: 3px solid var(--secondary); outline-offset: 2px; }
+.alerts-page .batch-hint { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 20; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 0.95rem; color: var(--on-primary); background: var(--primary); border: 0; border-radius: 999px; box-shadow: 0 4px 14px rgba(4, 37, 64, 0.35); font: inherit; font-weight: 600; cursor: pointer; }
+.alerts-page .batch-hint:hover, .alerts-page .batch-hint:focus-visible { background: var(--primary-container); }
+@media (max-width: 640px) { .alerts-page .batch-hint { left: 1rem; right: 1rem; justify-content: center; } }

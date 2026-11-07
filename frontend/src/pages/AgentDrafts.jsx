@@ -6,7 +6,7 @@ import { listClients } from '../api/clients.js'
 import { saveBlob } from '../api/request.js'
 import { Pager } from '../components/ListFooter.jsx'
 import { useArrayPages } from '../components/paging.js'
-import { draftReportApproval, stalenessText } from '../utils/newsReports.js'
+import { draftReportApproval, SKIP_REASONS, stalenessText } from '../utils/newsReports.js'
 import {
   createDraft,
   createNewsDrafts,
@@ -44,14 +44,12 @@ const SHORT_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'sh
 const HOLIDAY_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 const wordCount = (text) => (text.trim() ? text.trim().split(/\s+/).length : 0)
 const PAST_MEETING_DAYS = 92
-const NEWS_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: SINGAPORE })
-const SKIP_REASONS = {
-  NOT_AUTHORISED: 'no longer one of your clients',
-  NOT_INFORMED: 'not in Plan client briefing',
-  NOT_APPROVED: 'the approval is missing or expired',
-  ALREADY_ON_DRAFT: 'already on a news draft',
-  LIMIT_REACHED: 'the draft is full',
+// Why a report could not be marked Sent Out after the email went out (it never can be, so there is no retry).
+const UNMARKED_REASONS = {
+  NOT_AUTHORISED: 'the client is no longer yours',
+  INVALID_STATUS: 'the client is not in Plan client briefing',
 }
+const NEWS_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: SINGAPORE })
 // engagement-service's largest draft list (docs/api/engagement-api.yaml).
 const DRAFT_LIMIT = 100
 
@@ -530,6 +528,14 @@ function DraftEditor({ draftId, clientName, now: today, onChanged, onClose }) {
                 <span>The reports on this draft changed. Rebuild summary?</span>
                 <button type="button" onClick={() => handleRebuild(false)} disabled={state.busy}>Rebuild summary</button>
                 <button type="button" onClick={() => handleRebuild(true)} disabled={state.busy}>Keep my text</button>
+              </div>
+            )}
+            {draft.status === 'SENT' && (news.unmarkedReports || []).length > 0 && (
+              <div className="engagement-hint" role="status">
+                <span>
+                  The email was sent, but these reports could not be marked Sent Out:{' '}
+                  {news.unmarkedReports.map((report) => `${report.issuer} (${UNMARKED_REASONS[report.reason] || report.reason})`).join('; ')}.
+                </span>
               </div>
             )}
             {draft.status === 'SENT' && !news.sentOutSynced && (
