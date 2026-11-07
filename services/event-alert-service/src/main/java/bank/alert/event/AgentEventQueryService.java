@@ -48,18 +48,27 @@ public class AgentEventQueryService {
 
     @Transactional
     public EventPage list(String agentSubject, boolean onlyOpen, int limit) {
-        return list(agentSubject, onlyOpen, null, limit);
+        return list(agentSubject, onlyOpen, true, null, limit);
     }
 
     @Transactional
     public EventPage list(String agentSubject, boolean onlyOpen, String encodedCursor, int limit) {
+        return list(agentSubject, onlyOpen, true, encodedCursor, limit);
+    }
+
+    /**
+     * @param onlyOpen      only events with a client still New
+     * @param includeClosed also events whose clients are all Sent Out or Dismissed, which the main view leaves out
+     */
+    @Transactional
+    public EventPage list(String agentSubject, boolean onlyOpen, boolean includeClosed, String encodedCursor, int limit) {
         ownership.refresh();
         AlertQueryService.Cursor cursor = AlertQueryService.decodeCursor(encodedCursor);
         StringBuilder sql = new StringBuilder("""
                 SELECT pe.id AS event_id, sr.title, sr.canonical_url, sr.source_domain,
                        sr.published_at, sr.retrieved_at,
                        COUNT(DISTINCT a.client_ref) AS client_count,
-                       COUNT(DISTINCT a.client_ref) FILTER (WHERE a.status IN ('NEW', 'MONITORING')) AS open_count,
+                       COUNT(DISTINCT a.client_ref) FILTER (WHERE a.status = 'NEW') AS open_count,
                        MAX(a.score) AS top_score, MAX(a.created_at) AS latest,
                        (SELECT b.summary FROM briefing b JOIN alert a2 ON a2.id = b.alert_id
                          WHERE a2.public_event_id = pe.id ORDER BY b.created_at, b.id LIMIT 1) AS summary,
@@ -86,9 +95,12 @@ public class AgentEventQueryService {
                 """.formatted(OWNER));
         List<Object> args = new ArrayList<>();
         args.add(agentSubject);
-        if (onlyOpen) sql.append(" HAVING COUNT(*) FILTER (WHERE a.status IN ('NEW', 'MONITORING')) > 0");
+        List<String> having = new ArrayList<>();
+        if (onlyOpen) having.add("COUNT(*) FILTER (WHERE a.status = 'NEW') > 0");
+        if (!includeClosed) having.add("COUNT(*) FILTER (WHERE a.status IN ('NEW', 'INFORMED')) > 0");
+        if (!having.isEmpty()) sql.append(" HAVING ").append(String.join(" AND ", having));
         if (cursor != null) {
-            sql.append(onlyOpen ? " AND " : " HAVING ");
+            sql.append(having.isEmpty() ? " HAVING " : " AND ");
             sql.append("(MAX(a.created_at) < ? OR (MAX(a.created_at) = ? AND pe.id < ?))");
             args.add(Timestamp.from(cursor.createdAt()));
             args.add(Timestamp.from(cursor.createdAt()));
@@ -113,7 +125,7 @@ public class AgentEventQueryService {
                 SELECT pe.id AS event_id, sr.title, sr.canonical_url, sr.source_domain,
                        sr.published_at, sr.retrieved_at,
                        COUNT(DISTINCT a.client_ref) AS client_count,
-                       COUNT(DISTINCT a.client_ref) FILTER (WHERE a.status IN ('NEW', 'MONITORING')) AS open_count,
+                       COUNT(DISTINCT a.client_ref) FILTER (WHERE a.status = 'NEW') AS open_count,
                        MAX(a.score) AS top_score, MAX(a.created_at) AS latest,
                        (SELECT b.summary FROM briefing b JOIN alert a2 ON a2.id = b.alert_id
                          WHERE a2.public_event_id = pe.id ORDER BY b.created_at, b.id LIMIT 1) AS summary,

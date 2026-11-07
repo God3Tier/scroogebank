@@ -395,14 +395,14 @@ class CurrentHoldingsIntegrationTest {
                         List.of(new ActionMember(selected.alertId(), selected.version())))))
                 .hasMessageContaining("idempotency");
 
-        // the unselected client is untouched; a second action on the finished one is recorded, not applied
+        // the unselected client is untouched; recording the same status again on the chosen one changes nothing
         assertThat(alerts.findById(unselected.alertId()).orElseThrow().getStatus()).isEqualTo(AlertStatus.NEW);
         ActionResult second = eventActions.apply(eventId, "agent-a", "action-key-0002", UUID.randomUUID(),
-                new ActionRequest(AlertDecisionType.MONITOR, null, List.of(
+                new ActionRequest(AlertDecisionType.INFORM_CLIENT, null, List.of(
                         new ActionMember(selected.alertId(), selected.version() + 1),
                         new ActionMember(unselected.alertId(), 99))));
         assertThat(second.members()).extracting(m -> m.outcome())
-                .containsExactlyInAnyOrder(MemberOutcome.INVALID_TRANSITION, MemberOutcome.STALE_VERSION);
+                .containsExactlyInAnyOrder(MemberOutcome.APPLIED, MemberOutcome.STALE_VERSION);
         assertThat(alerts.findById(unselected.alertId()).orElseThrow().getStatus()).isEqualTo(AlertStatus.NEW);
 
         // another agent can neither see the event nor act on its clients

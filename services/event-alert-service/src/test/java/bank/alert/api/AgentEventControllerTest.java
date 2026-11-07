@@ -38,7 +38,7 @@ class AgentEventControllerTest {
 
     private static final UUID EVENT = UUID.fromString("e0000000-0000-4000-8000-000000000001");
     private static final UUID ALERT = UUID.fromString("50000000-0000-4000-8000-000000000001");
-    private static final String BODY = "{\"decision\":\"MONITOR\",\"members\":[{\"alertId\":\"" + ALERT
+    private static final String BODY = "{\"decision\":\"DISMISS\",\"members\":[{\"alertId\":\"" + ALERT
             + "\",\"expectedVersion\":0}]}";
 
     @Autowired MockMvc mockMvc;
@@ -48,14 +48,14 @@ class AgentEventControllerTest {
 
     @Test
     void listsOnlyForTheAuthenticatedAgent() throws Exception {
-        when(queries.list("agent-a", true, null, 25)).thenReturn(new EventPage(List.of(), null));
+        when(queries.list("agent-a", true, false, null, 25)).thenReturn(new EventPage(List.of(), null));
 
         mockMvc.perform(get("/api/alerts/events").param("onlyOpen", "true").with(user("agent-a").roles("AGENT")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray());
-        when(queries.list("agent-a", false, "opaque-page", 25)).thenReturn(new EventPage(List.of(), null));
+        when(queries.list("agent-a", false, false, "opaque-page", 25)).thenReturn(new EventPage(List.of(), null));
         mockMvc.perform(get("/api/alerts/events").param("cursor", "opaque-page")
                         .with(user("agent-a").roles("AGENT"))).andExpect(status().isOk());
-        verify(queries).list("agent-a", false, "opaque-page", 25);
+        verify(queries).list("agent-a", false, false, "opaque-page", 25);
         mockMvc.perform(get("/api/alerts/events").with(user("admin-1").roles("ADMIN")))
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/alerts/events")).andExpect(status().isUnauthorized());
@@ -64,7 +64,7 @@ class AgentEventControllerTest {
     @Test
     void anActionNeedsAnExplicitClientSetAndAnIdempotencyKey() throws Exception {
         when(actions.apply(eq(EVENT), eq("agent-a"), eq("action-key-0001"), any(), any()))
-                .thenReturn(new ActionResult(UUID.randomUUID(), EVENT, AlertDecisionType.MONITOR,
+                .thenReturn(new ActionResult(UUID.randomUUID(), EVENT, AlertDecisionType.DISMISS,
                         Instant.parse("2026-10-30T02:00:00Z"), List.of()));
         var agent = user("agent-a").roles("AGENT");
 
@@ -78,7 +78,7 @@ class AgentEventControllerTest {
         mockMvc.perform(post("/api/alerts/events/{id}/actions", EVENT).with(agent)
                         .header("Idempotency-Key", "action-key-0001")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"decision\":\"MONITOR\",\"members\":[]}"))
+                        .content("{\"decision\":\"DISMISS\",\"members\":[]}"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(post("/api/alerts/events/{id}/actions", EVENT).with(user("admin-1").roles("ADMIN"))
                         .header("Idempotency-Key", "action-key-0001")

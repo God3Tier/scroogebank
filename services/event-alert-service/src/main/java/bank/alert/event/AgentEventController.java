@@ -43,10 +43,11 @@ public class AgentEventController {
     @PreAuthorize("hasRole('AGENT')")
     public EventPage list(
             @RequestParam(defaultValue = "false") boolean onlyOpen,
+            @RequestParam(defaultValue = "false") boolean includeClosed,
             @RequestParam(defaultValue = "25") @Min(1) @Max(100) int limit,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             Authentication authentication) {
-        return queries.list(authentication.getName(), onlyOpen, cursor, limit);
+        return queries.list(authentication.getName(), onlyOpen, includeClosed, cursor, limit);
     }
 
     @GetMapping("/{eventId}")

@@ -255,6 +255,11 @@ paths:
       parameters:
         - name: onlyOpen
           in: query
+          description: Only events with a client still New.
+          schema: {type: boolean, default: false}
+        - name: includeClosed
+          in: query
+          description: Also events whose clients are all Sent Out or Dismissed, which the main view leaves out.
           schema: {type: boolean, default: false}
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -289,7 +294,7 @@ paths:
     post:
       tags: [Alerts]
       operationId: recordAgentEventAction
-      summary: Inform, monitor or dismiss for an explicit set of the agent's clients
+      summary: Plan client briefing or dismiss for an explicit set of the agent's clients
       description: >-
         Applies one choice to the listed clients only and records an outcome for each. Inform
         records intent; it never contacts a client. Reusing an idempotency key with the same
@@ -315,35 +320,321 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
-  /alerts/events/{eventId}/report/delivery-package:
-    post:
+  /alerts/events/{eventId}/report/review:
+    get:
       tags: [Alerts]
-      operationId: buildReportDeliveryPackage
-      summary: The current report and the chosen clients, for the engagement service to email (ADR-0084)
+      operationId: getReportReview
+      summary: The agent's edit and approval of the event's latest report (news-alert-drafts plan 5.2)
       description: >-
-        Called by the engagement service with the agent's token. Rechecks current ownership and the
-        report version, and releases a client only if the alert is still the agent's, linked to a CRM
-        client, and marked INFORMED. A client that fails any check comes back NOT_AUTHORISED with no
-        client details. Changes and sends nothing. 409 if the report is not at the expected version.
+        The original sections in the shape an edit takes, the agent's saved edit (null if none) and the agent's
+        approval of this version (null if none). Edits and approvals belong to one agent; other agents holding the
+        ticker still see the original.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: The review state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportReview'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}/report/edit:
+    put:
+      tags: [Alerts]
+      operationId: saveReportEdit
+      summary: Save the agent's edit of the latest report (news-alert-drafts plan 5.2 and 5.3)
+      description: >-
+        Replaces the wording of the executive summary, key facts, why it matters, what to monitor and uncertainty.
+        The headline, the sources and which source each sentence cites cannot change. The edited text is checked
+        again: same shape and lengths, every figure the agent added appears in a source the sentence cites, and no
+        advice language. 422 names the section and item; nothing is saved. 409 if the version changed or the report
+        is already approved.
       parameters:
         - $ref: '#/components/parameters/EventId'
       requestBody:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/ReportPackageRequest'}
+            schema:
+              type: object
+              required: [expectedReportVersion, sections]
+              properties:
+                expectedReportVersion: {type: integer, minimum: 1}
+                sections: {$ref: '#/components/schemas/ReportSections'}
       responses:
         '200':
-          description: The report, its sources and each chosen client's outcome.
+          description: The review state with the saved edit.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/ReportPackage'}
+              schema: {$ref: '#/components/schemas/ReportReview'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: >-
+            The edit failed a check. The problem has code (UNSUPPORTED_FIGURE, ADVICE_LANGUAGE, EMPTY_TEXT,
+            TEXT_TOO_LONG, INVALID_SHAPE or INVALID_EDIT), section and index (the item, from 0, or -1).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
         '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [Alerts]
+      operationId: discardReportEdit
+      summary: Throw away the agent's unapproved edit
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: The review state without an edit.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportReview'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /alerts/events/{eventId}/report/approval:
+    post:
+      tags: [Alerts]
+      operationId: approveReport
+      summary: Approve the latest report, with the agent's edit if any (final)
+      description: >-
+        Freezes the text the client receives. Approval is final and cannot be edited or undone. It can be used to
+        send for alert.reports.approval-valid-for (default 7 days); after that the agent approves again. At least one
+        of the agent's clients on the event must be in Plan client briefing. 409 if the version changed or the agent
+        already holds a valid approval. Audited as alert.report-approved with the original and final hashes.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedReportVersion]
+              properties:
+                expectedReportVersion: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: The approval.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReportApproval'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: The saved edit no longer passes the checks.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/events/{eventId}/report/pdf:
+    get:
+      tags: [Alerts]
+      operationId: downloadReportPdf
+      summary: One report as a PDF, for agents and admins
+      description: >-
+        Rendered on the server, in the same layout as the PDF the client receives. No approval is needed: before
+        approval it carries "Not yet reviewed". An agent's valid approval of the version is used when there is one.
+        Admins get the original.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - name: version
+          in: query
+          schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: The PDF.
+          content:
+            application/pdf:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /alerts/approved-reports:
+    get:
+      tags: [Alerts]
+      operationId: listApprovedReports
+      summary: The caller's approved, unsent reports in Plan client briefing (the News Alert entry on Follow-up Emails)
+      parameters:
+        - name: clientRef
+          in: query
+          schema: {type: string, maxLength: 64}
+      responses:
+        '200':
+          description: One row per client and report.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ApprovedReportItem'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/approved-reports/package:
+    post:
+      tags: [Alerts]
+      operationId: buildApprovedReportPackage
+      summary: Each chosen client's approved report, for engagement-service to make news drafts
+      description: >-
+        Called by engagement-service with the agent's token. A client is released (OK) only when the alert is still
+        the agent's, on this event, a CRM client, in Plan client briefing, and the agent holds a valid approval.
+        Otherwise NOT_AUTHORISED, NOT_INFORMED or NOT_APPROVED with the other fields null. Changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, alertIds]
+              properties:
+                eventId: {type: string, format: uuid}
+                alertIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: {type: string, format: uuid}
+      responses:
+        '200':
+          description: One item per alert.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ApprovedReportPackageItem'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/approved-reports/pdf:
+    post:
+      tags: [Alerts]
+      operationId: buildCombinedReportPdf
+      summary: The combined report PDF for a news draft
+      description: >-
+        One document: cover, contents, one section per approval in issuer order, closing page with the disclaimer.
+        No client data. The document date is the Singapore date of the newest approval, so the same approvals and name
+        give byte-for-byte the same file. Every approval must be the caller's and still hold its text (404 otherwise).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approvalIds]
+              properties:
+                approvalIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {type: string, format: uuid}
+                preparedBy: {type: string, maxLength: 100, nullable: true}
+      responses:
+        '200':
+          description: The PDF (base64), its hash, and where each company starts.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CombinedReportPdf'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /alerts/send-check:
+    post:
+      tags: [Alerts]
+      operationId: checkReportsBeforeSending
+      summary: Whether each client can still be sent its approved report (news-alert-drafts plan 5.6)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AlertIdList'}
+      responses:
+        '200':
+          description: One outcome per alert.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [alertId, outcome, approvalId, finalHash]
+                  properties:
+                    alertId: {type: string, format: uuid}
+                    outcome: {type: string, enum: [OK, NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, EXPIRED]}
+                    approvalId: {type: string, format: uuid, nullable: true}
+                    finalHash: {type: string, nullable: true}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /alerts/sent-out:
+    post:
+      tags: [Alerts]
+      operationId: recordSentOut
+      summary: The news email was accepted by SES; the clients move to Sent Out (final, idempotent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alertIds, draftId, sesMessageId]
+              properties:
+                alertIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: {type: string, format: uuid}
+                draftId: {type: string, format: uuid}
+                sesMessageId: {type: string, maxLength: 200}
+      responses:
+        '200':
+          description: One outcome per alert.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [alertId, outcome]
+                  properties:
+                    alertId: {type: string, format: uuid}
+                    outcome: {type: string, enum: [SENT_OUT, ALREADY_SENT_OUT, NOT_AUTHORISED, INVALID_STATUS]}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    get:
+      tags: [Alerts]
+      operationId: listSentOut
+      summary: "The Sent out view, newest first (agent: own clients; admin: everyone's, read-only)"
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 200, default: 100}
+      responses:
+        '200':
+          description: Sent clients and reports.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/SentOutRow'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /alerts/search-websites:
     get:
       tags: [Alerts]
@@ -690,54 +981,138 @@ components:
         positions:
           type: array
           items: {$ref: '#/components/schemas/PortfolioPosition'}
-    ReportPackageRequest:
+    ReportSections:
+      type: object
+      description: The editable wording of a report. Item counts of the summary, key facts and why it matters stay fixed.
+      required: [executiveSummary, keyFacts, whyItMatters, whatToMonitor, uncertainty]
+      properties:
+        executiveSummary: {type: array, items: {type: string}}
+        keyFacts:
+          type: array
+          items:
+            type: object
+            required: [label, value, context]
+            properties:
+              label: {type: string}
+              value: {type: string}
+              context: {type: string}
+        whyItMatters: {type: array, items: {type: string}}
+        whatToMonitor: {type: array, minItems: 2, maxItems: 4, items: {type: string}}
+        uncertainty: {type: string}
+    ReportApproval:
       type: object
       additionalProperties: false
-      required: [expectedReportVersion, alertIds]
+      required: [approvalId, eventId, version, edited, approvedAt, validUntil, valid, stale]
       properties:
-        expectedReportVersion: {type: integer, minimum: 1}
+        approvalId: {type: string, format: uuid}
+        eventId: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        edited: {type: boolean}
+        approvedAt: {type: string, format: date-time}
+        validUntil: {type: string, format: date-time}
+        valid: {type: boolean, description: "False once it expired or its text was cleared."}
+        stale: {type: boolean, description: "True from alert.reports.stale-after (default day 5) until it expires."}
+    ReportReview:
+      type: object
+      additionalProperties: false
+      required: [eventId, reportVersion, editable, originalSections, editedSections, approval, newsDate]
+      properties:
+        eventId: {type: string, format: uuid}
+        reportVersion: {type: integer, minimum: 0}
+        editable: {type: boolean, description: "False for older migrated reports, which can be approved but not edited."}
+        originalSections:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/ReportSections'}]
+        editedSections:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/ReportSections'}]
+        approval:
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/ReportApproval'}]
+        newsDate: {type: string, format: date-time, nullable: true}
+    ApprovedReportItem:
+      type: object
+      additionalProperties: false
+      required: [alertId, clientRef, eventId, approvalId, instrumentId, ticker, issuer, headline, newsDate, approvedAt, validUntil, edited]
+      properties:
+        alertId: {type: string, format: uuid}
+        clientRef: {type: string}
+        eventId: {type: string, format: uuid}
+        approvalId: {type: string, format: uuid}
+        instrumentId: {type: string}
+        ticker: {type: string, nullable: true}
+        issuer: {type: string}
+        headline: {type: string}
+        newsDate: {type: string, format: date-time}
+        approvedAt: {type: string, format: date-time}
+        validUntil: {type: string, format: date-time}
+        edited: {type: boolean}
+    ApprovedReportPackageItem:
+      type: object
+      additionalProperties: false
+      required: [alertId, outcome, approvalId, clientRef, instrumentId, issuer, headline, newsDate, validUntil, edited, finalHash, summaryLine]
+      properties:
+        alertId: {type: string, format: uuid}
+        outcome: {type: string, enum: [OK, NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED]}
+        approvalId: {type: string, format: uuid, nullable: true}
+        clientRef: {type: string, nullable: true}
+        instrumentId: {type: string, nullable: true}
+        issuer: {type: string, nullable: true}
+        headline: {type: string, nullable: true}
+        newsDate: {type: string, format: date-time, nullable: true}
+        validUntil: {type: string, format: date-time, nullable: true}
+        edited: {type: boolean}
+        finalHash: {type: string, nullable: true}
+        summaryLine:
+          type: string
+          nullable: true
+          description: The AI summary sentence when the report was not edited and has one, otherwise its first sentence.
+    CombinedReportPdf:
+      type: object
+      additionalProperties: false
+      required: [fileName, documentDate, pdfBase64, pdfHash, pageCount, sections]
+      properties:
+        fileName: {type: string}
+        documentDate: {type: string, format: date}
+        pdfBase64: {type: string}
+        pdfHash: {type: string}
+        pageCount: {type: integer, minimum: 3}
+        sections:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [approvalId, issuer, headline, startPage, finalHash]
+            properties:
+              approvalId: {type: string, format: uuid}
+              issuer: {type: string}
+              headline: {type: string}
+              startPage: {type: integer, minimum: 1}
+              finalHash: {type: string}
+    AlertIdList:
+      type: object
+      required: [alertIds]
+      properties:
         alertIds:
           type: array
           minItems: 1
           maxItems: 200
           items: {type: string, format: uuid}
-    ReportPackage:
+    SentOutRow:
       type: object
       additionalProperties: false
-      required: [eventId, reportId, version, schemaVersion, report, reportHash, sources, recipients]
+      required: [alertId, eventId, clientRef, instrumentId, ticker, issuer, headline, reportVersion, edited, sentAt]
       properties:
+        alertId: {type: string, format: uuid}
         eventId: {type: string, format: uuid}
-        reportId: {type: string, format: uuid}
-        version: {type: integer, minimum: 1}
-        schemaVersion: {type: string}
-        report: {type: object, additionalProperties: true}
-        reportHash: {type: string, description: "SHA-256 of the version, report and linked source IDs."}
-        sources:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            required: [id, title, url, domain, publishedAt, retrievedAt, usedInReport]
-            properties:
-              id: {type: string}
-              title: {type: string}
-              url: {type: string}
-              domain: {type: string}
-              publishedAt: {type: string, format: date-time, nullable: true}
-              retrievedAt: {type: string, format: date-time, nullable: true}
-              usedInReport: {type: boolean}
-        recipients:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            required: [alertId, outcome, clientRef, instrumentId, issuer]
-            properties:
-              alertId: {type: string, format: uuid}
-              outcome: {type: string, enum: [OK, NOT_AUTHORISED]}
-              clientRef: {type: string, nullable: true}
-              instrumentId: {type: string, nullable: true}
-              issuer: {type: string, nullable: true}
+        clientRef: {type: string}
+        instrumentId: {type: string}
+        ticker: {type: string, nullable: true}
+        issuer: {type: string}
+        headline: {type: string, nullable: true}
+        reportVersion: {type: integer}
+        edited: {type: boolean}
+        sentAt: {type: string, format: date-time}
     EventReportSource:
       type: object
       additionalProperties: false
@@ -885,9 +1260,13 @@ components:
       enum: [null]
     AlertStatus:
       type: string
-      enum: [NEW, MONITORING, INFORMED, DISMISSED]
+      description: >-
+        NEW, INFORMED (Plan client briefing), DISMISSED or SENT_OUT (final, set only when the news email was sent).
+        MONITORING appears only in old history; nothing sets it any more.
+      enum: [NEW, MONITORING, INFORMED, DISMISSED, SENT_OUT]
     Decision:
       type: string
+      description: INFORM_CLIENT (Plan client briefing) or DISMISS. MONITOR appears only in old history; a new one is refused (400).
       enum: [INFORM_CLIENT, MONITOR, DISMISS]
     ValuationFreshness:
       type: string
@@ -1243,3 +1622,5 @@ components:
         detail: {type: string, nullable: true, maxLength: 500}
         correlationId: {type: string, format: uuid}
         code: {type: string, maxLength: 64, description: "Stable reason code such as BLOCKED_DOMAIN."}
+        section: {type: string, description: "A refused report edit: the section that failed (news-alert-drafts plan 5.3)."}
+        index: {type: integer, minimum: -1, description: "A refused report edit: the item within the section, from 0, or -1."}

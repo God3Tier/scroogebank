@@ -50,8 +50,8 @@ class AlertMutationControllerTest {
     @Test
     void assignedAgentIdentityComesFromAuthentication() throws Exception {
         AlertDecision decision = new AlertDecision(
-                UUID.randomUUID(), ALERT_ID, "syn-agent-001", AlertDecisionType.MONITOR,
-                AlertStatus.NEW, AlertStatus.MONITORING, null, "decision-key-001", NOW, 1L);
+                UUID.randomUUID(), ALERT_ID, "syn-agent-001", AlertDecisionType.DISMISS,
+                AlertStatus.NEW, AlertStatus.DISMISSED, null, "decision-key-001", NOW, 1L);
         when(mutationService.recordDecision(
                 eq(ALERT_ID), eq("syn-agent-001"), eq("decision-key-001"), any(), any()))
                 .thenReturn(decision);
@@ -61,12 +61,12 @@ class AlertMutationControllerTest {
                         .header("Idempotency-Key", "decision-key-001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"decision":"MONITOR","expectedVersion":0}
+                                {"decision":"DISMISS","expectedVersion":0}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.actorSubject").value("syn-agent-001"))
                 .andExpect(jsonPath("$.previousStatus").value("NEW"))
-                .andExpect(jsonPath("$.newStatus").value("MONITORING"))
+                .andExpect(jsonPath("$.newStatus").value("DISMISSED"))
                 .andExpect(jsonPath("$.alertVersion").value(1));
 
         verify(mutationService).recordDecision(
@@ -75,7 +75,7 @@ class AlertMutationControllerTest {
 
     @Test
     void adminIsReadOnlyAndAnonymousIsUnauthorized() throws Exception {
-        String request = "{\"decision\":\"MONITOR\",\"expectedVersion\":0}";
+        String request = "{\"decision\":\"DISMISS\",\"expectedVersion\":0}";
 
         mockMvc.perform(post("/api/alerts/{alertId}/decisions", ALERT_ID)
                         .with(user("syn-admin-001").roles("ADMIN"))
@@ -135,7 +135,7 @@ class AlertMutationControllerTest {
                         .header("Idempotency-Key", "decision-key-001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"decision":"MONITOR","expectedVersion":0}
+                                {"decision":"DISMISS","expectedVersion":0}
                                 """))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().string("Retry-After", "5"))

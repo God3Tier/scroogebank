@@ -24,6 +24,12 @@ idp:
 
 alert:
   mode: ${ALERT_MODE:API}
+  reports:
+    # An approval can be used to send for this long; the page highlights it from stale-after (news-alert-drafts plan).
+    approval-valid-for: ${ALERT_REPORT_APPROVAL_VALID_FOR:7d}
+    stale-after: 5d
+    # One AI summary sentence per report version, written by the worker. Off until Azeez has reviewed 20 samples.
+    summary-enabled: ${ALERT_REPORT_SUMMARY_ENABLED:false}
   holdings:
     # fixture: bundled synthetic JSON (isolated demos and tests).
     # database: maintained CRM-linked portfolios; API and worker must use the same mode.

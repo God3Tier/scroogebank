@@ -26,7 +26,8 @@ import java.time.Clock;
         ScheduleProperties.class,
         TavilyProperties.class,
         PipelineProperties.class,
-        CrmDirectoryProperties.class
+        CrmDirectoryProperties.class,
+        ReportReviewProperties.class
 })
 public class AlertServiceConfiguration {
 

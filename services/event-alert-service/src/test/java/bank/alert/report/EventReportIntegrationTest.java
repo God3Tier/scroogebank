@@ -94,6 +94,7 @@ class EventReportIntegrationTest {
     @Autowired AlertRepository alerts;
     @Autowired AuditOutboxRepository outbox;
     @Autowired JdbcTemplate jdbc;
+    @Autowired jakarta.persistence.EntityManager entityManager;
 
     private final AtomicReference<Instant> now = new AtomicReference<>(NOW);
     private final Clock clock = new Clock() {
@@ -460,8 +461,14 @@ class EventReportIntegrationTest {
 
     private static final String CRM_CLIENT = "11111111-2222-4333-8444-555555555555";
 
-    private ReportPackageService packages() {
-        return new ReportPackageService(jdbc, eventQueries, new ObjectMapper().findAndRegisterModules());
+    private ReportReviewService reviews() {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        @SuppressWarnings("unchecked")
+        ObjectProvider<CrmDirectory> noDirectory = mock(ObjectProvider.class);
+        when(noDirectory.getIfAvailable()).thenReturn(null);
+        return new ReportReviewService(jdbc, eventQueries, alerts, new bank.alert.service.AlertStateMachine(),
+                new CurrentOwnership(jdbc, noDirectory, clock, outbox, mapper, 1000), outbox, mapper,
+                new bank.alert.config.ReportReviewProperties(null, null, false), clock, 1000);
     }
 
     /** One event with a report whose first alert now belongs to an INFORMED CRM-style client, as in production. */
@@ -469,6 +476,8 @@ class EventReportIntegrationTest {
         store("one.example", "2026-09-26T22:00:00Z", "a");
         pipeline.processPending();
         jdbc.update("UPDATE alert SET client_ref = ?, status = 'INFORMED' WHERE id = (SELECT id FROM alert ORDER BY id LIMIT 1)", CRM_CLIENT);
+        entityManager.flush();
+        entityManager.clear();
         UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);
         UUID reportId = jdbc.queryForObject("SELECT id FROM event_report", UUID.class);
         UUID alertId = jdbc.queryForObject("SELECT id FROM alert WHERE client_ref = ?", UUID.class, CRM_CLIENT);
@@ -479,62 +488,182 @@ class EventReportIntegrationTest {
         return jdbc.queryForObject("SELECT assigned_agent_subject FROM alert WHERE id = ?", String.class, alertId);
     }
 
-    @Test
-    void thePackageHoldsTheReportItsSourcesAndOnlyTheChosenClients() {
-        UUID[] ids = eventWithInformedCrmClient();
-        String agent = agentOf(ids[2]);
-
-        var pack = packages().build(ids[0], agent, 1, List.of(ids[2]));
-
-        assertThat(pack.reportId()).isEqualTo(ids[1]);
-        assertThat(pack.version()).isOne();
-        assertThat(pack.reportHash()).hasSize(64);
-        assertThat(pack.sources()).singleElement().satisfies(s -> {
-            assertThat(s.usedInReport()).isTrue();
-            assertThat(s.retrievedAt()).isNotNull();
-        });
-        assertThat(pack.recipients()).singleElement().satisfies(r -> {
-            assertThat(r.outcome()).isEqualTo("OK");
-            assertThat(r.clientRef()).isEqualTo(CRM_CLIENT);
-            assertThat(r.issuer()).isNotBlank();
-        });
+    private com.fasterxml.jackson.databind.node.ObjectNode sections(String firstSentence) {
+        ObjectMapper mapper = new ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode sections = mapper.createObjectNode();
+        sections.putArray("executiveSummary").add(firstSentence).add("Two.");
+        sections.putArray("keyFacts");
+        sections.putArray("whyItMatters").add("Why.");
+        sections.putArray("whatToMonitor").add("Watch one").add("Watch two");
+        sections.put("uncertainty", "Uncertain.");
+        return sections;
     }
 
     @Test
-    void aClientIsReleasedOnlyWhenInformedCrmLinkedAndStillTheAgents() {
+    void anEditIsCheckedSavedAndUsedByTheApproval() {
         UUID[] ids = eventWithInformedCrmClient();
         String agent = agentOf(ids[2]);
-        UUID other = jdbc.queryForObject("SELECT id FROM alert WHERE id <> ? LIMIT 1", UUID.class, ids[2]);
+        ReportReviewService reviews = reviews();
 
-        var notMine = packages().build(ids[0], agent, 1, List.of(UUID.randomUUID()));
-        assertThat(notMine.recipients()).singleElement().satisfies(r -> {
-            assertThat(r.outcome()).isEqualTo("NOT_AUTHORISED");
-            assertThat(r.clientRef()).isNull();
+        assertThatThrownBy(() -> reviews.saveEdit(ids[0], agent, 1, sections("Revenue rose 42 per cent.")))
+                .isInstanceOf(ReportEdits.EditRefused.class)
+                .satisfies(e -> {
+                    ReportEdits.Violation v = ((ReportEdits.EditRefused) e).violation();
+                    assertThat(v.code()).isEqualTo("UNSUPPORTED_FIGURE");
+                    assertThat(v.section()).isEqualTo("executiveSummary");
+                    assertThat(v.index()).isZero();
+                });
+        assertThatThrownBy(() -> reviews.saveEdit(ids[0], agent, 1, sections("We recommend buying more.")))
+                .isInstanceOf(ReportEdits.EditRefused.class)
+                .satisfies(e -> assertThat(((ReportEdits.EditRefused) e).violation().code()).isEqualTo("ADVICE_LANGUAGE"));
+        assertThat(count("report_edit")).as("a refused edit saves nothing").isZero();
+
+        var review = reviews.saveEdit(ids[0], agent, 1, sections("One, said more plainly."));
+        assertThat(review.editedSections().path("executiveSummary").get(0).asText()).isEqualTo("One, said more plainly.");
+        assertThat(review.approval()).isNull();
+
+        var approval = reviews.approve(ids[0], agent, 1);
+        assertThat(approval.edited()).isTrue();
+        assertThat(approval.valid()).isTrue();
+        assertThat(approval.validUntil()).isEqualTo(NOW.plus(Duration.ofDays(7)));
+        assertThat(count("report_edit")).as("the edit becomes the approval").isZero();
+        assertThat(jdbc.queryForObject("SELECT final_text->'executiveSummary'->0->>'text' FROM approved_report", String.class))
+                .isEqualTo("One, said more plainly.");
+        assertThat(jdbc.queryForObject("SELECT report->'executiveSummary'->0->>'text' FROM event_report", String.class))
+                .as("other agents still see the original").isEqualTo("One.");
+
+        assertThatThrownBy(() -> reviews.approve(ids[0], agent, 1))
+                .as("approval is final").isInstanceOf(bank.alert.service.AlertMutationConflictException.class);
+        assertThatThrownBy(() -> reviews.saveEdit(ids[0], agent, 1, sections("Changed again.")))
+                .as("an approved report cannot be edited").isInstanceOf(bank.alert.service.AlertMutationConflictException.class);
+        assertThat(outbox.findAll()).extracting(o -> o.getEventType())
+                .contains("alert.report-edited", "alert.report-approved");
+    }
+
+    @Test
+    void approvingNeedsAClientInPlanClientBriefingAndTheCurrentVersion() {
+        UUID[] ids = eventWithInformedCrmClient();
+        String agent = agentOf(ids[2]);
+        assertThatThrownBy(() -> reviews().approve(ids[0], agent, 2))
+                .isInstanceOf(bank.alert.service.AlertMutationConflictException.class);
+        jdbc.update("UPDATE alert SET status = 'NEW'");
+        entityManager.flush();
+        entityManager.clear();
+        assertThatThrownBy(() -> reviews().approve(ids[0], agent, 1))
+                .isInstanceOf(bank.alert.service.AlertMutationConflictException.class)
+                .hasMessageContaining("Plan client briefing");
+        assertThatThrownBy(() -> reviews().approve(ids[0], "someone-else", 1)).isInstanceOf(AlertNotFoundException.class);
+    }
+
+    @Test
+    void thePackageReleasesOnlyInformedCrmClientsWithAValidApproval() {
+        UUID[] ids = eventWithInformedCrmClient();
+        String agent = agentOf(ids[2]);
+        ReportReviewService reviews = reviews();
+        UUID synthetic = jdbc.queryForObject("SELECT id FROM alert WHERE id <> ? LIMIT 1", UUID.class, ids[2]);
+
+        assertThat(reviews.packageFor(agent, ids[0], List.of(ids[2])).getFirst().outcome()).isEqualTo("NOT_APPROVED");
+        var approval = reviews.approve(ids[0], agent, 1);
+
+        var items = reviews.packageFor(agent, ids[0], List.of(ids[2], UUID.randomUUID(), synthetic));
+        assertThat(items.get(0)).satisfies(item -> {
+            assertThat(item.outcome()).isEqualTo("OK");
+            assertThat(item.approvalId()).isEqualTo(approval.approvalId());
+            assertThat(item.clientRef()).isEqualTo(CRM_CLIENT);
+            assertThat(item.summaryLine()).as("no AI sentence, so the first sentence").isEqualTo("One.");
+            assertThat(item.finalHash()).hasSize(64);
         });
-        // A synthetic client reference is not a CRM client, so it never receives mail.
-        assertThat(packages().build(ids[0], agent, 1, List.of(other)).recipients().getFirst().outcome())
-                .isEqualTo("NOT_AUTHORISED");
-        jdbc.update("UPDATE alert SET status = 'MONITORING' WHERE id = ?", ids[2]);
-        assertThat(packages().build(ids[0], agent, 1, List.of(ids[2])).recipients().getFirst().outcome())
-                .isEqualTo("NOT_AUTHORISED");
+        assertThat(items.get(1).outcome()).isEqualTo("NOT_AUTHORISED");
+        assertThat(items.get(2).outcome()).as("a synthetic client never receives mail").isEqualTo("NOT_AUTHORISED");
+
+        jdbc.update("UPDATE event_report SET summary_sentence = 'Synthetic Co reported synthetic earnings.'");
+
+        entityManager.flush();
+
+        entityManager.clear();
+        assertThat(reviews.packageFor(agent, ids[0], List.of(ids[2])).getFirst().summaryLine())
+                .isEqualTo("Synthetic Co reported synthetic earnings.");
+        assertThat(reviews.approved(agent, CRM_CLIENT)).singleElement()
+                .satisfies(item -> assertThat(item.approvalId()).isEqualTo(approval.approvalId()));
+
+        jdbc.update("UPDATE alert SET status = 'DISMISSED' WHERE id = ?", ids[2]);
+
+        entityManager.flush();
+
+        entityManager.clear();
+        assertThat(reviews.packageFor(agent, ids[0], List.of(ids[2])).getFirst().outcome()).isEqualTo("NOT_INFORMED");
         jdbc.update("UPDATE alert SET status = 'INFORMED' WHERE id = ?", ids[2]);
-        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertNotFoundException.class,
-                () -> packages().build(ids[0], "someone-else", 1, List.of(ids[2])));
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(reviews.packageFor(agent, ids[0], List.of(ids[2])).getFirst().outcome())
+                .as("Dismiss and back again reuses the valid approval").isEqualTo("OK");
+
+        now.set(NOW.plus(Duration.ofDays(8)));
+        assertThat(reviews.packageFor(agent, ids[0], List.of(ids[2])).getFirst().outcome()).isEqualTo("NOT_APPROVED");
+        assertThat(reviews.sendCheck(agent, List.of(ids[2]))).singleElement()
+                .satisfies(check -> assertThat(check.outcome()).isEqualTo("EXPIRED"));
     }
 
     @Test
-    void aStaleReportVersionIsAConflictAndALaterArticleDoesNotChangeAnEarlierReport() {
+    void sentOutIsFinalIdempotentAndClearsTheApprovedText() {
         UUID[] ids = eventWithInformedCrmClient();
         String agent = agentOf(ids[2]);
+        ReportReviewService reviews = reviews();
+        reviews.approve(ids[0], agent, 1);
+        jdbc.update("UPDATE alert SET status = 'SENT_OUT' WHERE id <> ? AND assigned_agent_subject = ?", ids[2], agent);
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(reviews.sendCheck(agent, List.of(ids[2]))).singleElement()
+                .satisfies(check -> assertThat(check.outcome()).isEqualTo("OK"));
+        UUID draftId = UUID.randomUUID();
 
-        org.junit.jupiter.api.Assertions.assertThrows(bank.alert.service.AlertMutationConflictException.class,
-                () -> packages().build(ids[0], agent, 2, List.of(ids[2])));
+        assertThat(reviews.sentOut(agent, List.of(ids[2]), draftId, "ses-1")).singleElement()
+                .satisfies(item -> assertThat(item.outcome()).isEqualTo("SENT_OUT"));
+        assertThat(reviews.sentOut(agent, List.of(ids[2]), draftId, "ses-1")).singleElement()
+                .satisfies(item -> assertThat(item.outcome()).isEqualTo("ALREADY_SENT_OUT"));
+        assertThat(jdbc.queryForObject("SELECT status FROM alert WHERE id = ?", String.class, ids[2])).isEqualTo("SENT_OUT");
+        assertThat(reviews.sentOutList(agent, false, 10)).singleElement().satisfies(row -> {
+            assertThat(row.alertId()).isEqualTo(ids[2]);
+            assertThat(row.headline()).isNotBlank();
+        });
+        assertThat(reviews.sentOutList("admin", true, 10)).hasSize(1);
+        assertThat(count("approved_report WHERE final_text IS NULL"))
+                .as("every client on it is Sent Out, so its text is cleared").isOne();
+        assertThat(reviews.sendCheck(agent, List.of(ids[2])).getFirst().outcome()).isEqualTo("NOT_INFORMED");
+    }
 
+    @Test
+    void theCombinedPdfIsTheSameForTheSameApprovalsAndListsWhereEachCompanyStarts() {
+        UUID[] ids = eventWithInformedCrmClient();
+        String agent = agentOf(ids[2]);
+        ReportReviewService reviews = reviews();
+        var approval = reviews.approve(ids[0], agent, 1);
+
+        var first = reviews.combinedPdf(agent, List.of(approval.approvalId()), "Alex Tan");
+        now.set(NOW.plus(Duration.ofDays(2)));
+        var second = reviews.combinedPdf(agent, List.of(approval.approvalId()), "Alex Tan");
+
+        assertThat(second.pdfBase64()).as("byte for byte the same on another day").isEqualTo(first.pdfBase64());
+        assertThat(first.documentDate()).hasToString("2026-09-27");
+        assertThat(first.fileName()).isEqualTo("Portfolio-update-2026-09-27.pdf");
+        assertThat(first.sections()).singleElement().satisfies(section -> {
+            assertThat(section.startPage()).as("cover, contents, then the company").isEqualTo(3);
+            assertThat(section.finalHash()).hasSize(64);
+        });
+        byte[] pdf = java.util.Base64.getDecoder().decode(first.pdfBase64());
+        assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+        assertThat(new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1)).doesNotContain(CRM_CLIENT);
+
+        assertThatThrownBy(() -> reviews.combinedPdf("someone-else", List.of(approval.approvalId()), null))
+                .isInstanceOf(AlertNotFoundException.class);
+        assertThat(reviews.singlePdf(ids[0], null, null, true).pdf()).as("admins can read a report").isNotEmpty();
+    }
+
+    @Test
+    void aLaterArticleStartsTheNextEventAndLeavesTheEarlierOneAlone() {
+        eventWithInformedCrmClient();
         store("two.example", "2026-09-26T23:00:00Z", "b");
         pipeline.processPending();
-
         assertThat(count("public_event")).as("the later article starts the next event").isEqualTo(2);
-        assertThat(packages().build(ids[0], agent, 1, List.of(ids[2])).sources())
-                .as("the earlier event's report still rests on its own source only").hasSize(1);
     }
 }

@@ -68,6 +68,9 @@ public class AlertMutationService {
             String idempotencyKey,
             UUID correlationId,
             DecisionRequest request) {
+        if (!request.decision().accepted()) {
+            throw new IllegalArgumentException("decision is no longer accepted");
+        }
         AlertDecision replay = decisionRepository
                 .findByActorSubjectAndIdempotencyKey(actorSubject, idempotencyKey)
                 .orElse(null);

@@ -51,10 +51,19 @@ public class EventReportService {
     private final ObjectMapper mapper;
     private final Clock clock;
     private final int maxPendingAuditEvents;
+    /** Null when no summary sentence is written (some tests). */
+    private final SummarySentenceGenerator summaries;
 
     public EventReportService(JdbcTemplate jdbc, InstrumentRepository instruments, ClientReportGenerator generator,
+            AuditOutboxRepository auditOutbox, ObjectMapper mapper, Clock clock, int maxPendingAuditEvents) {
+        this(jdbc, instruments, generator, auditOutbox, mapper, clock, maxPendingAuditEvents, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public EventReportService(JdbcTemplate jdbc, InstrumentRepository instruments, ClientReportGenerator generator,
             AuditOutboxRepository auditOutbox, ObjectMapper mapper, Clock clock,
-            @Value("${alert.audit.max-pending:10000}") int maxPendingAuditEvents) {
+            @Value("${alert.audit.max-pending:10000}") int maxPendingAuditEvents, SummarySentenceGenerator summaries) {
+        this.summaries = summaries;
         this.jdbc = jdbc;
         this.instruments = instruments;
         this.generator = generator;
@@ -116,6 +125,7 @@ public class EventReportService {
         }
         int version = persist(eventId, outcome, chosenIds);
         jdbc.update("DELETE FROM event_report_attempt WHERE public_event_id = ?", eventId);
+        if (version > 0) writeSummarySentence(eventId, version, instrumentRefs);
         return version > 0;
     }
 
@@ -137,6 +147,40 @@ public class EventReportService {
                 "modelVersion", outcome.modelVersion(), "promptVersion", outcome.promptVersion(),
                 "sourceIds", sourceIds, "outcome", "GENERATED")), now));
         return version;
+    }
+
+    /**
+     * The one-sentence summary for the news email (news-alert-drafts plan, section 6), from this report's public text
+     * only. A failure never affects the report: the email then uses the report's first sentence.
+     */
+    private void writeSummarySentence(UUID eventId, int version, List<ReportInput.InstrumentRef> instrumentRefs) {
+        if (summaries == null || instrumentRefs.isEmpty()) return;
+        try {
+            List<Object[]> rows = jdbc.query("SELECT id, report::text FROM event_report WHERE public_event_id = ? AND version = ?",
+                    (rs, n) -> new Object[] {rs.getObject(1, UUID.class), rs.getString(2)}, eventId, version);
+            if (rows.isEmpty()) return;
+            UUID reportId = (UUID) rows.getFirst()[0];
+            ReportInput.InstrumentRef instrument = instrumentRefs.getFirst();
+            SummarySentenceGenerator.Outcome outcome = summaries.write(mapper.readTree((String) rows.getFirst()[1]),
+                    instrument.issuerName(), instrument.ticker());
+            if ("SUMMARY_DISABLED".equals(outcome.reasonCode())) return;
+            if (outcome.sentence() != null) {
+                jdbc.update("UPDATE event_report SET summary_sentence = ?, summary_model = ? WHERE id = ?",
+                        outcome.sentence(), outcome.model(), reportId);
+            }
+            Instant now = clock.instant();
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("reportId", reportId);
+            payload.put("publicEventId", eventId);
+            payload.put("version", version);
+            payload.put("modelId", outcome.model());
+            payload.put("outcome", outcome.sentence() != null ? "PASSED" : "FAILED");
+            payload.put("reasonCode", outcome.reasonCode());
+            payload.put("occurredAt", now.toString());
+            auditOutbox.saveAndFlush(new AuditOutbox(UUID.randomUUID(), "alert.summary-generated", 1, json(payload), now));
+        } catch (JsonProcessingException | RuntimeException failure) {
+            log.warn("summary sentence not written error_code={}", failure.getClass().getSimpleName());
+        }
     }
 
     private void recordAttempt(UUID eventId, ReportOutcome outcome) {
