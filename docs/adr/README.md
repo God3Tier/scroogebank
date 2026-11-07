@@ -122,6 +122,8 @@ ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 an
 - [ADR-0080](ADR-0080-alert-worker-runs-once-on-every-apply.md) — Proposed 2026-11-04 (owner Hayyun; review pending): the alert-worker stack starts one worker run at the end of every apply, then the four-hour schedule carries on; switch off with `run_on_apply = false`; each run spends Tavily credits.
 - [ADR-0081](ADR-0081-producer-sync-leaves-out-seeded-demo-accounts.md) — Proposed 2026-11-04 (owner Neo Jia Wen; Joseph Yau to review): `scripts/sync-producer-accounts.sh` leaves out the four Client Health demo accounts listed in the script, so they keep only their deterministic history; supersedes ADR-0045 decision 3 in part.
 
+- [ADR-0082](ADR-0082-admin-complete-audit-log-view.md) — Proposed 2026-11-07 (owner Joseph, confirmation required): administrators read every audit event through a new user-service endpoint and internal gRPC method; the existing activity feed stays changes-only.
+
 ## Maintenance rule
 
 Add or update exactly one concise entry whenever an ADR is added, superseded, or

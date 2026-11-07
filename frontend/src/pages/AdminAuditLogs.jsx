@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import { listActivities } from '../api/activities.js'
+import { listAuditLogs } from '../api/auditLogs.js'
 import { AuditAction, AuditPayload, AuditTime } from '../components/AuditLogParts.jsx'
 import CorruptedAuditLogs from '../components/CorruptedAuditLogs.jsx'
 import { Pager } from '../components/ListFooter.jsx'
@@ -10,8 +10,8 @@ import { cursorSource, usePagedList } from '../components/paging.js'
 function errorMessage(error) {
   if (error.status === 401) return 'Your session has expired. Sign in again.'
   if (error.status === 403) return 'You do not have permission to view this page.'
-  if (error.status === 503) return 'Audit activity is temporarily unavailable.'
-  return 'Audit activity could not be loaded.'
+  if (error.status === 503) return 'The audit log is temporarily unavailable.'
+  return 'The audit log could not be loaded.'
 }
 
 // The audit trail and its integrity findings. ListPage supplies the page
@@ -19,7 +19,7 @@ function errorMessage(error) {
 export default function AdminAuditLogs() {
   const source = useMemo(
     () => cursorSource(
-      ({ size, cursor }) => listActivities({ size, cursor }),
+      ({ size, cursor }) => listAuditLogs({ size, cursor }),
       { pageSize: 20, chunkSize: 20 },
     ),
     [],
@@ -33,9 +33,9 @@ export default function AdminAuditLogs() {
       <section className="card card-flush audit-log" aria-labelledby="audit-activity-heading">
         <header className="audit-log__header">
           <div>
-            <h2 id="audit-activity-heading">Audit Activity</h2>
+            <h2 id="audit-activity-heading">Complete Audit Log</h2>
             <p className="audit-log__note">
-              Successful changes only. Reads, sign-ins, sign-outs, and failures are not included.
+              All recorded events, including reads, authentication, failures, and transaction-service activity.
             </p>
           </div>
         </header>
@@ -56,6 +56,7 @@ export default function AdminAuditLogs() {
                   <th scope="col">Time</th>
                   <th scope="col">User</th>
                   <th scope="col">Service</th>
+                  <th scope="col">Event type</th>
                   <th scope="col">Action</th>
                   <th scope="col">Details</th>
                 </tr>
@@ -70,6 +71,7 @@ export default function AdminAuditLogs() {
                         : <span className="mono">{entry.actorId || 'Unknown'}</span>}
                     </td>
                     <td className="mono">{entry.sourceService}</td>
+                    <td className="mono">{entry.eventType}</td>
                     <td><AuditAction action={entry.action} /></td>
                     <td><AuditPayload label="View details" value={entry.payload} /></td>
                   </tr>
@@ -86,11 +88,11 @@ export default function AdminAuditLogs() {
         {empty && (
           <p className="audit-log__status">
             <span className="material-symbols-outlined" aria-hidden="true">history</span>
-            No audit activity found.
+            No audit log entries found.
           </p>
         )}
 
-        {!empty && !list.error && <Pager list={list} label="Audit activity pages" />}
+        {!empty && !list.error && <Pager list={list} label="Audit log pages" />}
       </section>
 
       <CorruptedAuditLogs />

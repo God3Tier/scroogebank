@@ -19,6 +19,34 @@ service AuditService {
   // entries of the activity feed. The caller's token decides what it may
   // see: an admin any actor, an agent only their own entries.
   rpc ListActivities(ListActivitiesRequest) returns (ListActivitiesResponse);
+  // ListAuditLogs returns the complete audit trail to administrators. Unlike
+  // ListActivities it includes reads, authentication, failures, background
+  // work and transaction-service events.
+  rpc ListAuditLogs(ListAuditLogsRequest) returns (ListAuditLogsResponse);
+}
+
+message ListAuditLogsRequest {
+  // 1 to 100.
+  int32 page_size = 1;
+  // A previous response's next_page_token. Empty starts at the newest entry.
+  string page_token = 2;
+}
+
+message ListAuditLogsResponse {
+  // Every audit entry, newest first.
+  repeated AuditLogEntry entries = 1;
+  // Pass as page_token to get the next page. Empty means no more pages.
+  string next_page_token = 2;
+}
+
+message AuditLogEntry {
+  string id = 1;
+  string event_type = 2;
+  string action = 3;
+  string source_service = 4;
+  string actor_id = 5;
+  google.protobuf.Timestamp timestamp = 6;
+  string payload = 7;
 }
 
 message ListActivitiesRequest {

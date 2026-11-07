@@ -1,7 +1,10 @@
 package bank.user.activity;
 
 import bank.audit.grpc.v1.Activity;
+import bank.audit.grpc.v1.AuditLogEntry;
 import bank.audit.grpc.v1.AuditServiceGrpc;
+import bank.audit.grpc.v1.ListAuditLogsRequest;
+import bank.audit.grpc.v1.ListAuditLogsResponse;
 import bank.audit.grpc.v1.ListActivitiesRequest;
 import bank.audit.grpc.v1.ListActivitiesResponse;
 import bank.user.domain.User;
@@ -69,10 +72,65 @@ public class ActivityService {
                     : "Activity log request failed", e);
         }
 
-        Map<String, String> actorNames = actorNames(response.getActivitiesList());
+        Map<String, String> actorNames = actorNamesFor(
+                response.getActivitiesList().stream().map(Activity::getActorId).toList());
         return new ActivityPage(
                 response.getActivitiesList().stream().map(entry -> toResponse(entry, actorNames)).toList(),
                 response.getNextPageToken().isEmpty() ? null : response.getNextPageToken());
+    }
+
+    /** Returns every audit event. The REST controller and auditor both require ADMIN. */
+    public AuditLogPage listAuditLogs(int size, String cursor, String accessToken) {
+        ListAuditLogsRequest.Builder request = ListAuditLogsRequest.newBuilder().setPageSize(size);
+        if (cursor != null) {
+            request.setPageToken(cursor);
+        }
+
+        ListAuditLogsResponse response;
+        try {
+            response = auditorCircuitBreaker.executeSupplier(
+                    () -> callAuditLogsWithOneRetry(request.build(), accessToken));
+        } catch (CallNotPermittedException e) {
+            log.warn("Auditor circuit breaker is open; not calling ListAuditLogs");
+            throw new AuditorUnavailableException("Audit log is temporarily unavailable", e);
+        } catch (StatusRuntimeException e) {
+            log.warn("Auditor ListAuditLogs failed: {}", e.getStatus());
+            Status.Code code = e.getStatus().getCode();
+            boolean transientFailure = code == Status.Code.UNAVAILABLE || code == Status.Code.DEADLINE_EXCEEDED;
+            throw new AuditorUnavailableException(transientFailure
+                    ? "Audit log is temporarily unavailable"
+                    : "Audit log request failed", e);
+        }
+
+        Map<String, String> actorNames = actorNamesFor(
+                response.getEntriesList().stream().map(AuditLogEntry::getActorId).toList());
+        return new AuditLogPage(
+                response.getEntriesList().stream().map(entry -> new AuditLogResponse(
+                        entry.getId(), entry.getEventType(), entry.getSourceService(), entry.getAction(),
+                        entry.getActorId(), actorNames.get(entry.getActorId()),
+                        Instant.ofEpochSecond(entry.getTimestamp().getSeconds(), entry.getTimestamp().getNanos()),
+                        parsePayload(entry.getPayload()))).toList(),
+                response.getNextPageToken().isEmpty() ? null : response.getNextPageToken());
+    }
+
+    private ListAuditLogsResponse callAuditLogsWithOneRetry(ListAuditLogsRequest request, String accessToken) {
+        try {
+            return callAuditLogs(request, accessToken);
+        } catch (StatusRuntimeException e) {
+            if (e.getStatus().getCode() != Status.Code.UNAVAILABLE) {
+                throw e;
+            }
+            log.info("Auditor unavailable; retrying ListAuditLogs once");
+            return callAuditLogs(request, accessToken);
+        }
+    }
+
+    private ListAuditLogsResponse callAuditLogs(ListAuditLogsRequest request, String accessToken) {
+        Metadata headers = new Metadata();
+        headers.put(AUTHORIZATION, "Bearer " + accessToken);
+        return auditor.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers))
+                .withDeadlineAfter(DEADLINE.toMillis(), TimeUnit.MILLISECONDS)
+                .listAuditLogs(request);
     }
 
     /**
@@ -122,8 +180,8 @@ public class ActivityService {
     }
 
     /** The CRM users who acted on this page, by Cognito sub, looked up in one query. */
-    private Map<String, String> actorNames(List<Activity> activities) {
-        List<String> actorIds = activities.stream().map(Activity::getActorId).distinct().toList();
+    private Map<String, String> actorNamesFor(List<String> ids) {
+        List<String> actorIds = ids.stream().distinct().toList();
         if (actorIds.isEmpty()) {
             return Map.of();
         }

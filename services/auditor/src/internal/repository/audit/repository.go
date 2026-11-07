@@ -16,6 +16,7 @@ type Repository interface {
 	// afterSequenceNo, oldest first.
 	GetChainPage(ctx context.Context, afterSequenceNo int64, limit int) ([]models.AuditLog, error)
 	ListActivities(ctx context.Context, filter models.ActivityFilter) ([]models.AuditLog, error)
+	ListAuditLogs(ctx context.Context, filter models.AuditLogFilter) ([]models.AuditLog, error)
 }
 
 type impl struct {
