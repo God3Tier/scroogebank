@@ -1,0 +1,22 @@
+# Copy to prod.tfvars (git-ignored). Apply the CRM stack first: this stack reads
+# that stack's alerts_worker_inputs output from its state (ADR-0048). The worker
+# uses the same image and tag as the event-alert-service API. Its schedule
+# follows the CRM stack's running variable, so apply this stack again after
+# every CRM apply that changes it.
+
+legal_entity = "sg"
+environment  = "prod"
+
+# The bootstrap stack's state_bucket output, the same bucket as in
+# env/prod.s3.tfbackend.
+state_bucket = "crm-tfstate-123456789012"
+
+# Hayyun approved enabling both on 2026-11-01 (ADR-0051). Set them to true in your
+# own prod.tfvars once the Tavily secret is populated; the template stays false so
+# a new environment never starts calling Tavily or Bedrock by accident.
+ingestion_enabled = false
+ai_enabled        = false
+
+# Requester-authorized sources; summaries include source links (ADR-0051).
+# Official issuer/exchange/regulator domains also come from alerts-db.
+approved_news_domains = ["reuters.com", "cnbc.com", "ft.com", "bloomberg.com", "wsj.com", "barrons.com", "marketwatch.com", "finance.yahoo.com", "investing.com", "benzinga.com", "fool.com", "forbes.com", "businesstimes.com.sg", "straitstimes.com", "channelnewsasia.com", "theedgesingapore.com", "apnews.com", "bbc.com", "theguardian.com", "techcrunch.com", "theverge.com", "thenextweb.com", "techspot.com", "adage.com"]

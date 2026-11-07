@@ -1,0 +1,131 @@
+package routers
+
+import (
+	accountcontroller "account-service/src/internal/controller/account"
+	aggregatecontroller "account-service/src/internal/controller/aggregate"
+	"account-service/src/internal/models"
+	"account-service/src/internal/security"
+	"database/sql"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+/*
+	List of HTTP status codes used in the application
+	http.StatusOK = 200
+	http.StatusCreated = 201
+	http.StatusAccepted = 202
+	http.StatusNoContent = 204
+	http.StatusBadRequest = 400
+	http.StatusUnauthorized = 401
+	http.StatusForbidden = 403
+	http.StatusNotFound = 404
+	http.StatusInternalServerError = 500
+	http.StatusNotImplemented = 501
+	http.StatusBadGateway = 502
+	http.StatusServiceUnavailable = 503
+*/
+
+func RegisterRoutes(router *gin.Engine, accounts accountcontroller.AccountController, aggregates aggregatecontroller.Controller, db *sql.DB, authenticate, authenticateService, authenticateAlertDirectory, auditLogger gin.HandlerFunc) {
+	// The business dashboard's figures, and the account IDs user-service
+	// scopes an agent's transaction figures by, fetched with the caller's own
+	// user token. Outside /api, so API Gateway never routes them, and not
+	// audited here: the dashboard audits each view (ADR-0039).
+	aggregate := router.Group("/aggregates")
+	aggregate.Use(authenticate)
+	aggregate.Use(security.RequireCRMRole())
+	aggregate.GET("/accounts/stats", withCaller(aggregates.AccountStats))
+	aggregate.GET("/accounts/ids", withCaller(aggregates.OwnedAccountIDs))
+
+	// Service-to-service routes take client-credentials tokens, never user
+	// tokens, and sit outside /api so API Gateway never routes them (ADR-0037).
+	// Not audited: a lookup changes nothing, and the import audits each file.
+	// Each route has its own service middleware, so the transaction import's
+	// token cannot read the alert directory and the alert service's token
+	// cannot look up accounts for an import (ADR-0066).
+	internal := router.Group("/internal")
+	internal.POST("/accounts/lookup", authenticateService, adaptHandler(accounts.LookupAccounts, ""))
+	internal.POST("/alerts/accounts/lookup", authenticateAlertDirectory, adaptHandler(accounts.LookupAlertAccounts, ""))
+
+	// Moving a reassigned client's accounts to its new agent: called only by
+	// client-profile-management-service with the admin's own user token, while
+	// it holds the clients locked. Outside /api, so API Gateway never routes
+	// it, and not audited here: client-service audits each client moved
+	// (ADR-0060).
+	ownership := router.Group("/ownership")
+	ownership.Use(authenticate)
+	ownership.Use(security.RequireAdmin())
+	ownership.PUT("/accounts", adaptHandler(accounts.SetOwner, ""))
+
+	api := router.Group("/api")
+	api.Use(authenticate)
+	api.Use(security.RequireCRMRole())
+
+	account := api.Group("/accounts")
+	account.Use(auditLogger)
+	{
+		// Admins only read accounts; every write is for agents (ADR-0059).
+		// Ownership of the client is checked by client-profile-management-
+		// service inside CreateAccount, using the caller's token. The caller
+		// is passed too: agents need a verified client (ADR-0050).
+		account.POST("", security.RequireAgent(), withCaller(accounts.CreateAccount))
+		account.GET("", listAccounts(accounts))
+		account.GET("/:accountId", security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.GetAccount, "accountId"))
+		account.DELETE("/:accountId", security.RequireAgent(), security.RequireAccountOwner(db, "accountId"), adaptHandler(accounts.DeleteAccount, "accountId"))
+		// Only an account's status can change, by the agent who owns it, once
+		// its client is verified (ADR-0050).
+		account.PATCH("/:accountId", security.RequireAgent(), security.RequireAccountOwner(db, "accountId"), withCallerAndAccount(accounts.UpdateAccountStatus))
+	}
+}
+
+// withCallerAndAccount is withCaller for handlers that also take the route's
+// account ID.
+func withCallerAndAccount(handler func(http.ResponseWriter, *http.Request, models.Caller, string)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		accountID := c.Param("accountId")
+		withCaller(func(w http.ResponseWriter, r *http.Request, caller models.Caller) {
+			handler(w, r, caller, accountID)
+		})(c)
+	}
+}
+
+// listAccounts hands the verified caller to the controller explicitly. The
+// list is scoped by that caller, so it must never come from request data.
+func listAccounts(accounts accountcontroller.AccountController) gin.HandlerFunc {
+	return withCaller(accounts.ListAccounts)
+}
+
+// withCaller hands the verified caller to the controller explicitly, for
+// handlers scoped by that caller.
+func withCaller(handler func(http.ResponseWriter, *http.Request, models.Caller)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		principal, ok := security.PrincipalFromGin(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		handler(c.Writer, c.Request, models.Caller{
+			Subject: principal.Subject,
+			Admin:   principal.Role == "ADMIN",
+		})
+	}
+}
+
+// adaptHandler lets the existing net/http controllers serve Gin routes. The
+// route IDs are copied into the query parameter used by those controllers.
+func adaptHandler(handler func(http.ResponseWriter, *http.Request), routeID string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		req := c.Request
+		if routeID != "" {
+			urlCopy := *req.URL
+			query := urlCopy.Query()
+			query.Set("id", c.Param(routeID))
+			urlCopy.RawQuery = query.Encode()
+			requestCopy := req.Clone(req.Context())
+			requestCopy.URL = &urlCopy
+			req = requestCopy
+		}
+		handler(c.Writer, req)
+	}
+}

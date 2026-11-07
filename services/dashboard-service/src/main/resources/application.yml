@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: dashboard-service
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER_URI}
+
+# No spring.datasource and no flyway block: this service owns no data
+# (ADR-0033). If a datasource ever appears here, that decision has been
+# reversed and needs a superseding ADR.
+
+server:
+  port: 8085
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# Off unless the `local` profile is active (application-local.yml). Opt-in
+# rather than opt-out, so a deployment that forgets to set a profile keeps the
+# API spec unpublished instead of exposing it.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+    path: /swagger-ui.html
+
+# Only access tokens issued to the CRM's app client are accepted, as in
+# user-service.
+idp:
+  cognito:
+    app-client-id: ${COGNITO_APP_CLIENT_ID}
+
+# DASHBOARD_VIEW events go to the shared audit queue, best-effort (ADR-0033).
+# Blank means not sent, for running locally without AWS.
+audit:
+  sqs:
+    queue-url: ${AUDIT_QUEUE_URL:}
+    region: ${AWS_REGION:ap-southeast-1}
+
+dashboard:
+  # Reporting window limits. The maximum is a guard against a single request
+  # asking an upstream to aggregate an unbounded range.
+  window:
+    default-days: 30
+    max-days: 365
+  # Per-task Caffeine cache (ADR-0033). Not shared between tasks, and keyed by
+  # caller subject so one caller's scoped figures can never serve another.
+  cache:
+    ttl-seconds: 180
+    max-entries: 1000
+  # Budgets for the upstream fan-out. No retries: a read-only dashboard should
+  # surface a failure immediately rather than amplify load on a struggling
+  # upstream (see nfr-notes.md, "Resiliency scope"). Down to 5 s and 8 s from
+  # 10 s and 15 s, which were raised for calls that stalled in the JDK
+  # HttpClient; that is fixed (see RestClientConfig). The overall budget must
+  # stay under API Gateway's 29 s integration timeout (ADR-0033).
+  upstream:
+    per-call-timeout-ms: 5000
+    overall-budget-ms: 8000
+    # Blank by default on purpose, unlike the settings above: an unset
+    # upstream is a supported state that degrades its panels, not a startup
+    # failure. user-service serves the agent roster, and transaction-service
+    # the transaction figures (ADR-0064).
+    user-service-base-url: ${USER_SERVICE_BASE_URL:}
+    client-service-base-url: ${CLIENT_SERVICE_BASE_URL:}
+    account-service-base-url: ${ACCOUNT_SERVICE_BASE_URL:}
+    transaction-service-base-url: ${TRANSACTION_SERVICE_BASE_URL:}
+
+logging:
+  level:
+    bank.dashboard: INFO

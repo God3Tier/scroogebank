@@ -1,0 +1,20 @@
+{
+  "eventId": "40000000-0000-4000-8000-000000000001",
+  "eventType": "alert.created",
+  "eventVersion": 1,
+  "occurredAt": "2026-09-27T00:01:00Z",
+  "correlationId": "20000000-0000-4000-8000-000000000001",
+  "producer": "event-alert-service",
+  "payload": {
+    "alertId": "50000000-0000-4000-8000-000000000001",
+    "clientRef": "syn-client-001",
+    "assignedAgentSubject": "syn-agent-001",
+    "publicEventId": "10000000-0000-4000-8000-000000000001",
+    "instrumentId": "SYN-SGX-001",
+    "score": 72.5,
+    "ruleVersion": "materiality-v1",
+    "valuationSnapshotId": "30000000-0000-4000-8000-000000000001",
+    "status": "NEW",
+    "createdAt": "2026-09-27T00:01:00Z"
+  }
+}

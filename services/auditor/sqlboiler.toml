@@ -1,0 +1,12 @@
+# No generated ORM tests: they need the PostgreSQL client tools (createdb,
+# dropdb, pg_dump), which the Go test image lacks, and the repository tests
+# already run the ORM against the real schema.
+no-tests = true
+
+[psql]
+  dbname = "myapp"
+  host = "postgres"
+  port = 5432
+  user = "postgres"
+  pass = "postgres"
+  sslmode = "disable"

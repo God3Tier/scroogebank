@@ -1,0 +1,19 @@
+output = "models"
+# Soft deletes (ADR-0036): generated queries skip rows whose deleted_at is set,
+# and Delete(ctx, exec, false) sets deleted_at instead of removing the row.
+add-soft-deletes = true
+# No generated ORM tests: they need the PostgreSQL client tools (createdb,
+# dropdb, pg_dump), which the Go test image lacks, and the repository tests
+# already run the ORM against the real schema.
+no-tests = true
+
+[psql]
+dbname = "myapp"
+host = "localhost"
+port = 5432
+user = "postgres"
+pass = "postgres"
+schema = "public"
+sslmode = "disable"
+# The audit outbox is written with plain SQL (src/serverd/sqs/outbox.go), not the ORM.
+blacklist = ["audit_outbox"]

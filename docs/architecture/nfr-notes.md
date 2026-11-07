@@ -2,17 +2,17 @@
 
 Design rationale that doesn't belong in any single service's README because it applies system-wide. See each service's own README for how it individually satisfies the mandatory NFRs (Scalability, Availability, Maintainability/Extensibility).
 
-## Deployment model: AWS only
+## Deployment model: AWS in production; local database profile with Cognito security
 
-This system has no local runtime. The services require a real RDS instance, a real Cognito user pool, and Cloud Map service discovery, and every configuration value is read from an environment variable **with no default**, so a missing one fails the container at startup rather than silently falling back to a local-shaped value.
+Production runs on AWS. The services use RDS, Cognito, and Cloud Map, and production configuration is supplied by task definitions and Secrets Manager rather than local defaults.
 
-This is a deliberate narrowing. An earlier revision ran the full stack locally via docker-compose (Postgres + a Keycloak container standing in for Cognito), which bought environment parity at the cost of a second IdP implementation, a second set of configuration defaults, and a standing risk of the two paths drifting. Removing it deleted `KeycloakIdentityProviderClient`, the `local`/`aws` Spring profile split, and the dual-claim role parsing in both the backend `JwtRoleConverter`s and the frontend's `roles.ts`.
+The user-service `local` profile uses local PostgreSQL and enables Swagger while retaining Cognito provisioning, JWT validation, and Admin-only method authorization. It is not an authentication bypass. Feature 2 independently validates Cognito access tokens and enforces agent ownership of client profiles and accounts; an API Gateway authorizer is an additional edge check, not a replacement for service-side validation.
 
-The cost is real and worth stating: there is no way to exercise the running system without deploying it, so the feedback loop for anything beyond unit and repository tests now runs through AWS. Testcontainers-backed tests still run on a developer machine (they need Docker, not the application stack), which keeps the data layer verifiable locally.
+Testcontainers-backed tests still run on a developer machine (they need Docker, not the application stack), which keeps the data layer verifiable locally.
 
 ## MFA
 
-Feature 1 requires MFA. The Cognito User Pool (`infra/terraform/modules/cognito`) sets `mfa_configuration = "ON"` with TOTP software tokens, so every user must enrol MFA on first sign-in — no custom code. The Spring Security resource-server config validates tokens identically regardless; MFA enforcement is entirely Cognito's responsibility and never touches application code.
+Feature 1 requires MFA. Since [ADR-0076](../adr/ADR-0076-evaluation-accounts-without-mfa.md) the pool's MFA is optional, so that the brief's two evaluation accounts can sign in without it, and a pre token generation trigger enforces it for everyone else: API Gateway requires the `crm/api` scope, which the trigger adds only for a user with TOTP enrolled or in `MFA_EXEMPT`. The app enrols TOTP for a user who has none. Earlier, Cognito enforced MFA in the user-pool configuration alone. The user-service validates access-token type, issuer, app-client ID, signature, and time claims, while MFA enrollment and challenge enforcement remain Cognito responsibilities. The infrastructure directory is absent in this checkout, so the deployed pool's MFA setting cannot be verified here.
 
 ## NFR 12 (Data Segregation): single-tenant assumption, not built
 
@@ -30,13 +30,17 @@ An earlier revision used a single shared instance to save cost. What killed it w
 
 The cost is one database instance per service instead of one shared instance, which is the honest price of removing a manual deployment step and getting real per-service isolation. Every instance holds actual CRM records, so all of them stay Multi-AZ for the mandatory Availability NFR.
 
-## No message broker
+## No message broker (superseded for the auditor service)
 
-Every service serves its own synchronous REST API, and no service consumes events from another, so there is no Kafka/RabbitMQ/SQS. A broker earns its cost when there are multiple consumers, ordering/backpressure requirements, or a need to decouple producer/consumer lifecycles — none of which apply today. Introducing one here would be infrastructure for its own sake.
+Every service serves its own synchronous REST API, and no service consumes events from another *except the auditor*, which reads audit events via a queue. A broker earns its cost when there are multiple consumers, ordering/backpressure requirements, or a need to decouple producer/consumer lifecycles — none of which apply to the rest of the system today, so this remains the default for every other service. Introducing one elsewhere would still be infrastructure for its own sake.
+
+The auditor's queue is Amazon SQS (previously Kafka before it) — see [ADR-0004](../adr/ADR-0004-auditor-kafka-to-sqs-migration.md) for the rationale and the earlier Kafka setup this replaced.
 
 ## Resiliency scope
 
-No retry or circuit-breaker library (such as Resilience4j) is applied, because no service calls another over HTTP: every request goes from API Gateway straight to the one service that owns it. That is simple edge proxying, where a failure should surface immediately rather than be retried silently.
+No retry or circuit-breaker library is applied to the HTTP calls between services, such as user-service asking account-service whether the caller may read an account: each runs inside one user request, where a failure should surface at once rather than be retried silently.
+
+There is one service-to-service call that does use both: the user service's activity feed (`GET /api/activities`) reads the audit log from the auditor over gRPC (`AuditService.ListActivities`), as [ADR-0021](../adr/ADR-0021-audit-read-path-grpc-service-connect.md) requires. The auditor is internal only. It is reached through ECS Service Connect and is never exposed through API Gateway. Each call has a 2-second deadline and is retried once, only on `UNAVAILABLE`, when the call never reached a server and Service Connect may route the retry to another task. A Resilience4j circuit breaker (the core library, no Spring Boot starter) opens after half of the last 10 calls failed on the auditor's side and then fails fast for 30 seconds, so a down auditor does not hold request threads; caller errors do not count. Any auditor failure returns `503`, and business actions are unaffected because audit writes go through SQS. Service Connect's sidecar proxy tracks the auditor's task addresses, so the long-lived gRPC channel does not hit the stale-IP problem described below, and the auditor recycles connections every 5 minutes so they rebalance.
 
 The self-hosted gateway that used to sit at the edge had a resilience problem of its own: Spring Cloud Gateway's Netty HTTP client pooled connections to backend tasks, and since ECS replaces task IPs on every deploy and scale event, a pooled connection could keep pointing at an address that no longer existed — an intermittent `Connection refused` against a healthy backend. It was handled by disabling pooling outright (`spring.cloud.gateway.httpclient.pool.type: DISABLED`), found by observation during end-to-end testing rather than theorised.
 

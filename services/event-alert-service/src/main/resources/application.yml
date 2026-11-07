@@ -1,0 +1,227 @@
+spring:
+  application:
+    name: event-alert-service
+  datasource:
+    url: ${EVENT_ALERT_DB_URL:jdbc:postgresql://localhost:5432/event_alert}
+    username: ${EVENT_ALERT_DB_USERNAME:event_alert}
+    password: ${EVENT_ALERT_DB_PASSWORD:}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${COGNITO_ISSUER_URI}
+
+# API mode accepts only access tokens issued to this app client (ADR-0005, ADR-0025).
+idp:
+  cognito:
+    app-client-id: ${COGNITO_APP_CLIENT_ID:}
+
+alert:
+  mode: ${ALERT_MODE:API}
+  reports:
+    # An approval can be used to send for this long; the page highlights it from stale-after (news-alert-drafts plan).
+    approval-valid-for: ${ALERT_REPORT_APPROVAL_VALID_FOR:7d}
+    stale-after: 5d
+    # One AI summary sentence per report version, written by the worker. Off until Azeez has reviewed 20 samples.
+    summary-enabled: ${ALERT_REPORT_SUMMARY_ENABLED:false}
+  holdings:
+    # fixture: bundled synthetic JSON (isolated demos and tests).
+    # database: maintained CRM-linked portfolios; API and worker must use the same mode.
+    mode: ${ALERT_HOLDINGS_MODE:fixture}
+  crm:
+    # Only read in database mode: the private account alert-directory route plus a dedicated
+    # client-credentials identity holding just the directory read scopes.
+    account-directory-url: ${ALERT_CRM_ACCOUNT_DIRECTORY_URL:}
+    token-endpoint: ${ALERT_CRM_TOKEN_ENDPOINT:}
+    client-id: ${ALERT_CRM_CLIENT_ID:}
+    client-secret: ${ALERT_CRM_CLIENT_SECRET:}
+    scope: ${ALERT_CRM_SCOPE:}
+    timeout: ${ALERT_CRM_TIMEOUT:5s}
+  audit:
+    max-pending: ${ALERT_AUDIT_MAX_PENDING:10000}
+    publisher:
+      # Auditor delivery is opt-in. The default never opens an SQS connection.
+      enabled: ${ALERT_AUDIT_PUBLISHER_ENABLED:false}
+      queue-url: ${AUDIT_QUEUE_URL:}
+      region: ${AWS_REGION:ap-southeast-1}
+      endpoint: ${AWS_ENDPOINT_URL:}
+      interval: ${ALERT_AUDIT_PUBLISH_INTERVAL:5s}
+      batch-size: ${ALERT_AUDIT_PUBLISH_BATCH_SIZE:50}
+      max-attempts: ${ALERT_AUDIT_PUBLISH_MAX_ATTEMPTS:10}
+      lease-duration: ${ALERT_AUDIT_LEASE_DURATION:30s}
+      send-timeout: ${ALERT_AUDIT_SEND_TIMEOUT:10s}
+  retention:
+    enabled: ${ALERT_RETENTION_ENABLED:true}
+    interval: ${ALERT_RETENTION_INTERVAL:1h}
+    batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
+  # The most new alerts one agent gets in a UTC day; 0 means no limit. It was 10 (ADR-0004) until 2026-11-07.
+  generation:
+    daily-limit: ${ALERT_DAILY_ALERT_LIMIT:200}
+  # When the automatic searches run, for the page to show the next one (ADR-0081). The schedule itself is
+  # EventBridge Scheduler's, in stacks/alert-worker; keep these two in step.
+  schedule:
+    enabled: ${ALERT_SCHEDULE_ENABLED:true}
+    interval: ${ALERT_SCHEDULE_INTERVAL:4h}
+    zone: ${ALERT_SCHEDULE_ZONE:Asia/Singapore}
+  # A search started when an agent adds a website or presses Search now (ADR-0081). Off unless a mode is set: ecs starts the
+  # worker task in AWS, local-process starts it as a child process on a developer's machine.
+  search-on-add:
+    mode: ${ALERT_SEARCH_ON_ADD_MODE:off}
+    cooldown: ${ALERT_SEARCH_ON_ADD_COOLDOWN:15m}
+    daily-cap: ${ALERT_SEARCH_ON_ADD_DAILY_CAP:0}
+    lookback: ${ALERT_SEARCH_ON_ADD_LOOKBACK:7d}
+    cluster: ${ALERT_SEARCH_ON_ADD_CLUSTER:}
+    task-definition: ${ALERT_SEARCH_ON_ADD_TASK_DEFINITION:}
+    subnets: ${ALERT_SEARCH_ON_ADD_SUBNETS:}
+    security-group: ${ALERT_SEARCH_ON_ADD_SECURITY_GROUP:}
+    command: ${ALERT_SEARCH_ON_ADD_COMMAND:}
+  ingestion:
+    # Outbound discovery is deliberately fail-closed until IaC, IAM and live evidence are approved.
+    enabled: ${ALERT_INGESTION_ENABLED:false}
+    provider: ${ALERT_SEARCH_PROVIDER:tavily}
+    overlap: 5m
+    initial-lookback: 4h
+    # No small cap: every eligible instrument is searched on every run (ADR-0084). The monthly quota and the
+    # monthly budget below still stop all searching before a run that they cannot cover.
+    max-queries-per-run: ${ALERT_MAX_QUERIES_PER_RUN:1000}
+    max-results-per-query: 20
+    max-attempts: 3
+    retention: 90d
+    # Select public search terms in Singapore from sufficiently common holdings.
+    # Only public ticker/issuer/sector terms leave the private boundary.
+    minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.20}
+    minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
+    tavily:
+      # Injected from Secrets Manager by the worker task. Empty keeps the
+      # application startable but every search fails closed.
+      api-key: ${ALERT_TAVILY_API_KEY:}
+      endpoint: https://api.tavily.com/search
+      timeout: 30s
+      max-response-bytes: 262144
+      # Shared publishers authorized by the requester (the first three on 2026-10-30, the list widened on 2026-11-07); see ADR-0051.
+      # Tavily is restricted to these sites, a company's official sites and the websites agents add (include_domains).
+      # Every issuer also adds its official domains from the instrument master.
+      approved-domains: [reuters.com, cnbc.com, ft.com, bloomberg.com, wsj.com, barrons.com, marketwatch.com, finance.yahoo.com, investing.com, benzinga.com, fool.com, forbes.com, businesstimes.com.sg, straitstimes.com, channelnewsasia.com, theedgesingapore.com, apnews.com, bbc.com, theguardian.com, techcrunch.com, theverge.com, thenextweb.com, techspot.com, adage.com]
+    event-terms:
+      - earnings
+      - results
+      - financial results
+      - profit
+      - revenue
+      - guidance
+      - regulatory action
+      - investigation
+      - fine
+      - filing
+      - approval
+      - merger
+      - acquisition
+      - takeover
+      - divestment
+      - buyback
+      - credit rating
+      - downgrade
+      - upgrade
+      - default
+      - credit outlook
+      - appointment
+      - appointed
+      - appoints
+      - resignation
+      - resigned
+      - steps down
+      # Added 2026-11-07 (AWS test feedback), approved by Azeez: more words that name a company event in a title.
+      - probe
+      - lawsuit
+      - settlement
+      - layoffs
+      - recall
+      - bankruptcy
+      - outlook
+      - forecast
+      - deal
+      - stake
+      - partnership
+      - launches
+      - plans
+      - cuts
+      - raises
+      - rejects
+      - weighs
+      - posts
+      - winding down
+      - shares fall
+      - warns
+      - beats
+      - misses
+      - acquires
+      - sues
+      - hack
+      - breach
+      - outage
+      - ban
+      - sanctions
+  ai:
+    # Independent fail-closed switch; no model can be invoked by default.
+    enabled: ${ALERT_AI_ENABLED:false}
+    provider: ${ALERT_AI_PROVIDER:none}
+    # Bedrock's Nova Pro by default; a developer machine can use Claude through the Anthropic API
+    # (ALERT_AI_PROVIDER=anthropic, ALERT_AI_MODEL=claude-sonnet-5-5, ALERT_ANTHROPIC_API_KEY) (ADR-0083).
+    model: ${ALERT_AI_MODEL:apac.amazon.nova-pro-v1:0}
+    prompt-version: alert-public-v1
+    max-input-characters: 12000
+    max-output-characters: 8000
+    max-output-tokens: 1200
+    max-attempts: 2
+    timeout: 20s
+    minimum-confidence: 0.60
+    bedrock:
+      region: ${ALERT_AI_BEDROCK_REGION:ap-southeast-1}
+    anthropic:
+      api-key: ${ALERT_ANTHROPIC_API_KEY:}
+  # Lower environments only: search just this one eligible instrument, to test a report (ADR-0084). Unset searches all.
+  search:
+    only-instrument-id: ${ALERT_SEARCH_ONLY_INSTRUMENT_ID:}
+  operations:
+    # Independent outbound controls remain fail-closed until explicitly enabled.
+    ingestion-enabled: ${ALERT_INGESTION_ENABLED:false}
+    model-enabled: ${ALERT_AI_ENABLED:false}
+    monthly-search-quota: ${ALERT_MONTHLY_SEARCH_QUOTA:1000}
+    max-searches-per-run: ${ALERT_MAX_SEARCHES_PER_RUN:1000}
+    # What one Tavily search is counted as costing, for the monthly budget (ADR-0084).
+    estimated-search-cost-usd: ${ALERT_ESTIMATED_SEARCH_COST_USD:0.008}
+    monthly-model-token-quota: ${ALERT_MONTHLY_MODEL_TOKEN_QUOTA:200000}
+    max-model-tokens-per-invocation: ${ALERT_MAX_MODEL_TOKENS_PER_INVOCATION:3000}
+    monthly-budget-usd: ${ALERT_MONTHLY_BUDGET_USD:25.00}
+
+  pipeline:
+    # Sources turned into alerts per worker run; each can cost two model calls.
+    max-sources-per-run: ${ALERT_PIPELINE_MAX_SOURCES_PER_RUN:50}
+  metrics:
+    cloudwatch:
+      # Off by default: every distinct metric and tag combination is a billed
+      # custom metric. The worker exports its last values as it exits.
+      enabled: ${ALERT_CLOUDWATCH_METRICS_ENABLED:false}
+  worker:
+    # Set only on a one-off operator replay task (ADR-0049); all four are then required.
+    replay:
+      from: ${ALERT_WORKER_REPLAY_FROM:}
+      to: ${ALERT_WORKER_REPLAY_TO:}
+      operator: ${ALERT_WORKER_REPLAY_OPERATOR:}
+      correlation-id: ${ALERT_WORKER_REPLAY_CORRELATION_ID:}
+
+management:
+  cloudwatch:
+    metrics:
+      export:
+        namespace: ${ALERT_CLOUDWATCH_NAMESPACE:CRM/EventAlerts}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

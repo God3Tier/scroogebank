@@ -1,0 +1,14 @@
+# Copy to prod.tfvars (git-ignored). Apply the CRM stack first: this stack
+# reads that stack's dashboard_inputs output from its state (ADR-0047). Tasks
+# start and stop with the CRM stack's running variable, so apply this stack
+# again after every CRM apply that changes it.
+
+legal_entity = "sg"
+environment  = "prod"
+
+# The bootstrap stack's state_bucket output, the same bucket as in
+# env/prod.s3.tfbackend.
+state_bucket = "crm-tfstate-123456789012"
+
+# The tag you pushed dashboard-service with, for example the commit SHA.
+image_tag = "replace-with-the-pushed-tag"

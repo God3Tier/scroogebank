@@ -1,0 +1,274 @@
+# Account-wide resources, applied at the start of every deployment before any
+# CRM stack and destroyed last in its teardown (docs/runbooks/deploy-aws.md
+# step 1, ADR-0058). Its own state is local: it creates the bucket the other
+# stacks keep their state in. Keep terraform.tfstate from this directory until
+# the teardown, or import the resources again if it is lost.
+
+terraform {
+  required_version = ">= 1.10.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  default_tags {
+    tags = {
+      Project   = "cs301-crm"
+      ManagedBy = "terraform"
+      Stack     = "bootstrap"
+    }
+  }
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+locals {
+  account_id   = data.aws_caller_identity.current.account_id
+  state_bucket = coalesce(var.state_bucket_name, "crm-tfstate-${local.account_id}")
+}
+
+# ------------------------------------------------------- Terraform state
+# S3 with native locking (use_lockfile), versioned and encrypted (ADR-0042
+# decision 1). The state holds secrets such as the project CA's private key,
+# so only administrators may read it.
+
+resource "aws_s3_bucket" "state" {
+  bucket = local.state_bucket
+}
+
+resource "aws_s3_bucket_versioning" "state" {
+  bucket = aws_s3_bucket.state.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "state" {
+  bucket                  = aws_s3_bucket.state.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "state" {
+  bucket = aws_s3_bucket.state.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+  rule {
+    id     = "expire-old-state-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
+data "aws_iam_policy_document" "state" {
+  statement {
+    sid    = "TlsOnly"
+    effect = "Deny"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "state" {
+  bucket     = aws_s3_bucket.state.id
+  policy     = data.aws_iam_policy_document.state.json
+  depends_on = [aws_s3_bucket_public_access_block.state]
+}
+
+# --------------------------------------------------------- GitHub OIDC
+# One provider per account; each CRM stack makes its own deploy role.
+
+resource "aws_iam_openid_connect_provider" "github" {
+  count          = var.enable_github_oidc ? 1 : 0
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+}
+
+# ------------------------------------------------------------ CloudTrail
+# One management-events trail is free (ADR-0027 decision 5). It also records
+# data events on the audit anchor buckets (ADR-0022).
+
+resource "aws_s3_bucket" "trail" {
+  bucket        = "crm-cloudtrail-${local.account_id}"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_versioning" "trail" {
+  bucket = aws_s3_bucket.trail.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "trail" {
+  bucket                  = aws_s3_bucket.trail.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "trail" {
+  bucket = aws_s3_bucket.trail.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "trail" {
+  bucket = aws_s3_bucket.trail.id
+  rule {
+    id     = "expire"
+    status = "Enabled"
+    filter {}
+    expiration {
+      days = var.trail_retention_days
+    }
+  }
+}
+
+locals {
+  trail_name = "crm-account-trail"
+}
+
+data "aws_iam_policy_document" "trail" {
+  statement {
+    sid    = "TlsOnly"
+    effect = "Deny"
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.trail.arn, "${aws_s3_bucket.trail.arn}/*"]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+
+  statement {
+    sid = "AclCheck"
+    principals {
+      type        = "Service"
+      identifiers = ["cloudtrail.amazonaws.com"]
+    }
+    actions   = ["s3:GetBucketAcl"]
+    resources = [aws_s3_bucket.trail.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:${data.aws_partition.current.partition}:cloudtrail:${var.aws_region}:${local.account_id}:trail/${local.trail_name}"]
+    }
+  }
+
+  statement {
+    sid = "Write"
+    principals {
+      type        = "Service"
+      identifiers = ["cloudtrail.amazonaws.com"]
+    }
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.trail.arn}/AWSLogs/${local.account_id}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "s3:x-amz-acl"
+      values   = ["bucket-owner-full-control"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:${data.aws_partition.current.partition}:cloudtrail:${var.aws_region}:${local.account_id}:trail/${local.trail_name}"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "trail" {
+  bucket     = aws_s3_bucket.trail.id
+  policy     = data.aws_iam_policy_document.trail.json
+  depends_on = [aws_s3_bucket_public_access_block.trail]
+}
+
+resource "aws_cloudtrail" "account" {
+  name                          = local.trail_name
+  s3_bucket_name                = aws_s3_bucket.trail.id
+  is_multi_region_trail         = true
+  include_global_service_events = true
+  enable_log_file_validation    = true
+
+  advanced_event_selector {
+    name = "Management events"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Management"]
+    }
+  }
+
+  advanced_event_selector {
+    name = "Audit anchor objects"
+    field_selector {
+      field  = "eventCategory"
+      equals = ["Data"]
+    }
+    field_selector {
+      field  = "resources.type"
+      equals = ["AWS::S3::Object"]
+    }
+    # Every CRM stack names its anchor bucket crm-audit-anchor-<entity>-...
+    field_selector {
+      field       = "resources.ARN"
+      starts_with = ["arn:${data.aws_partition.current.partition}:s3:::crm-audit-anchor-"]
+    }
+  }
+
+  depends_on = [aws_s3_bucket_policy.trail]
+}
+
+# ------------------------------------------------------------- GuardDuty
+# Not managed here. ADR-0027 decision 5 needs GuardDuty core detection, but the
+# account already has a detector, and GuardDuty allows one per account per
+# Region, so creating another fails. The existing detector provides the
+# detection (ADR-0042 revision of 2026-10-16).
+
+# --------------------------------------------------------------- budgets
+# Not managed here. The ADR-0029 budget alerts are made by hand in the Billing
+# console, so they survive every teardown, this stack's included (ADR-0058
+# decision 7).

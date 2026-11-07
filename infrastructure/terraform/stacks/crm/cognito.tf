@@ -1,0 +1,315 @@
+# Identity (ADR-0005, ADR-0025): MFA required, managed login with the
+# authorization-code flow and PKCE from a public app client, ADMIN and AGENT
+# groups in cognito:groups, a client-credentials client for the transaction
+# import, and the login/password-reset audit triggers (ADR-0040).
+#
+# ADR-0076: the brief's evaluation accounts sign in without MFA. Cognito can
+# exempt no single user while MFA is ON, so with the triggers deployed the pool
+# is OPTIONAL and the token-scope trigger enforces MFA instead: only a user
+# with TOTP enrolled, or in the MFA_EXEMPT group, gets the crm/api scope that
+# API Gateway requires. Without the triggers the pool stays ON.
+
+resource "random_id" "cognito_domain" {
+  byte_length = 3
+}
+
+resource "aws_cognito_user_pool" "this" {
+  name = local.name
+
+  # Managed login (the new hosted UI) needs the Essentials tier.
+  user_pool_tier      = "ESSENTIALS"
+  deletion_protection = local.deletion_protection ? "ACTIVE" : "INACTIVE"
+
+  # user-service creates users with their e-mail address as the username.
+  username_attributes      = ["email"]
+  auto_verified_attributes = ["email"]
+  username_configuration {
+    case_sensitive = false
+  }
+
+  mfa_configuration = var.enable_cognito_triggers ? "OPTIONAL" : "ON"
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
+
+  password_policy {
+    minimum_length                   = 12
+    require_lowercase                = true
+    require_uppercase                = true
+    require_numbers                  = true
+    require_symbols                  = true
+    temporary_password_validity_days = 3
+  }
+
+  # The SPA's access token may call Cognito's own user APIs (to enrol TOTP), so
+  # a changed e-mail address takes effect only once it is verified.
+  user_attribute_update_settings {
+    attributes_require_verification_before_update = ["email"]
+  }
+
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
+
+  dynamic "lambda_config" {
+    for_each = var.enable_cognito_triggers ? [1] : []
+    content {
+      post_authentication = aws_lambda_function.cognito_triggers[0].arn
+      post_confirmation   = aws_lambda_function.cognito_triggers[0].arn
+
+      # V2_0 events can add scopes to access tokens (Essentials tier).
+      pre_token_generation_config {
+        lambda_arn     = aws_lambda_function.token_scope[0].arn
+        lambda_version = "V2_0"
+      }
+    }
+  }
+}
+
+resource "aws_cognito_user_group" "this" {
+  for_each     = toset(["ADMIN", "AGENT"])
+  name         = each.key
+  user_pool_id = aws_cognito_user_pool.this.id
+  description  = "CRM ${lower(each.key)}s"
+}
+
+# ADR-0076: members sign in without MFA. Only Terraform adds users to it (the
+# evaluation accounts below); the token-scope trigger keeps the group out of
+# tokens, so no service ever sees it.
+resource "aws_cognito_user_group" "mfa_exempt" {
+  count        = var.enable_cognito_triggers ? 1 : 0
+  name         = "MFA_EXEMPT"
+  user_pool_id = aws_cognito_user_pool.this.id
+  description  = "Evaluation accounts that sign in without MFA (ADR-0076)"
+}
+
+# The evaluation accounts. They are created without a password and with no
+# e-mail sent (they have no mailbox); scripts/evaluation-accounts.sh then sets
+# their permanent passwords, so the passwords never reach Terraform state.
+# user-service adds the role groups: the root admin on start, the agent when
+# an admin creates it in the CRM, which adopts this Cognito user.
+resource "aws_cognito_user" "mfa_exempt" {
+  for_each       = var.enable_cognito_triggers ? toset(var.mfa_exempt_users) : toset([])
+  user_pool_id   = aws_cognito_user_pool.this.id
+  username       = each.key
+  message_action = "SUPPRESS"
+  attributes = {
+    email          = each.key
+    email_verified = "true"
+  }
+}
+
+resource "aws_cognito_user_in_group" "mfa_exempt" {
+  for_each     = aws_cognito_user.mfa_exempt
+  user_pool_id = aws_cognito_user_pool.this.id
+  group_name   = aws_cognito_user_group.mfa_exempt[0].name
+  username     = each.value.username
+}
+
+resource "aws_cognito_user_pool_domain" "this" {
+  domain                = coalesce(var.cognito_domain_prefix, "${local.name}-${random_id.cognito_domain.hex}")
+  user_pool_id          = aws_cognito_user_pool.this.id
+  managed_login_version = 2
+}
+
+locals {
+  # The custom domain first, when there is one. CloudFront still answers on
+  # its own name, and the SPA builds its callback from the address it was
+  # loaded from, so both sign in.
+  web_origins = concat(
+    local.custom_domain ? ["https://${local.app_host}"] : [],
+    ["https://${aws_cloudfront_distribution.this.domain_name}"],
+    var.local_dev_origins,
+  )
+}
+
+# The SPA's client (ADR-0025 decision 2): public, code grant only, PKCE added
+# by oidc-client-ts, token revocation on.
+resource "aws_cognito_user_pool_client" "web" {
+  name         = "${local.name}-web"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = false
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  # aws.cognito.signin.user.admin lets the SPA enrol a TOTP authenticator for
+  # a user who has none (ADR-0076). With it a user could also edit their own
+  # attributes, so the client may write only their names (an empty list would
+  # mean every attribute); the CRM shows the names users-db holds.
+  allowed_oauth_scopes         = concat(["openid", "email"], var.enable_cognito_triggers ? ["aws.cognito.signin.user.admin"] : [])
+  write_attributes             = ["family_name", "given_name"]
+  supported_identity_providers = ["COGNITO"]
+  callback_urls                = [for o in local.web_origins : "${o}/auth/callback"]
+  logout_urls                  = [for o in local.web_origins : "${o}/"]
+  # Do not enable ALLOW_USER_SRP_AUTH: browser sign-in goes only through the
+  # managed-login authorization-code flow with PKCE (ADR-0025).
+  explicit_auth_flows           = ["ALLOW_REFRESH_TOKEN_AUTH"]
+  enable_token_revocation       = true
+  prevent_user_existence_errors = "ENABLED"
+
+  access_token_validity  = 60
+  id_token_validity      = 60
+  refresh_token_validity = 12
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "hours"
+  }
+}
+
+# Managed login shows a page only for clients that have a style.
+resource "aws_cognito_managed_login_branding" "web" {
+  user_pool_id                = aws_cognito_user_pool.this.id
+  client_id                   = aws_cognito_user_pool_client.web.id
+  use_cognito_provided_values = true
+}
+
+# Service identity for the transaction import (ADR-0037): resource server
+# crm-accounts with scope lookup, checked by account-service.
+resource "aws_cognito_resource_server" "accounts" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  identifier   = "crm-accounts"
+  name         = "CRM accounts"
+
+  scope {
+    scope_name        = "lookup"
+    scope_description = "Look up accounts for the transaction import"
+  }
+
+  # The event-alert service reads each account's client, type, status and current
+  # owner (ADR-0066). Its own scope keeps the transaction import's token out of
+  # that route, and the alert service's token out of the import's.
+  scope {
+    scope_name        = "alert-directory"
+    scope_description = "Read account ownership for the event-alert service"
+  }
+}
+
+resource "aws_cognito_user_pool_client" "transaction_ingest" {
+  name         = "${local.name}-transaction-ingest"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["crm-accounts/lookup"]
+  supported_identity_providers         = ["COGNITO"]
+  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+
+  depends_on = [aws_cognito_resource_server.accounts]
+}
+
+resource "aws_secretsmanager_secret" "ingest_client" {
+  name                    = "${local.name}/cognito/transaction-ingest"
+  description             = "Client ID and secret of the transaction-ingest app client"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "ingest_client" {
+  secret_id = aws_secretsmanager_secret.ingest_client.id
+  secret_string = jsonencode({
+    client_id     = aws_cognito_user_pool_client.transaction_ingest.id
+    client_secret = aws_cognito_user_pool_client.transaction_ingest.client_secret
+  })
+}
+
+# The event-alert API and worker read account ownership with this machine identity
+# (ADR-0066). It holds only the alert-directory scope and no user groups. Its
+# secret is in Terraform state, which is encrypted and access-controlled
+# (docs/runbooks/deploy-aws.md); tasks read it from Secrets Manager, never from
+# plain environment variables.
+resource "aws_cognito_user_pool_client" "alert_directory" {
+  name         = "${local.name}-alert-directory"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes                 = ["crm-accounts/alert-directory"]
+  supported_identity_providers         = ["COGNITO"]
+  explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
+
+  depends_on = [aws_cognito_resource_server.accounts]
+}
+
+resource "aws_secretsmanager_secret" "alert_directory" {
+  name                    = "${local.name}/cognito/alert-directory"
+  description             = "Event-alert service account-directory app client"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "alert_directory" {
+  secret_id = aws_secretsmanager_secret.alert_directory.id
+  secret_string = jsonencode({
+    client_id     = aws_cognito_user_pool_client.alert_directory.id
+    client_secret = aws_cognito_user_pool_client.alert_directory.client_secret
+    scope         = "crm-accounts/alert-directory"
+  })
+}
+
+# Client Health Monitor is a machine caller with read-only access to matched
+# transaction history. It receives no user groups and cannot write transactions.
+resource "aws_cognito_resource_server" "transactions" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  identifier   = "crm-transactions"
+  name         = "CRM transactions"
+
+  scope {
+    scope_name        = "read"
+    scope_description = "Read matched transaction history for Client Health Monitor"
+  }
+}
+
+resource "aws_cognito_resource_server" "client_assignments" {
+  user_pool_id = aws_cognito_user_pool.this.id
+  identifier   = "crm-clients"
+  name         = "CRM client assignments"
+
+  scope {
+    scope_name        = "assignment.read"
+    scope_description = "Read the current client assignment for Client Health"
+  }
+}
+
+resource "aws_cognito_user_pool_client" "client_health_read" {
+  name         = "${local.name}-client-health-read"
+  user_pool_id = aws_cognito_user_pool.this.id
+
+  generate_secret                      = true
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_scopes = [
+    "crm-transactions/read",
+    "crm-clients/assignment.read",
+  ]
+  supported_identity_providers = ["COGNITO"]
+  explicit_auth_flows          = ["ALLOW_REFRESH_TOKEN_AUTH"]
+
+  depends_on = [
+    aws_cognito_resource_server.transactions,
+    aws_cognito_resource_server.client_assignments,
+  ]
+}
+
+resource "aws_secretsmanager_secret" "client_health_read" {
+  name                    = "${local.name}/cognito/client-health-read"
+  description             = "Client Health Monitor transaction read app client"
+  recovery_window_in_days = local.deletion_protection ? 7 : 0
+}
+
+resource "aws_secretsmanager_secret_version" "client_health_read" {
+  secret_id = aws_secretsmanager_secret.client_health_read.id
+  secret_string = jsonencode({
+    client_id        = aws_cognito_user_pool_client.client_health_read.id
+    client_secret    = aws_cognito_user_pool_client.client_health_read.client_secret
+    scope            = "crm-transactions/read"
+    assignment_scope = "crm-clients/assignment.read"
+  })
+}

@@ -3,6 +3,14 @@
 .env.*
 !.env.example
 
+### Local project docs ###
+# Personal copies of the spec, TODOs and notes; not part of the repository.
+/references/
+
+### Load and ZAP test output ###
+# Raw run output (tests/load, tests/security/zap); reports copy what they keep.
+/out/
+
 ### Java / Maven ###
 target/
 *.class
@@ -38,12 +46,25 @@ Thumbs.db
 *.tfstate.*
 crash.log
 crash.*.log
-.terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
+*.s3.tfbackend
+!*.s3.tfbackend.example
 
 ### Docker ###
 *.log
 
+### Go ###
+**/orm/**
+/**/mocks*
+/**/mock_*
+/**/*.pb.go 
+!/services/auditor/src/gen/*.pb.go
 ### TypeScript ###
 *.tsbuildinfo
+
+### SFTP Server ### 
+## 
+secrets
+**/bruno/
+**/gen/ 
