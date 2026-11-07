@@ -266,7 +266,7 @@ components:
 
     User:
       type: object
-      required: [id, idpSub, firstName, lastName, email, role, enabled, createdAt, updatedAt]
+      required: [id, idpSub, firstName, lastName, email, role, enabled, deletable, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         idpSub:
@@ -280,5 +280,6 @@ components:
         email: { type: string, format: email }
         role: { $ref: '#/components/schemas/Role' }
         enabled: { type: boolean }
+        deletable: {type: boolean, description: "False for the root admin; true for all other users."}
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
