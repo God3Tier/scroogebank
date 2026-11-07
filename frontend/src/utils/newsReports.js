@@ -13,6 +13,31 @@ export const SKIP_REASONS = {
 }
 export const APPROVAL_DAYS = 7
 export const STALE_AFTER_DAYS = 5
+/** News older than this is stale: the page says so on a report the agent has not approved. */
+export const STALE_NEWS_DAYS = 7
+export const STALE_NEWS_EXPLAINED = `This news is more than ${STALE_NEWS_DAYS} days old. Check it is still current before you approve the report.`
+export const FRESH_NEWS_EXPLAINED = `This news is ${STALE_NEWS_DAYS} days old or less. It turns stale after ${STALE_NEWS_DAYS} days.`
+
+/** Whole days since the news, never negative; null when the date is missing or unreadable. */
+export function newsAgeDays(newsDate, now) {
+  const time = newsDate ? new Date(newsDate).getTime() : NaN
+  return Number.isFinite(time) ? Math.max(0, Math.floor((now - time) / DAY)) : null
+}
+
+/** "from today", "1 day old", "4 days old". */
+export function newsAgeText(newsDate, now) {
+  const days = newsAgeDays(newsDate, now)
+  if (days === null) return ''
+  if (days === 0) return 'from today'
+  return `${days} day${days === 1 ? '' : 's'} old`
+}
+
+/** True when the news is more than STALE_NEWS_DAYS old. A missing or unreadable date is not called stale. */
+export function isNewsStale(newsDate, now) {
+  const time = newsDate ? new Date(newsDate).getTime() : NaN
+  return Number.isFinite(time) && now - time > STALE_NEWS_DAYS * DAY
+}
+
 /** The report body with the agent's wording in place of the original's: the same merge the server makes. */
 export function mergeSections(body, sections) {
   if (!body || !sections) return body

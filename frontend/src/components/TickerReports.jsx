@@ -8,7 +8,7 @@ import { useReportEditor } from '../utils/useReportEditor.js'
 import { BatchNotify, FloatingBatchHint } from './BatchNotify.jsx'
 import ClientsTable from './ClientsTable.jsx'
 import { CombinedSources, EventReport } from './EventReport.jsx'
-import { ReportReview } from './ReportReview.jsx'
+import { NewsFreshnessNotice, ReportReview } from './ReportReview.jsx'
 import SentOutList from './SentOutList.jsx'
 
 // Event alerts for an agent, by ticker (ADR-0084, news-alert-drafts plan). Each row on the left is one ticker with
@@ -200,6 +200,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           </div>
           {report ? (
             <>
+              <NewsFreshnessNotice report={report} review={review} />
               <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} editor={editor} />
               <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
                 company={card.issuer || card.ticker}

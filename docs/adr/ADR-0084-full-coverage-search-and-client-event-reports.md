@@ -80,7 +80,7 @@ Part 1: unit tests cover the exact query groups, two searches per instrument wit
 
 - **Scheduled search rule:** a company is searched by the scheduled runs when at least two distinct clients hold it and those clients are at least 20% of the clients that hold anything. The old second clause (at least 50% of one account) is removed, so a company one client holds heavily is not searched on its own. A manual Search now is unchanged: it searches any company the agent's clients hold. `alert.ingestion.minimum-account-concentration`, `ALERT_MINIMUM_ACCOUNT_CONCENTRATION` and the alert-worker variable `minimum_account_concentration` are gone, and so is the metric `alert.search.selection.concentration`.
 - **Results per search:** up to 20 (Tavily's maximum), not 10.
-- **Search window:** 7 days for a manual search and for adding a website.
+- **Search window:** 7 days for a manual search and for adding a website; the page marks news older than 7 days stale on a report the agent has not approved.
 
 ## References
 
