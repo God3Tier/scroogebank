@@ -151,7 +151,7 @@ class EventReportIntegrationTest {
             ReportOutcome outcome = reportOutcome.get();
             return outcome.status() == ReportOutcome.Status.GENERATED
                     ? new ReportOutcome(ReportOutcome.Status.GENERATED, report("v" + reportRequests.size()), null, 1,
-                            "fixture-model-v1", "alert-client-report-v2.1", clock.instant())
+                            "fixture-model-v1", "alert-client-report-v2.2", clock.instant())
                     : outcome;
         };
         reports = new EventReportService(jdbc, instruments, generator, outbox, mapper, clock, 1000);
@@ -305,22 +305,35 @@ class EventReportIntegrationTest {
     }
 
     @Test
-    void noReportIsWrittenForAnEventWithoutAnAlertOfSixtyOrMore() {
+    void aLowScoreStillGetsAReportButAnEventWithNoAlertDoesNot() {
         store("one.example", "2026-09-26T22:00:00Z", "a");
         reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.ABSTAINED, null, "MODEL_ABSTAINED", 1));
         pipeline.processPending();
-        jdbc.update("UPDATE alert SET score = 59.99");
+        jdbc.update("UPDATE alert SET score = 12.00");
         reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.GENERATED, report("x"), null, 1));
         reportRequests.clear();
 
-        assertThat(reports.refresh(20)).isZero();
+        assertThat(reports.refresh(20)).as("the score of 60 is gone: any alert makes the event due").isOne();
+        assertThat(count("event_report")).isOne();
 
+        jdbc.update("DELETE FROM alert_sent_out");
+        jdbc.update("DELETE FROM approved_report");
+        jdbc.update("DELETE FROM report_edit");
+        jdbc.update("DELETE FROM event_report");
+        jdbc.update("DELETE FROM agent_event_action_member");
+        jdbc.update("DELETE FROM alert_feedback");
+        jdbc.update("DELETE FROM alert_decision");
+        jdbc.update("DELETE FROM briefing");
+        jdbc.update("DELETE FROM alert_factor");
+        jdbc.update("DELETE FROM alert");
+        reportRequests.clear();
+
+        assertThat(reports.refresh(20)).as("no alert, no report").isZero();
         assertThat(reportRequests).isEmpty();
-        assertThat(count("event_report")).isZero();
     }
 
     @Test
-    void failedAttemptsAreCountedAndStopAfterThreeButAnUnavailableModelIsNotAFailure() {
+    void failedDraftsAreCountedAndStopAfterTenButAnUnavailableModelIsNotAFailure() {
         store("one.example", "2026-09-26T22:00:00Z", "a");
         reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.PENDING, null, "MODEL_DISABLED", 0));
         pipeline.processPending();
@@ -331,8 +344,8 @@ class EventReportIntegrationTest {
         reportRequests.clear();
         for (int pass = 0; pass < 5; pass++) reports.refresh(20);
 
-        assertThat(reportRequests).as("tried three times, then left alone").hasSize(3);
-        assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(3);
+        assertThat(reportRequests).as("five tries of two drafts each, then left alone").hasSize(5);
+        assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(10);
         assertThat(count("event_report")).isZero();
         String agent = jdbc.queryForObject("SELECT assigned_agent_subject FROM alert LIMIT 1", String.class);
         UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);

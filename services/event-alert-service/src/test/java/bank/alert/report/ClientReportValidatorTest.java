@@ -57,6 +57,26 @@ class ClientReportValidatorTest {
     }
 
     @Test
+    void aOneSentenceSummaryIsRefusedUnlessTheCheckIsRelaxed() {
+        List<ClientReport.CitedText> one = List.of(sentence("Microsoft reported quarterly revenue growth.", "src-a"));
+        ClientReportModelOutput output = output(facts(), why(), null, monitor(), one);
+
+        assertThat(check(output)).isEqualTo("INVALID_MODEL_SCHEMA");
+        assertThat(ClientReportValidator.validate(output, EVIDENCE, true)).isNull();
+    }
+
+    @Test
+    void relaxingStillRefusesAnEmptySummaryAndTooManySentences() {
+        List<ClientReport.CitedText> four = List.of(sentence("One.", "src-a"), sentence("Two.", "src-a"),
+                sentence("Three.", "src-a"), sentence("Four.", "src-a"));
+
+        assertThat(ClientReportValidator.validate(output(facts(), why(), null, monitor(), List.of()), EVIDENCE, true))
+                .isEqualTo("INVALID_MODEL_SCHEMA");
+        assertThat(ClientReportValidator.validate(output(facts(), why(), null, monitor(), four), EVIDENCE, true))
+                .isEqualTo("INVALID_MODEL_SCHEMA");
+    }
+
+    @Test
     void aSourceMayBeCitedByItsUrlAndIsStoredByItsId() {
         ClientReportModelOutput output = output(facts(), why(), null, monitor(), summary());
 

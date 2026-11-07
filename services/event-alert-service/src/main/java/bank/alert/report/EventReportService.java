@@ -36,8 +36,10 @@ public class EventReportService {
 
     private static final Logger log = LoggerFactory.getLogger(EventReportService.class);
 
-    static final int MINIMUM_ALERT_SCORE = 60;
-    static final int MAX_FAILED_ATTEMPTS = 3;
+    /** Any alert, whatever its score, makes an event due for a report (the score of 60 was removed on 2026-11-07). */
+    static final int MINIMUM_ALERT_SCORE = 0;
+    /** Refused drafts of one event, counted one by one, after which it is left alone. The first five are strict; a one-sentence summary is accepted after that. */
+    static final int MAX_FAILED_ATTEMPTS = 10;
     /** An earlier report on the same company this recent is given to the model so it is not repeated. */
     static final java.time.Duration REPEAT_GUARD = java.time.Duration.ofHours(72);
     /** Not a failure of the report: it is tried again when the model or the budget is available. */
@@ -118,7 +120,7 @@ public class EventReportService {
         List<String> instrumentIds = instrumentRefs.stream().map(ReportInput.InstrumentRef::instrumentId).toList();
         List<PublicEvidence> evidence = chosenIds.stream().map(byId::get).map(row -> toEvidence(row, instrumentIds)).toList();
         ReportInput input = new ReportInput(instrumentRefs, evidence, alreadyReported(eventId, instrumentRefs));
-        ReportOutcome outcome = generator.generate(input);
+        ReportOutcome outcome = generator.generate(input, failedDrafts(eventId));
         if (outcome.status() != ReportOutcome.Status.GENERATED) {
             recordAttempt(eventId, outcome);
             return false;
@@ -183,17 +185,23 @@ public class EventReportService {
         }
     }
 
+    /** How many drafts of this event's report have been refused so far. */
+    private int failedDrafts(UUID eventId) {
+        List<Integer> found = jdbc.queryForList("SELECT attempts FROM event_report_attempt WHERE public_event_id = ?", Integer.class, eventId);
+        return found.isEmpty() ? 0 : found.getFirst();
+    }
+
     private void recordAttempt(UUID eventId, ReportOutcome outcome) {
         boolean failure = outcome.reasonCode() != null && !NOT_A_FAILURE.contains(outcome.reasonCode());
         log.info("event report not written event_id={} status={} reason_code={}", eventId, outcome.status(), outcome.reasonCode());
         if (!failure) return;
         jdbc.update("""
                 INSERT INTO event_report_attempt (public_event_id, attempts, last_reason, last_attempt_at)
-                VALUES (?, 1, ?, ?)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT (public_event_id) DO UPDATE
-                   SET attempts = event_report_attempt.attempts + 1, last_reason = EXCLUDED.last_reason,
+                   SET attempts = event_report_attempt.attempts + EXCLUDED.attempts, last_reason = EXCLUDED.last_reason,
                        last_attempt_at = EXCLUDED.last_attempt_at
-                """, eventId, outcome.reasonCode(), Timestamp.from(clock.instant()));
+                """, eventId, Math.max(1, outcome.attempts()), outcome.reasonCode(), Timestamp.from(clock.instant()));
     }
 
     // ---- reading what the report is built from ---------------------------------------------------

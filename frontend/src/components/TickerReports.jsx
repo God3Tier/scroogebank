@@ -208,8 +208,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
             </>
           ) : (
             <div className="inline-empty">
-              <Icon name={card.reportFailure ? 'info' : 'autorenew'} /> {noReportText(card)}
-              {card.reportFailure && card.summary && <small className="inline-empty__note"> What the AI said: {card.summary}</small>}
+              <Icon name="autorenew" /> {noReportText()}
             </div>
           )}
         </section>
@@ -392,7 +391,13 @@ function TickerReports() {
             {state.error && <div className="queue-error" role="alert">{state.error}</div>}
             {state.loading && <div className="queue-loading" role="status"><Icon name="autorenew" /> Loading tickers…</div>}
             {!state.loading && !state.error && state.items.length === 0 && (
-              <div className="queue-empty"><h2>No tickers need review</h2><p>New reports will appear here after the next search run.</p></div>
+              <div className="queue-empty">
+                <p className="queue-empty__notice" role="status">
+                  <Icon name="search_off" /> <strong>No news found in the past 4 hours.</strong>
+                </p>
+                <h2>No tickers need review</h2>
+                <p>New reports will appear here after the next search run.</p>
+              </div>
             )}
             <ol className="alert-list">
               {state.items.map((item) => (
