@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getAlert, listAlerts, recordDecision, recordFeedback } from '../api/alerts.js'
 
+// The most each part of the score can add, so "Why this appeared" reads "18.0 of 30", like the agent's ticker view.
+const FACTOR_MAX = { EVENT_SEVERITY: 30, PORTFOLIO_EXPOSURE: 35, RETRIEVAL_RELEVANCE: 15, CLASSIFIER_CONFIDENCE: 20 }
+
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`.trim()} aria-hidden="true">{name}</span>
 }
@@ -354,7 +357,10 @@ function AlertWorkspace({ readOnly = false }) {
                     {detail.explanationFactors.map((factor) => (
                       <li key={factor.code}>
                         <div><strong>{factor.code.replaceAll('_', ' ')}</strong><span>{factor.description}</span></div>
-                        <b>{Number(factor.contribution) >= 0 ? '+' : ''}{Number(factor.contribution).toFixed(1)}</b>
+                        <b>
+                          {Number(factor.contribution) >= 0 ? '+' : ''}{Number(factor.contribution).toFixed(1)}
+                          {FACTOR_MAX[factor.code] ? <small> of {FACTOR_MAX[factor.code]}</small> : null}
+                        </b>
                       </li>
                     ))}
                   </ol>

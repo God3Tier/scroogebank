@@ -25,7 +25,8 @@ const alert = {
 const detail = {
   ...alert,
   exposure: { amountSgd: '128450.00', portfolioPercentage: 18.6, valuationAsOf: '2026-09-27T23:00:00Z', freshness: 'FRESH' },
-  explanationFactors: [{ code: 'CLIENT_EXPOSURE', contribution: 31.2, description: 'Material synthetic exposure.' }],
+  explanationFactors: [{ code: 'CLIENT_EXPOSURE', contribution: 31.2, description: 'Material synthetic exposure.' },
+    { code: 'EVENT_SEVERITY', contribution: 18, description: 'Severity.' }],
   evidence: [{ title: 'Issuer announcement', url: 'https://example.invalid/source', sourceDomain: 'example.invalid', retrievedAt: '2026-09-27T23:55:00Z' }],
   briefing: { summary: 'Review the cited event.', aiGenerated: true, modelVersion: 'fixture-v1', promptVersion: 'brief-v1', uncertainty: 'Terms remain preliminary.' },
   latestDecision: null,
@@ -96,6 +97,13 @@ describe('AlertWorkspace', () => {
 
     expect(await screen.findByText('Read-only oversight.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+  })
+
+  it('shows how much of the score each part can add, for the administrator too', async () => {
+    render(<AlertWorkspace readOnly />)
+
+    expect(await screen.findByText('of 30')).toBeInTheDocument()
+    expect(screen.getByText('EVENT SEVERITY').closest('li')).toHaveTextContent('+18.0 of 30')
   })
 
   it('explains an empty assigned queue', async () => {
