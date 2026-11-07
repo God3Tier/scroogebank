@@ -101,7 +101,7 @@ describe('TickerReports', () => {
     expect(await screen.findByText('Chloe Tan')).toBeInTheDocument()
     expect(screen.getByText('Daniel Lim')).toBeInTheDocument()
     expect(screen.getByText('Plan client briefing', { selector: 'td' })).toBeInTheDocument()
-    expect(screen.getAllByRole('checkbox', { name: /Select/ })).toHaveLength(2)
+    expect(screen.getAllByRole('checkbox', { name: /^Select (?!all)/ })).toHaveLength(2)
     expect(screen.queryByText('Continue monitoring')).not.toBeInTheDocument()
   })
 

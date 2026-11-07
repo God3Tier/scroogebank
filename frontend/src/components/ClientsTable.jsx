@@ -19,6 +19,10 @@ function ClientsTable({ clients, names, selected, setSelected, selectable, statu
   const current = Math.min(page, pages - 1)
   const shown = paged ? matching.slice(current * CLIENTS_PER_PAGE, (current + 1) * CLIENTS_PER_PAGE) : clients
   const ticked = clients.filter((client) => selected[client.alertId] && selectable(client)).length
+  // "Select all" covers every client that can be chosen and matches the search, on every page.
+  const chooseable = matching.filter(selectable)
+  const allChosen = chooseable.length > 0 && chooseable.every((client) => selected[client.alertId])
+  const selectAll = (checked) => setSelected((s) => ({ ...s, ...Object.fromEntries(chooseable.map((client) => [client.alertId, checked])) }))
 
   return (
     <>
@@ -37,7 +41,13 @@ function ClientsTable({ clients, names, selected, setSelected, selectable, statu
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th /><th>Client</th><th className="num">Share of portfolio</th><th className="num">Exposure (SGD)</th><th className="num">Score</th><th>Status</th></tr>
+            <tr>
+              <th>
+                <input type="checkbox" aria-label={paged && search.trim() ? 'Select all matching clients' : 'Select all clients'}
+                  disabled={chooseable.length === 0} checked={allChosen} onChange={(e) => selectAll(e.target.checked)} />
+              </th>
+              <th>Client <span className="clients-selectall-hint">(tick the box to select all {chooseable.length})</span></th><th className="num">Share of portfolio</th><th className="num">Exposure (SGD)</th><th className="num">Score</th><th>Status</th>
+            </tr>
           </thead>
           <tbody>
             {shown.map((client) => (

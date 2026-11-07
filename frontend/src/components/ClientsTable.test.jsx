@@ -26,12 +26,12 @@ describe('ClientsTable', () => {
     render(<Harness clients={make(5)} />)
     expect(screen.queryByLabelText('Search clients')).toBeNull()
     expect(screen.queryByRole('navigation', { name: 'Client pages' })).toBeNull()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(5)
+    expect(screen.getAllByRole('checkbox', { name: /^Select (?!all)/ })).toHaveLength(5)
   })
 
   it('pages five at a time and keeps ticks across pages', () => {
     render(<Harness clients={make(12)} />)
-    expect(screen.getAllByRole('checkbox')).toHaveLength(5)
+    expect(screen.getAllByRole('checkbox', { name: /^Select (?!all)/ })).toHaveLength(5)
     expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Client A' }))
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
@@ -48,10 +48,30 @@ describe('ClientsTable', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'client k' } })
     expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+    expect(screen.getAllByRole('checkbox', { name: /^Select (?!all)/ })).toHaveLength(1)
     expect(screen.getByRole('checkbox', { name: 'Select Client K' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'zzz' } })
     expect(screen.getByText('No client matches "zzz".')).toBeInTheDocument()
+  })
+
+  it('selects every chooseable client on every page with the header box, and clears them again', () => {
+    const clients = make(12)
+    clients[3].status = 'SENT_OUT'
+    render(<Harness clients={clients} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all clients' }))
+    expect(screen.getByTestId('ticked')).toHaveTextContent('11') // 12 minus the Sent Out one
+    expect(screen.getByRole('checkbox', { name: 'Select all clients' })).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByRole('checkbox', { name: 'Select Client F' })).toBeChecked()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all clients' }))
+    expect(screen.getByTestId('ticked')).toHaveTextContent('0')
+  })
+
+  it('selects only the clients that match the search', () => {
+    render(<Harness clients={make(12)} />)
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'client a' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all matching clients' }))
+    expect(screen.getByTestId('ticked')).toHaveTextContent('1')
   })
 
   it('does not let a Sent Out client be ticked', () => {
