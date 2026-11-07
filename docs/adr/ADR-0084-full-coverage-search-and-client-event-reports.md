@@ -7,7 +7,7 @@
 - Feature/branch: `feat/event-driven-alerts`
 - Related issue/PR: TBD
 - Supersedes: the four-query, two-instrument limits of [ADR-0051](ADR-0051-single-issuer-search-and-relevance-gate.md) decision 3 and the per-alert briefing of [ADR-0049](ADR-0049-alert-source-to-alert-pipeline.md) once part 2 lands; the quota, kill-switch and eligibility rules of ADR-0050 and ADR-0051 stand
-- Superseded by: N/A
+- Superseded by: decisions 12 to 18 (delivery from Event Alerts) by [ADR-0085](ADR-0085-editable-approved-reports-for-news-alerts.md) and [ADR-0086](ADR-0086-news-alert-drafts-in-follow-up-emails.md) (proposed 2026-11-07); decisions 10 and 13 amended by ADR-0085 (agents may edit a report)
 
 ## Context
 

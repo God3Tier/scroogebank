@@ -1,5 +1,15 @@
 # AI usage log
 
+## 2026-11-07 - News alerts sent from Follow-up Emails (news-alert-drafts plan)
+
+- Human owner: Hayyun; engagement part for Neo Jia Wen's review; edit checks for Azeez's approval.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Plan client briefing or Dismiss with a final Sent Out status; editable reports checked again; final approval; one combined server-rendered PDF; an optional summary sentence per report; News Alert drafts in Follow-up Emails with send-check, the PDF attached and Sent Out; removal of ADR-0084's direct delivery and the alert follow-up.
+- Files/components affected: event-alert-service `report/` (edits, approval, PDF, routes), state machine, V17; engagement-service `drafting/` (news drafts), `notifications/` (attachments), `integration/sources/`, V3 replaced; auditor allow-list; Terraform `agent-engagement`; Event Alerts and Follow-up Emails pages; OpenAPI, contracts, schema, runbook, ADR-0085 and ADR-0086.
+- Data/calls: no live model, Tavily or SES calls; unit and Testcontainers tests with the model, event-alert-service and mail mocked. No client data, client set of reports or agent-edited text reaches a model, and the PDF holds no client data.
+- Verification: Maven tests for event-alert-service and engagement-service, Vitest, ESLint and the Vite build pass (NavBar.test.jsx fails to load on this machine for a reason unrelated to this change). The auditor Go tests were not run because Go is not usable here.
+- Human verification required: Azeez's approval of the edit checks and the summary sentence; Neo Jia Wen's review of the engagement changes; a measured 30-report PDF render and send against the 30-second limit; one SES send with a PDF attachment to a verified recipient; the auditor Go tests.
+
 ## 2026-11-05 - Multi-source client report and its delivery (parts 2 and 3 of the plan by Azeez)
 
 - Human owner: Hayyun, from the plan by Azeez.

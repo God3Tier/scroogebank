@@ -7,7 +7,7 @@
 - Feature/branch: `task/agent-engagement/linked-follow-ups`
 - Related issue/PR: TBD
 - Supersedes: [ADR-0054](ADR-0054-ai-follow-up-drafts-and-holiday-data.md) in part: decision 2 (two more purposes and a third placeholder, `{{agent_details}}`), decision 4 (the screen checks the slot by purpose) and decision 6 (a draft's text is cleared once it is sent or discarded, and the agent gets a Bcc copy)
-- Superseded by: N/A
+- Superseded by: the `ALERT_FOLLOW_UP` purpose by [ADR-0086](ADR-0086-news-alert-drafts-in-follow-up-emails.md) (proposed 2026-11-07); the Client Health follow-up and draft retention stand
 
 ## Context
 

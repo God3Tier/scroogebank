@@ -30,7 +30,8 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_MAX_SEARCHES_PER_RUN` | `1000` | A sanity ceiling on one run's search reservation; the run is reserved whole and the monthly quota and budget decide (ADR-0084) |
 | `ALERT_MAX_QUERIES_PER_RUN` | `1000` | A sanity ceiling on the queries built for one run; every eligible instrument gets two (ADR-0084) |
 | `ALERT_ESTIMATED_SEARCH_COST_USD` | `0.008` | What one search counts as costing against `ALERT_MONTHLY_BUDGET_USD`; a run the budget cannot cover searches nothing |
-| `ENGAGEMENT_ALERT_REPORTS_ENABLED` (engagement service) | `true` | Kill switch for emailing event reports to clients; set `false` to stop. It is on by default, so real mail goes out as soon as SES is configured and an agent sends a report. Roll out in order: migrations, event-alert-service, engagement-service, frontend; test one named instrument and one verified SES recipient before opening it up, then remove the test filter after quota and cost approval |
+| `ALERT_REPORT_APPROVAL_VALID_FOR` | `7d` | How long an approved report can be sent (ADR-0085); the page highlights it from day 5 |
+| `ALERT_REPORT_SUMMARY_ENABLED` | `false` | The worker's one summary sentence per report version, for the news email. Keep off until Azeez has reviewed 20 samples; while off, the email uses each report's first sentence |
 | `ALERT_SEARCH_ONLY_INSTRUMENT_ID` | unset | Lower environments only: search just this eligible instrument. An unknown, inactive or ineligible id is refused before any quota is used |
 | `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.20` | Inclusive fraction of distinct positive-position clients for the common-holding rule |
 | `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
