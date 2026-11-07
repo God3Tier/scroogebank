@@ -5,7 +5,7 @@ import { createAccount, listAccountTransactions, listAccounts } from './accounts
 import { listClients } from './clients.js'
 import { getDashboard, panelData, windowForDays } from './dashboard.js'
 import { listTransactions } from './transactions.js'
-import { createUser, disableUser, listUsers, resetPassword } from './users.js'
+import { createUser, disableUser, listUsers, resetPassword, updateUser } from './users.js'
 
 vi.hoisted(() => { vi.stubEnv('VITE_API_URL', '') })
 afterAll(() => vi.unstubAllEnvs())
@@ -81,6 +81,19 @@ describe('list and admin APIs', () => {
 
     await expect(disableUser('user-1')).rejects.toMatchObject({ status: 403, message: 'root admin cannot be disabled' })
     expect(lastCall()[1].method).toBe('PATCH')
+  })
+
+  it('updates only the selected user name with the caller token', async () => {
+    const names = { firstName: 'Updated', lastName: 'Agent' }
+    fetchMock.mockResolvedValue(jsonResponse({ id: 'user-2', ...names }))
+
+    await expect(updateUser('user-2', { ...names, email: 'ignored@example.test', role: 'ADMIN' }))
+      .resolves.toMatchObject(names)
+    const [url, options] = lastCall()
+    expect(url).toBe('/api/users/user-2')
+    expect(options.method).toBe('PUT')
+    expect(options.headers).toMatchObject({ Authorization: 'Bearer synthetic-token', 'Content-Type': 'application/json' })
+    expect(JSON.parse(options.body)).toEqual(names)
   })
 
   it('treats an empty 204 as no content', async () => {

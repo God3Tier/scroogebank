@@ -473,12 +473,14 @@ textarea:focus {
   transition: background-color 0.15s ease;
 }
 
-/* Reassigning an agent's clients opens under their row (ADR-0060). */
-.row-list > li:has(.reassign-form) {
+/* Agent actions and inline forms can wrap under the row's name. */
+.row-list > li:has(.reassign-form),
+.row-list > li:has(.agent-name-edit) {
   flex-wrap: wrap;
 }
 
-.reassign-form {
+.reassign-form,
+.agent-name-form {
   flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
@@ -486,7 +488,8 @@ textarea:focus {
   gap: var(--stack-sm);
 }
 
-.reassign-form label {
+.reassign-form label,
+.agent-name-form label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -494,7 +497,8 @@ textarea:focus {
   flex: 1 1 240px;
 }
 
-.reassign-form .form-actions {
+.reassign-form .form-actions,
+.agent-name-form .form-actions {
   margin: 0;
 }
 

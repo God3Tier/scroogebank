@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 
 import { reassignClients } from '../api/clients.js'
-import { disableUser, listUsers, resetPassword } from '../api/users.js'
+import { disableUser, listUsers, resetPassword, updateUser } from '../api/users.js'
+import EditAgentNameForm from './EditAgentNameForm.jsx'
 import { Pager, ViewAll } from './ListFooter.jsx'
 import ReassignForm from './ReassignForm.jsx'
 import { numberedSource, usePagedList } from './paging.js'
@@ -33,6 +34,8 @@ function UserList({ role, title, paged = false }) {
   const [moved, setMoved] = useState('')
   const [resettingId, setResettingId] = useState(null)
   const [resetMessage, setResetMessage] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [updatedMessage, setUpdatedMessage] = useState('')
   const auth = useAuth()
   const currentSub = auth.user?.profile?.sub
 
@@ -70,10 +73,25 @@ function UserList({ role, title, paged = false }) {
     }
   }
 
+  function openEditName(user) {
+    setProblem('')
+    setUpdatedMessage('')
+    setReassigning(null)
+    setEditingId(user.id)
+  }
+
+  async function handleUpdateName(user, names) {
+    await updateUser(user.id, names)
+    setEditingId((current) => current === user.id ? null : current)
+    setUpdatedMessage(`${names.firstName} ${names.lastName}: name updated.`)
+    await list.reload()
+  }
+
   // The receivers are every enabled agent, not only the ones on this page.
   async function openReassign(user) {
     setMoved('')
     setProblem('')
+    setEditingId(null)
     setReassigning(user.id)
     setReceivers({ loading: true, users: [] })
     try {
@@ -101,6 +119,7 @@ function UserList({ role, title, paged = false }) {
       {problem && <p className="form-error" role="alert">{problem}</p>}
       {moved && <p className="success-message" role="status">{moved}</p>}
       {resetMessage && <p className="success-message" role="status">{resetMessage}</p>}
+      {updatedMessage && <p className="success-message" role="status">{updatedMessage}</p>}
       {empty && <p className="empty-note">None yet.</p>}
       <ul className="row-list">
         {list.rows.map((user) => (
@@ -108,6 +127,12 @@ function UserList({ role, title, paged = false }) {
             <span>
               {user.firstName} {user.lastName} ({user.email})
             </span>
+            {agentList && (
+              <button type="button" className="agent-name-edit" aria-expanded={editingId === user.id}
+                disabled={editingId === user.id} onClick={() => openEditName(user)}>
+                Edit name
+              </button>
+            )}
             {agentList && (
               <button type="button" disabled={resettingId !== null} onClick={() => handleResetPassword(user)}>
                 {resettingId === user.id ? 'Requesting reset…' : 'Reset password'}
@@ -127,6 +152,14 @@ function UserList({ role, title, paged = false }) {
               </button>
             ) : (
               <span className="badge">Disabled</span>
+            )}
+            {agentList && editingId === user.id && (
+              <EditAgentNameForm
+                key={user.id}
+                user={user}
+                onSubmit={(names) => handleUpdateName(user, names)}
+                onCancel={() => setEditingId(null)}
+              />
             )}
             {agentList && reassigning === user.id && receivers.loading && <p className="empty-note">Loading agents…</p>}
             {agentList && reassigning === user.id && !receivers.loading && (
