@@ -20,7 +20,8 @@ class PositionsTest(unittest.TestCase):
             self.assertEqual(self.held("dbs", index), expected)
 
     def test_the_news_profile_gives_one_client_several_tickers(self):
-        self.assertEqual(self.held("news", 0), {"LSE-SHEL": 600, "PRIV-ANTHROPIC": 400, "NASDAQ-AAPL": 60})
+        self.assertEqual(self.held("news", 0), {"PRIV-ANTHROPIC": 400, "NASDAQ-AAPL": 60})
+        self.assertNotIn("LSE-SHEL", self.held("news", 0), "Shell is not seeded")
         self.assertEqual(self.held("news", 1), {"NASDAQ-AAPL": 60, "PRIV-ANTHROPIC": 140})
         self.assertEqual(self.held("news", 2), {"NASDAQ-AAPL": 60})
         self.assertEqual(self.held("news", 7), {"NASDAQ-AAPL": 60})
@@ -32,7 +33,7 @@ class PositionsTest(unittest.TestCase):
                     {"instrumentId", "quantity", "unitPrice", "valuationCurrency", "fxToSgd"}, set(position))
         first = seed.positions_for("news", 0)
         first[0]["quantity"] = 1
-        self.assertEqual(seed.positions_for("news", 0)[0]["quantity"], 600, "a change must not leak into the profile")
+        self.assertEqual(seed.positions_for("news", 0)[0]["quantity"], 400, "a change must not leak into the profile")
 
 
 class WebsitesAndSearchTest(unittest.TestCase):

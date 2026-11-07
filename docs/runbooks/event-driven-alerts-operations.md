@@ -292,7 +292,7 @@ only for their own clients' accounts. Anyone holding the token can act as that
 agent until it expires, so do not paste it into chat, commits or files.
 
 News-alert test on AWS. Nothing local travels to AWS: the test clients, holdings, websites and reports are recreated there.
-Anthropic comes with migration V18; Shell and Apple come with V8. Order:
+Anthropic comes with migration V18; Apple (and Shell, which is not seeded) come with V8. Order:
 
 1. Build and push the images (alerts, engagement, auditor, db-migrate, the page) with one new tag. The migrations (alerts V17 and
    V18, engagement V3 and V4) ride in the db-migrate image.
@@ -303,13 +303,13 @@ Anthropic comes with migration V18; Shell and Apple come with V8. Order:
 4. Apply the agent-engagement stack (it reads the crm stack's outputs).
 5. An admin creates the agent in Manage Agents (deploy-aws.md, "Evaluation accounts"), and the agent signs in once. Copy the
    agent's access token (above) and run `scripts/seed-demo-portfolios.py --profile news --create-clients --client-emails
-   A,B,C --add-websites --search LSE-SHEL --dry-run`, then without `--dry-run`. `--create-clients` creates Chloe Tan, Daniel Lim
+   A,B,C --add-websites --dry-run`, then without `--dry-run`. `--create-clients` creates Chloe Tan, Daniel Lim
    and Esther Wong under that agent if they are missing (verified, each with an active SGD investment account); use addresses
    that can receive mail (verified ones in the SES sandbox). A rerun reuses what is there. Without `--create-clients` the
    script needs at least two of the agent's clients with an active investment account already. Websites go in first, because adding one starts a search of what is already held. The first client (accounts in id
-   order) holds Shell, Anthropic and Apple, the second Apple and Anthropic, the rest Apple.
+   order) holds Anthropic and Apple, the second Apple and Anthropic, the rest Apple. Shell is not seeded.
 6. Wait 5 to 7 minutes and refresh Event Alerts. A manual Search now searches every company an agent's clients hold; only the
-   scheduled runs apply the stricter two-clients-or-half-an-account rule, so Shell, held by one client, is searched by hand.
+   scheduled runs apply the stricter two-clients-or-half-an-account rule, so a company held by one client is searched by hand with Search now. The script does not start a search unless you add `--search ID`.
 7. Test: Plan client briefing, Edit, Save and preview, Approve, "Notify selected clients about <company>", then Send from Follow-up Emails to a verified address.
 
 Watch: Nova has not written a report before, so the first may be refused; SES with a display-name sender and a PDF attached is

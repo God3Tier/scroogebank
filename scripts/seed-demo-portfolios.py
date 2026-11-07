@@ -18,12 +18,13 @@ stacks, and at least two of the agent's clients with an active investment
 account (the client verified, then the account activated).
 
 News alerts (--profile news). Gives the agent's clients the holdings the news-alert test needs, so one client has several
-tickers: the first client (accounts in id order) holds Shell, Anthropic and Apple, the second Apple and Anthropic, and every
-other client Apple only. Shell, Apple and Anthropic must be in alerts-db (Shell and Apple from V8, Anthropic from V18). Two
+tickers: the first client (accounts in id order) holds Anthropic and Apple, the second Apple and Anthropic, and every
+other client Apple only. Shell is not seeded: to test it, record a Shell holding by hand and search it by hand. Apple and Anthropic
+must be in alerts-db (Apple from V8, Anthropic from V18). Two
 optional extras:
   --add-websites  adds the test websites to the shared search list. Do it first: adding a website starts a search of the
                   companies the agent's clients already hold (ADR-0081), which spends Tavily credits.
-  --search ID     then starts one search of that company (for example LSE-SHEL) over every website, as Search now does.
+  --search ID     then starts one search of that company (for example PRIV-ANTHROPIC) over every website, as Search now does.
 
 Clients (--create-clients). Creates the agent's demo clients when they are missing, so a fresh deployment needs no clicking:
 for each name in DEMO_CLIENTS it creates the client under the signed-in agent, verifies it without a document, and opens an
@@ -63,8 +64,8 @@ SOURCE_LABEL = "demo-seed"
 APPLE = {"instrumentId": "NASDAQ-AAPL", "quantity": 60, "unitPrice": 230, "valuationCurrency": "USD", "fxToSgd": 1.34}
 ANTHROPIC = {"instrumentId": "PRIV-ANTHROPIC", "unitPrice": 100, "valuationCurrency": "USD", "fxToSgd": 1.34}
 SHELL = {"instrumentId": "LSE-SHEL", "quantity": 600, "unitPrice": 27, "valuationCurrency": "GBP", "fxToSgd": 1.75}
-# A large Anthropic holding scores above the alert threshold only when it is about half of the portfolio, and a
-# portfolio with Shell in it is bigger, so the client with all three holds more Anthropic.
+# A large Anthropic holding scores above the alert threshold only when it is about half of the portfolio, so the
+# first client holds more Anthropic than the second. Shell is no longer seeded (SHELL stays for a hand-made test).
 DEMO_CLIENTS = [("Chloe", "Tan"), ("Daniel", "Lim"), ("Esther", "Wong")]
 NEWS_WEBSITES = ["cnbc.com", "finance.yahoo.com", "thenextweb.com", "techspot.com", "adage.com"]
 
@@ -74,7 +75,7 @@ def positions_for(profile, index):
     if profile == "dbs":
         return [dict(p) for p in POSITIONS]
     if index == 0:
-        return [dict(SHELL), dict(ANTHROPIC, quantity=400), dict(APPLE)]
+        return [dict(ANTHROPIC, quantity=400), dict(APPLE)]
     if index == 1:
         return [dict(APPLE), dict(ANTHROPIC, quantity=140)]
     return [dict(APPLE)]
@@ -221,7 +222,7 @@ def main():
                         help="the app's address (default %(default)s)")
     parser.add_argument("--dry-run", action="store_true", help="list the accounts without saving")
     parser.add_argument("--profile", choices=["dbs", "news"], default="dbs",
-                        help="dbs: the DBS and OCBC demo (default); news: Shell, Anthropic and Apple for the news-alert test")
+                        help="dbs: the DBS and OCBC demo (default); news: Anthropic and Apple for the news-alert test")
     parser.add_argument("--create-clients", action="store_true",
                         help="first create the demo clients and their active investment accounts if they are missing")
     parser.add_argument("--client-emails", default="",
