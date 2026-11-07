@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getAlert, listAlerts, recordDecision, recordFeedback } from '../api/alerts.js'
+import { NewsFreshnessNotice } from './ReportReview.jsx'
 
 // The most each part of the score can add, so "Why this appeared" reads "18.0 of 30", like the agent's ticker view.
 const FACTOR_MAX = { EVENT_SEVERITY: 30, PORTFOLIO_EXPOSURE: 35, RETRIEVAL_RELEVANCE: 15, CLASSIFIER_CONFIDENCE: 20 }
+
+// The date of the news: the newest source's publication date, or when the alert was made when the sources carry none.
+function newsDateOf(detail) {
+  const dates = (detail.evidence || []).map((item) => item.publishedAt).filter(Boolean).sort()
+  return dates.length > 0 ? dates[dates.length - 1] : detail.createdAt
+}
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`.trim()} aria-hidden="true">{name}</span>
@@ -325,7 +332,7 @@ function AlertWorkspace({ readOnly = false }) {
                 <dl>
                   <div><dt>Portfolio share</dt><dd>{Number(detail.exposure.portfolioPercentage).toFixed(1)}%</dd></div>
                   <div><dt>Valued</dt><dd>{formatDate(detail.exposure.valuationAsOf)}</dd></div>
-                  <div><dt>Freshness</dt><dd><span className={`freshness freshness--${detail.exposure.freshness.toLowerCase()}`}>{detail.exposure.freshness}</span></dd></div>
+                  <div><dt>Valuation freshness</dt><dd><span className={`freshness freshness--${detail.exposure.freshness.toLowerCase()}`}>{detail.exposure.freshness.charAt(0) + detail.exposure.freshness.slice(1).toLowerCase()}</span></dd></div>
                 </dl>
               </section>
 
@@ -335,6 +342,7 @@ function AlertWorkspace({ readOnly = false }) {
                     <div><Icon name="auto_awesome" /><h3 id="brief-title">AI-generated briefing</h3></div>
                     <span>Decision support</span>
                   </div>
+                  <NewsFreshnessNotice report={{ createdAt: detail.createdAt }} review={{ newsDate: newsDateOf(detail), approval: null }} />
                   {detail.briefing ? (
                     <div className="briefing">
                       <p>{detail.briefing.summary}</p>

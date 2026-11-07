@@ -106,6 +106,38 @@ describe('AlertWorkspace', () => {
     expect(screen.getByText('EVENT SEVERITY').closest('li')).toHaveTextContent('+18.0 of 30')
   })
 
+  it('shows the same Fresh or Stale label as the agent, from the date of the news, with the valuation labelled apart', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      getAlert.mockResolvedValue({ ...detail, evidence: [{ ...detail.evidence[0], publishedAt: '2026-09-26T00:00:00Z' }] })
+
+      vi.setSystemTime(new Date('2026-09-29T00:00:00Z')) // 3 days after the news
+      const { unmount } = render(<AlertWorkspace readOnly />)
+      expect(await screen.findByText('Fresh', { selector: '.stale-notice__chip' })).toBeInTheDocument()
+      expect(screen.getByRole('note')).toHaveTextContent('News 3 days old.')
+      expect(screen.getByText('Valuation freshness')).toBeInTheDocument()
+      unmount()
+
+      vi.setSystemTime(new Date('2026-10-08T00:00:00Z')) // 12 days after the news
+      render(<AlertWorkspace readOnly />)
+      expect(await screen.findByText('Stale', { selector: '.stale-notice__chip' })).toBeInTheDocument()
+      expect(screen.getByRole('note')).toHaveTextContent('more than 7 days old')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('dates the news by the alert when the sources carry no publication date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-10-01T00:00:00Z')) // just under 3 days after the alert
+      render(<AlertWorkspace readOnly />)
+      expect(await screen.findByRole('note')).toHaveTextContent('News 2 days old.')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('explains an empty assigned queue', async () => {
     listAlerts.mockResolvedValue({ items: [], nextCursor: null })
 
