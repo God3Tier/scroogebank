@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getEvent, getReportReview, listApprovedReports, listEvents, recordEventAction } from '../api/alertEvents.js'
 import { getClient } from '../api/clients.js'
 import { isCrmClientId, listOpenNewsAlerts } from '../api/engagement.js'
-import { mergeSections } from '../utils/newsReports.js'
+import { mergeSections, noReportText } from '../utils/newsReports.js'
 import { useReportEditor } from '../utils/useReportEditor.js'
 import { BatchNotify, FloatingBatchHint } from './BatchNotify.jsx'
 import { CombinedSources, EventReport } from './EventReport.jsx'
@@ -37,6 +37,10 @@ export const ON_DRAFT_MESSAGE = 'This client is on an open news draft. Remove th
 // Every client except Sent Out can still be chosen: the agent can change their mind until the email is sent.
 const selectable = (client) => client.status !== 'SENT_OUT'
 
+// How often the page looks for new reports by itself, only while it is open and visible.
+export const POLL_MS = 20_000
+const pageVisible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden'
+
 function formatDate(value) {
   if (!value) return 'Not supplied'
   return new Intl.DateTimeFormat('en-SG', {
@@ -69,6 +73,14 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
   const reportPanel = useRef(null)
   const reload = () => setReloadKey((key) => key + 1)
   const editor = useReportEditor({ eventId, review, onSaved: reload })
+
+  // Until the report is written, look again every few seconds so it appears by itself.
+  const waiting = Boolean(detail) && !detail.report
+  useEffect(() => {
+    if (!waiting) return undefined
+    const timer = setInterval(() => { if (pageVisible()) setReloadKey((key) => key + 1) }, POLL_MS)
+    return () => clearInterval(timer)
+  }, [waiting])
 
   useEffect(() => {
     let current = true
@@ -192,7 +204,10 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
                 editing={editor.editing} onReviewChanged={() => { reload(); onChanged() }} />
             </>
           ) : (
-            <div className="inline-empty"><Icon name="autorenew" /> The report for this ticker is still being written. {card.summary}</div>
+            <div className="inline-empty">
+              <Icon name={card.reportFailure ? 'info' : 'autorenew'} /> {noReportText(card)}
+              {card.reportFailure && card.summary && <small className="inline-empty__note"> What the AI said: {card.summary}</small>}
+            </div>
           )}
         </section>
         <section className="detail-section" aria-labelledby="ticker-why-title">
@@ -285,13 +300,25 @@ function TickerReports() {
   const [state, setState] = useState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
   const [selectedId, setSelectedId] = useState(null)
 
-  const load = useCallback(async () => {
+  // quiet: a background check. It keeps the pages and selection on screen, adds new tickers at the top, updates the
+  // ones it knows, and says nothing if it fails.
+  const load = useCallback(async (quiet = false) => {
     try {
       const page = await listEvents({ onlyOpen })
+      if (quiet) {
+        setState((current) => {
+          const fresh = new Map(page.items.map((item) => [item.eventId, item]))
+          const known = new Set(current.items.map((item) => item.eventId))
+          const added = page.items.filter((item) => !known.has(item.eventId))
+          return { ...current, items: [...added, ...current.items.map((item) => fresh.get(item.eventId) || item)] }
+        })
+        setSelectedId((current) => current || page.items[0]?.eventId || null)
+        return
+      }
       setState({ loading: false, error: '', items: page.items, nextCursor: page.nextCursor, loadingMore: false })
       setSelectedId((current) => (page.items.some((item) => item.eventId === current) ? current : page.items[0]?.eventId || null))
     } catch (e) {
-      setState({ loading: false, error: problemText(e), items: [], nextCursor: null, loadingMore: false })
+      if (!quiet) setState({ loading: false, error: problemText(e), items: [], nextCursor: null, loadingMore: false })
     }
   }, [onlyOpen])
 
@@ -314,6 +341,17 @@ function TickerReports() {
     void load()
     void loadReady()
   }, [load, loadReady])
+
+  // New tickers and reports show up by themselves, while the page is open and visible.
+  useEffect(() => {
+    if (view !== 'open') return undefined
+    const timer = setInterval(() => {
+      if (!pageVisible()) return
+      void load(true)
+      void loadReady()
+    }, POLL_MS)
+    return () => clearInterval(timer)
+  }, [view, load, loadReady])
 
   async function loadMore() {
     if (!state.nextCursor || state.loadingMore) return
@@ -357,8 +395,9 @@ function TickerReports() {
           <aside className="alert-queue" aria-label="Tickers">
             <div className="queue-toolbar">
               <div className="queue-toolbar__title"><Icon name="filter_list" /><span>Tickers</span></div>
-              <button className="icon-button" type="button" onClick={() => load()} aria-label="Refresh tickers"><Icon name="refresh" /></button>
+              <button className="icon-button" type="button" onClick={() => refresh()} aria-label="Refresh tickers"><Icon name="refresh" /></button>
             </div>
+            <p className="queue-auto">Checks for new reports by itself every {POLL_MS / 1000} seconds.</p>
             <div className="queue-filters">
               <label>
                 <input type="checkbox" checked={onlyOpen} onChange={(e) => {

@@ -512,6 +512,16 @@ public class ReportReviewService {
                 text = approval.get().text();
                 disclosure = disclosure(approval.get().edited(), null);
                 date = ReportPdfRenderer.singaporeDate(approval.get().approvedAt());
+            } else if (ReportEdits.editable(report.schemaVersion())) {
+                // Not approved yet: the agent's saved edit, so what they downloaded is what they wrote.
+                List<Object[]> saved = jdbc.query(
+                        "SELECT sections::text, updated_at FROM report_edit WHERE event_report_id = ? AND agent_sub = ?",
+                        (rs, n) -> new Object[] {rs.getString(1), rs.getTimestamp(2).toInstant()}, report.id(), agent);
+                if (!saved.isEmpty()) {
+                    text = ReportEdits.merge(report.json(), read((String) saved.getFirst()[0]));
+                    disclosure = "AI-drafted from public sources and edited by your relationship manager. Not yet approved.";
+                    date = ReportPdfRenderer.singaporeDate((Instant) saved.getFirst()[1]);
+                }
             }
         }
         ReportPdfRenderer.Rendered rendered = renderer.render(new ReportPdfRenderer.Document(date, null,

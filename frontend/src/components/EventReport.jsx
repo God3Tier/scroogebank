@@ -50,9 +50,11 @@ export function EventReport({ report, eventId, body: shown, label, editor }) {
               {editor.editing ? (editor.saving ? 'Checking…' : 'Preview') : 'Edit'}
             </button>
           )}
-          {eventId && !editor?.editing && (
-            <button className="button button--secondary" type="button" onClick={download} disabled={downloading}>
-              {downloading ? 'Preparing PDF…' : 'Download report as PDF'}
+          {eventId && (
+            <button className="button button--secondary" type="button" onClick={download}
+              disabled={downloading || Boolean(editor?.editing)}
+              title={editor?.editing ? 'Click Preview first, so your edit is saved and goes into the PDF' : undefined}>
+              {downloading ? 'Preparing PDF…' : editor?.editing ? 'Preview first to download' : 'Download report as PDF'}
             </button>
           )}
         </div>

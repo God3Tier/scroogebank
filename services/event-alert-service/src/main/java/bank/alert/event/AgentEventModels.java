@@ -39,7 +39,9 @@ public final class AgentEventModels {
             String issuer,
             int sourceCount,
             /** Null until the report is written. */
-            Integer reportVersion) {
+            Integer reportVersion,
+            /** Why the report was not written (for example MODEL_ABSTAINED), or null: it is in progress or written. */
+            String reportFailure) {
     }
 
     public record EventPage(List<EventCard> items, String nextCursor) {

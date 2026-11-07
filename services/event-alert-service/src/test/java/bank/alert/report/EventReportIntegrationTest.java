@@ -334,6 +334,10 @@ class EventReportIntegrationTest {
         assertThat(reportRequests).as("tried three times, then left alone").hasSize(3);
         assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(3);
         assertThat(count("event_report")).isZero();
+        String agent = jdbc.queryForObject("SELECT assigned_agent_subject FROM alert LIMIT 1", String.class);
+        UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);
+        assertThat(eventQueries.detail(eventId, agent).card().reportFailure())
+                .as("the page can say the report was refused, not only that it is missing").isEqualTo("UNSUPPORTED_FIGURE");
     }
 
     @Test
@@ -540,6 +544,22 @@ class EventReportIntegrationTest {
                 .as("an approved report cannot be edited").isInstanceOf(bank.alert.service.AlertMutationConflictException.class);
         assertThat(outbox.findAll()).extracting(o -> o.getEventType())
                 .contains("alert.report-edited", "alert.report-approved");
+    }
+
+    @Test
+    void theDownloadedPdfCarriesTheAgentsSavedEditBeforeApproval() {
+        UUID[] ids = eventWithInformedCrmClient();
+        String agent = agentOf(ids[2]);
+        ReportReviewService reviews = reviews();
+        byte[] original = reviews.singlePdf(ids[0], null, agent, false).pdf();
+
+        reviews.saveEdit(ids[0], agent, 1, sections("One, said more plainly."));
+        byte[] edited = reviews.singlePdf(ids[0], null, agent, false).pdf();
+
+        assertThat(edited).as("the saved edit is in the file, not the original text").isNotEqualTo(original);
+        assertThat(reviews.singlePdf(ids[0], null, "admin", true).pdf()).as("admins still get the original").isEqualTo(original);
+        reviews.discardEdit(ids[0], agent);
+        assertThat(reviews.singlePdf(ids[0], null, agent, false).pdf()).isEqualTo(original);
     }
 
     @Test

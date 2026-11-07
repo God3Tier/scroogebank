@@ -79,6 +79,7 @@ public class AgentEventQueryService {
                        (SELECT r.report::text FROM event_report r
                          WHERE r.public_event_id = pe.id ORDER BY r.version DESC LIMIT 1) AS report_json,
                        (SELECT max(r.version) FROM event_report r WHERE r.public_event_id = pe.id) AS report_version,
+                       (SELECT t.last_reason FROM event_report_attempt t WHERE t.public_event_id = pe.id) AS report_failure,
                        (SELECT count(*) FROM public_event_source s WHERE s.public_event_id = pe.id) AS source_count,
                        COALESCE(pe.instrument_id, (SELECT min(i.instrument_id) FROM public_event_instrument i
                                                     WHERE i.public_event_id = pe.id)) AS instrument_id,
@@ -136,6 +137,7 @@ public class AgentEventQueryService {
                        (SELECT r.report::text FROM event_report r
                          WHERE r.public_event_id = pe.id ORDER BY r.version DESC LIMIT 1) AS report_json,
                        (SELECT max(r.version) FROM event_report r WHERE r.public_event_id = pe.id) AS report_version,
+                       (SELECT t.last_reason FROM event_report_attempt t WHERE t.public_event_id = pe.id) AS report_failure,
                        (SELECT count(*) FROM public_event_source s WHERE s.public_event_id = pe.id) AS source_count,
                        COALESCE(pe.instrument_id, (SELECT min(i.instrument_id) FROM public_event_instrument i
                                                     WHERE i.public_event_id = pe.id)) AS instrument_id,
@@ -270,6 +272,6 @@ public class AgentEventQueryService {
                 rs.getInt("client_count"), rs.getInt("open_count"), top,
                 rs.getTimestamp("latest").toInstant(),
                 rs.getString("instrument_id"), rs.getString("ticker"), rs.getString("issuer"),
-                rs.getInt("source_count"), (Integer) rs.getObject("report_version"));
+                rs.getInt("source_count"), (Integer) rs.getObject("report_version"), rs.getString("report_failure"));
     }
 }

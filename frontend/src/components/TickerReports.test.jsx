@@ -337,6 +337,66 @@ describe('TickerReports', () => {
     expect(await screen.findByText('Monitoring (old option)', { selector: 'td' })).toBeInTheDocument()
   })
 
+  it('looks for new tickers and reports by itself, and keeps what is on screen', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const shell = { ...appleCard, eventId: 'e9', headline: 'Shell lifts dividend', issuer: 'Shell plc', ticker: 'SHEL', instrumentId: 'LSE-SHEL' }
+      renderPage()
+      await screen.findByRole('heading', { name: 'Apple Inc (AAPL)' })
+      expect(screen.getByText(/Checks for new reports by itself every 20 seconds/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Shell plc/ })).not.toBeInTheDocument()
+      listEvents.mockResolvedValue({ items: [shell, appleCard, dbsCard], nextCursor: null })
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+
+      expect(await screen.findByRole('button', { name: /Shell plc \(SHEL\)/ })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Apple Inc (AAPL)' })).toBeInTheDocument()
+      listEvents.mockRejectedValue(new Error('down'))
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+      expect(screen.getByRole('button', { name: /Shell plc \(SHEL\)/ })).toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows a report by itself once it is written', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      getEvent.mockImplementation(async () => ({ card: appleCard, clients: [client('a1', CHLOE, 'NEW')], latestAction: null, report: null }))
+      renderPage()
+      expect(await screen.findByText(/still being written. This page updates by itself/)).toBeInTheDocument()
+      getEvent.mockImplementation(async () => appleDetail([client('a1', CHLOE, 'NEW')]))
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+
+      expect(await screen.findByText('Apple reported higher revenue. [1] [2]')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says when the AI could not write a report, instead of saying it is still being written', async () => {
+    const refused = { ...appleCard, reportFailure: 'MODEL_ABSTAINED', summary: 'The source holds only navigation text.' }
+    listEvents.mockResolvedValue({ items: [refused], nextCursor: null })
+    getEvent.mockImplementation(async () => ({ card: refused, clients: [client('a1', CHLOE, 'NEW')], latestAction: null, report: null }))
+    renderPage()
+
+    expect(await screen.findByText(/The AI could not write a report from the sources found/)).toBeInTheDocument()
+    expect(screen.getByText(/What the AI said: The source holds only navigation text/)).toBeInTheDocument()
+    expect(screen.queryByText(/still being written/)).not.toBeInTheDocument()
+  })
+
+  it('keeps Download off while editing, so the PDF always has the saved edit', async () => {
+    renderPage()
+    const download = await screen.findByRole('button', { name: 'Download report as PDF' })
+    expect(download).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(screen.getByRole('button', { name: 'Preview first to download' })).toBeDisabled()
+  })
+
   it('lists sent reports, read-only, in the Sent out tab', async () => {
     listSentOut.mockResolvedValue([{ alertId: 'a4', eventId: 'e1', clientRef: CHLOE, instrumentId: 'NASDAQ-AAPL', ticker: 'AAPL',
       issuer: 'Apple Inc', headline: 'Apple beats revenue estimates', reportVersion: 1, edited: true, sentAt: '2026-11-06T02:00:00Z' }])

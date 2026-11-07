@@ -1154,7 +1154,7 @@ components:
     EventCard:
       type: object
       additionalProperties: false
-      required: [eventId, headline, summary, aiGenerated, uncertainty, evidence, affectedClientCount, openClientCount, topScore, latestAlertAt, instrumentId, ticker, issuer, sourceCount, reportVersion]
+      required: [eventId, headline, summary, aiGenerated, uncertainty, evidence, affectedClientCount, openClientCount, topScore, latestAlertAt, instrumentId, ticker, issuer, sourceCount, reportVersion, reportFailure]
       properties:
         eventId: {type: string, format: uuid}
         instrumentId: {type: string, nullable: true, description: The ticker this event is about. One event is one ticker's new news for one search run.}
@@ -1162,6 +1162,7 @@ components:
         issuer: {type: string, nullable: true}
         sourceCount: {type: integer, minimum: 0, description: How many sources are linked to the event.}
         reportVersion: {type: integer, nullable: true, description: Null until the report is written.}
+        reportFailure: {type: string, nullable: true, description: "Why the report was not written, such as MODEL_ABSTAINED (the AI found nothing to report in the sources); null while it is still being written or once it is written."}
         headline: {type: string}
         summary: {type: string, nullable: true}
         aiGenerated: {type: boolean}

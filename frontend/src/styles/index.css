@@ -3194,3 +3194,6 @@ textarea:focus {
 .alerts-page .batch-hint { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 20; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 0.95rem; color: var(--on-primary); background: var(--primary); border: 0; border-radius: 999px; box-shadow: 0 4px 14px rgba(4, 37, 64, 0.35); font: inherit; font-weight: 600; cursor: pointer; }
 .alerts-page .batch-hint:hover, .alerts-page .batch-hint:focus-visible { background: var(--primary-container); }
 @media (max-width: 640px) { .alerts-page .batch-hint { left: 1rem; right: 1rem; justify-content: center; } }
+
+.queue-auto { margin: 0; padding: 0.35rem 1rem; font-size: 0.78rem; color: var(--on-surface-variant); }
+.inline-empty__note { display: block; margin-top: 0.4rem; opacity: 0.85; }
