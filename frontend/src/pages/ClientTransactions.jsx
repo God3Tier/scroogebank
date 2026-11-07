@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Link, useParams } from 'react-router-dom'
 
-import { listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
+import { deleteAccount, listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
 import HoldingsEditor from '../components/HoldingsEditor.jsx'
 import { ADMIN, homeFor, inAnyGroup } from '../auth/roles.js'
@@ -30,6 +30,11 @@ function statusChangeProblem(error) {
     if (error.status === 404) return 'This account is no longer available.'
     if (error.status === 503) return 'The client could not be checked just now. Try again shortly.'
     return 'The status could not be changed. Try again.'
+}
+
+function deleteProblem(error) {
+    if (error.status === 404) return 'This account is no longer available.'
+    return 'The account could not be deleted. Try again.'
 }
 
 function loadProblem(error) {
@@ -93,9 +98,39 @@ function AccountStatus({ account, mode, onChanged }) {
     )
 }
 
+// Deletes the account, a soft delete (ADR-0036): it disappears from every list
+// but its row and transactions are kept. Agents only, on their own accounts,
+// whether or not the client is verified; admins only read accounts (ADR-0059).
+// A client cannot be deleted while it has accounts that are not deleted.
+function DeleteAccount({ account, onDeleted }) {
+    const [deleting, setDeleting] = useState({ busy: false, error: '' })
+
+    async function handleDelete() {
+        const name = `${account.account_type} account ${account.id.slice(0, 8)}`
+        if (!window.confirm(`Delete the ${name}? It will no longer be shown. This cannot be undone.`)) return
+        setDeleting({ busy: true, error: '' })
+        try {
+            await deleteAccount(account.id)
+        } catch (error) {
+            setDeleting({ busy: false, error: deleteProblem(error) })
+            return
+        }
+        onDeleted(account.id)
+    }
+
+    return (
+        <div className="account-delete">
+            <button type="button" onClick={handleDelete} disabled={deleting.busy}>
+                {deleting.busy ? 'Deleting…' : 'Delete account'}
+            </button>
+            {deleting.error && <p className="form-error" role="alert">{deleting.error}</p>}
+        </div>
+    )
+}
+
 // The account's newest ten transactions, and a link to all of them when there
 // are more.
-function AccountTransactions({ clientId, account, statusMode, onStatusChanged }) {
+function AccountTransactions({ clientId, account, statusMode, onStatusChanged, onDeleted }) {
     const [editingHoldings, setEditingHoldings] = useState(false)
     // Agents record holdings on investment accounts; admins are read-only (ADR-0066).
     const canRecordHoldings = statusMode !== 'view' && String(account.account_type).toUpperCase() === 'INVESTMENT'
@@ -105,6 +140,7 @@ function AccountTransactions({ clientId, account, statusMode, onStatusChanged })
                 {account.account_type} account <span className="mono" title={account.id}>{account.id.slice(0, 8)}</span>
             </h2>
             <AccountStatus account={account} mode={statusMode} onChanged={onStatusChanged} />
+            {statusMode !== 'view' && <DeleteAccount account={account} onDeleted={onDeleted} />}
             {canRecordHoldings && (
                 <div className="holdings-panel">
                     <button type="button" aria-expanded={editingHoldings} onClick={() => setEditingHoldings(!editingHoldings)}>
@@ -159,6 +195,13 @@ function ClientTransactions() {
         }))
     }
 
+    function handleDeleted(accountId) {
+        setState((current) => ({
+            ...current,
+            data: { ...current.data, accounts: current.data.accounts.filter((account) => account.id !== accountId) },
+        }))
+    }
+
     return (
         <div className="page">
             {/* Home, not the browser's last page, which may be one of these accounts' transaction pages. */}
@@ -191,7 +234,7 @@ function ClientTransactions() {
                         </section>
                     ) : (
                         state.data.accounts.map((account) => (
-                            <AccountTransactions key={account.id} clientId={clientId} account={account} statusMode={statusMode} onStatusChanged={handleStatusChanged} />
+                            <AccountTransactions key={account.id} clientId={clientId} account={account} statusMode={statusMode} onStatusChanged={handleStatusChanged} onDeleted={handleDeleted} />
                         ))
                     )}
                 </>

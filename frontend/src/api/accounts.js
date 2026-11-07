@@ -20,6 +20,13 @@ export function updateAccountStatus(accountId, status) {
   return requestJson(`/api/accounts/${encodeURIComponent(accountId)}`, { method: 'PATCH', body: { status } })
 }
 
+// A soft delete (ADR-0036): account-service sets deleted_at and keeps the row,
+// which is then never listed or returned again. Only the agent who owns the
+// account may delete it.
+export function deleteAccount(accountId) {
+  return requestJson(`/api/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' })
+}
+
 // One account's transactions, newest first, from transaction-service, which
 // checks the caller may read the account first (ADR-0064).
 export function listAccountTransactions(accountId) {
