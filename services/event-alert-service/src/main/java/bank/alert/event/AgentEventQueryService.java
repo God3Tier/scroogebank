@@ -94,10 +94,14 @@ public class AgentEventQueryService {
                   JOIN source_result sr ON sr.id = pe.source_result_id
                   LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
                  WHERE %s = ?
+                   AND NOT (NOT EXISTS (SELECT 1 FROM event_report r0 WHERE r0.public_event_id = pe.id)
+                            AND COALESCE((SELECT t0.attempts FROM event_report_attempt t0 WHERE t0.public_event_id = pe.id), 0) >= ?)
                  GROUP BY pe.id, sr.title, sr.canonical_url, sr.source_domain, sr.published_at, sr.retrieved_at
                 """.formatted(OWNER));
         List<Object> args = new ArrayList<>();
         args.add(agentSubject);
+        // An event whose report the model could not write and that has no fallback either is left out: nothing is shown for it.
+        args.add(bank.alert.report.SafeClientReportGenerator.GIVE_UP_AFTER_FAILED_DRAFTS);
         List<String> having = new ArrayList<>();
         if (onlyOpen) having.add("COUNT(*) FILTER (WHERE a.status = 'NEW') > 0");
         if (!includeClosed) having.add("COUNT(*) FILTER (WHERE a.status IN ('NEW', 'INFORMED')) > 0");

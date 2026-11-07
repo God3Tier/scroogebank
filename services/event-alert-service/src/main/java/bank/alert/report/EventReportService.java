@@ -38,8 +38,8 @@ public class EventReportService {
 
     /** Any alert, whatever its score, makes an event due for a report (the score of 60 was removed on 2026-11-07). */
     static final int MINIMUM_ALERT_SCORE = 0;
-    /** Refused drafts of one event, counted one by one, after which it is left alone. The first five are strict; a one-sentence summary is accepted after that. */
-    static final int MAX_FAILED_ATTEMPTS = 10;
+    /** Refused drafts of one event, counted one by one, after which the model is left alone and a report is built from the sources. */
+    static final int MAX_FAILED_ATTEMPTS = SafeClientReportGenerator.GIVE_UP_AFTER_FAILED_DRAFTS;
     /** An earlier report on the same company this recent is given to the model so it is not repeated. */
     static final java.time.Duration REPEAT_GUARD = java.time.Duration.ofHours(72);
     /** Not a failure of the report: it is tried again when the model or the budget is available. */

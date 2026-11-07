@@ -57,8 +57,14 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
 
     static final String PROMPT_VERSION = "alert-client-report-v2.2";
 
-    /** After this many refused drafts of one event, a one-sentence summary is accepted. */
-    public static final int RELAX_SUMMARY_AFTER_FAILED_DRAFTS = 5;
+    /** After this many refused drafts of one event, a one-sentence summary is accepted (for the drafts that remain). */
+    public static final int RELAX_SUMMARY_AFTER_FAILED_DRAFTS = 3;
+
+    /**
+     * Refused drafts of one event after which the model is left alone: a report is then put together from the sources (a fallback),
+     * or the event is not shown if even that is not possible.
+     */
+    public static final int GIVE_UP_AFTER_FAILED_DRAFTS = 5;
 
     private static final String SYSTEM_INSTRUCTION = "Write one factual report about a public company for a bank's "
             + "clients, using only the supplied public sources. The sources may describe several different "
@@ -123,7 +129,9 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
                 SYSTEM_INSTRUCTION, publicJson, OUTPUT_SCHEMA, outputTokens);
         String lastReason = "PROVIDER_FAILURE";
         int attemptsMade = 0;
-        for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
+        // Never more drafts than are left before giving up, so an event's refused drafts add up to five and no more.
+        int allowedDrafts = Math.min(properties.maxAttempts(), Math.max(1, GIVE_UP_AFTER_FAILED_DRAFTS - failedDraftsSoFar));
+        for (int attempt = 1; attempt <= allowedDrafts; attempt++) {
             attemptsMade = attempt;
             ReservationResult reservation = outboundControls.reserveModelTokens(outputTokens);
             if (!reservation.allowed()) {

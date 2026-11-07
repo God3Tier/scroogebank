@@ -333,7 +333,7 @@ class EventReportIntegrationTest {
     }
 
     @Test
-    void failedDraftsAreCountedAndStopAfterTenButAnUnavailableModelIsNotAFailure() {
+    void failedDraftsAreCountedAndStopAfterFiveButAnUnavailableModelIsNotAFailure() {
         store("one.example", "2026-09-26T22:00:00Z", "a");
         reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.PENDING, null, "MODEL_DISABLED", 0));
         pipeline.processPending();
@@ -344,7 +344,7 @@ class EventReportIntegrationTest {
         reportRequests.clear();
         for (int pass = 0; pass < 5; pass++) reports.refresh(20);
 
-        assertThat(reportRequests).as("five tries of two drafts each, then the model is left alone").hasSize(5);
+        assertThat(reportRequests).as("three rounds (2, 2 and 1 drafts), then the model is left alone").hasSize(3);
         assertThat(count("event_report")).as("the safe way to fail: a report from the sources alone").isOne();
         assertThat(jdbc.queryForObject("SELECT model_version FROM event_report", String.class)).isEqualTo("basic-summary-v1");
         assertThat(jdbc.queryForObject("SELECT prompt_version FROM event_report", String.class)).isEqualTo("fallback-v1");
@@ -367,10 +367,30 @@ class EventReportIntegrationTest {
         reports.refresh(20);
         reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.ABSTAINED, null, "INVALID_MODEL_SCHEMA", 2));
         reportRequests.clear();
-        for (int pass = 0; pass < 4; pass++) reports.refresh(20);
+        for (int pass = 0; pass < 2; pass++) reports.refresh(20);
 
-        assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(8);
-        assertThat(count("event_report")).as("eight refused drafts: still the model's turn").isZero();
+        assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(4);
+        assertThat(count("event_report")).as("four refused drafts: still the model's turn").isZero();
+        String agent = jdbc.queryForObject("SELECT assigned_agent_subject FROM alert LIMIT 1", String.class);
+        assertThat(eventQueries.list(agent, false, false, null, 25).items()).as("shown while it is still being tried").hasSize(1);
+    }
+
+    @Test
+    void anEventWithNoReportAndNoFallbackIsNotShownAtAll() {
+        store("one.example", "2026-09-26T22:00:00Z", "a");
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.PENDING, null, "MODEL_DISABLED", 0));
+        pipeline.processPending();
+        reports.refresh(20);
+        String agent = jdbc.queryForObject("SELECT assigned_agent_subject FROM alert LIMIT 1", String.class);
+        UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);
+        // Five refused drafts, and the only source is advice wording, so no fallback can be made either.
+        jdbc.update("UPDATE source_result SET title = 'Analysts say consider buying Apple', excerpt = 'Consider buying the stock now.'");
+        jdbc.update("INSERT INTO event_report_attempt (public_event_id, attempts, last_reason, last_attempt_at) VALUES (?, 5, 'INVALID_MODEL_SCHEMA', now())", eventId);
+
+        reports.refresh(20);
+
+        assertThat(count("event_report")).as("no fallback was possible").isZero();
+        assertThat(eventQueries.list(agent, false, false, null, 25).items()).as("so nothing is shown for it").isEmpty();
     }
 
     @Test
