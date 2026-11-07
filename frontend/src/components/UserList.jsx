@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useAuth } from 'react-oidc-context'
 
 import { reassignClients } from '../api/clients.js'
 import { disableUser, listUsers } from '../api/users.js'
@@ -30,8 +31,17 @@ function UserList({ role, title, paged = false }) {
   const [reassigning, setReassigning] = useState(null)
   const [receivers, setReceivers] = useState({ loading: false, users: [] })
   const [moved, setMoved] = useState('')
+  const auth = useAuth()
+  const currentSub = auth.user?.profile?.sub
+
+  function disableReason(user) {
+    if (user.deletable === false) return 'The root admin cannot be disabled.'
+    if (!currentSub) return 'Your signed-in identity is still loading.'
+    if (user.idpSub === currentSub) return 'You cannot disable your own account.'
+  }
 
   async function handleDisable(user) {
+    if (disableReason(user)) return
     setProblem('')
     try {
       await disableUser(user.id)
@@ -82,7 +92,14 @@ function UserList({ role, title, paged = false }) {
               <button type="button" onClick={() => openReassign(user)}>Reassign clients</button>
             )}
             {user.enabled ? (
-              <button type="button" onClick={() => handleDisable(user)}>Disable</button>
+              <button 
+                type="button" 
+                disabled={Boolean(disableReason(user))}
+                title={disableReason(user)}
+                onClick={() => handleDisable(user)}
+              >
+                Disable
+              </button>
             ) : (
               <span className="badge">Disabled</span>
             )}

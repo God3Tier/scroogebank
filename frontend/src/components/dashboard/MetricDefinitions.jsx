@@ -25,9 +25,6 @@ function MetricDefinitions({ keys }) {
           )
         })}
       </dl>
-      <p className="demo-note">
-        Demo mockup: figures are synthetic and follow the dashboard-service API contract.
-      </p>
     </details>
   )
 }

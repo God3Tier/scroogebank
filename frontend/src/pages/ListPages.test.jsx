@@ -19,6 +19,18 @@ vi.mock('../api/clients.js', () => ({ deleteClient: vi.fn(), getClient: vi.fn(),
 vi.mock('../api/dashboard.js', async (importOriginal) => ({ ...(await importOriginal()), getDashboard: vi.fn() }))
 vi.mock('../api/transactions.js', () => ({ listTransactions: vi.fn() }))
 vi.mock('../api/users.js', () => ({ disableUser: vi.fn(), listUsers: vi.fn() }))
+vi.mock('react-oidc-context', () => ({
+  useAuth: () => ({
+    isAuthenticated: true,
+    isLoading: false,
+    user: {
+      profile: {
+        sub: 'synthetic-admin-sub',
+        'cognito:groups': ['ADMIN'],
+      },
+    },
+  }),
+}))
 
 // Synthetic data only.
 const agent = (n) => ({ id: `user-${n}`, firstName: 'Agent', lastName: `Number${n}`, email: `agent${n}@example.test`, enabled: true })

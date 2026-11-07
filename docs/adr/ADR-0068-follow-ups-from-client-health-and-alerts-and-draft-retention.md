@@ -50,6 +50,7 @@ Alerts on CRM-linked holdings carry the CRM client UUID as `clientRef` (ADR-0066
 2. **The agent's details slot.**
    - The two purposes have one `{{agent_details}}` in the body: in every template, and required exactly once in model output. Any other purpose may not use it, and the subject never holds it. The screen rejects a reply that breaks this rule, and the template is used instead.
    - The prompt lists the slot only for these purposes. Prompt version `drafts-v2`, templates `templates-v2`.
+   - *Implementation note, 2026-11-05:* `drafts-v2` listed the slot only in the user input. Its system prompt still described the slot to every purpose, and Nova Lite then put `{{agent_details}}` into most check-ins, so every check-in fell back to the template. `drafts-v3` describes the slot in the system prompt only for these two purposes. The decision is unchanged.
    - The agent sees the slot as `[Add your details here]`. Saving it untouched stores the placeholder again, as for names (ADR-0056).
    - Sending is refused (422) while the slot is still there.
 3. **The agent is responsible for what they add.**

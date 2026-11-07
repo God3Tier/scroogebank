@@ -1,6 +1,7 @@
-import { Routes, Route } from 'react-router-dom'
+import { useAuth } from 'react-oidc-context'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import RequireAuth from './auth/RequireAuth.jsx'
-import { ADMIN, AGENT } from './auth/roles.js'
+import { ADMIN, AGENT, homeFor } from './auth/roles.js'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import SignInCallback from './pages/SignInCallback.jsx'
@@ -18,6 +19,7 @@ import AgentDrafts from './pages/AgentDrafts.jsx'
 import ListPage from './pages/ListPage.jsx'
 import AccountTransactions from './pages/AccountTransactions.jsx'
 import AgentPerformance from './pages/AgentPerformance.jsx'
+import AdminAuditLogs from './pages/AdminAuditLogs.jsx'
 import ActivityFeed from './components/ActivityFeed.jsx'
 import ClientList from './components/ClientList.jsx'
 import TransactionsTable from './components/TransactionsTable.jsx'
@@ -28,10 +30,30 @@ import UserList from './components/UserList.jsx'
 // page is too: client-service lets an admin act on any client and an agent
 // only on their own (ADR-0041). The lists on Agent Home and Admin Home show
 // their first ten rows and open in full, paged, on their own pages.
+
+function HomeEntry() {
+  const auth = useAuth()
+  if (auth.isLoading){
+    return(
+      <p className="empty-state" role="status">
+        Checking your sign-in status...
+      </p>
+    )
+  }
+
+  if (auth.isAuthenticated) {
+    const destination = homeFor(auth.user)
+    if (destination !== '/') {
+      return <Navigate to={destination} replace />
+    }
+  }
+  return <Home />
+}
+
 function AppRouter() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<HomeEntry />} />
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<SignInCallback />} />
       <Route path="/mfa-setup" element={<MfaSetup />} />
@@ -40,8 +62,8 @@ function AppRouter() {
       <Route path="/agent/calendar" element={<RequireAuth groups={[AGENT]}><AgentCalendar /></RequireAuth>} />
       <Route path="/agent/drafts" element={<RequireAuth groups={[AGENT]}><AgentDrafts /></RequireAuth>} />
       <Route path="/admin" element={<RequireAuth groups={[ADMIN]}><AdminDashboard /></RequireAuth>} />
-      <Route path="/agent/client/:clientId/transactions" element={<RequireAuth groups={[ADMIN, AGENT]}><ClientTransactions /></RequireAuth>} />
-      <Route path="/agent/client/:clientId/accounts/:accountId/transactions" element={<RequireAuth groups={[ADMIN, AGENT]}><AccountTransactions /></RequireAuth>} />
+      <Route path="/agent/client/:clientId/transactions" element={<RequireAuth groups={[AGENT]}><ClientTransactions /></RequireAuth>} />
+      <Route path="/agent/client/:clientId/accounts/:accountId/transactions" element={<RequireAuth groups={[AGENT]}><AccountTransactions /></RequireAuth>} />
       <Route path="/clients/:clientId" element={<RequireAuth groups={[ADMIN, AGENT]}><ClientProfile /></RequireAuth>} />
       <Route path="/agent/client-health" element={<RequireAuth groups={[AGENT]}><ClientHealthMonitor /></RequireAuth>} />
       <Route path="/admin/client-health" element={<RequireAuth groups={[ADMIN]}><ClientHealthMonitor /></RequireAuth>} />
@@ -66,6 +88,9 @@ function AppRouter() {
       </RequireAuth>} />
       <Route path="/admin/transactions" element={<RequireAuth groups={[ADMIN]}>
         <ListPage title="All transactions" subtitle="Every account's transactions, newest first" back="/admin"><TransactionsTable paged /></ListPage>
+      </RequireAuth>} />
+      <Route path="/admin/audit-logs" element={<RequireAuth groups={[ADMIN]}>
+        <ListPage title="Audit Activity" subtitle="Successful changes recorded across the CRM, newest first" back="/admin"><AdminAuditLogs /></ListPage>
       </RequireAuth>} />
     </Routes>
   )

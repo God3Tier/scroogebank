@@ -18,22 +18,37 @@ import java.util.Map;
 @UtilityClass
 final class DraftPrompt {
 
-    static final String VERSION = "drafts-v2";
+    /**
+     * v3 names {@code {{agent_details}}} only to the purposes that have the
+     * slot (ADR-0068 decision 2): v2 named it to every purpose, and Nova Lite
+     * then wrote it into most check-ins, which the screen rejects.
+     */
+    static final String VERSION = "drafts-v3";
 
-    static final String SYSTEM = """
+    private static final String INTRO = """
             You write short, polite emails from a relationship manager at a bank in Singapore to one of \
             their clients. Write in British English for readers in Singapore, in the requested tone.
             Address the client only as {{client_first_name}} and sign off only as {{agent_name}}. \
             Never invent names. Use only the placeholders you are given.
-            If you are given {{agent_details}}, put it exactly once in the body, on a line of its own, \
-            where the relationship manager will add their own reason for writing. Do not guess or \
-            describe that reason yourself.
+            """;
+
+    private static final String DETAILS_SLOT = """
+            Put {{agent_details}} exactly once in the body, on a line of its own, where the relationship \
+            manager will add their own reason for writing. Do not guess or describe that reason yourself.
+            """;
+
+    private static final String RULES = """
             Do not mention products, rates, interest, returns, yields, investments, prices, fees, offers, \
             promotions, loans, credit, funds, stocks, insurance, accounts, balances or transactions. \
             Do not include figures with a percent sign or currency, links, email addresses or phone numbers.
             Keep the body under 150 words, in short paragraphs.
             Reply with only a JSON object and nothing else: {"subject": "...", "body": "..."}. \
             The subject is at most 120 characters. The body must contain {{client_first_name}}.""";
+
+    /** The system prompt for a purpose; only a purpose with a details slot hears of it. */
+    static String system(DraftPurpose purpose) {
+        return INTRO + (purpose.hasDetailsSlot() ? DETAILS_SLOT : "") + RULES;
+    }
 
     static String userInput(DraftPurpose purpose, DraftTone tone, List<HolidayView> holidays,
             MeetingRecency recency, ObjectMapper mapper) {

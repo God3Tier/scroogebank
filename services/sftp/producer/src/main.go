@@ -194,7 +194,8 @@ func getenv(key, fallback string) string {
 
 func getenvDuration(key string, fallbackSeconds int) time.Duration {
 	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
+		// time.NewTicker panics on a duration that is not positive.
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return time.Duration(n) * time.Second
 		}
 	}

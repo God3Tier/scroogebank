@@ -2119,3 +2119,61 @@ retry exhaustion and refusal to retry after the last available reservation.
   match the re-test report's table and the panel added to `stress.html`.
   `throttle.js` at its new default rate was not run.
 - Human verification required: Neo Jia Wen to review.
+
+## 2026-11-04 — Rerunnable scripts for the load tests, ZAP scans, availability drills and audit check
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: turn the commands behind the 2026-11-02 and 2026-11-03 tests on AWS,
+  which were typed by hand or kept outside the repository, into scripts that
+  anyone can run again.
+- Files:
+  - `tests/test-users.py`: creates the 105 load-test users and the ZAP test
+    agent in Cognito with TOTP and their user-service rows, and issues tokens.
+  - `tests/security/zap/edge.sh`, `direct.sh`, `waf-blocks.py`, and the ZAP
+    README's procedure. Also a fix to `run-in-vpc.sh`: it uploaded `scan.sh`
+    with Windows line endings from a `core.autocrlf` checkout, which the
+    task's `sh` cannot run.
+  - `tests/drills/`: `task-failure.sh`, `auditor-outage.sh`,
+    `db-failover.sh`, `chain-verify.sh`, and their shared `lib.sh`,
+    `probe-report.py`, `api.py` and README. `tests/load/poller.js` takes
+    `PROBE_PATH`.
+  - `tests/load/audit-check.py` and the load README's steps.
+  - Pointers from the drill, ZAP and re-test reports.
+- Safeguards: each drill asks for the cluster's name before breaking
+  anything and refuses any cluster but `crm-sg-prod`. The Auditor drill
+  restores the Auditor's task count and autoscaling on any exit. Passwords,
+  TOTP secrets and tokens stay in a folder outside the repository. The
+  sign-in override the scripts need stays uncommitted.
+- Verification:
+  - shell syntax and Python compile checks;
+  - the TOTP code against the RFC 6238 test vectors;
+  - `probe-report.py` on the 2026-11-02 task-failure probe, which reproduces
+    the drill report's 59 s outage (11:19:47 to 11:20:45);
+  - `api.py` against a local mock of the clients and accounts API;
+  - not run against AWS, because nothing is deployed, and not shellchecked,
+    because Docker was not running.
+- Human verification required: Neo Jia Wen to review, and to run each script
+  once on the next deployment before relying on its results.
+
+## 2026-11-05 — Check-in drafts always fell back to the template (prompt drafts-v3)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: find why every AI follow-up draft in prod showed "the AI draft did
+  not pass the safety checks", and fix it.
+- Finding: the engagement-service logs for 4 and 5 November held 24 screen
+  rejections, all `unknown_placeholder`. Prompt `drafts-v2` (AE-T12)
+  described `{{agent_details}}` in the system prompt to every purpose, and
+  Nova Lite then wrote it into check-ins, which have no details slot. With
+  the `drafts-v2` prompt, 6 of 9 live Check-in replies held the slot.
+- Files: `DraftPrompt.java` (the system prompt is built per purpose; version
+  `drafts-v3`), `DraftGenerator.java`, new `DraftPromptTest.java`, an
+  implementation note in ADR-0068 decision 2, AE-T13 in the feature plan.
+- Verification: the drafting unit tests pass. With the `drafts-v3` text,
+  9 of 9 live Check-in replies held no slot, and 6 of 6 passed a Python copy
+  of the full screen. Health check-in replies kept the slot, but 2 of 6
+  were blocked for the word "offer", a separate issue not changed here.
+  Not yet deployed.
+- Data: the model received only the purpose, tone, two public holidays and
+  placeholders; no client data.
+- Human verification required: Neo Jia Wen to review, deploy, and confirm
+  that new prod check-ins come from the AI.

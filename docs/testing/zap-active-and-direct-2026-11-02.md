@@ -23,6 +23,8 @@ The application is protected in layers, and each layer holds on its own:
 
 ## Method
 
+To repeat these scans, use the scripts in `tests/security/zap/` (`edge.sh`, `direct.sh`, `waf-blocks.py`, with the test agent from `tests/test-users.py`; [README](../../tests/security/zap/README.md#active-scans-through-the-edge-and-directly)), added on 2026-11-04 from the commands used here.
+
 - **Scope:** `active-scope.py` copied the public OpenAPI specs, writes included, and left out three operations:
   - `POST /api/engagement/drafts` (calls Bedrock);
   - `POST /api/engagement/drafts/{id}/send` (sends e-mail);

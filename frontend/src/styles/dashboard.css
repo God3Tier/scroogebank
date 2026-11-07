@@ -628,7 +628,7 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px var(--stack-md);
   margin: 0;
-  padding: 12px 16px 0;
+  padding: 12px 16px;
 }
 
 .definitions dt {
@@ -642,14 +642,6 @@
 
 .definitions .caveat {
   color: var(--warning);
-}
-
-.demo-note {
-  margin: 12px 16px 0;
-  padding: 8px 0 12px;
-  border-top: 1px solid var(--outline-variant);
-  color: var(--outline);
-  font-size: 11px;
 }
 
 /* ---------- Narrow screens ---------- */

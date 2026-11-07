@@ -526,6 +526,11 @@ textarea:focus {
   color: #fff;
 }
 
+.row-list button:disabled{
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .plain-rows > li {
   font-family: var(--mono);
   font-size: 13px;
@@ -2879,6 +2884,154 @@ textarea:focus {
   animation: spin 1s linear infinite;
 }
 
+
+/* ---------- Audit activity (pages/AdminAuditLogs.jsx) ----------
+   Flush cards with a header bar and a .data-table, after the Stitch
+   "Transaction Log" screen. */
+
+.audit-log__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--stack-md);
+  padding: var(--stack-md) var(--stack-lg);
+  background: var(--surface);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.audit-log__header h2 {
+  margin: 0;
+}
+
+.audit-log__note {
+  margin-top: 2px;
+  color: var(--on-surface-variant);
+  font-size: 13px;
+}
+
+.main .audit-log__header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.main .audit-log__header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.audit-log__header button .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.audit-log__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--stack-sm);
+  padding: var(--stack-lg);
+  color: var(--on-surface-variant);
+  text-align: center;
+}
+
+.audit-log__problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--stack-sm) 12px;
+  margin: var(--stack-md) var(--stack-lg);
+  padding: 12px var(--stack-md);
+  border-radius: var(--radius-lg);
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+.audit-log__problem p {
+  flex: 1 1 200px;
+}
+
+.main .audit-log__problem button {
+  padding: 4px 12px;
+  background: var(--surface-lowest);
+}
+
+.audit-log-table td {
+  vertical-align: top;
+}
+
+.audit-log__time {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-log__clock {
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.audit-log__actor {
+  font-weight: 500;
+}
+
+.audit-log__details summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--secondary);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.audit-log__details summary::-webkit-details-marker {
+  display: none;
+}
+
+.audit-log__details summary .material-symbols-outlined {
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+
+.audit-log__details[open] summary .material-symbols-outlined {
+  transform: rotate(90deg);
+}
+
+.audit-log__details summary:focus-visible {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.audit-log-payload {
+  max-width: 420px;
+  margin: var(--stack-sm) 0 0;
+  padding: 12px;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius);
+  background: var(--surface-low);
+  font: 12px/18px var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audit-log__details summary .material-symbols-outlined {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .audit-log__header {
+    padding-right: var(--stack-md);
+    padding-left: var(--stack-md);
+  }
+}
+
 /* ---------- Loading spinner (components/Spinner.jsx) ---------- */
 
 .spinner {
@@ -3197,3 +3350,4 @@ textarea:focus {
 
 .queue-auto { margin: 0; padding: 0.35rem 1rem; font-size: 0.78rem; color: var(--on-surface-variant); }
 .inline-empty__note { display: block; margin-top: 0.4rem; opacity: 0.85; }
+.muted { opacity: 0.7; }
