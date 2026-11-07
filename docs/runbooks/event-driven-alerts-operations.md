@@ -323,7 +323,9 @@ Watch: Nova has not written a report before, so the first may be refused; SES wi
 untested; a 30-report send must finish inside API Gateway's 30 seconds. Teardown empties alerts-db, so run step 5 again after every
 deployment and within 72 hours of a demo.
 
-Testing the automatic cycle with five minutes (then back to four hours). The worker logs one line per run,
+Testing the automatic cycle with five minutes (then back to four hours). The repo is set to five minutes for the 2026-11-07 AWS check
+(alert-worker `schedule` = `cron(0/5 * * * ? *)`, crm `alert_schedule_interval` = `PT5M`); set both back to `cron(0 0/4 * * ? *)` and
+`PT4H` when the check is done. The worker logs one line per run,
 `worker run status=… run_id=… window_from=… window_to=… search_attempts=… accepted=… duplicates=… rejected=…`, so each run is
 visible in the worker's CloudWatch log group. Locally: start the stack with `LOCAL_SCHEDULE_MINUTES=5` and watch for a run line
 every five minutes. On AWS: set the alert-worker `schedule = "cron(0/5 * * * ? *)"` (Singapore time) and the crm
