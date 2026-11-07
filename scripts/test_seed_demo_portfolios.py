@@ -19,21 +19,34 @@ class PositionsTest(unittest.TestCase):
         for index in range(4):
             self.assertEqual(self.held("dbs", index), expected)
 
-    def test_the_news_profile_gives_one_client_several_tickers(self):
-        self.assertEqual(self.held("news", 0), {"PRIV-ANTHROPIC": 400, "NASDAQ-AAPL": 60})
-        self.assertNotIn("LSE-SHEL", self.held("news", 0), "Shell is not seeded")
+    def test_the_news_profile_gives_the_first_three_clients_their_fixed_holdings(self):
+        self.assertEqual(self.held("news", 0), {"NASDAQ-AAPL": 60})
         self.assertEqual(self.held("news", 1), {"NASDAQ-AAPL": 60, "PRIV-ANTHROPIC": 140})
-        self.assertEqual(self.held("news", 2), {"NASDAQ-AAPL": 60})
-        self.assertEqual(self.held("news", 7), {"NASDAQ-AAPL": 60})
+        self.assertEqual(self.held("news", 2), {"NASDAQ-AAPL": 60, "PRIV-ANTHROPIC": 140, "LSE-SHEL": 400})
+
+    def test_thirty_more_clients_hold_a_mix_of_the_three_companies_and_the_six_others(self):
+        counts = {}
+        for index in range(len(seed.DEMO_CLIENTS)):
+            for instrument in self.held("news", index):
+                counts[instrument] = counts.get(instrument, 0) + 1
+        self.assertEqual(len(seed.DEMO_CLIENTS), 33)
+        self.assertEqual((counts["NASDAQ-AAPL"], counts["PRIV-ANTHROPIC"], counts["LSE-SHEL"]), (20, 19, 17))
+        self.assertEqual(set(counts) - {"NASDAQ-AAPL", "PRIV-ANTHROPIC", "LSE-SHEL"},
+                         {"NASDAQ-MSFT", "NASDAQ-NVDA", "NYSE-JPM", "NYSE-V", "HKEX-0700", "LSE-HSBA"})
+        for index in range(3, 33):
+            self.assertGreaterEqual(len(self.held("news", index)), 2, f"client {index} holds a mix")
+
+    def test_a_client_after_the_demo_clients_holds_apple_only(self):
+        self.assertEqual(self.held("news", 40), {"NASDAQ-AAPL": 60})
 
     def test_every_news_position_is_complete_and_a_copy(self):
-        for index in range(3):
+        for index in range(len(seed.DEMO_CLIENTS) + 1):
             for position in seed.positions_for("news", index):
                 self.assertEqual(
                     {"instrumentId", "quantity", "unitPrice", "valuationCurrency", "fxToSgd"}, set(position))
         first = seed.positions_for("news", 0)
         first[0]["quantity"] = 1
-        self.assertEqual(seed.positions_for("news", 0)[0]["quantity"], 400, "a change must not leak into the profile")
+        self.assertEqual(seed.positions_for("news", 0)[0]["quantity"], 60, "a change must not leak into the profile")
 
 
 class WebsitesAndSearchTest(unittest.TestCase):
@@ -56,7 +69,7 @@ class WebsitesAndSearchTest(unittest.TestCase):
 
 
 class CreateClientsTest(unittest.TestCase):
-    EMAILS = ["a@x.com", "b@x.com", "c@x.com"]
+    EMAILS = ["a@x.com", "b@x.com", "c@x.com"]  # replaces the addresses of the first three clients only
 
     def fake(self, existing, accounts_for=()):
         """A tiny stand-in for the CRM: records the calls and answers like it."""
@@ -70,37 +83,53 @@ class CreateClientsTest(unittest.TestCase):
                 held = any(c in path for c in accounts_for)
                 return 200, [{"id": "acc", "account_type": "INVESTMENT", "status": "ACTIVE"}] if held else []
             if method == "POST" and path == "/api/clients":
-                return 201, {"client_id": "id-" + body["first_name"]}
+                return 201, {"client_id": "id-" + body["first_name"].replace(" ", "_")}
             return 201 if path == "/api/accounts" else 200, {}
         return request, calls
 
-    def test_a_fresh_agent_gets_three_verified_clients_with_active_accounts(self):
+    def test_a_fresh_agent_gets_every_demo_client_verified_with_an_active_account(self):
         request, calls = self.fake([])
         with mock.patch.object(seed, "request", side_effect=request):
             seed.create_clients("http://x", "t", self.EMAILS, False)
-        self.assertEqual(sum(c == ("POST", "/api/clients") for c in calls), 3)
-        self.assertEqual(sum(c == ("POST", "/api/accounts") for c in calls), 3)
-        self.assertEqual(sum(c[1].endswith("/verify") for c in calls), 3)
+        clients = len(seed.DEMO_CLIENTS)
+        self.assertEqual(sum(c == ("POST", "/api/clients") for c in calls), clients)
+        self.assertEqual(sum(c == ("POST", "/api/accounts") for c in calls), clients)
+        self.assertEqual(sum(c[1].endswith("/verify") for c in calls), clients)
+
+    def test_the_given_addresses_go_to_the_first_clients_and_the_rest_get_made_up_ones(self):
+        sent = []
+        base, _ = self.fake([])
+
+        def request(basepath, token, method, path, body=None, headers=None):
+            if method == "POST" and path == "/api/clients":
+                sent.append(body["email"])
+            return base(basepath, token, method, path, body, headers)
+        with mock.patch.object(seed, "request", side_effect=request):
+            seed.create_clients("http://x", "t", self.EMAILS, False)
+        self.assertEqual(sent[:3], self.EMAILS)
+        self.assertEqual(sent[3], "aaron.teo@example.test")
+        self.assertEqual(len(set(sent)), len(seed.DEMO_CLIENTS), "every address is different")
+        self.assertIn("xinyi.tan@example.test", sent)
 
     def test_a_rerun_creates_nothing_when_everything_is_there(self):
-        there = [{"client_id": "id-" + f, "first_name": f, "last_name": l, "verification_status": "VERIFIED"}
+        there = [{"client_id": "id-" + f.replace(" ", "_"), "first_name": f, "last_name": l, "verification_status": "VERIFIED"}
                  for f, l in seed.DEMO_CLIENTS]
-        request, calls = self.fake(there, accounts_for=["id-Chloe", "id-Daniel", "id-Esther"])
+        request, calls = self.fake(there, accounts_for=["id-" + first.replace(" ", "_") for first, _ in seed.DEMO_CLIENTS])
         with mock.patch.object(seed, "request", side_effect=request):
             seed.create_clients("http://x", "t", self.EMAILS, False)
         self.assertFalse([c for c in calls if c[0] == "POST"])
 
-    def test_a_dry_run_changes_nothing_and_the_emails_must_match_the_clients(self):
+    def test_a_dry_run_changes_nothing_and_there_cannot_be_more_addresses_than_clients(self):
         request, calls = self.fake([])
         with mock.patch.object(seed, "request", side_effect=request):
             seed.create_clients("http://x", "t", self.EMAILS, True)
             with self.assertRaises(SystemExit):
-                seed.create_clients("http://x", "t", ["only@x.com"], False)
+                seed.create_clients("http://x", "t", ["a@x.com"] * (len(seed.DEMO_CLIENTS) + 1), False)
         self.assertFalse([c for c in calls if c[0] == "POST"])
 
     def test_every_generated_client_has_its_own_phone_and_a_valid_shape(self):
         bodies = [seed.client_body(f, l, "e@x.com", i + 1) for i, (f, l) in enumerate(seed.DEMO_CLIENTS)]
-        self.assertEqual(len({b["phone_number"] for b in bodies}), 3)
+        self.assertEqual(len({b["phone_number"] for b in bodies}), len(seed.DEMO_CLIENTS))
         for b in bodies:
             self.assertRegex(b["phone_number"], r"^\+[0-9]{10,15}$")
             self.assertRegex(b["postal_code"], r"^[0-9]{6}$")

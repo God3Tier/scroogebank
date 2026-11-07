@@ -17,24 +17,26 @@ Needs alert_holdings_mode = "database" applied to the crm and alert-worker
 stacks, and at least two of the agent's clients with an active investment
 account (the client verified, then the account activated).
 
-News alerts (--profile news). Gives the agent's clients the holdings the news-alert test needs, so one client has several
-tickers: the first client (accounts in id order) holds Anthropic and Apple, the second Apple and Anthropic, and every
-other client Apple only. Shell is not seeded: to test it, record a Shell holding by hand and search it by hand. Apple and Anthropic
-must be in alerts-db (Apple from V8, Anthropic from V18). Two
-optional extras:
+News alerts (--profile news). Gives the agent's clients the holdings the news-alert test used, in account-id order: the first
+three hold Apple, Apple and Anthropic, and Apple, Anthropic and Shell; the next thirty each hold a mix of Apple, Anthropic
+and Shell plus one or two of Microsoft, Nvidia, JPMorgan, Visa, Tencent and HSBC (those six are test companies that are
+unlikely to find any news); any client after that holds Apple only. Apple, Shell and the six others come with V8 and Anthropic
+with V18. The script never starts a search by itself: use --search, or press Search now (a single press searches every company
+the agent's clients hold). Two optional extras:
   --add-websites  adds the test websites to the shared search list. Do it first: adding a website starts a search of the
                   companies the agent's clients already hold (ADR-0081), which spends Tavily credits.
   --search ID     then starts one search of that company (for example PRIV-ANTHROPIC) over every website, as Search now does.
 
-Clients (--create-clients). Creates the agent's demo clients when they are missing, so a fresh deployment needs no clicking:
-for each name in DEMO_CLIENTS it creates the client under the signed-in agent, verifies it without a document, and opens an
-active SGD investment account. A client that already exists (same first and last name) is reused, and one that has an active
-investment account keeps it, so a rerun creates nothing twice. --client-emails gives one address per client, in order; use
-addresses that can receive mail (in the SES sandbox, verified ones). The agent itself is not created here: an admin creates it
+Clients (--create-clients). Creates the agent's 33 demo clients (DEMO_CLIENTS) when they are missing, so a fresh deployment
+needs no clicking: each is created under the signed-in agent, verified without a document, and given an active SGD investment
+account. A client that already exists (same first and last name) is reused, and one that has an active investment account keeps
+it, so a rerun creates nothing twice. Every client gets a made-up address, first.last@example.test, which cannot receive mail.
+--client-emails A,B,C replaces the addresses of the first clients, in the order of DEMO_CLIENTS, with ones that can receive
+mail (in the SES sandbox, verified ones); give one for every client you will send an email to. Each address must be unused. The agent itself is not created here: an admin creates it
 in Manage Agents (docs/runbooks/deploy-aws.md, "Evaluation accounts"), and it then signs in once.
 
 usage: ALERT_AGENT_TOKEN=<access token> python scripts/seed-demo-portfolios.py [--base-url URL] [--dry-run]
-       [--profile dbs|news] [--create-clients --client-emails A,B,C] [--add-websites] [--search INSTRUMENT_ID]
+       [--profile dbs|news] [--create-clients [--client-emails A,B,C]] [--add-websites] [--search INSTRUMENT_ID]
 
 The token is the agent's access token: sign in to the app as the agent, then in
 the browser console run
@@ -64,9 +66,25 @@ SOURCE_LABEL = "demo-seed"
 APPLE = {"instrumentId": "NASDAQ-AAPL", "quantity": 60, "unitPrice": 230, "valuationCurrency": "USD", "fxToSgd": 1.34}
 ANTHROPIC = {"instrumentId": "PRIV-ANTHROPIC", "unitPrice": 100, "valuationCurrency": "USD", "fxToSgd": 1.34}
 SHELL = {"instrumentId": "LSE-SHEL", "quantity": 600, "unitPrice": 27, "valuationCurrency": "GBP", "fxToSgd": 1.75}
-# A large Anthropic holding scores above the alert threshold only when it is about half of the portfolio, so the
-# first client holds more Anthropic than the second. Shell is no longer seeded (SHELL stays for a hand-made test).
-DEMO_CLIENTS = [("Chloe", "Tan"), ("Daniel", "Lim"), ("Esther", "Wong")]
+DEMO_CLIENTS = [
+    ("Chloe", "Tan"), ("Daniel", "Lim"), ("Esther", "Goh"),
+    ("Aaron", "Teo"), ("Bella", "Ng"), ("Caleb", "Lee"), ("Diana", "Koh"), ("Ethan", "Chua"), ("Fiona", "Tay"),
+    ("Gareth", "Ong"), ("Hannah", "Sim"), ("Ivan", "Goh"), ("Jasmine", "Yeo"), ("Kelvin", "Ho"), ("Lydia", "Chan"),
+    ("Marcus", "Phua"), ("Nadia", "Lau"), ("Oscar", "Fong"), ("Priya", "Nair"), ("Quinn", "Toh"), ("Rachel", "Seah"),
+    ("Samuel", "Wee"), ("Tina", "Low"), ("Umar", "Yusof"), ("Vera", "Lim"), ("Wesley", "Ang"), ("Xin Yi", "Tan"),
+    ("Yusuf", "Aziz"), ("Zoe", "Chong"), ("Alvin", "Peh"), ("Bernice", "Ho"), ("Clarence", "Lew"), ("Denise", "Quek"),
+]
+# The six other test companies: round demo prices, fx to SGD. All six come with V8.
+OTHER_COMPANIES = [
+    {"instrumentId": "NASDAQ-MSFT", "unitPrice": 420, "valuationCurrency": "USD", "fxToSgd": 1.34},
+    {"instrumentId": "NASDAQ-NVDA", "unitPrice": 130, "valuationCurrency": "USD", "fxToSgd": 1.34},
+    {"instrumentId": "NYSE-JPM", "unitPrice": 240, "valuationCurrency": "USD", "fxToSgd": 1.34},
+    {"instrumentId": "NYSE-V", "unitPrice": 310, "valuationCurrency": "USD", "fxToSgd": 1.34},
+    {"instrumentId": "HKEX-0700", "unitPrice": 380, "valuationCurrency": "HKD", "fxToSgd": 0.17},
+    {"instrumentId": "LSE-HSBA", "unitPrice": 8, "valuationCurrency": "GBP", "fxToSgd": 1.75},
+]
+CORE_MIXES = [("apple",), ("anthropic",), ("shell",), ("apple", "anthropic"), ("apple", "shell"), ("anthropic", "shell"),
+              ("apple", "anthropic", "shell")]
 NEWS_WEBSITES = ["cnbc.com", "finance.yahoo.com", "thenextweb.com", "techspot.com", "adage.com"]
 
 
@@ -75,10 +93,24 @@ def positions_for(profile, index):
     if profile == "dbs":
         return [dict(p) for p in POSITIONS]
     if index == 0:
-        return [dict(ANTHROPIC, quantity=400), dict(APPLE)]
+        return [dict(APPLE)]
     if index == 1:
         return [dict(APPLE), dict(ANTHROPIC, quantity=140)]
+    if index == 2:
+        return [dict(APPLE), dict(ANTHROPIC, quantity=140), dict(SHELL, quantity=400)]
+    if index < len(DEMO_CLIENTS):
+        return mixed_positions(index - 3)
     return [dict(APPLE)]
+
+
+def mixed_positions(i):
+    """The i-th of the thirty mixed clients: a core mix of Apple, Anthropic and Shell, plus one or two of the six others."""
+    base = {"apple": (APPLE, 40), "anthropic": (ANTHROPIC, 150), "shell": (SHELL, 500)}
+    chosen = [(dict(base[name][0]), base[name][1]) for name in CORE_MIXES[i % len(CORE_MIXES)]]
+    others = [OTHER_COMPANIES[i % 6]] + ([OTHER_COMPANIES[(i + 2) % 6]] if i % 3 == 0 else [])
+    chosen += [(dict(company), 20) for company in others]
+    # A different size for each holding, so the shares of the portfolios differ from client to client.
+    return [dict(position, quantity=quantity + ((i * 7 + n * 13) % 5) * 10) for n, (position, quantity) in enumerate(chosen)]
 
 
 def add_websites(base_url, token):
@@ -107,9 +139,9 @@ def search_now(base_url, token, instrument_id):
 
 def client_body(first, last, email, index):
     """A valid demo client: adult, Singapore address, a phone number of its own (a phone number cannot be shared)."""
-    return {"first_name": first, "last_name": last, "date_of_birth": "1985-06-15T00:00:00Z", "gender": "Female" if index != 1 else "Male",
+    return {"first_name": first, "last_name": last, "date_of_birth": "1985-06-15T00:00:00Z", "gender": "Male" if index % 2 == 0 else "Female",
             "email": email, "phone_number": f"+65910000{index:02d}", "address": f"{10 + index} Demo Street",
-            "city": "Singapore", "state": "Singapore", "country": "Singapore", "postal_code": f"01890{index}"}
+            "city": "Singapore", "state": "Singapore", "country": "Singapore", "postal_code": f"{180000 + index}"}
 
 
 def account_body(client_id):
@@ -117,13 +149,18 @@ def account_body(client_id):
             "initial_deposit": 10000, "currency": "SGD", "branch_id": "SG-001"}
 
 
+def default_email(first, last):
+    """A made-up address that cannot receive mail, unique per client."""
+    return f"{first}.{last}".lower().replace(" ", "") + "@example.test"
+
+
 def create_clients(base_url, token, emails, dry_run):
     """Creates the demo clients that are missing, verifies them and opens an active investment account for each."""
-    if len(emails) != len(DEMO_CLIENTS):
-        sys.exit(f"--client-emails needs {len(DEMO_CLIENTS)} addresses, one per client: "
-                 + ", ".join(f"{f} {l}" for f, l in DEMO_CLIENTS))
+    if len(emails) > len(DEMO_CLIENTS):
+        sys.exit(f"--client-emails has {len(emails)} addresses but there are only {len(DEMO_CLIENTS)} clients")
     existing = {(c["first_name"], c["last_name"]): c for c in agent_clients(base_url, token)}
-    for index, ((first, last), email) in enumerate(zip(DEMO_CLIENTS, emails)):
+    for index, (first, last) in enumerate(DEMO_CLIENTS):
+        email = emails[index] if index < len(emails) else default_email(first, last)
         client = existing.get((first, last))
         if client is None:
             if dry_run:

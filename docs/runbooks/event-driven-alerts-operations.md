@@ -302,14 +302,21 @@ Anthropic comes with migration V18; Apple (and Shell, which is not seeded) come 
    It runs once at apply; with no holdings yet it finds nothing to search.
 4. Apply the agent-engagement stack (it reads the crm stack's outputs).
 5. An admin creates the agent in Manage Agents (deploy-aws.md, "Evaluation accounts"), and the agent signs in once. Copy the
-   agent's access token (above) and run `scripts/seed-demo-portfolios.py --profile news --create-clients --client-emails
-   A,B,C --add-websites --dry-run`, then without `--dry-run`. `--create-clients` creates Chloe Tan, Daniel Lim
-   and Esther Wong under that agent if they are missing (verified, each with an active SGD investment account); use addresses
-   that can receive mail (verified ones in the SES sandbox). A rerun reuses what is there. Without `--create-clients` the
-   script needs at least two of the agent's clients with an active investment account already. Websites go in first, because adding one starts a search of what is already held. The first client (accounts in id
-   order) holds Anthropic and Apple, the second Apple and Anthropic, the rest Apple. Shell is not seeded.
+   agent's access token (above) and run `scripts/seed-demo-portfolios.py --profile news --create-clients [--client-emails A,B,C]
+   --add-websites --dry-run`, then without `--dry-run`. `--create-clients` creates the 33 demo clients (Chloe Tan, Daniel Lim,
+   Esther Goh and thirty more, listed in `DEMO_CLIENTS`) under that agent if they are missing, each verified with an active SGD
+   investment account, and a rerun reuses what is there. Every client gets a made-up address that cannot receive mail;
+   `--client-emails` replaces the first ones, in that order, with addresses that can (verified ones in the SES sandbox), for the
+   clients you will send an email to. Without `--create-clients` the script needs at least two of the agent's clients with an
+   active investment account already. Websites go in first, because adding one starts a search of what is already held.
+   The holdings, in account-id order: the first three hold Apple; Apple and Anthropic; Apple, Anthropic and Shell. The next
+   thirty each hold a mix of Apple, Anthropic and Shell plus one or two of Microsoft, Nvidia, JPMorgan, Visa, Tencent and HSBC
+   (those six are unlikely to find any news). Apple ends up with 20 clients, Anthropic 19, Shell 17 and JPMorgan 10, so the
+   client lists have several pages.
 6. Wait 5 to 7 minutes and refresh Event Alerts. A manual Search now searches every company an agent's clients hold; only the
-   scheduled runs apply the stricter two-clients-or-half-an-account rule, so a company held by one client is searched by hand with Search now. The script does not start a search unless you add `--search ID`.
+   scheduled runs apply the two-clients-and-20% rule, so a company held by one client is searched by hand with Search now. The
+   script does not start a search unless you add `--search ID`. Press Search now once, not once per company: a single press
+   searches every company in one run.
 7. Test: Plan client briefing, Edit, Save and preview, Approve, "Notify selected clients about <company>", then Send from Follow-up Emails to a verified address.
 
 Watch: Nova has not written a report before, so the first may be refused; SES with a display-name sender and a PDF attached is
