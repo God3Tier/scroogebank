@@ -980,6 +980,21 @@ textarea:focus {
   margin: 0;
 }
 
+/* An agent's control to delete the account, under its status. */
+.account-delete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--stack-sm);
+  padding: var(--stack-md) var(--stack-lg);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.account-delete .form-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .verify-done > p:first-child {
   display: flex;
   align-items: center;
