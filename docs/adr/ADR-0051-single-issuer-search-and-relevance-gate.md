@@ -119,3 +119,8 @@ Azeez is on file; this is not a licence or a named ADR review. The code and
 Terraform defaults (`ingestion_enabled`, `ai_enabled`) stay `false`; enabling is a
 separate apply of the alert-worker stack. The decision 6 benchmark targets are
 still unmet and the benchmark labels have not been human-reviewed.
+
+## Addendum, 2026-11-07: open-web search, local approved-site filter
+
+Tavily is no longer told which sites to search (no `include_domains`). It searches the open web with Azeez's unchanged query text, and the worker keeps only results from the approved sites: the shared list (`alert.ingestion.approved-domains`, `approved_news_domains` in the alert-worker stack), each company's official sites and the websites agents add. The requester widened the shared list from reuters.com, cnbc.com and ft.com to about two dozen well-known news and finance sites (see `application.yml`); the platforms anyone can post on stay blocked. Azeez's relevance filter (`IssuerSearchQuery.accepts`) is unchanged. More results are now rejected locally, so the accepted and rejected counts in the worker's run line are the thing to watch.
+

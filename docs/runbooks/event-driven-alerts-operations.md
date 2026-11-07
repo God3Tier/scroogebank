@@ -137,7 +137,7 @@ Inspect application health and these low-cardinality Micrometer series:
 - `alert.outbound.monthly.searches`
 - `alert.outbound.monthly.model.tokens`
 - `alert.outbound.monthly.estimated.cost.usd`
-- `alert.search.universe.eligible`, `alert.search.selection.common`, and `alert.search.selection.concentration`
+- `alert.search.universe.eligible`, and `alert.search.selection.common`
 - `alert.search.batch.selected` and `alert.search.batch.deferred`
 - `alert.search.coverage.oldest.age.seconds`
 
@@ -310,11 +310,19 @@ Anthropic comes with migration V18; Shell and Apple come with V8. Order:
    order) holds Shell, Anthropic and Apple, the second Apple and Anthropic, the rest Apple.
 6. Wait 5 to 7 minutes and refresh Event Alerts. A manual Search now searches every company an agent's clients hold; only the
    scheduled runs apply the stricter two-clients-or-half-an-account rule, so Shell, held by one client, is searched by hand.
-7. Test: Plan client briefing, Edit, Save and preview, Approve, Notify, then Send from Follow-up Emails to a verified address.
+7. Test: Plan client briefing, Edit, Save and preview, Approve, "Notify selected clients about <company>", then Send from Follow-up Emails to a verified address.
 
 Watch: Nova has not written a report before, so the first may be refused; SES with a display-name sender and a PDF attached is
 untested; a 30-report send must finish inside API Gateway's 30 seconds. Teardown empties alerts-db, so run step 5 again after every
 deployment and within 72 hours of a demo.
+
+Testing the automatic cycle with five minutes (then back to four hours). The worker logs one line per run,
+`worker run status=… run_id=… window_from=… window_to=… search_attempts=… accepted=… duplicates=… rejected=…`, so each run is
+visible in the worker's CloudWatch log group. Locally: start the stack with `LOCAL_SCHEDULE_MINUTES=5` and watch for a run line
+every five minutes. On AWS: set the alert-worker `schedule = "cron(0/5 * * * ? *)"` (Singapore time) and the crm
+`alert_schedule_interval = "PT5M"` (this only changes what the page says), apply both, check the log group for a run line every five
+minutes, then set them back to `cron(0 0/4 * * ? *)` and `PT4H` and apply again. Each run spends Tavily credits for every
+eligible company, so keep the test short. `run_on_apply` adds one extra run at each apply.
 
 Rollback: set `ALERT_HOLDINGS_MODE=fixture` and stop portfolio edits. All recorded
 portfolios, snapshots and audit events remain. Do not restore a former agent's

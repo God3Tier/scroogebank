@@ -33,7 +33,7 @@ A scheduled run looks only at the last four hours, so one company seldom has a m
 1. **Two ways to start a search.**
    - *Adding a website* starts a search of the companies the agent's clients hold, using only the new website.
    - *Search now* starts a search of one company, or of every company the caller may search (an agent's own; an admin's any held company), using every website: each company's official sites, the shared news sites and every added website.
-   - Both look back 14 days.
+   - Both look back 7 days (14 until 2026-11-07; news older than 7 days is stale).
 2. **Same rules as a scheduled run.** Same image, task definition, roles, network, outbound controls, run lock and strict relevance gate (a title naming the company and an event word). The run stores sources and runs the pipeline. Like a replay it does not move the scheduler watermark, and a manual search never changes the automatic schedule.
 3. **The worker re-checks.** A search using one website runs only if that website is an active added website.
 4. **Limits.**
@@ -56,7 +56,7 @@ A scheduled run looks only at the last four hours, so one company seldom has a m
 - The first run after the schedule changes comes at the next fixed time.
 - The API's task role can start one task definition and nothing else.
 - Two searches close together run two tasks; the worker's run lock makes the second wait or end as ALREADY_RUNNING.
-- A 14-day window can return articles from before a website was added. That is intended.
+- A 7-day window can return articles from before a website was added. That is intended.
 - The effect needs the worker stack applied with ingestion on. With ingestion off the worker ends as DISABLED.
 - The alerts service shows the schedule from its own settings and cannot see whether the schedule is switched on in AWS. Keep `alert.schedule` in step with the Terraform schedule.
 

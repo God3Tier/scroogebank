@@ -700,6 +700,28 @@ run "search_on_add_lets_the_api_start_the_worker" {
   }
 }
 
+run "page_schedule_defaults_to_four_hours" {
+  command = plan
+
+  assert {
+    condition     = module.event_alert_service.app_environment["ALERT_SCHEDULE_INTERVAL"] == "PT4H"
+    error_message = "The page says the automatic search runs every four hours unless told otherwise."
+  }
+}
+
+run "page_schedule_follows_the_variable" {
+  command = plan
+
+  variables {
+    alert_schedule_interval = "PT5M"
+  }
+
+  assert {
+    condition     = module.event_alert_service.app_environment["ALERT_SCHEDULE_INTERVAL"] == "PT5M"
+    error_message = "A five-minute test changes what the page says."
+  }
+}
+
 run "mfa_required_without_triggers" {
   command = plan
 

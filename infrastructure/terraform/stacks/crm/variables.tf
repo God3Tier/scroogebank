@@ -59,6 +59,17 @@ variable "enable_test_tooling" {
   default     = false
 }
 
+variable "alert_schedule_interval" {
+  description = "How often the automatic searches run, as the Event Alerts page shows it (ALERT_SCHEDULE_INTERVAL, an ISO-8601 duration, counted from midnight in Singapore). It only changes what the page says: the schedule itself is the alert-worker stack's `schedule`, and the two must be changed together. PT4H matches cron(0 0/4 * * ? *); PT5M matches cron(0/5 * * * ? *) for a test."
+  type        = string
+  default     = "PT4H"
+
+  validation {
+    condition     = can(regex("^PT([0-9]+H)?([0-9]+M)?$", var.alert_schedule_interval)) && var.alert_schedule_interval != "PT"
+    error_message = "alert_schedule_interval must be an ISO-8601 time duration such as PT4H or PT5M."
+  }
+}
+
 variable "alert_search_on_add" {
   description = "When an agent adds a search domain, let the event-alert API start one worker task to search that company over the last 14 days using only the new domain (ADR-0080). Needs the alert-worker stack applied with ingestion_enabled = true, and spends Tavily credits. It gives the API's task role ecs:RunTask on the worker's task definition and iam:PassRole on the worker's two roles. Off by default."
   type        = bool
