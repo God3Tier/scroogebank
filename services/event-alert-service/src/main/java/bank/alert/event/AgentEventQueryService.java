@@ -2,6 +2,7 @@ package bank.alert.event;
 
 import bank.alert.api.EvidenceResponse;
 import bank.alert.crm.CurrentOwnership;
+import bank.alert.scoring.MaterialityScorer;
 import bank.alert.domain.AlertDecisionType;
 import bank.alert.domain.AlertStatus;
 import bank.alert.event.AgentEventModels.ActionResult;
@@ -9,6 +10,7 @@ import bank.alert.event.AgentEventModels.AffectedClient;
 import bank.alert.event.AgentEventModels.EventCard;
 import bank.alert.event.AgentEventModels.EventDetail;
 import bank.alert.event.AgentEventModels.EventPage;
+import bank.alert.event.AgentEventModels.EventSeverity;
 import bank.alert.event.AgentEventModels.MemberOutcome;
 import bank.alert.event.AgentEventModels.MemberResult;
 import bank.alert.event.AgentEventModels.ReportSource;
@@ -183,7 +185,23 @@ public class AgentEventQueryService {
                  ORDER BY created_at DESC, id DESC LIMIT 1
                 """, UUID.class, eventId, agentSubject);
         ActionResult latest = actions.isEmpty() ? null : loadAction(actions.getFirst());
-        return new EventDetail(cards.getFirst(), clients, latest, loadReport(eventId, clients));
+        return new EventDetail(cards.getFirst(), clients, latest, loadReport(eventId, clients), loadSeverity(eventId, agentSubject));
+    }
+
+    /** The severity part of the score. It is the same for every client of the event, so any of this agent's alerts gives it. */
+    private EventSeverity loadSeverity(UUID eventId, String agentSubject) {
+        List<EventSeverity> found = jdbc.query("""
+                SELECT f.contribution, pe.classification, pe.direction
+                  FROM alert a
+                  JOIN alert_factor f ON f.alert_id = a.id AND f.code = 'EVENT_SEVERITY'
+                  JOIN public_event pe ON pe.id = a.public_event_id
+                  LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
+                 WHERE a.public_event_id = ? AND %s = ?
+                 ORDER BY f.contribution DESC LIMIT 1
+                """.formatted(OWNER), (rs, n) -> new EventSeverity(rs.getBigDecimal("contribution"),
+                MaterialityScorer.SEVERITY_WEIGHT.intValue(), rs.getString("classification"), rs.getString("direction")),
+                eventId, agentSubject);
+        return found.isEmpty() ? null : found.getFirst();
     }
 
     /** The latest report with every source linked to the event, or null before one has been written. */

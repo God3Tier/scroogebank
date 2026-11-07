@@ -81,7 +81,7 @@ class InstrumentCoverageServiceTest {
     private static InstrumentCoverageService service(InstrumentSearchCoverageRepository repository) {
         return new InstrumentCoverageService(repository, new IngestionProperties(true, "tavily",
                 Duration.ofMinutes(5), Duration.ofHours(4), 4, 10, 3, Duration.ofDays(90),
-                new BigDecimal("0.20"), 2, new BigDecimal("0.50"), List.of("sgx.com"),
+                new BigDecimal("0.20"), 2, List.of("sgx.com"),
                 List.of("earnings")), Clock.fixed(TO, ZoneOffset.UTC), mock(OperationalMetrics.class));
     }
 }

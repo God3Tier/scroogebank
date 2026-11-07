@@ -17,7 +17,6 @@ public class OperationalMetrics {
     private final AtomicLong selectedInstruments = new AtomicLong();
     private final AtomicLong deferredInstruments = new AtomicLong();
     private final AtomicLong commonSelections = new AtomicLong();
-    private final AtomicLong concentrationSelections = new AtomicLong();
     private final AtomicLong oldestCoverageAgeSeconds = new AtomicLong();
     private final AtomicLong maintainedPortfolios = new AtomicLong();
     private final AtomicLong missingHoldings = new AtomicLong();
@@ -34,7 +33,6 @@ public class OperationalMetrics {
         registry.gauge("alert.search.batch.selected", selectedInstruments);
         registry.gauge("alert.search.batch.deferred", deferredInstruments);
         registry.gauge("alert.search.selection.common", commonSelections);
-        registry.gauge("alert.search.selection.concentration", concentrationSelections);
         registry.gauge("alert.search.coverage.oldest.age.seconds", oldestCoverageAgeSeconds);
         registry.gauge("alert.holdings.portfolios.maintained", maintainedPortfolios);
         registry.gauge("alert.holdings.positions.missing", missingHoldings);
@@ -65,10 +63,9 @@ public class OperationalMetrics {
         monthlyEstimatedCost.set(estimatedCostUsd.doubleValue());
     }
 
-    public void searchUniverse(int eligible, int common, int concentration) {
+    public void searchUniverse(int eligible, int common) {
         eligibleInstruments.set(eligible);
         commonSelections.set(common);
-        concentrationSelections.set(concentration);
     }
 
     public void searchBatch(int selected, int deferred, long oldestAgeSeconds) {

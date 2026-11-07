@@ -29,7 +29,7 @@ zero to one. It calculates a score from zero to 100 using these fixed weights:
 | Classifier confidence | 20 |
 
 Each contribution and the final score are rounded half-up to two decimal places.
-The alert threshold is 60.00. A stale valuation subtracts 10.00 and produces a
+The alert threshold was 60.00 and is 0.00 since 2026-11-07 (Hayyun's decision after the AWS test: a client with a small holding should still see the alert; the score only ranks). A client whose exposure cannot be worked out still gets none. A stale valuation subtracts 10.00 and produces a
 visible warning. Missing or expired valuations do not produce a score or alert.
 
 Exposure is affected SGD holding value divided by the positive total SGD value

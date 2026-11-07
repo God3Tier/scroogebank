@@ -67,8 +67,8 @@ run "ingestion_off_by_default" {
   }
 
   assert {
-    condition     = aws_scheduler_schedule.alert_worker.state == "DISABLED" && aws_scheduler_schedule.alert_worker.schedule_expression == "cron(0 0/4 * * ? *)"
-    error_message = "With ingestion off the schedule stays DISABLED, at fixed times every four hours (ADR-0081)."
+    condition     = aws_scheduler_schedule.alert_worker.state == "DISABLED" && aws_scheduler_schedule.alert_worker.schedule_expression == "cron(0/5 * * * ? *)"
+    error_message = "With ingestion off the schedule stays DISABLED. It is every five minutes for the 2026-11-07 check; set it back to every four hours (ADR-0081) afterwards."
   }
   assert {
     condition     = module.event_alert_worker.task_definition_family == "crm-sg-prod-event-alert-worker" && module.event_alert_worker.service_name == null
@@ -82,7 +82,7 @@ run "ingestion_on_while_running" {
   variables {
     ingestion_enabled     = true
     ai_enabled            = true
-    approved_news_domains = ["reuters.com", "cnbc.com", "ft.com"]
+    approved_news_domains = ["reuters.com", "cnbc.com", "ft.com", "bloomberg.com"]
   }
 
   assert {
@@ -144,11 +144,11 @@ run "no_run_on_apply_while_ingestion_is_off" {
   }
 }
 
-run "rejects_unreviewed_news_domain" {
+run "rejects_an_open_posting_platform_as_a_news_domain" {
   command = plan
 
   variables {
-    approved_news_domains = ["unreviewed.example"]
+    approved_news_domains = ["reddit.com"]
   }
 
   expect_failures = [var.approved_news_domains]

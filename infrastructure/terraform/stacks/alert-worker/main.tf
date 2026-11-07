@@ -116,7 +116,6 @@ module "event_alert_worker" {
     ALERT_INGESTION_ENABLED             = tostring(var.ingestion_enabled)
     ALERT_SEARCH_PROVIDER               = "tavily"
     ALERT_MINIMUM_SEARCH_CLIENT_SHARE   = tostring(var.minimum_search_client_share)
-    ALERT_MINIMUM_ACCOUNT_CONCENTRATION = tostring(var.minimum_account_concentration)
     ALERT_INGESTION_APPROVED_DOMAINS    = join(",", var.approved_news_domains)
     ALERT_AI_ENABLED                    = tostring(var.ai_enabled)
     ALERT_AI_PROVIDER                   = var.ai_enabled ? "bedrock" : "none"

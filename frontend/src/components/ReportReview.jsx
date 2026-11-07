@@ -3,21 +3,43 @@ import { useNavigate } from 'react-router-dom'
 
 import { approveReport, discardReportEdit } from '../api/alertEvents.js'
 import { createNewsDrafts, isCrmClientId } from '../api/engagement.js'
-import { SKIP_REASONS, stalenessText } from '../utils/newsReports.js'
+import { FRESH_NEWS_EXPLAINED, isNewsStale, newsAgeText, SKIP_REASONS, STALE_NEWS_EXPLAINED, stalenessText } from '../utils/newsReports.js'
 
 // Edit, approve, then notify (news-alert-drafts plan 5.2). The agent may change the report's wording; the headline
 // and sources stay fixed, and the edited text is checked again. Approval is final and freezes what the client gets.
-// After approval the approve button is replaced by "Notify selected clients of news", which puts the report on each
+// After approval the approve button is replaced by "Notify selected clients about <company>", which puts the report on each
 // selected client's News Alert draft in Follow-up Emails. Nothing here sends an email.
 
 const TIME = new Intl.DateTimeFormat('en-SG', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore' })
 const DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' })
 
 /**
+ * "Fresh" or "Stale" at the top of a report the agent has not approved: stale when its news is more than 7 days old,
+ * fresh until then, with how old it is. The same words are the hover text, so the meaning is there without a hover.
+ */
+export function NewsFreshnessNotice({ report, review, now: fixedNow }) {
+  const [loadedAt] = useState(() => Date.now())
+  const now = fixedNow ?? loadedAt
+  if (!report || !review) return null
+  if (review.approval?.valid) return null
+  const newsDate = review.newsDate || report.createdAt
+  const age = newsAgeText(newsDate, now)
+  if (!age) return null
+  const stale = isNewsStale(newsDate, now)
+  const explained = stale ? STALE_NEWS_EXPLAINED : FRESH_NEWS_EXPLAINED
+  return (
+    <p className={stale ? 'stale-notice' : 'stale-notice stale-notice--fresh'} role="note" title={explained}>
+      <strong className="stale-notice__chip">{stale ? 'Stale' : 'Fresh'}</strong> {age ? `News ${age}. ` : ''}{explained}
+    </p>
+  )
+}
+
+/**
  * clients: the agent's clients on this report; selected: { alertId: true }. Approval and Notify act on the selected
  * clients in Plan client briefing.
  */
-export function ReportReview({ eventId, report, review, clients, selected, editing = false, onReviewChanged }) {
+export function ReportReview({ eventId, report, review, clients, selected, company = 'this company', editing = false, onReviewChanged }) {
+  const notifyLabel = `Notify selected clients about ${company}`
   const navigate = useNavigate()
   const [now] = useState(() => Date.now())
   const [state, setState] = useState({ busy: false, error: '', message: '' })
@@ -35,7 +57,7 @@ export function ReportReview({ eventId, report, review, clients, selected, editi
     try {
       await approveReport(eventId, review.reportVersion)
       onReviewChanged()
-      setState({ busy: false, error: '', message: 'Approved. The button is now "Notify selected clients of news".' })
+      setState({ busy: false, error: '', message: `Approved. The button is now "${notifyLabel}".` })
     } catch (e) {
       setState({ busy: false, error: e.status === 409 ? e.message || 'The report changed. Reload and review it again.' : e.message || 'The report could not be approved.', message: '' })
     }
@@ -82,7 +104,7 @@ export function ReportReview({ eventId, report, review, clients, selected, editi
           </p>
           <button type="button" className="button button--accent report-review__notify" onClick={notify}
             disabled={state.busy || count === 0}>
-            {state.busy ? 'Making drafts…' : 'Notify selected clients of news'}
+            {state.busy ? 'Making drafts…' : notifyLabel}
           </button>
           {count === 0 && <p className="holdings-note">Select the clients in Plan client briefing to notify.</p>}
           <p className="holdings-note report-review__hint">
@@ -99,7 +121,7 @@ export function ReportReview({ eventId, report, review, clients, selected, editi
               <button type="button" className="button button--secondary" onClick={discardEdits} disabled={state.busy}>Undo my edits</button>
             )}
             <button type="button" className="button button--primary" onClick={approve} disabled={state.busy || editing || count === 0}>
-              {approval ? 'Approve again' : `Approve report for ${count} selected client${count === 1 ? '' : 's'}`}
+              {approval ? `Approve ${company} report again` : `Approve ${company} report for ${count} selected client${count === 1 ? '' : 's'}`}
             </button>
           </div>
           {editing && <p className="holdings-note">Click Save and preview to save your edits first.</p>}

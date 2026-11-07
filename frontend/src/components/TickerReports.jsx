@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getEvent, getReportReview, listApprovedReports, listEvents, recordEventAction } from '../api/alertEvents.js'
 import { getClient } from '../api/clients.js'
 import { isCrmClientId, listOpenNewsAlerts } from '../api/engagement.js'
-import { mergeSections, noReportText } from '../utils/newsReports.js'
+import { mergeSections, noReportText, severityText } from '../utils/newsReports.js'
 import { useReportEditor } from '../utils/useReportEditor.js'
 import { BatchNotify, FloatingBatchHint } from './BatchNotify.jsx'
+import ClientsTable from './ClientsTable.jsx'
 import { CombinedSources, EventReport } from './EventReport.jsx'
-import { ReportReview } from './ReportReview.jsx'
+import { NewsFreshnessNotice, ReportReview } from './ReportReview.jsx'
 import SentOutList from './SentOutList.jsx'
 
 // Event alerts for an agent, by ticker (ADR-0084, news-alert-drafts plan). Each row on the left is one ticker with
@@ -160,7 +161,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
   if (error && !detail) return <p className="error-text" role="alert">{error}</p>
   if (!detail) return <p className="empty-note" role="status">Loading…</p>
 
-  const { card, report } = detail
+  const { card, report, severity } = detail
   // Sent Out clients are listed in the Sent out tab, not here.
   const clients = detail.clients.filter((client) => client.status !== 'SENT_OUT')
   const open = clients.filter((c) => c.status === 'NEW')
@@ -199,8 +200,10 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           </div>
           {report ? (
             <>
+              <NewsFreshnessNotice report={report} review={review} />
               <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} editor={editor} />
               <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
+                company={card.issuer || card.ticker}
                 editing={editor.editing} onReviewChanged={() => { reload(); onChanged() }} />
             </>
           ) : (
@@ -217,6 +220,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           <ul className="ticker-why">
             <li>{clients.length} of your client{clients.length === 1 ? '' : 's'} hold {card.issuer || 'this company'}.</li>
             <li>The highest client score is {Number(card.topScore).toFixed(1)} out of 100.</li>
+            {severity && <li>{severityText(severity)}</li>}
             <li>The report combines what was newly found for this ticker in the latest search run.</li>
           </ul>
           <CombinedSources report={report} evidence={[]} />
@@ -228,30 +232,8 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           <div><Icon name="groups" /><h3 id="ticker-clients-title">Affected clients</h3></div>
           <span>{open.length} new · {informed.length} in Plan client briefing</span>
         </div>
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr><th /><th>Client</th><th className="num">Share of portfolio</th><th className="num">Exposure (SGD)</th><th className="num">Score</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.alertId}>
-                  <td>
-                    <input type="checkbox" aria-label={`Select ${clientLabel(client, names)}`}
-                      disabled={!selectable(client)}
-                      checked={Boolean(selected[client.alertId])}
-                      onChange={(e) => setSelected((s) => ({ ...s, [client.alertId]: e.target.checked }))} />
-                  </td>
-                  <td title={client.clientRef}>{clientLabel(client, names)}</td>
-                  <td className="num">{client.portfolioPercentage == null ? '—' : `${Number(client.portfolioPercentage).toFixed(1)}%`}</td>
-                  <td className="num">{Number(client.amountSgd).toLocaleString('en-SG', { minimumFractionDigits: 2 })}</td>
-                  <td className="num">{Number(client.score).toFixed(1)}</td>
-                  <td>{STATUS_LABELS[client.status] || client.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ClientsTable clients={clients} names={names} selected={selected} setSelected={setSelected}
+          selectable={selectable} statusLabels={STATUS_LABELS} clientLabel={clientLabel} />
 
         {clients.length > 0 && (
           <form className="decision-section" onSubmit={submitDecision} aria-label="Decide for the selected clients">

@@ -194,7 +194,7 @@ export const MAIL_STATUS_LABELS = {
   DISABLED: 'Off',
 }
 
-// "Notify selected clients of news": each chosen client's approved report goes on that client's
+// "Notify selected clients about <company>": each chosen client's approved report goes on that client's
 // News Alert draft. Returns { drafts: [{draftId, clientId, created, reportCount, added}], skipped }.
 export function createNewsDrafts({ eventId, alertIds }) {
   return requestJson('/api/engagement/drafts/news', { method: 'POST', body: { eventId, alertIds } })

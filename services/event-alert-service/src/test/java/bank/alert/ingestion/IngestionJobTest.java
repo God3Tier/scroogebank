@@ -277,7 +277,6 @@ class IngestionJobTest {
     private static IngestionProperties properties() {
         return new IngestionProperties(false, "tavily", Duration.ofMinutes(5),
                 Duration.ofHours(4), 4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2,
-                new BigDecimal("0.50"),
                 List.of("sgx.com"), List.of("earnings"));
     }
 }

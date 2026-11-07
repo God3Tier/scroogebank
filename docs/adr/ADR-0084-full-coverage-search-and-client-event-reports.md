@@ -76,6 +76,14 @@ New setting `ALERT_SEARCH_ONLY_INSTRUMENT_ID` for lower environments and `ALERT_
 
 Part 1: unit tests cover the exact query groups, two searches per instrument with no cap, no rotation, the budget and quota reservations, and the single-instrument setting, including refusal of an unknown, inactive or ineligible instrument before any reservation. Not verified: a live billed-credit benchmark, and parts 2 and 3.
 
+## Addendum, 2026-11-07 (AWS test feedback)
+
+- **Scheduled search rule:** a company is searched by the scheduled runs when at least two distinct clients hold it and those clients are at least 20% of the clients that hold anything. The old second clause (at least 50% of one account) is removed, so a company one client holds heavily is not searched on its own. A manual Search now is unchanged: it searches any company the agent's clients hold. `alert.ingestion.minimum-account-concentration`, `ALERT_MINIMUM_ACCOUNT_CONCENTRATION` and the alert-worker variable `minimum_account_concentration` are gone, and so is the metric `alert.search.selection.concentration`.
+- **Alert minimum score:** the score of 60 needed for an alert is removed. Every client who holds the company and whose exposure can be worked out gets an alert; the score still ranks them. The only limit left on what is searched on a schedule is the two-clients-and-20% rule above.
+- **Daily alert limit:** the limit of ten new alerts per agent per day (ADR-0004, ADR-0014) is now 200 and is a setting, `alert.generation.daily-limit` (`ALERT_DAILY_ALERT_LIMIT`); 0 means no limit. With the score minimum gone, one popular company can give an agent an alert for every client who holds it.
+- **Results per search:** up to 20 (Tavily's maximum), not 10.
+- **Search window:** 7 days for a manual search and for adding a website; the page marks news older than 7 days stale on a report the agent has not approved.
+
 ## References
 
 - [ADR-0049](ADR-0049-alert-source-to-alert-pipeline.md), [ADR-0050](ADR-0050-event-search-provider-after-scp-block.md), [ADR-0051](ADR-0051-single-issuer-search-and-relevance-gate.md), [ADR-0066](ADR-0066-crm-linked-current-alert-holdings.md)

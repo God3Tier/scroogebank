@@ -184,7 +184,7 @@ function NewsEntry({ clients, onCreated }) {
   )
 }
 
-function GenerateForm({ clients, now, linked, onCreated }) {
+function GenerateForm({ clients, now, linked, onCreated, draftOpen = false }) {
   const [values, setValues] = useState(() => ({
     clientId: '', purpose: 'CHECK_IN', tone: 'FORMAL', eventId: '', healthTaskId: '', alertId: '', ...linked,
   }))
@@ -303,10 +303,12 @@ function GenerateForm({ clients, now, linked, onCreated }) {
               <span>The AI sees only the purpose, the tone and upcoming public holidays, never the client&apos;s name or details. You review every email before it is sent.</span>
             </p>
             {state.error && <p className="form-error draft-generate__full" role="alert">{state.error}</p>}
-            <button type="submit" className="draft-generate__full draft-generate__submit" disabled={state.saving}>
+            <button type="submit" className="draft-generate__full draft-generate__submit" disabled={state.saving || draftOpen}
+              title={draftOpen ? 'Close the open email to write a new one' : undefined}>
               <span className="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
               {state.saving ? 'Writing…' : 'Write draft'}
             </button>
+            {draftOpen && <p className="draft-generate__hint draft-generate__full">You are working on an email. Close it to write a new one.</p>}
           </>
         )}
       </div>
@@ -649,7 +651,7 @@ function AgentDrafts({ now: fixedNow }) {
   const [clients, setClients] = useState([])
   const [status, setStatus] = useState('DRAFT')
   const [list, setList] = useState({ loading: true, error: '', drafts: [] })
-  // "Notify selected clients of news" on Event Alerts opens the client's News Alert draft here.
+  // "Notify selected clients about <company>" on Event Alerts opens the client's News Alert draft here.
   const [openId, setOpenId] = useState(() => searchParams.get('openDraft'))
   const [notice] = useState(() => {
     const made = Number(searchParams.get('news') || 0)
@@ -752,6 +754,7 @@ function AgentDrafts({ now: fixedNow }) {
 
   return (
     <div className="page engagement-page">
+      <div className="back-row"><Link to="/agent/alerts">Back to Event Alerts</Link></div>
       <header className="page-header page-header--ruled">
         <h1>Follow-up Emails</h1>
         <p className="page-subtitle">AI helps write the first draft. Nothing is sent until you press Send.</p>
@@ -760,7 +763,7 @@ function AgentDrafts({ now: fixedNow }) {
 
       <div className="drafts-layout">
         <div className="drafts-layout__side">
-          <GenerateForm clients={clients} now={now} linked={linked} onCreated={(draft) => {
+          <GenerateForm clients={clients} now={now} linked={linked} draftOpen={Boolean(openId)} onCreated={(draft) => {
             // The link has done its job; a reload should not offer the same follow-up again.
             if (linked) setSearchParams({}, { replace: true })
             setStatus('DRAFT'); pages.go(0); setOpenId(draft.id); setVersion((v) => v + 1)

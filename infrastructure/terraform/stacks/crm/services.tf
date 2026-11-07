@@ -743,6 +743,7 @@ module "event_alert_service" {
     AWS_REGION                    = local.region
     ALERT_INGESTION_ENABLED       = "false"
     ALERT_AI_ENABLED              = "false"
+    ALERT_SCHEDULE_INTERVAL       = var.alert_schedule_interval # what the page says; the schedule is stacks/alert-worker's
     SPRING_FLYWAY_ENABLED         = "false" # db-migrate applies its migrations
   }, local.alert_search_on_add_environment)
   secrets = merge(local.alert_holdings_secrets, {

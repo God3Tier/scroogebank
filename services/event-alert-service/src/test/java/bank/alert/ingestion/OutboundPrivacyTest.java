@@ -17,7 +17,6 @@ import bank.alert.domain.HoldingSnapshot;
 import bank.alert.domain.ValuationFreshness;
 import bank.alert.holdings.SearchUniverseSelector;
 import bank.alert.operations.OperationalMetrics;
-import bank.alert.scoring.ExposureCalculator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -93,8 +92,9 @@ class OutboundPrivacyTest {
             book.add(position(UUID.randomUUID().toString(), UUID.randomUUID().toString(), "agent-other",
                     "BASE", "1000", "1000.00"));
         }
-        List<String> universe = new SearchUniverseSelector(properties(), new ExposureCalculator(),
-                new OperationalMetrics(new SimpleMeterRegistry())).select(book);
+        // A second client holds ALPHA too: a company one client holds is no longer searched on its own.
+        book.add(position(UUID.randomUUID().toString(), UUID.randomUUID().toString(), "agent-other", "ALPHA", "5", "5.00"));
+        List<String> universe = new SearchUniverseSelector(properties(), new OperationalMetrics(new SimpleMeterRegistry())).select(book);
         assertThat(universe).contains("ALPHA");
 
         // Instrument identifiers become public search terms through the catalogue, as in production.
@@ -154,7 +154,7 @@ class OutboundPrivacyTest {
 
     private static IngestionProperties properties() {
         return new IngestionProperties(false, "tavily", Duration.ofMinutes(5), Duration.ofHours(4), 4, 10, 3,
-                Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
+                Duration.ofDays(90), new BigDecimal("0.20"), 2,
                 List.of("sgx.com"), List.of("earnings"));
     }
 

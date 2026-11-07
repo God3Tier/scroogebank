@@ -137,7 +137,7 @@ Inspect application health and these low-cardinality Micrometer series:
 - `alert.outbound.monthly.searches`
 - `alert.outbound.monthly.model.tokens`
 - `alert.outbound.monthly.estimated.cost.usd`
-- `alert.search.universe.eligible`, `alert.search.selection.common`, and `alert.search.selection.concentration`
+- `alert.search.universe.eligible`, and `alert.search.selection.common`
 - `alert.search.batch.selected` and `alert.search.batch.deferred`
 - `alert.search.coverage.oldest.age.seconds`
 
@@ -292,7 +292,7 @@ only for their own clients' accounts. Anyone holding the token can act as that
 agent until it expires, so do not paste it into chat, commits or files.
 
 News-alert test on AWS. Nothing local travels to AWS: the test clients, holdings, websites and reports are recreated there.
-Anthropic comes with migration V18; Shell and Apple come with V8. Order:
+Anthropic comes with migration V18; Apple (and Shell, which is not seeded) come with V8. Order:
 
 1. Build and push the images (alerts, engagement, auditor, db-migrate, the page) with one new tag. The migrations (alerts V17 and
    V18, engagement V3 and V4) ride in the db-migrate image.
@@ -302,19 +302,36 @@ Anthropic comes with migration V18; Shell and Apple come with V8. Order:
    It runs once at apply; with no holdings yet it finds nothing to search.
 4. Apply the agent-engagement stack (it reads the crm stack's outputs).
 5. An admin creates the agent in Manage Agents (deploy-aws.md, "Evaluation accounts"), and the agent signs in once. Copy the
-   agent's access token (above) and run `scripts/seed-demo-portfolios.py --profile news --create-clients --client-emails
-   A,B,C --add-websites --search LSE-SHEL --dry-run`, then without `--dry-run`. `--create-clients` creates Chloe Tan, Daniel Lim
-   and Esther Wong under that agent if they are missing (verified, each with an active SGD investment account); use addresses
-   that can receive mail (verified ones in the SES sandbox). A rerun reuses what is there. Without `--create-clients` the
-   script needs at least two of the agent's clients with an active investment account already. Websites go in first, because adding one starts a search of what is already held. The first client (accounts in id
-   order) holds Shell, Anthropic and Apple, the second Apple and Anthropic, the rest Apple.
+   agent's access token (above) and run `scripts/seed-demo-portfolios.py --profile news --create-clients [--client-emails A,B,C]
+   --add-websites --dry-run`, then without `--dry-run`. `--create-clients` creates the 33 demo clients (Chloe Tan, Daniel Lim,
+   Esther Goh and thirty more, listed in `DEMO_CLIENTS`) under that agent if they are missing, each verified with an active SGD
+   investment account, and a rerun reuses what is there. Every client gets a made-up address that cannot receive mail;
+   `--client-emails` replaces the first ones, in that order, with addresses that can (verified ones in the SES sandbox), for the
+   clients you will send an email to. Without `--create-clients` the script needs at least two of the agent's clients with an
+   active investment account already. Websites go in first, because adding one starts a search of what is already held.
+   The holdings, in account-id order: the first three hold Apple; Apple and Anthropic; Apple, Anthropic and Shell. The next
+   thirty each hold a mix of Apple, Anthropic and Shell plus one or two of Microsoft, Nvidia, JPMorgan, Visa, Tencent and HSBC
+   (those six are unlikely to find any news). Apple ends up with 20 clients, Anthropic 19, Shell 17 and JPMorgan 10, so the
+   client lists have several pages.
 6. Wait 5 to 7 minutes and refresh Event Alerts. A manual Search now searches every company an agent's clients hold; only the
-   scheduled runs apply the stricter two-clients-or-half-an-account rule, so Shell, held by one client, is searched by hand.
-7. Test: Plan client briefing, Edit, Save and preview, Approve, Notify, then Send from Follow-up Emails to a verified address.
+   scheduled runs apply the two-clients-and-20% rule, so a company held by one client is searched by hand with Search now. The
+   script does not start a search unless you add `--search ID`. Press Search now once, not once per company: a single press
+   searches every company in one run.
+7. Test: Plan client briefing, Edit, Save and preview, Approve, "Notify selected clients about <company>", then Send from Follow-up Emails to a verified address.
 
 Watch: Nova has not written a report before, so the first may be refused; SES with a display-name sender and a PDF attached is
 untested; a 30-report send must finish inside API Gateway's 30 seconds. Teardown empties alerts-db, so run step 5 again after every
 deployment and within 72 hours of a demo.
+
+Testing the automatic cycle with five minutes (then back to four hours). The repo is set to five minutes for the 2026-11-07 AWS check
+(alert-worker `schedule` = `cron(0/5 * * * ? *)`, crm `alert_schedule_interval` = `PT5M`); set both back to `cron(0 0/4 * * ? *)` and
+`PT4H` when the check is done. The worker logs one line per run,
+`worker run status=… run_id=… window_from=… window_to=… search_attempts=… accepted=… duplicates=… rejected=…`, so each run is
+visible in the worker's CloudWatch log group. Locally: start the stack with `LOCAL_SCHEDULE_MINUTES=5` and watch for a run line
+every five minutes. On AWS: set the alert-worker `schedule = "cron(0/5 * * * ? *)"` (Singapore time) and the crm
+`alert_schedule_interval = "PT5M"` (this only changes what the page says), apply both, check the log group for a run line every five
+minutes, then set them back to `cron(0 0/4 * * ? *)` and `PT4H` and apply again. Each run spends Tavily credits for every
+eligible company, so keep the test short. `run_on_apply` adds one extra run at each apply.
 
 Rollback: set `ALERT_HOLDINGS_MODE=fixture` and stop portfolio edits. All recorded
 portfolios, snapshots and audit events remain. Do not restore a former agent's

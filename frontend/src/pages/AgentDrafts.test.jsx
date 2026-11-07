@@ -87,6 +87,27 @@ describe('AgentDrafts', () => {
     expect(screen.getByText('12 emails')).toBeInTheDocument()
   })
 
+  it('has a link back to Event Alerts', async () => {
+    listDrafts.mockResolvedValue([])
+    renderDrafts()
+
+    expect(await screen.findByRole('link', { name: 'Back to Event Alerts' })).toHaveAttribute('href', '/agent/alerts')
+  })
+
+  it('greys out Write draft while an email is open, and enables it again when it is closed', async () => {
+    renderDrafts()
+    const write = await screen.findByRole('button', { name: 'Write draft' })
+    expect(write).toBeEnabled()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await screen.findByRole('heading', { name: 'Email to Synthetic Client' })
+    expect(screen.getByRole('button', { name: 'Write draft' })).toBeDisabled()
+    expect(screen.getByText('You are working on an email. Close it to write a new one.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Close$/ }))
+    expect(screen.getByRole('button', { name: 'Write draft' })).toBeEnabled()
+  })
+
   it('asks for a draft for the chosen client and opens it', async () => {
     listDrafts.mockResolvedValueOnce([])
     createDraft.mockResolvedValue(AI_DRAFT)

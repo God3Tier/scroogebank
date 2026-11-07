@@ -78,6 +78,14 @@ class TavilySearchProviderTest {
     }
 
     @Test
+    void aSearchMayAskForTwentyResultsAndNoMore() {
+        Instant from = Instant.parse("2026-10-23T04:00:00Z");
+        assertThat(new PublicSearchRequest("SYN1 earnings", List.of("sgx.com"), from, NOW, 20).maximumResults()).isEqualTo(20);
+        assertThatThrownBy(() -> new PublicSearchRequest("SYN1 earnings", List.of("sgx.com"), from, NOW, 21))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void sendsOnlyBoundedNewsFiltersAndAuthenticatesInTheHeader() {
         provider().search(request());
 

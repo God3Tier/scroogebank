@@ -60,6 +60,9 @@ alert:
     enabled: ${ALERT_RETENTION_ENABLED:true}
     interval: ${ALERT_RETENTION_INTERVAL:1h}
     batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
+  # The most new alerts one agent gets in a UTC day; 0 means no limit. It was 10 (ADR-0004) until 2026-11-07.
+  generation:
+    daily-limit: ${ALERT_DAILY_ALERT_LIMIT:200}
   # When the automatic searches run, for the page to show the next one (ADR-0081). The schedule itself is
   # EventBridge Scheduler's, in stacks/alert-worker; keep these two in step.
   schedule:
@@ -72,7 +75,7 @@ alert:
     mode: ${ALERT_SEARCH_ON_ADD_MODE:off}
     cooldown: ${ALERT_SEARCH_ON_ADD_COOLDOWN:15m}
     daily-cap: ${ALERT_SEARCH_ON_ADD_DAILY_CAP:0}
-    lookback: ${ALERT_SEARCH_ON_ADD_LOOKBACK:14d}
+    lookback: ${ALERT_SEARCH_ON_ADD_LOOKBACK:7d}
     cluster: ${ALERT_SEARCH_ON_ADD_CLUSTER:}
     task-definition: ${ALERT_SEARCH_ON_ADD_TASK_DEFINITION:}
     subnets: ${ALERT_SEARCH_ON_ADD_SUBNETS:}
@@ -87,14 +90,13 @@ alert:
     # No small cap: every eligible instrument is searched on every run (ADR-0084). The monthly quota and the
     # monthly budget below still stop all searching before a run that they cannot cover.
     max-queries-per-run: ${ALERT_MAX_QUERIES_PER_RUN:1000}
-    max-results-per-query: 10
+    max-results-per-query: 20
     max-attempts: 3
     retention: 90d
     # Select public search terms in Singapore from sufficiently common holdings.
     # Only public ticker/issuer/sector terms leave the private boundary.
     minimum-search-client-share: ${ALERT_MINIMUM_SEARCH_CLIENT_SHARE:0.20}
     minimum-search-client-count: ${ALERT_MINIMUM_SEARCH_CLIENT_COUNT:2}
-    minimum-account-concentration: ${ALERT_MINIMUM_ACCOUNT_CONCENTRATION:0.50}
     tavily:
       # Injected from Secrets Manager by the worker task. Empty keeps the
       # application startable but every search fails closed.
@@ -102,9 +104,10 @@ alert:
       endpoint: https://api.tavily.com/search
       timeout: 30s
       max-response-bytes: 262144
-      # Shared publishers authorized by the requester on 2026-10-30; see ADR-0051.
+      # Shared publishers authorized by the requester (the first three on 2026-10-30, the list widened on 2026-11-07); see ADR-0051.
+      # Tavily is restricted to these sites, a company's official sites and the websites agents add (include_domains).
       # Every issuer also adds its official domains from the instrument master.
-      approved-domains: [reuters.com, cnbc.com, ft.com]
+      approved-domains: [reuters.com, cnbc.com, ft.com, bloomberg.com, wsj.com, barrons.com, marketwatch.com, finance.yahoo.com, investing.com, benzinga.com, fool.com, forbes.com, businesstimes.com.sg, straitstimes.com, channelnewsasia.com, theedgesingapore.com, apnews.com, bbc.com, theguardian.com, techcrunch.com, theverge.com, thenextweb.com, techspot.com, adage.com]
     event-terms:
       - earnings
       - results
@@ -133,6 +136,37 @@ alert:
       - resignation
       - resigned
       - steps down
+      # Added 2026-11-07 (AWS test feedback), approved by Azeez: more words that name a company event in a title.
+      - probe
+      - lawsuit
+      - settlement
+      - layoffs
+      - recall
+      - bankruptcy
+      - outlook
+      - forecast
+      - deal
+      - stake
+      - partnership
+      - launches
+      - plans
+      - cuts
+      - raises
+      - rejects
+      - weighs
+      - posts
+      - winding down
+      - shares fall
+      - warns
+      - beats
+      - misses
+      - acquires
+      - sues
+      - hack
+      - breach
+      - outage
+      - ban
+      - sanctions
   ai:
     # Independent fail-closed switch; no model can be invoked by default.
     enabled: ${ALERT_AI_ENABLED:false}

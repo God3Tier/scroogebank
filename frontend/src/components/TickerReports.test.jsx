@@ -61,7 +61,8 @@ const approval = (overrides = {}) => ({
 const client = (alertId, clientRef, status, version = 0) => ({
   alertId, clientRef, accountRef: 'acc-1', instrumentId: 'NASDAQ-AAPL', status, score: 70, portfolioPercentage: 30, amountSgd: '36000.00', version,
 })
-const appleDetail = (clients) => ({ card: appleCard, clients, latestAction: null, report })
+const severity = { points: 18, maximum: 30, eventType: 'EARNINGS', direction: 'POSITIVE' }
+const appleDetail = (clients) => ({ card: appleCard, clients, latestAction: null, report, severity })
 
 function renderPage() {
   return render(
@@ -100,8 +101,15 @@ describe('TickerReports', () => {
     expect(await screen.findByText('Chloe Tan')).toBeInTheDocument()
     expect(screen.getByText('Daniel Lim')).toBeInTheDocument()
     expect(screen.getByText('Plan client briefing', { selector: 'td' })).toBeInTheDocument()
-    expect(screen.getAllByRole('checkbox', { name: /Select/ })).toHaveLength(2)
+    expect(screen.getAllByRole('checkbox', { name: /^Select (?!all)/ })).toHaveLength(2)
     expect(screen.queryByText('Continue monitoring')).not.toBeInTheDocument()
+  })
+
+  it('shows the event severity in why this appeared', async () => {
+    renderPage()
+
+    expect(await screen.findByText(/Event severity: 18 of 30 \(earnings\)/)).toBeInTheDocument()
+    // The Fresh or Stale label depends on today's date, so NewsFreshnessNotice.test.jsx covers it with a fixed clock.
   })
 
   it('offers only Plan client briefing and Dismiss, keeps the clients selected and focuses the report', async () => {
@@ -140,7 +148,7 @@ describe('TickerReports', () => {
     expect(screen.queryByLabelText('Sentence 1')).not.toBeInTheDocument()
     expect(box.value).toContain('EXECUTIVE SUMMARY')
     expect(screen.getByRole('heading', { name: 'Apple beats revenue estimates' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Approve report/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Approve Apple Inc report/ })).toBeDisabled()
     expect(screen.getByText('Click Save and preview to save your edits first.')).toBeInTheDocument()
 
     fireEvent.change(box, { target: { value: box.value.replace('Partial excerpts.', 'Changed.') } })
@@ -203,12 +211,12 @@ describe('TickerReports', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve report for 1 selected client' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Apple Inc report for 1 selected client' }))
 
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Approval is final'))
     await waitFor(() => expect(approveReport).toHaveBeenCalledWith('e1', 1))
-    expect(await screen.findByRole('button', { name: 'Notify selected clients of news' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Approve report/ })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Notify selected clients about Apple Inc' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve Apple Inc report/ })).not.toBeInTheDocument()
     expect(screen.getByText(/Approved by you at/)).toBeInTheDocument()
     expect(screen.getByText(/Approved 2 days ago, can be sent for 5 more days/)).toBeInTheDocument()
   })
@@ -217,7 +225,7 @@ describe('TickerReports', () => {
     window.confirm.mockReturnValue(false)
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve report for 1 selected client' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Apple Inc report for 1 selected client' }))
     expect(approveReport).not.toHaveBeenCalled()
   })
 
@@ -229,7 +237,7 @@ describe('TickerReports', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Notify selected clients of news' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Notify selected clients about Apple Inc' }))
 
     await waitFor(() => expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e1', alertIds: ['a2'] }))
     expect(await screen.findByText('Follow-up Emails page')).toBeInTheDocument()
@@ -245,7 +253,7 @@ describe('TickerReports', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
     expect(screen.getByText(/Your approval expired/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Approve again' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve Apple Inc report again' })).toBeEnabled()
   })
 
   it('opens another ticker when its row is chosen, and says when a report is not written yet', async () => {

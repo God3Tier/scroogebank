@@ -20,8 +20,8 @@ public record PublicSearchRequest(
         Objects.requireNonNull(publishedFrom);
         Objects.requireNonNull(publishedTo);
         if (!publishedFrom.isBefore(publishedTo)) throw new IllegalArgumentException("invalid publication window");
-        if (maximumResults < 1 || maximumResults > 10) {
-            throw new IllegalArgumentException("maximumResults must be between 1 and 10");
+        if (maximumResults < 1 || maximumResults > 20) {
+            throw new IllegalArgumentException("maximumResults must be between 1 and 20");
         }
     }
 }

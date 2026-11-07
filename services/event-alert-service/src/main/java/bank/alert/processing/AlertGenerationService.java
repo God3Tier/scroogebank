@@ -22,6 +22,7 @@ import bank.alert.scoring.ScoreFactor;
 import bank.alert.service.AuditUnavailableException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -47,7 +48,8 @@ import java.util.stream.Collectors;
 @Service
 public class AlertGenerationService {
 
-    private static final int DAILY_ALERT_LIMIT = 10;
+    /** The most new alerts one agent gets in a UTC day (alert.generation.daily-limit); 0 means no limit. It was 10 until 2026-11-07. */
+    static final int DEFAULT_DAILY_ALERT_LIMIT = 200;
     /** A ticker's event takes new articles until its report is written, but never for longer than this (ADR-0084). */
     static final java.time.Duration OPEN_WINDOW = java.time.Duration.ofHours(72);
     private static final Collection<String> PENDING_AUDIT_STATUSES = List.of("PENDING", "FAILED");
@@ -63,13 +65,25 @@ public class AlertGenerationService {
     private final ObjectMapper mapper;
     private final Clock clock;
     private final int maxPendingAuditEvents;
+    private final int dailyAlertLimit;
 
     public AlertGenerationService(SourceResultRepository sourceResults,
             HoldingsProvider holdingsProvider, ExposureCalculator exposureCalculator,
             MaterialityScorer scorer, HoldingSnapshotRepository holdingSnapshots,
             AlertRepository alerts, AuditOutboxRepository auditOutbox, JdbcTemplate jdbc,
+            ObjectMapper mapper, Clock clock, int maxPendingAuditEvents) {
+        this(sourceResults, holdingsProvider, exposureCalculator, scorer, holdingSnapshots, alerts, auditOutbox, jdbc,
+                mapper, clock, maxPendingAuditEvents, DEFAULT_DAILY_ALERT_LIMIT);
+    }
+
+    @Autowired
+    public AlertGenerationService(SourceResultRepository sourceResults,
+            HoldingsProvider holdingsProvider, ExposureCalculator exposureCalculator,
+            MaterialityScorer scorer, HoldingSnapshotRepository holdingSnapshots,
+            AlertRepository alerts, AuditOutboxRepository auditOutbox, JdbcTemplate jdbc,
             ObjectMapper mapper, Clock clock,
-            @Value("${alert.audit.max-pending:10000}") int maxPendingAuditEvents) {
+            @Value("${alert.audit.max-pending:10000}") int maxPendingAuditEvents,
+            @Value("${alert.generation.daily-limit:200}") int dailyAlertLimit) {
         this.sourceResults = sourceResults;
         this.holdingsProvider = holdingsProvider;
         this.exposureCalculator = exposureCalculator;
@@ -81,6 +95,12 @@ public class AlertGenerationService {
         this.mapper = mapper;
         this.clock = clock;
         this.maxPendingAuditEvents = maxPendingAuditEvents;
+        this.dailyAlertLimit = dailyAlertLimit;
+    }
+
+    /** True when the agent has reached the day's limit; a limit of 0 or less never is. */
+    static boolean limitReached(long alertsToday, int createdNow, int limit) {
+        return limit > 0 && alertsToday + createdNow >= limit;
     }
 
     @Transactional
@@ -177,7 +197,7 @@ public class AlertGenerationService {
                 duplicates++;
                 continue;
             }
-            if (dailyCount + created >= DAILY_ALERT_LIMIT) {
+            if (limitReached(dailyCount, created, dailyAlertLimit)) {
                 suppressed++;
                 continue;
             }

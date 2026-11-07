@@ -50,7 +50,7 @@ export function BatchNotify({ ready, selected, panelRef }) {
   return (
     <section className="batch-notify" ref={panelRef} tabIndex={-1} aria-labelledby="batch-notify-title">
       <h2 id="batch-notify-title">Notify several tickers at once</h2>
-      <p className="holdings-note">
+      <p className="holdings-note batch-notify__intro">
         Approve each ticker&apos;s report first (approval is final and is always one ticker at a time). Then make the client drafts
         for many tickers here. Nothing is approved or sent by these buttons; you review and send each draft in Follow-up Emails.
       </p>
@@ -60,6 +60,7 @@ export function BatchNotify({ ready, selected, panelRef }) {
             Notify all ready clients ({plural(people(ready), 'client')}, {plural(ready.length, 'report')})
           </button>
           <p className="batch-notify__what">
+            <span className="material-symbols-outlined" aria-hidden="true">groups</span>
             Makes a draft for every client who is in Plan client briefing and whose report you have approved, across all tickers.
           </p>
         </div>
@@ -68,6 +69,7 @@ export function BatchNotify({ ready, selected, panelRef }) {
             Notify ticked clients ({plural(people(ticked), 'client')}, {plural(ticked.length, 'report')})
           </button>
           <p className="batch-notify__what">
+            <span className="material-symbols-outlined" aria-hidden="true">checklist</span>
             The same, but only for the clients you have ticked. Your ticks are kept when you switch ticker.
           </p>
         </div>

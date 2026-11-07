@@ -100,6 +100,43 @@ class IngestionCoordinatorTest {
     }
 
     @Test
+    void aResearchSearchWaitsItsTurnWhenAnotherSearchHoldsTheLock() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty(), Optional.empty(), Optional.of(lockHold));
+        when(provider.search(any())).thenReturn(List.of());
+        int[] pauses = {0};
+        coordinator.usePause(duration -> { pauses[0]++; return true; });
+        List<InstrumentSearchTerms> catalogue = List.of(new InstrumentSearchTerms("SYN", "Synthetic Issuer",
+                "Synthetic", List.of(), List.of("earnings"), List.of(), List.of("added.example.com")));
+
+        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(7)), NOW, catalogue, List.of());
+
+        assertThat(pauses[0]).as("it waited twice, then got the lock").isEqualTo(2);
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.SUCCEEDED);
+        verify(provider, times(2)).search(any());
+    }
+
+    @Test
+    void aResearchSearchGivesUpWhenTheLockIsNeverFreeOrTheWaitIsInterrupted() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+        coordinator.usePause(duration -> false);
+
+        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(7)), NOW, CATALOGUE, List.of());
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        verify(provider, never()).search(any());
+    }
+
+    @Test
+    void aScheduledRunStillSkipsInsteadOfWaiting() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+        int[] pauses = {0};
+        coordinator.usePause(duration -> { pauses[0]++; return true; });
+
+        assertThat(coordinator.run(NOW, CATALOGUE).status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        assertThat(pauses[0]).isZero();
+    }
+
+    @Test
     void researchSearchesOnlyTheGivenDomainAndLeavesTheWatermarkAlone() {
         when(provider.search(any())).thenReturn(List.of());
         List<InstrumentSearchTerms> catalogue = List.of(new InstrumentSearchTerms("SYN", "Synthetic Issuer",
@@ -117,11 +154,14 @@ class IngestionCoordinatorTest {
     }
 
     @Test
-    void researchIsSkippedWhileAnotherRunHoldsTheLock() {
+    void researchGivesUpAfterTenMinutesOfWaitingWhileAnotherRunHoldsTheLock() {
         when(runLock.tryAcquire()).thenReturn(Optional.empty());
+        int[] pauses = {0};
+        coordinator.usePause(duration -> { pauses[0]++; return true; }); // no real waiting in a test
 
         IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, CATALOGUE, List.of());
 
+        assertThat(pauses[0]).as("120 waits of 5 seconds").isEqualTo(120);
         assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
         verify(provider, never()).search(any());
     }
@@ -320,7 +360,7 @@ class IngestionCoordinatorTest {
     private IngestionCoordinator coordinator(boolean enabled) {
         IngestionProperties properties = new IngestionProperties(enabled,
                 "tavily", Duration.ofMinutes(5), Duration.ofHours(4),
-                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
+                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2,
                 List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
         return new IngestionCoordinator(properties, provider, new IssuerQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,
