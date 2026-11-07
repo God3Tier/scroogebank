@@ -109,7 +109,6 @@ describe('TickerReports', () => {
     renderPage()
 
     expect(await screen.findByText(/Event severity: 18 of 30 \(earnings\)/)).toBeInTheDocument()
-    // The Fresh or Stale label depends on today's date, so NewsFreshnessNotice.test.jsx covers it with a fixed clock.
   })
 
   it('offers only Plan client briefing and Dismiss, keeps the clients selected and focuses the report', async () => {
