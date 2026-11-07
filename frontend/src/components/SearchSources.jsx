@@ -70,7 +70,7 @@ function SearchSources({ readOnly = false }) {
           <button type="button" disabled={busy} onClick={searchAll}>
             {busy ? 'Starting…' : readOnly ? 'Search now for all companies' : 'Search now for all my companies'}
           </button>
-          <span className="muted">Searches the last 14 days on every website. The automatic schedule is not changed.</span>
+          <span className="muted">Searches the last 7 days on every website. The automatic schedule is not changed.</span>
         </div>
       )}
       {searchError && <p className="error-text" role="alert">{searchError}</p>}

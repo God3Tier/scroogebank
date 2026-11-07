@@ -1244,7 +1244,7 @@ components:
     EventDetail:
       type: object
       additionalProperties: false
-      required: [card, clients, latestAction, report]
+      required: [card, clients, latestAction, report, severity]
       properties:
         card: {$ref: '#/components/schemas/EventCard'}
         clients:
@@ -1258,6 +1258,20 @@ components:
           anyOf:
             - {$ref: '#/components/schemas/EventReport'}
             - {$ref: '#/components/schemas/NullValue'}
+        severity:
+          description: The event's severity part of the score, the same for every client of the event; null if unknown.
+          anyOf:
+            - {$ref: '#/components/schemas/EventSeverity'}
+            - {$ref: '#/components/schemas/NullValue'}
+    EventSeverity:
+      type: object
+      additionalProperties: false
+      required: [points, maximum, eventType, direction]
+      properties:
+        points: {type: number, description: "Severity points this event adds to a client's score."}
+        maximum: {type: integer, description: "The most severity can add (30)."}
+        eventType: {type: string, description: "The classified event type, for example EARNINGS."}
+        direction: {type: string, description: "POSITIVE, NEUTRAL or NEGATIVE."}
     NullValue:
       description: JSON null. OpenAPI 3.0 has no null type, so a nullable reference is anyOf the schema and this.
       type: object

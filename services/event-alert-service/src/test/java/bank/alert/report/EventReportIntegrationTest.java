@@ -422,6 +422,11 @@ class EventReportIntegrationTest {
                 .startsWith("Your portfolio has exposure to ").endsWith(", which may be affected by this event.");
         assertThat(report.report().toString()).as("nothing about a client in what the model wrote")
                 .doesNotContain("syn-client").doesNotContain("syn-account");
+        AgentEventModels.EventSeverity severity = eventQueries.detail(card.eventId(), "syn-agent-001").severity();
+        assertThat(severity).as("the stored alerts carry the severity factor").isNotNull();
+        assertThat(severity.maximum()).isEqualTo(30);
+        assertThat(severity.points()).isBetween(java.math.BigDecimal.ZERO, new java.math.BigDecimal("30"));
+        assertThat(severity.eventType()).isNotBlank();
         assertThatThrownBy(() -> eventQueries.detail(card.eventId(), "someone-else")).isInstanceOf(AlertNotFoundException.class);
     }
 

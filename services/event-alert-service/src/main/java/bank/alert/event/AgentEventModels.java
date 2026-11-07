@@ -81,7 +81,12 @@ public final class AgentEventModels {
         }
     }
 
-    public record EventDetail(EventCard card, List<AffectedClient> clients, ActionResult latestAction, ReportView report) {
+    /** The event's severity points out of the most it can add to a score, with the type and direction it came from. Null if unknown. */
+    public record EventSeverity(BigDecimal points, int maximum, String eventType, String direction) {
+    }
+
+    public record EventDetail(EventCard card, List<AffectedClient> clients, ActionResult latestAction, ReportView report,
+            EventSeverity severity) {
         public EventDetail {
             clients = List.copyOf(clients);
         }

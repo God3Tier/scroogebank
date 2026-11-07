@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { approveReport, discardReportEdit } from '../api/alertEvents.js'
 import { createNewsDrafts, isCrmClientId } from '../api/engagement.js'
-import { SKIP_REASONS, stalenessText } from '../utils/newsReports.js'
+import { isNewsStale, SKIP_REASONS, STALE_NEWS_EXPLAINED, stalenessText } from '../utils/newsReports.js'
 
 // Edit, approve, then notify (news-alert-drafts plan 5.2). The agent may change the report's wording; the headline
 // and sources stay fixed, and the edited text is checked again. Approval is final and freezes what the client gets.
@@ -12,6 +12,23 @@ import { SKIP_REASONS, stalenessText } from '../utils/newsReports.js'
 
 const TIME = new Intl.DateTimeFormat('en-SG', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore' })
 const DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' })
+
+/**
+ * "Stale" at the top of a report the agent has not approved, when its news is more than 7 days old. The same words
+ * are the hover text, so the meaning is there even without a hover.
+ */
+export function StaleNewsNotice({ report, review, now: fixedNow }) {
+  const [loadedAt] = useState(() => Date.now())
+  const now = fixedNow ?? loadedAt
+  if (!report || !review) return null
+  if (review.approval?.valid) return null
+  if (!isNewsStale(review.newsDate || report.createdAt, now)) return null
+  return (
+    <p className="stale-notice" role="note" title={STALE_NEWS_EXPLAINED}>
+      <strong className="stale-notice__chip">Stale</strong> {STALE_NEWS_EXPLAINED}
+    </p>
+  )
+}
 
 /**
  * clients: the agent's clients on this report; selected: { alertId: true }. Approval and Notify act on the selected

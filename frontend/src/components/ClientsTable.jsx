@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
-export const CLIENTS_PER_PAGE = 5
+const CLIENTS_PER_PAGE = 5
 
 // The affected clients of one ticker. With more than CLIENTS_PER_PAGE clients it adds a search box and pages; ticks are kept
 // by the page (selected: { alertId: true }), so they survive searching and paging.
@@ -17,7 +17,6 @@ function ClientsTable({ clients, names, selected, setSelected, selectable, statu
 
   const pages = Math.max(1, Math.ceil(matching.length / CLIENTS_PER_PAGE))
   const current = Math.min(page, pages - 1)
-  useEffect(() => { if (page !== current) setPage(current) }, [page, current])
   const shown = paged ? matching.slice(current * CLIENTS_PER_PAGE, (current + 1) * CLIENTS_PER_PAGE) : clients
   const ticked = clients.filter((client) => selected[client.alertId] && selectable(client)).length
 

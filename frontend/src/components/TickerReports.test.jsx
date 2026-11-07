@@ -61,7 +61,8 @@ const approval = (overrides = {}) => ({
 const client = (alertId, clientRef, status, version = 0) => ({
   alertId, clientRef, accountRef: 'acc-1', instrumentId: 'NASDAQ-AAPL', status, score: 70, portfolioPercentage: 30, amountSgd: '36000.00', version,
 })
-const appleDetail = (clients) => ({ card: appleCard, clients, latestAction: null, report })
+const severity = { points: 18, maximum: 30, eventType: 'EARNINGS', direction: 'POSITIVE' }
+const appleDetail = (clients) => ({ card: appleCard, clients, latestAction: null, report, severity })
 
 function renderPage() {
   return render(
@@ -102,6 +103,13 @@ describe('TickerReports', () => {
     expect(screen.getByText('Plan client briefing', { selector: 'td' })).toBeInTheDocument()
     expect(screen.getAllByRole('checkbox', { name: /Select/ })).toHaveLength(2)
     expect(screen.queryByText('Continue monitoring')).not.toBeInTheDocument()
+  })
+
+  it('shows the event severity in why this appeared, and a stale chip is not there for fresh news', async () => {
+    renderPage()
+
+    expect(await screen.findByText(/Event severity: 18 of 30 \(earnings\)/)).toBeInTheDocument()
+    expect(screen.queryByText('Stale')).not.toBeInTheDocument()
   })
 
   it('offers only Plan client briefing and Dismiss, keeps the clients selected and focuses the report', async () => {

@@ -13,6 +13,15 @@ export const SKIP_REASONS = {
 }
 export const APPROVAL_DAYS = 7
 export const STALE_AFTER_DAYS = 5
+/** News older than this is stale: the page says so on a report the agent has not approved. */
+export const STALE_NEWS_DAYS = 7
+export const STALE_NEWS_EXPLAINED = `This news is more than ${STALE_NEWS_DAYS} days old. Check it is still current before you approve the report.`
+
+/** True when the news is more than STALE_NEWS_DAYS old. A missing or unreadable date is not called stale. */
+export function isNewsStale(newsDate, now) {
+  const time = newsDate ? new Date(newsDate).getTime() : NaN
+  return Number.isFinite(time) && now - time > STALE_NEWS_DAYS * DAY
+}
 
 /** The report body with the agent's wording in place of the original's: the same merge the server makes. */
 export function mergeSections(body, sections) {
@@ -52,4 +61,13 @@ export function noReportText(card) {
     return `The AI's draft did not pass the checks (${card.reportFailure.toLowerCase().replace(/_/g, ' ')}). It tries again on the next run, up to three times.`
   }
   return 'The report for this ticker is still being written. This page updates by itself.'
+}
+
+/** "Event severity: 18 of 30 (earnings news)": how much the kind of event adds to every client's score. */
+export function severityText(severity) {
+  const points = Number(severity.points)
+  const shown = Number.isInteger(points) ? points : points.toFixed(1)
+  const type = String(severity.eventType || '').toLowerCase().replace(/_/g, ' ')
+  const negative = severity.direction === 'NEGATIVE' ? ', negative' : ''
+  return `Event severity: ${shown} of ${severity.maximum}${type ? ` (${type}${negative})` : ''}. It is the same for every client; their score also counts their holding.`
 }

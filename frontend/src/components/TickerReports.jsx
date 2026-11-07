@@ -3,12 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getEvent, getReportReview, listApprovedReports, listEvents, recordEventAction } from '../api/alertEvents.js'
 import { getClient } from '../api/clients.js'
 import { isCrmClientId, listOpenNewsAlerts } from '../api/engagement.js'
-import { mergeSections, noReportText } from '../utils/newsReports.js'
+import { mergeSections, noReportText, severityText } from '../utils/newsReports.js'
 import { useReportEditor } from '../utils/useReportEditor.js'
 import { BatchNotify, FloatingBatchHint } from './BatchNotify.jsx'
 import ClientsTable from './ClientsTable.jsx'
 import { CombinedSources, EventReport } from './EventReport.jsx'
-import { ReportReview } from './ReportReview.jsx'
+import { ReportReview, StaleNewsNotice } from './ReportReview.jsx'
 import SentOutList from './SentOutList.jsx'
 
 // Event alerts for an agent, by ticker (ADR-0084, news-alert-drafts plan). Each row on the left is one ticker with
@@ -161,7 +161,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
   if (error && !detail) return <p className="error-text" role="alert">{error}</p>
   if (!detail) return <p className="empty-note" role="status">Loading…</p>
 
-  const { card, report } = detail
+  const { card, report, severity } = detail
   // Sent Out clients are listed in the Sent out tab, not here.
   const clients = detail.clients.filter((client) => client.status !== 'SENT_OUT')
   const open = clients.filter((c) => c.status === 'NEW')
@@ -200,6 +200,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           </div>
           {report ? (
             <>
+              <StaleNewsNotice report={report} review={review} />
               <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} editor={editor} />
               <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
                 company={card.issuer || card.ticker}
@@ -219,6 +220,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           <ul className="ticker-why">
             <li>{clients.length} of your client{clients.length === 1 ? '' : 's'} hold {card.issuer || 'this company'}.</li>
             <li>The highest client score is {Number(card.topScore).toFixed(1)} out of 100.</li>
+            {severity && <li>{severityText(severity)}</li>}
             <li>The report combines what was newly found for this ticker in the latest search run.</li>
           </ul>
           <CombinedSources report={report} evidence={[]} />

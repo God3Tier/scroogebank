@@ -14,7 +14,8 @@ public class MaterialityScorer {
     public static final String RULE_VERSION = "materiality-v1";
     public static final BigDecimal ALERT_THRESHOLD = new BigDecimal("60.00");
 
-    private static final BigDecimal SEVERITY_WEIGHT = new BigDecimal("30.00");
+    /** The most the event severity can add to a client's score. */
+    public static final BigDecimal SEVERITY_WEIGHT = new BigDecimal("30.00");
     private static final BigDecimal EXPOSURE_WEIGHT = new BigDecimal("35.00");
     private static final BigDecimal RELEVANCE_WEIGHT = new BigDecimal("15.00");
     private static final BigDecimal CONFIDENCE_WEIGHT = new BigDecimal("20.00");

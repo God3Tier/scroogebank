@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 
 import { getClient } from '../api/clients.js'
 import {
@@ -99,7 +100,7 @@ describe('search sources', () => {
   it('adds a website, tells the agent what is being searched and reloads the list', async () => {
     listSearchWebsites.mockResolvedValueOnce(websites()).mockResolvedValueOnce(websites({ added: [MINE] }))
     addSearchWebsite.mockResolvedValue({
-      ...MINE, search: { outcome: 'STARTED', started: ['SGX-D05', 'NASDAQ-AAPL'], cooldown: [], lookbackDays: 14 },
+      ...MINE, search: { outcome: 'STARTED', started: ['SGX-D05', 'NASDAQ-AAPL'], cooldown: [], lookbackDays: 7 },
     })
     render(<SearchSources />)
 
@@ -108,7 +109,7 @@ describe('search sources', () => {
     fireEvent.change(input, { target: { value: 'www.BusinessTimes.com.sg' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add website' }))
 
-    expect(await screen.findByText(/Added businesstimes.com.sg. Searching 2 companies on businesstimes.com.sg over the last 14 days/)).toBeInTheDocument()
+    expect(await screen.findByText(/Added businesstimes.com.sg. Searching 2 companies on businesstimes.com.sg over the last 7 days/)).toBeInTheDocument()
     expect(addSearchWebsite).toHaveBeenCalledWith('www.BusinessTimes.com.sg')
     expect(screen.getByLabelText('Add a website')).toHaveValue('')
     expect(await screen.findByLabelText('Remove businesstimes.com.sg')).toBeInTheDocument()
@@ -117,7 +118,7 @@ describe('search sources', () => {
   it('says which companies were skipped because they were searched a moment ago', async () => {
     addSearchWebsite.mockResolvedValue({
       ...MINE, search: { outcome: 'STARTED', started: ['NASDAQ-AAPL'],
-        cooldown: [{ instrumentId: 'SGX-D05', availableAt: '2026-11-04T04:15:00Z' }], lookbackDays: 14 },
+        cooldown: [{ instrumentId: 'SGX-D05', availableAt: '2026-11-04T04:15:00Z' }], lookbackDays: 7 },
     })
     render(<SearchSources />)
 
@@ -128,7 +129,7 @@ describe('search sources', () => {
   })
 
   it('keeps the website added when the search could not start', async () => {
-    addSearchWebsite.mockResolvedValue({ ...MINE, search: { outcome: 'FAILED', started: [], cooldown: [], lookbackDays: 14 } })
+    addSearchWebsite.mockResolvedValue({ ...MINE, search: { outcome: 'FAILED', started: [], cooldown: [], lookbackDays: 7 } })
     render(<SearchSources />)
 
     fireEvent.change(await screen.findByLabelText('Add a website'), { target: { value: 'businesstimes.com.sg' } })
@@ -176,17 +177,17 @@ describe('search sources', () => {
   })
 
   it('searches every company at once and says what started', async () => {
-    searchNow.mockResolvedValue({ outcome: 'STARTED', started: ['SGX-D05', 'NASDAQ-AAPL'], cooldown: [], lookbackDays: 14 })
+    searchNow.mockResolvedValue({ outcome: 'STARTED', started: ['SGX-D05', 'NASDAQ-AAPL'], cooldown: [], lookbackDays: 7 })
     render(<SearchSources />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Search now for all my companies' }))
 
-    expect(await screen.findByText(/Searching 2 companies on every website over the last 14 days/)).toBeInTheDocument()
+    expect(await screen.findByText(/Searching 2 companies on every website over the last 7 days/)).toBeInTheDocument()
     expect(searchNow).toHaveBeenCalledWith()
   })
 
   it('searches one company from its own card', async () => {
-    searchNow.mockResolvedValue({ outcome: 'STARTED', started: ['SGX-D05'], cooldown: [], lookbackDays: 14 })
+    searchNow.mockResolvedValue({ outcome: 'STARTED', started: ['SGX-D05'], cooldown: [], lookbackDays: 7 })
     render(<SearchSources />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Search now for D05' }))
@@ -197,7 +198,7 @@ describe('search sources', () => {
 
   it('says when a company can be searched again', async () => {
     searchNow.mockResolvedValue({ outcome: 'COOLDOWN', started: [],
-      cooldown: [{ instrumentId: 'SGX-D05', availableAt: '2026-11-04T04:15:00Z' }], lookbackDays: 14 })
+      cooldown: [{ instrumentId: 'SGX-D05', availableAt: '2026-11-04T04:15:00Z' }], lookbackDays: 7 })
     render(<SearchSources />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Search now for D05' }))
@@ -257,7 +258,7 @@ describe('the event alerts page', () => {
   afterEach(() => vi.clearAllMocks())
 
   it('keeps the client alerts open for an agent, with no collapsible section', async () => {
-    const { container } = render(<EventAlerts />)
+    const { container } = render(<MemoryRouter><EventAlerts /></MemoryRouter>)
 
     expect(screen.queryByText('Events that may affect your clients')).not.toBeInTheDocument()
     expect(screen.getByText('Ticker reports')).toBeInTheDocument()
@@ -266,7 +267,7 @@ describe('the event alerts page', () => {
   })
 
   it('keeps the client alerts open for an admin too, read only', async () => {
-    const { container } = render(<EventAlerts readOnly />)
+    const { container } = render(<MemoryRouter><EventAlerts readOnly /></MemoryRouter>)
 
     expect(screen.getByText('Alert workspace read only')).toBeInTheDocument()
     expect(container.querySelector('details')).toBeNull()
