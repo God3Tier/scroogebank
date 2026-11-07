@@ -136,6 +136,37 @@ alert:
       - resignation
       - resigned
       - steps down
+      # Added 2026-11-07 (AWS test feedback; Azeez to approve): more words that name a company event in a title.
+      - probe
+      - lawsuit
+      - settlement
+      - layoffs
+      - recall
+      - bankruptcy
+      - outlook
+      - forecast
+      - deal
+      - stake
+      - partnership
+      - launches
+      - plans
+      - cuts
+      - raises
+      - rejects
+      - weighs
+      - posts
+      - winding down
+      - shares fall
+      - warns
+      - beats
+      - misses
+      - acquires
+      - sues
+      - hack
+      - breach
+      - outage
+      - ban
+      - sanctions
   ai:
     # Independent fail-closed switch; no model can be invoked by default.
     enabled: ${ALERT_AI_ENABLED:false}

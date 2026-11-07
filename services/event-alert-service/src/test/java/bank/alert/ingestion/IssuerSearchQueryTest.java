@@ -33,6 +33,21 @@ class IssuerSearchQueryTest {
         assertThat(query.accepts(result("D05 earnings rise", "Quarterly profit increased."))).isFalse();
     }
 
+    @Test
+    void theWordsAddedOnTheSeventhOfNovemberAcceptRealHeadlinesButNotMarketChatter() {
+        IssuerSearchQuery wider = new IssuerSearchQuery("Microsoft news",
+                List.of("Microsoft Corporation", "Microsoft"),
+                List.of("earnings", "deal", "winding down", "probe", "weighs", "plans", "warns", "sues", "ban"),
+                List.of("microsoft.com"), List.of("reuters.com", "bloomberg.com"));
+        String url = "https://www.bloomberg.com/news/1";
+        assertThat(wider.accepts(result("Microsoft Is Winding Down Oracle Deal to Rent AI Cloud Capacity", null, url))).isTrue();
+        assertThat(wider.accepts(result("Microsoft plans to use fewer neoclouds as AI buildout shows signs of strain", null, url))).isTrue();
+        assertThat(wider.accepts(result("Democrats to probe Microsoft's cloud contracts", null, url))).isTrue();
+        // Still needs the company in the title, and a market roundup with no event word is still out.
+        assertThat(wider.accepts(result("Nvidia weighs playing the cosigner for Nscale's data center", null, url))).isFalse();
+        assertThat(wider.accepts(result("Stocks making the biggest moves midday: Microsoft, Moderna, IonQ", null, url))).isFalse();
+    }
+
     private static PublicSearchResult result(String title, String snippet) {
         return result(title, snippet, "https://www.sgx.com/news/1");
     }

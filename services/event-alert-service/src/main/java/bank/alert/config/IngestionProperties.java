@@ -42,7 +42,13 @@ public record IngestionProperties(
                         "regulatory action", "investigation", "fine", "filing", "approval",
                         "merger", "acquisition", "takeover", "divestment", "buyback",
                         "credit rating", "downgrade", "upgrade", "default", "credit outlook",
-                        "appointment", "appointed", "appoints", "resignation", "resigned", "steps down")
+                        "appointment", "appointed", "appoints", "resignation", "resigned", "steps down",
+                        // Added 2026-11-07 (Azeez to approve)
+                        "probe", "lawsuit", "settlement", "layoffs", "recall", "bankruptcy",
+                        "outlook", "forecast", "deal", "stake", "partnership", "launches",
+                        "plans", "cuts", "raises", "rejects", "weighs", "posts",
+                        "winding down", "shares fall", "warns", "beats", "misses", "acquires",
+                        "sues", "hack", "breach", "outage", "ban", "sanctions")
                 : eventTerms.stream().map(String::strip).filter(term -> !term.isEmpty()).distinct().toList();
         if (overlap.isNegative() || overlap.compareTo(initialLookback) >= 0) {
             throw new IllegalArgumentException("alert.ingestion.overlap must be non-negative and shorter than initial-lookback");

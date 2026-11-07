@@ -25,10 +25,15 @@ class IngestionConfigurationTest {
         Map<?, ?> ingestion = (Map<?, ?>) alert.get("ingestion");
 
         assertThat(ingestion.get("event-terms"))
-                .isEqualTo(List.of("earnings", "results", "financial results", "profit", "revenue",
-                        "guidance", "regulatory action", "investigation", "fine", "filing", "approval",
-                        "merger", "acquisition", "takeover", "divestment", "buyback", "credit rating",
-                        "downgrade", "upgrade", "default", "credit outlook", "appointment", "appointed",
-                        "appoints", "resignation", "resigned", "steps down"));
+                .isEqualTo(List.of("earnings", "results", "financial results", "profit", "revenue", "guidance",
+                        "regulatory action", "investigation", "fine", "filing", "approval", "merger",
+                        "acquisition", "takeover", "divestment", "buyback", "credit rating", "downgrade",
+                        "upgrade", "default", "credit outlook", "appointment", "appointed", "appoints",
+                        "resignation", "resigned", "steps down", "probe", "lawsuit", "settlement",
+                        "layoffs", "recall", "bankruptcy", "outlook", "forecast", "deal",
+                        "stake", "partnership", "launches", "plans", "cuts", "raises",
+                        "rejects", "weighs", "posts", "winding down", "shares fall", "warns",
+                        "beats", "misses", "acquires", "sues", "hack", "breach",
+                        "outage", "ban", "sanctions"));
     }
 }
