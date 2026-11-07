@@ -49,3 +49,42 @@ POST /api/engagement/drafts/{draftId}/send the response property `bodyTemplate` 
 POST /api/engagement/drafts/{draftId}/send the response property `subjectTemplate` became nullable for the status `200`
 POST /api/engagement/drafts/{draftId}/send added the new `ALERT_FOLLOW_UP` enum value to the `purpose` response property for the response status `200`
 POST /api/engagement/drafts/{draftId}/send added the new `HEALTH_CHECK_IN` enum value to the `purpose` response property for the response status `200`
+
+# News alert drafts (ADR-0085, ADR-0086). A draft now has the source NEWS, the purpose NEWS_ALERT and the tone NONE (a news
+# email has no tone). The frontend is the only client of these routes and ships in the same change: it reads the three values
+# and shows a News Alert draft by its reports.
+GET /api/engagement/drafts added the new `NEWS` enum value to the `items/source` response property for the response status `200`
+GET /api/engagement/drafts added the new `NEWS_ALERT` enum value to the `items/purpose` response property for the response status `200`
+GET /api/engagement/drafts added the new `NONE` enum value to the `items/tone` response property for the response status `200`
+POST /api/engagement/drafts added the new `NEWS` enum value to the `source` response property for the response status `201`
+POST /api/engagement/drafts added the new `NEWS_ALERT` enum value to the `purpose` response property for the response status `201`
+POST /api/engagement/drafts added the new `NONE` enum value to the `tone` response property for the response status `201`
+GET /api/engagement/drafts/{draftId} added the new `NEWS` enum value to the `source` response property for the response status `200`
+GET /api/engagement/drafts/{draftId} added the new `NEWS_ALERT` enum value to the `purpose` response property for the response status `200`
+GET /api/engagement/drafts/{draftId} added the new `NONE` enum value to the `tone` response property for the response status `200`
+PUT /api/engagement/drafts/{draftId} added the new `NEWS` enum value to the `source` response property for the response status `200`
+PUT /api/engagement/drafts/{draftId} added the new `NEWS_ALERT` enum value to the `purpose` response property for the response status `200`
+PUT /api/engagement/drafts/{draftId} added the new `NONE` enum value to the `tone` response property for the response status `200`
+POST /api/engagement/drafts/{draftId}/send added the new `NEWS` enum value to the `source` response property for the response status `200`
+POST /api/engagement/drafts/{draftId}/send added the new `NEWS_ALERT` enum value to the `purpose` response property for the response status `200`
+POST /api/engagement/drafts/{draftId}/send added the new `NONE` enum value to the `tone` response property for the response status `200`
+
+# A report that has been sent is Sent Out, a new alert status (ADR-0085). The frontend is the only client of these routes and
+# ships in the same change: it shows the status and lists Sent Out alerts apart from the open ones.
+GET /alerts added the new `SENT_OUT` enum value to the `items/items/status` response property for the response status `200`
+GET /alerts/events/{eventId} added the new `SENT_OUT` enum value to the `clients/items/status` response property for the response status `200`
+GET /alerts/events/{eventId} added the new `SENT_OUT` enum value to the `latestAction/anyOf[#/components/schemas/EventActionResult]/members/items/newStatus/anyOf[#/components/schemas/AlertStatus]/` response property for the response status `200`
+GET /alerts/events/{eventId} added the new `SENT_OUT` enum value to the `latestAction/anyOf[#/components/schemas/EventActionResult]/members/items/previousStatus/anyOf[#/components/schemas/AlertStatus]/` response property for the response status `200`
+POST /alerts/events/{eventId}/actions added the new `SENT_OUT` enum value to the `members/items/newStatus/anyOf[#/components/schemas/AlertStatus]/` response property for the response status `200`
+POST /alerts/events/{eventId}/actions added the new `SENT_OUT` enum value to the `members/items/previousStatus/anyOf[#/components/schemas/AlertStatus]/` response property for the response status `200`
+GET /alerts/{alertId} added the new `SENT_OUT` enum value to the `latestDecision/anyOf[#/components/schemas/DecisionRecord]/newStatus` response property for the response status `200`
+GET /alerts/{alertId} added the new `SENT_OUT` enum value to the `latestDecision/anyOf[#/components/schemas/DecisionRecord]/previousStatus` response property for the response status `200`
+GET /alerts/{alertId} added the new `SENT_OUT` enum value to the `status` response property for the response status `200`
+POST /alerts/{alertId}/decisions added the new `SENT_OUT` enum value to the `newStatus` response property for the response status `200`
+POST /alerts/{alertId}/decisions added the new `SENT_OUT` enum value to the `previousStatus` response property for the response status `200`
+
+# The per-company search-source routes of ADR-0079 are replaced by the shared search websites of ADR-0081 (/alerts/search-websites).
+# The Search sources page is the only caller and ships in the same change.
+GET /alerts/search-sources api path removed without deprecation
+POST /alerts/search-sources/{instrumentId}/domains api path removed without deprecation
+DELETE /alerts/search-sources/{instrumentId}/domains/{domainId} api path removed without deprecation

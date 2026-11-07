@@ -133,7 +133,7 @@ class AlertMutationServiceTest {
 
     @Test
     void recordsDecisionAndRedactedAuditAtomicallyThenReplays() {
-        DecisionRequest request = new DecisionRequest(AlertDecisionType.MONITOR, 0L, null);
+        DecisionRequest request = new DecisionRequest(AlertDecisionType.DISMISS, 0L, null);
 
         var first = mutationService.recordDecision(
                 ALERT_ID, "syn-agent-001", "decision-key-001", UUID.randomUUID(), request);
@@ -143,7 +143,7 @@ class AlertMutationServiceTest {
         assertThat(first.getId()).isEqualTo(replay.getId());
         assertThat(first.getAlertVersion()).isEqualTo(1L);
         assertThat(alertRepository.findById(ALERT_ID).orElseThrow().getStatus())
-                .isEqualTo(AlertStatus.MONITORING);
+                .isEqualTo(AlertStatus.DISMISSED);
         assertThat(decisionRepository.count()).isEqualTo(1);
         assertThat(outboxRepository.findAll()).singleElement().satisfies(outbox -> {
             assertThat(outbox.getPayload()).contains("decisionId", "syn-agent-001");
@@ -156,13 +156,13 @@ class AlertMutationServiceTest {
         assertThatThrownBy(() -> mutationService.recordDecision(
                 ALERT_ID, "syn-agent-999", "decision-key-999",
                 UUID.randomUUID(),
-                new DecisionRequest(AlertDecisionType.MONITOR, 0L, null)))
+                new DecisionRequest(AlertDecisionType.DISMISS, 0L, null)))
                 .isInstanceOf(AlertNotFoundException.class);
 
         assertThatThrownBy(() -> mutationService.recordDecision(
                 ALERT_ID, "syn-agent-001", "decision-key-002",
                 UUID.randomUUID(),
-                new DecisionRequest(AlertDecisionType.MONITOR, 4L, null)))
+                new DecisionRequest(AlertDecisionType.DISMISS, 4L, null)))
                 .isInstanceOf(AlertMutationConflictException.class);
         assertThat(decisionRepository.count()).isZero();
         assertThat(outboxRepository.count()).isZero();

@@ -36,6 +36,12 @@ variable "ingestion_enabled" {
   default     = false
 }
 
+variable "report_summary_enabled" {
+  description = "Let the worker write one summary sentence for each new report, for the news email (ALERT_REPORT_SUMMARY_ENABLED, ADR-0085). Approved by Azeez, so on by default; it needs ai_enabled and is skipped, without affecting the report, when the AI is off or the sentence fails its checks."
+  type        = bool
+  default     = true
+}
+
 variable "ai_enabled" {
   description = "Let the worker call Bedrock (ALERT_AI_ENABLED) and give its task role bedrock:InvokeModel on the pinned profile. Keep false until the AI benchmark gates pass (ADR-0010)."
   type        = bool
@@ -43,9 +49,9 @@ variable "ai_enabled" {
 }
 
 variable "schedule" {
-  description = "EventBridge Scheduler expression for worker runs (ADR-0031 decision 1: every four hours)."
+  description = "EventBridge Scheduler expression for worker runs, in Singapore time. The default is every four hours at fixed times, 00:00, 04:00, 08:00, 12:00, 16:00 and 20:00 (ADR-0031 decision 1, ADR-0081), so the Event Alerts page can show the next one. If you change it, change ALERT_SCHEDULE_INTERVAL on the alerts service to match."
   type        = string
-  default     = "rate(4 hours)"
+  default     = "cron(0 0/4 * * ? *)"
 }
 
 variable "run_on_apply" {

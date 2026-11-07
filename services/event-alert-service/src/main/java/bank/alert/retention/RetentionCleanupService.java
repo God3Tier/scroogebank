@@ -60,6 +60,14 @@ public class RetentionCleanupService {
                   FROM expired e
                  WHERE s.id = e.id
                 """, now, batchSize);
+        // Approved report text is kept until every client on it is Sent Out (cleared at that send) or for 14 days
+        // after the approval expired; unapproved edits nobody touched for 30 days go too (news-alert-drafts plan 7.1).
+        jdbc.update("""
+                UPDATE approved_report SET final_text = NULL, text_cleared_at = ?
+                 WHERE final_text IS NOT NULL AND valid_until < ?
+                """, now, Timestamp.from(clock.instant().minus(java.time.Duration.ofDays(14))));
+        jdbc.update("DELETE FROM report_edit WHERE updated_at < ?",
+                Timestamp.from(clock.instant().minus(java.time.Duration.ofDays(30))));
         return new RetentionCleanupOutcome(briefings, sources);
     }
 }

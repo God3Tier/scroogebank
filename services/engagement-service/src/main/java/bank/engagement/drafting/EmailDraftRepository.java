@@ -22,6 +22,10 @@ interface EmailDraftRepository extends JpaRepository<EmailDraft, UUID> {
     List<EmailDraft> findByOwnerAgentSubAndClientIdAndStatusInOrderByCreatedAtDesc(String owner, UUID clientId,
             Collection<DraftStatus> statuses, Pageable page);
 
+    /** The client's open News Alert draft, if any: reports are added to it rather than to a new one. */
+    Optional<EmailDraft> findFirstByOwnerAgentSubAndClientIdAndPurposeAndStatusOrderByCreatedAtDesc(String owner,
+            UUID clientId, DraftPurpose purpose, DraftStatus status);
+
     /**
      * Holds the draft for one send. Only a {@code DRAFT} at the version the
      * agent saw can be claimed, so a second send finds nothing to claim. A

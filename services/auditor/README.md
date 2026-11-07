@@ -171,6 +171,7 @@ addresses. The actions are:
 | Calendar events | `EVENT_CREATE`, `EVENT_UPDATE`, `EVENT_CANCEL` |
 | Emails the dispatcher sends | `INVITE_SENT`, `INVITE_FAILED`, `REMINDER_SENT`, `REMINDER_FAILED`, `REMINDER_MISSED` |
 | Client follow-up drafts | `DRAFT_GENERATE`, `DRAFT_DISCARD`, `EMAIL_SEND`, `EMAIL_SEND_FAILED` |
+| A report taken off a News Alert draft | `DRAFT_REPORT_REMOVED` |
 | Notification preferences | `PREFERENCES_UPDATE` |
 
 The auditor long-polls the queue (up to 20s), so it should pick the message

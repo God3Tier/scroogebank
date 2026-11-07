@@ -84,7 +84,7 @@ public class AlertListRepository {
     public Optional<DetailRow> findVisibleDetail(UUID alertId, String actorSubject, boolean admin) {
         StringBuilder sql = new StringBuilder("""
                 SELECT a.id, a.client_ref, a.instrument_id, sr.title, a.status,
-                       a.score, a.created_at, a.version,
+                       a.score, a.created_at, a.version, a.public_event_id,
                        hs.value_sgd, hs.valued_at, hs.freshness, hs.account_ref,
                        ROUND(hs.value_sgd * 100 / NULLIF((
                            SELECT SUM(h2.value_sgd)
@@ -134,6 +134,7 @@ public class AlertListRepository {
                             resultSet.getBigDecimal("score"),
                             resultSet.getTimestamp("created_at").toInstant(),
                             resultSet.getLong("version")),
+                    resultSet.getObject("public_event_id", UUID.class),
                     resultSet.getBigDecimal("value_sgd"),
                     resultSet.getBigDecimal("portfolio_percentage"),
                     resultSet.getTimestamp("valued_at").toInstant(),
@@ -166,6 +167,7 @@ public class AlertListRepository {
 
     public record DetailRow(
             AlertSummaryResponse summary,
+            UUID eventId,
             BigDecimal amountSgd,
             BigDecimal portfolioPercentage,
             Instant valuationAsOf,

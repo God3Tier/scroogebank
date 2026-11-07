@@ -429,20 +429,14 @@ class DraftApiTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void anAlertFollowUpNeedsTheAgentsAlertForThisClient() throws Exception {
+    void anAlertFollowUpIsReplacedByNewsAlertDrafts() throws Exception {
         UUID alert = UUID.fromString("50000000-0000-4000-8000-000000000001");
-        expectCreate(alertDraft(null), 400, "alertId is required for ALERT_FOLLOW_UP");
-
-        // An older alert's synthetic reference is never a CRM client.
-        doReturn("syn-client-001").when(sources).alertClient(alert);
-        expectCreate(alertDraft(alert), 400, "The alert is not for this client");
-        doThrow(new SourceNotFoundException()).when(sources).alertClient(alert);
-        expectCreate(alertDraft(alert), 400, "alertId must be one of your alerts");
-        doThrow(new SourceUnavailableException("down")).when(sources).alertClient(alert);
-        expectCreate(alertDraft(alert), 503, "Alerts are unavailable; nothing was saved");
-
-        doReturn(CLIENT.toString().toUpperCase()).when(sources).alertClient(alert);
-        assertThat(create(alertDraft(alert)).get("alertId").asText()).isEqualTo(alert.toString());
+        expectCreate(alertDraft(alert), 400, "Alert follow-ups were replaced by News Alert drafts; open them from Event Alerts");
+        expectCreate(alertDraft(null), 400, "Alert follow-ups were replaced by News Alert drafts; open them from Event Alerts");
+        expectCreate("""
+                {"clientId":"%s","purpose":"NEWS_ALERT","tone":"NONE"}
+                """.formatted(CLIENT), 400, "News Alert drafts are made from approved reports, not written here");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM email_drafts", Integer.class)).isZero();
     }
 
     @Test

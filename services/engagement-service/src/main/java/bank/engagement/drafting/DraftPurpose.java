@@ -10,8 +10,11 @@ public enum DraftPurpose {
     PRE_HOLIDAY_REVIEW("An invitation to meet and plan ahead before the upcoming public holiday."),
     HEALTH_CHECK_IN("A friendly note offering a conversation. The agent adds their own reason for getting in "
             + "touch at {{agent_details}}. Never suggest that anything about the client has been noticed."),
+    /** History only: replaced by {@link #NEWS_ALERT}. Older drafts stay readable; none can be created. */
     ALERT_FOLLOW_UP("A short note offering to talk through recent developments the client may want to discuss. "
-            + "The agent adds the topic at {{agent_details}}. Never name a company, market, event or figure.");
+            + "The agent adds the topic at {{agent_details}}. Never name a company, market, event or figure."),
+    /** One client's email with the reports the agent approved on Event Alerts. Never written by a model. */
+    NEWS_ALERT("An update on companies in the client's portfolio, with the approved reports attached.");
 
     private final String description;
 

@@ -1,6 +1,7 @@
 package bank.alert.worker;
 
 import bank.alert.config.ReplayProperties;
+import bank.alert.config.ResearchProperties;
 import bank.alert.ingestion.IngestionJob;
 import bank.alert.ingestion.IngestionOutcome;
 import bank.alert.ingestion.IngestionStatus;
@@ -47,7 +48,8 @@ class WorkerRunnerTest {
     }
 
     private WorkerRunner runner(ReplayProperties replay) {
-        return new WorkerRunner(job, Clock.fixed(NOW, ZoneOffset.UTC), replay, audit, meters, controls, pipeline);
+        return new WorkerRunner(job, Clock.fixed(NOW, ZoneOffset.UTC), replay, audit,
+                new ResearchProperties(null, null, null, null), meters, controls, pipeline);
     }
 
     @ParameterizedTest
@@ -60,7 +62,8 @@ class WorkerRunnerTest {
 
         verify(job).runScheduledWindow(NOW);
         verify(audit, never()).record(any(), any());
-        assertThat(runner.getExitCode()).isEqualTo(status == IngestionStatus.FAILED ? 1 : 0);
+        assertThat(runner.getExitCode()).isEqualTo(
+                status == IngestionStatus.FAILED || status == IngestionStatus.INVALID_FILTER ? 1 : 0);
         assertThat(meters.counter("alert.worker.runs", "status", status.name().toLowerCase()).count())
                 .isEqualTo(1.0);
     }

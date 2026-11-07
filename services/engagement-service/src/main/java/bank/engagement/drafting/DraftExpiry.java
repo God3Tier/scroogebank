@@ -34,6 +34,7 @@ class DraftExpiry {
     private final DraftProperties properties;
     private final TransactionTemplate transactions;
     private final Clock clock;
+    private final NewsDraftStore newsStore;
 
     @Scheduled(initialDelayString = "${engagement.drafts.expiry-initial-delay:5m}",
             fixedDelayString = "${engagement.drafts.expiry-interval:24h}")
@@ -58,6 +59,8 @@ class DraftExpiry {
                 List<EmailDraft> expired = repository.lockExpired(before, BATCH_SIZE);
                 for (EmailDraft draft : expired) {
                     draft.discard(clock.instant());
+                    // A News Alert draft gives its reports back; the clients keep their status.
+                    newsStore.release(draft.getId());
                     Map<String, Object> data = DraftService.auditData(draft);
                     data.put("reason", "expired");
                     audit.record(AuditAction.DRAFT_DISCARD, AuditTrail.SYSTEM, data);

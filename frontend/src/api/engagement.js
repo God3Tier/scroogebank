@@ -1,4 +1,4 @@
-import { query, requestJson } from './request.js'
+import { query, requestBlob, requestJson } from './request.js'
 
 // engagement-service (docs/api/engagement-api.yaml): the agent's calendar,
 // reminders, follow-up drafts and notification preferences. Agents only; the
@@ -159,10 +159,17 @@ export const PURPOSES = [
   { value: 'MEETING_FOLLOW_UP', label: 'Meeting follow-up' },
   { value: 'HOLIDAY_GREETING', label: 'Holiday greeting' },
   { value: 'PRE_HOLIDAY_REVIEW', label: 'Catch-up before a holiday' },
-  // Offered only when the page is opened from a task or an alert (ADR-0068).
+  // Offered only when the page is opened from a Client Health task (ADR-0068).
   { value: 'HEALTH_CHECK_IN', label: 'Client Health follow-up', source: 'healthTaskId' },
-  { value: 'ALERT_FOLLOW_UP', label: 'Alert follow-up', source: 'alertId' },
+  // Made from the reports the agent approved on Event Alerts (news-alert-drafts plan 5.5).
+  { value: 'NEWS_ALERT', label: 'News Alert', news: true },
 ]
+
+// Older drafts may still show the purpose News Alert replaced.
+export const PURPOSE_LABELS = {
+  ...Object.fromEntries(PURPOSES.map((purpose) => [purpose.value, purpose.label])),
+  ALERT_FOLLOW_UP: 'Alert follow-up',
+}
 
 // Shown where the agent adds their own details to a follow-up from another
 // feature; sending is refused until it is replaced or deleted (ADR-0068).
@@ -185,4 +192,37 @@ export const MAIL_STATUS_LABELS = {
   MISSED: 'Missed',
   CANCELLED: 'Cancelled',
   DISABLED: 'Off',
+}
+
+// "Notify selected clients of news": each chosen client's approved report goes on that client's
+// News Alert draft. Returns { drafts: [{draftId, clientId, created, reportCount, added}], skipped }.
+export function createNewsDrafts({ eventId, alertIds }) {
+  return requestJson('/api/engagement/drafts/news', { method: 'POST', body: { eventId, alertIds } })
+}
+
+// The alerts on the agent's open News Alert drafts: those clients cannot be dismissed on Event Alerts.
+export function listOpenNewsAlerts() {
+  return requestJson('/api/engagement/drafts/news/open-alerts')
+}
+
+export function removeNewsReport(draftId, alertId) {
+  return requestJson(`/api/engagement/drafts/${encodeURIComponent(draftId)}/reports/${encodeURIComponent(alertId)}`, {
+    method: 'DELETE',
+  })
+}
+
+// keep: keep the agent's text and clear the "Rebuild summary?" prompt.
+export function rebuildNewsSummary(draftId, { keep = false } = {}) {
+  return requestJson(`/api/engagement/drafts/${encodeURIComponent(draftId)}/summary/rebuild${keep ? '?keep=true' : ''}`, {
+    method: 'POST',
+  })
+}
+
+// Exactly the combined PDF the client would get.
+export function previewNewsPdf(draftId) {
+  return requestBlob(`/api/engagement/drafts/${encodeURIComponent(draftId)}/pdf`)
+}
+
+export function retryNewsStatus(draftId) {
+  return requestJson(`/api/engagement/drafts/${encodeURIComponent(draftId)}/news-status`, { method: 'POST' })
 }

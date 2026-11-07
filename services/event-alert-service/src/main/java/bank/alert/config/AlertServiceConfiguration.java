@@ -15,13 +15,19 @@ import java.time.Clock;
 @EnableConfigurationProperties({
         AlertModeProperties.class,
         IngestionProperties.class,
+        SearchFilterProperties.class,
         AiProperties.class,
         BedrockAiProperties.class,
+        AnthropicAiProperties.class,
         OperationalProperties.class,
         ReplayProperties.class,
+        ResearchProperties.class,
+        SearchOnAddProperties.class,
+        ScheduleProperties.class,
         TavilyProperties.class,
         PipelineProperties.class,
-        CrmDirectoryProperties.class
+        CrmDirectoryProperties.class,
+        ReportReviewProperties.class
 })
 public class AlertServiceConfiguration {
 

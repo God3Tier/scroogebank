@@ -10,25 +10,23 @@ import java.util.List;
 public class IssuerQueryBuilder {
 
     /**
-     * One focused search per topic for every instrument. The 2026-10-31 Tavily experiment found about twice as
-     * many usable stories this way as with one mixed search; two topics found 10 of the 13 that four did, at
-     * half the credits.
+     * Exactly two searches for every instrument, one per query group (ADR-0084). The 2026-10-31 Tavily experiment
+     * found about twice as many usable stories this way as with one mixed search. Adding domains to a request
+     * does not add searches.
      */
-    private static final List<List<String>> TOPIC_TERMS = List.of(
-            List.of("earnings", "results", "financial results", "profit", "revenue", "guidance"),
-            List.of("merger", "acquisition", "takeover", "divestment", "buyback"));
+    static final List<String> PERFORMANCE_AND_CREDIT = List.of(
+            "earnings", "results", "profit", "revenue", "guidance", "dividend",
+            "credit rating", "downgrade", "upgrade", "default", "credit outlook");
+    static final List<String> CORPORATE_AND_EXTERNAL_EVENTS = List.of(
+            "merger", "acquisition", "takeover", "divestment", "buyback", "regulatory action",
+            "investigation", "fine", "filing", "approval", "appointment", "resignation", "steps down");
+    private static final List<List<String>> TOPIC_TERMS = List.of(PERFORMANCE_AND_CREDIT, CORPORATE_AND_EXTERNAL_EVENTS);
 
     public static final int QUERIES_PER_INSTRUMENT = TOPIC_TERMS.size();
 
-    public List<IssuerSearchQuery> build(List<InstrumentSearchTerms> instruments,
-            List<String> sharedDomains, int maximumQueries) {
-        if (maximumQueries < 1 || maximumQueries > 4) {
-            throw new IllegalArgumentException("maximumQueries must be between 1 and 4");
-        }
+    /** Two searches for every instrument given; there is no cap on how many instruments (ADR-0084). */
+    public List<IssuerSearchQuery> build(List<InstrumentSearchTerms> instruments, List<String> sharedDomains) {
         if (instruments == null || instruments.isEmpty()) return List.of();
-        if (instruments.size() * QUERIES_PER_INSTRUMENT > maximumQueries) {
-            throw new IllegalArgumentException("instrument catalogue exceeds the bounded query capacity");
-        }
 
         List<IssuerSearchQuery> queries = new ArrayList<>();
         for (InstrumentSearchTerms instrument : instruments) {

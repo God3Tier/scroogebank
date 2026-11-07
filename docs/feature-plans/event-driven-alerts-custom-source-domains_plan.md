@@ -1,7 +1,7 @@
 # Agent-added search domains per company
 
 Owner: Hayyun. Reviewer: Azeez (approved). Status: Implemented and tested locally (backend 303 tests, frontend 292 tests); not deployed. Last updated: 2026-11-04.
-Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Decision: [ADR-0079](../adr/ADR-0079-agent-added-search-domains-per-company.md) (Accepted).
+Parent: [event-driven alerts plan](event-driven-alerts_plan.md). Superseded in part by [ADR-0082](../adr/ADR-0082-one-shared-list-of-search-websites.md) (one shared list of websites instead of per-company ones). Decision: [ADR-0079](../adr/ADR-0079-agent-added-search-domains-per-company.md) (Accepted).
 Branch: `task/event-driven-alerts/custom-source-domains`, from `dev` at `0c0c7d2`. Merges into `feat/event-driven-alerts` only when Hayyun says so.
 
 ## Goal and scope

@@ -209,6 +209,9 @@ var engagementActions = map[string]bool{
 	"EMAIL_SEND":         true,
 	"EMAIL_SEND_FAILED":  true,
 	"PREFERENCES_UPDATE": true,
+
+	// A report taken off a News Alert draft (news-alert-drafts plan, section 9).
+	"DRAFT_REPORT_REMOVED": true,
 }
 
 // ValidEngagementPayload is engagement-service's outbox envelope, the same
@@ -322,6 +325,7 @@ func validateEventAlertPayload(envelope ValidEvent) error {
 		"DECISION_RECORDED":           true,
 		"FEEDBACK_RECORDED":           true,
 		"OPERATIONAL_CONTROL_CHANGED": true,
+		"REPORT_GENERATED":            true,
 	}
 	if !allowedActions[envelope.Action] {
 		return fmt.Errorf("unrecognized action for EVENT_ALERT_SERVICE: %s", envelope.Action)

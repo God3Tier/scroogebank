@@ -1,5 +1,56 @@
 # AI usage log
 
+## 2026-11-07 - News alerts sent from Follow-up Emails (news-alert-drafts plan)
+
+- Human owner: Hayyun; engagement part for Neo Jia Wen's review; edit checks for Azeez's approval.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Plan client briefing or Dismiss with a final Sent Out status; editable reports checked again; final approval; one combined server-rendered PDF; an optional summary sentence per report; News Alert drafts in Follow-up Emails with send-check, the PDF attached and Sent Out; removal of ADR-0084's direct delivery and the alert follow-up.
+- Files/components affected: event-alert-service `report/` (edits, approval, PDF, routes), state machine, V17; engagement-service `drafting/` (news drafts), `notifications/` (attachments), `integration/sources/`, V3 replaced; auditor allow-list; Terraform `agent-engagement`; Event Alerts and Follow-up Emails pages; OpenAPI, contracts, schema, runbook, ADR-0085 and ADR-0086.
+- Data/calls: no live model, Tavily or SES calls; unit and Testcontainers tests with the model, event-alert-service and mail mocked. No client data, client set of reports or agent-edited text reaches a model, and the PDF holds no client data.
+- Verification: Maven tests for event-alert-service and engagement-service, Vitest, ESLint and the Vite build pass (NavBar.test.jsx fails to load on this machine for a reason unrelated to this change). The auditor Go tests were not run because Go is not usable here.
+- Round 2 (same day): Edit / Preview as one text box in place, batch Notify across tickers with a floating helper, one open news draft per client (V4), a final Sent Out refusal ending the retry, and the page-only dismiss block recorded as accepted. Maven (145 engagement tests), Vitest and the Vite build pass; the Go auditor tests were not touched.
+- Round 3 (same day): Save and preview with a confirm, the download carries the saved edit, the page refreshes itself, a refused report says so; V18 (Anthropic), the seeding script's news profile, the worker's `report_summary_enabled`. Maven, Vitest, the script's unit tests and `terraform test` pass; the script ran against the local stack only.
+- Human verification required: Azeez's approval of the edit checks and the summary sentence; Neo Jia Wen's review of the engagement changes; a measured 30-report PDF render and send against the 30-second limit; one SES send with a PDF attachment to a verified recipient; the auditor Go tests.
+
+## 2026-11-05 - Multi-source client report and its delivery (parts 2 and 3 of the plan by Azeez)
+
+- Human owner: Hayyun, from the plan by Azeez.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Group sources into one event, write one cited `alert-client-report-v2` report per event (the application adds the portfolio line, disclaimer and contact details), show it to the agent, and email it to the clients the agent chose after the agent approves it.
+- Files/components affected: event-alert-service `report/` package, `AlertGenerationService`, `SourcePipeline`, event card and detail queries, migration V12, the delivery-package endpoint; engagement-service `alertreports/` package, `ReportPackages`, migration V3, audit actions; the auditor allow-list; the Event Briefings page; OpenAPI and contract documents; the `agent-engagement` Terraform stack switch.
+- Data/calls: no live model, Tavily or SES calls; unit and Testcontainers tests with the model and mail mocked. The model sees only public evidence, never client, account or holding data.
+- Verification: Maven tests for event-alert-service and engagement-service, Vitest, ESLint and the Vite build pass. The auditor change was not run because Go is not installed on this machine.
+- Human verification required: a keyed Tavily test for one named instrument; one SES-sandbox end-to-end send to a verified recipient; the auditor Go tests; review of the sending design in ADR-0084 decision 16.
+
+## 2026-11-05 - Full-coverage search (part 1 of Azeez's plan)
+
+- Human owner: Hayyun, from the plan by Azeez; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Search every eligible instrument on every run with exactly two searches each, reserve the whole run against the monthly quota and the USD 25 budget, and add `ALERT_SEARCH_ONLY_INSTRUMENT_ID` for lower environments (ADR-0084, Proposed). Parts 2 (one report per event) and 3 (delivery) are not yet built.
+- Files/components affected: `IssuerQueryBuilder` (two query groups, no cap), `InstrumentCoverageService` (no rotation), `IngestionJob` and `SearchFilterProperties` (the single-instrument setting), `OutboundControlService` and `OperationalProperties` (the budget check and `estimatedSearchCostUsd`), `IngestionStatus.INVALID_FILTER`, `application.yml`; their unit tests; the operations runbook.
+- Data/calls: none to Tavily or a model; unit tests only.
+- Verification: `mvn test` for event-alert-service passes.
+- Human verification required: review of ADR-0084; a live billed-credit benchmark before the quota is raised; Azeez's approval before ingestion is enabled.
+## 2026-11-05 - Claude through the Anthropic API as a model for a developer machine
+
+- Human owner: Hayyun; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Add `AnthropicAiModelGateway`, a second implementation of the model gateway chosen by `alert.ai.provider=anthropic`, so the pipeline from search to alert can be tried on a laptop (ADR-0083, Proposed). It is never set by the Terraform stacks.
+- Files/components affected: `ai/AnthropicAiModelGateway`, `AnthropicAiGatewayConfiguration`, `config/AnthropicAiProperties`, `application.yml` (`alert.ai.model` from `ALERT_AI_MODEL`, `alert.ai.anthropic.api-key`), their unit tests and a key-gated live test; `docs/adr/ADR-0083`.
+- Data/calls: public news excerpts only; a few real calls to `claude-sonnet-5-5` from a developer machine on the owner's key; no client data; no AWS calls.
+- Verification: unit tests against a local stand-in for the API pass; one real call classified a headline correctly; a local run stored 7 real articles, 5 became alerts with summaries and 3 were held back for low confidence.
+- Human verification required: review of ADR-0083; that article text leaving the Singapore and AWS boundary is acceptable for development only; the owner to rotate the API key, which was shared in a chat; classification quality has not been run against the ADR-0010 benchmark.
+
+## 2026-11-05 - Searches by hand and on adding a website; one shared list of websites; fixed schedule
+
+- Human owner: Hayyun; review pending.
+- AI tool: Claude Code (Anthropic).
+- Task/purpose: Start a targeted worker run when an agent adds a website or presses Search now, with a per-company cooldown and no small cap (ADR-0081, Proposed); replace the per-company websites with one shared list and show which clients hold each company (ADR-0082, Proposed); run the automatic searches at fixed Singapore times and show the next one; keep the client alerts always open.
+- Files/components affected: event-alert-service migrations V14 and V15, `SearchWebsite`, `SearchWebsiteService`, `HoldingsOverview`, `SourceSearchRequest`, `research/` (service, ECS and local-process triggers), `ResearchProperties`, `SearchOnAddProperties`, `ScheduleProperties`, `SearchScheduleService`, the new search controllers, `IngestionCoordinator.research`, `IngestionJob.researchCompanies`, `WorkerRunner`, the raised per-run search limits; `docs/api/openapi.yaml`; the `crm` stack (`alert_search_on_add`, a start-the-worker policy) and the `alert-worker` schedule, with their tests; the Event Alerts page and the Search sources screens and their tests.
+- Data/calls: synthetic data only; a local PostgreSQL in Docker; real Tavily searches from a developer machine (a few credits); no AWS calls.
+- Verification: event-alert-service `mvn test`, frontend tests and lint, and `terraform fmt`, `validate` and `test` for the `crm` and `alert-worker` stacks pass. A local run against real Tavily stored a passing article for DBS.
+- Human verification required: review of ADR-0081 and ADR-0082; starting the worker through ECS in AWS (permissions and reaching the ECS API); the cron schedule in AWS; the credits spent per company per run.
+
 ## 2026-11-04 - The alert worker runs once at the end of every apply
 
 - Human owner: Hayyun; review pending.

@@ -121,6 +121,35 @@ class EmailDraft {
         this.updatedAt = now;
     }
 
+    /**
+     * A News Alert draft (news-alert-drafts plan, section 5.5): one client, built from approved reports with no model
+     * call, so its purpose, tone and source are fixed.
+     */
+    static EmailDraft news(UUID id, String ownerAgentSub, UUID clientId, String subject, String body, Instant now) {
+        EmailDraft draft = new EmailDraft();
+        draft.id = Objects.requireNonNull(id);
+        draft.ownerAgentSub = Objects.requireNonNull(ownerAgentSub);
+        draft.clientId = Objects.requireNonNull(clientId);
+        draft.purpose = DraftPurpose.NEWS_ALERT;
+        draft.tone = DraftTone.NONE;
+        draft.source = DraftSource.NEWS;
+        draft.subjectTemplate = subject;
+        draft.bodyTemplate = body;
+        draft.status = DraftStatus.DRAFT;
+        draft.createdAt = now;
+        draft.updatedAt = now;
+        return draft;
+    }
+
+    /** The service rebuilt the text after the reports changed; this is not the agent's edit. */
+    void rebuilt(String subject, String body, Instant now) {
+        subjectTemplate = subject;
+        bodyTemplate = body;
+        updatedAt = now;
+    }
+
+    boolean isNews() { return purpose == DraftPurpose.NEWS_ALERT; }
+
     void edit(String subject, String body, Instant now) {
         if (!subject.equals(subjectTemplate) || !body.equals(bodyTemplate)) {
             edited = true;
@@ -170,6 +199,7 @@ class EmailDraft {
     UUID getHolidayId() { return holidayId; }
     DraftStatus getStatus() { return status; }
     Instant getSentAt() { return sentAt; }
+    String getSesMessageId() { return sesMessageId; }
     int getVersion() { return version; }
     Instant getCreatedAt() { return createdAt; }
     Instant getUpdatedAt() { return updatedAt; }

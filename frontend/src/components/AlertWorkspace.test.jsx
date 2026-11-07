@@ -37,8 +37,8 @@ describe('AlertWorkspace', () => {
     listAlerts.mockResolvedValue({ items: [alert], nextCursor: null })
     getAlert.mockResolvedValue(detail)
     recordDecision.mockResolvedValue({
-      id: 'decision-1', alertId: alert.id, decision: 'MONITOR',
-      previousStatus: 'NEW', newStatus: 'MONITORING',
+      id: 'decision-1', alertId: alert.id, decision: 'INFORM_CLIENT',
+      previousStatus: 'NEW', newStatus: 'INFORMED',
       actorSubject: 'syn-agent-001', decidedAt: '2026-09-28T00:05:00Z', alertVersion: 1,
     })
     recordFeedback.mockResolvedValue({ id: 'feedback-1', rating: 'USEFUL' })
@@ -62,11 +62,11 @@ describe('AlertWorkspace', () => {
 
     await waitFor(() => expect(recordDecision).toHaveBeenCalledWith(
       alert.id,
-      { decision: 'MONITOR', expectedVersion: 0, note: null },
+      { decision: 'INFORM_CLIENT', expectedVersion: 0, note: null },
     ))
-    expect(await screen.findByText('Continue monitoring recorded.')).toBeInTheDocument()
-    expect(screen.getByText('Monitoring', { selector: '.status-badge' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Latest recorded decision')).toHaveTextContent('Continue monitoring')
+    expect(await screen.findByText('Decision complete.')).toBeInTheDocument()
+    expect(screen.getByText('Plan client briefing', { selector: '.status-badge' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Latest recorded decision')).toHaveTextContent('Plan client briefing')
     expect(screen.getByLabelText('Latest recorded decision')).toHaveTextContent('alert v1')
   })
 

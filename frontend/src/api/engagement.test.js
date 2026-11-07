@@ -5,12 +5,15 @@ import {
   cancelEvent,
   createDraft,
   createEvent,
+  createNewsDrafts,
   followUpLink,
   fromLocalInput,
   isCrmClientId,
   listEvents,
   listHolidays,
   monthWindow,
+  rebuildNewsSummary,
+  removeNewsReport,
   sendDraft,
   singaporeParts,
   toLocalInput,
@@ -83,6 +86,19 @@ describe('engagement API', () => {
     expect(isCrmClientId('55555555-5555-4555-8555-555555555555')).toBe(true)
     expect(isCrmClientId('syn-client-001')).toBe(false)
     expect(isCrmClientId(null)).toBe(false)
+  })
+
+  it('makes News Alert drafts and changes their reports through the news routes', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ drafts: [], skipped: [] }))
+    await createNewsDrafts({ eventId: 'e-1', alertIds: ['a-1'], extra: 'ignored' })
+    await removeNewsReport('d-1', 'a-1')
+    await rebuildNewsSummary('d-1', { keep: true })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/engagement/drafts/news')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ eventId: 'e-1', alertIds: ['a-1'] })
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/engagement/drafts/d-1/reports/a-1')
+    expect(fetchMock.mock.calls[1][1].method).toBe('DELETE')
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/engagement/drafts/d-1/summary/rebuild?keep=true')
   })
 
   it('reports the status and message of an error', async () => {

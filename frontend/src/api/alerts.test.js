@@ -38,7 +38,7 @@ describe('alert API', () => {
       { status: 503, headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '5' } },
     )))
 
-    await expect(recordDecision('alert-1', { decision: 'MONITOR', expectedVersion: 0 }, 'decision-key-001'))
+    await expect(recordDecision('alert-1', { decision: 'DISMISS', expectedVersion: 0 }, 'decision-key-001'))
       .rejects.toMatchObject({ status: 503, retryAfter: '5', message: 'audit outbox is at capacity' })
   })
 

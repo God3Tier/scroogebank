@@ -102,7 +102,7 @@ class OutboundPrivacyTest {
                 .map(id -> new InstrumentSearchTerms(id, id + " Holdings", "Synthetic", List.of(),
                         List.of("earnings"), List.of("sgx.com")))
                 .toList();
-        List<IssuerSearchQuery> queries = new IssuerQueryBuilder().build(catalogue, List.of("sgx.com"), 4);
+        List<IssuerSearchQuery> queries = new IssuerQueryBuilder().build(catalogue, List.of("sgx.com"));
         TavilySearchProvider provider = new TavilySearchProvider(
                 URI.create("http://127.0.0.1:" + tavily.getAddress().getPort() + "/search"), "tvly-test",
                 Duration.ofSeconds(5), 16_384, new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC),

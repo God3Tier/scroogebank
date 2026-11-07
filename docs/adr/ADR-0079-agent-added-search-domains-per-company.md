@@ -7,7 +7,7 @@
 - Feature/branch: `task/event-driven-alerts/custom-source-domains`
 - Related issue/PR: TBD
 - Supersedes: none; extends [ADR-0051](ADR-0051-single-issuer-search-and-relevance-gate.md) decision 2 (official domains are fixed reference data)
-- Superseded by: N/A
+- Superseded by: [ADR-0082](ADR-0082-one-shared-list-of-search-websites.md) in part (decisions 1, 2 and 4, and the search part of 5: one shared list of websites replaces per-company ones)
 
 ## Context
 

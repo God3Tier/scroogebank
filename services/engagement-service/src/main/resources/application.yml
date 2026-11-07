@@ -39,6 +39,14 @@ engagement:
     health-base-url: ${CLIENT_HEALTH_BASE_URL:}
     alerts-base-url: ${ALERT_SERVICE_BASE_URL:}
     timeout: 5s
+    # The combined report PDF is rendered by event-alert-service on the send, so it gets more time than the
+    # other calls, still well inside API Gateway's 30-second limit (news-alert-drafts plan, section 11).
+    pdf-timeout: 15s
+  news:
+    # A safety limit for send time and file size, not a product rule; set from a real measurement.
+    max-reports-per-email: 30
+    # The summary lists at most this many companies; the rest are named in the guide to the PDF.
+    summary-lines: 10
   drafts:
     # An open draft not changed for this long is discarded and its text
     # cleared by a daily job (ADR-0068).

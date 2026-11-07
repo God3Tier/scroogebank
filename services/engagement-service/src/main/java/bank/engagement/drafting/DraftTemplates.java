@@ -159,6 +159,8 @@ final class DraftTemplates {
 
                             Best wishes,
                             {{agent_name}}""");
+            // A News Alert draft is built from approved reports by NewsDraftService, never from a template.
+            case NEWS_ALERT -> throw new IllegalArgumentException("News Alert drafts have no template");
         };
     }
 }

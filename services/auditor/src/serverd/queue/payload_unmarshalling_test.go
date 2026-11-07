@@ -655,6 +655,7 @@ func TestValidatePayload_ValidEngagementActions(t *testing.T) {
 		"REMINDER_SENT", "REMINDER_FAILED", "REMINDER_MISSED",
 		"DRAFT_GENERATE", "DRAFT_DISCARD", "EMAIL_SEND", "EMAIL_SEND_FAILED",
 		"PREFERENCES_UPDATE",
+		"DRAFT_REPORT_REMOVED",
 	}
 	for _, action := range actions {
 		t.Run(action, func(t *testing.T) {

@@ -19,6 +19,8 @@ public enum AuditAction {
     DRAFT_DISCARD,
     EMAIL_SEND,
     EMAIL_SEND_FAILED,
+    /** A report taken off a News Alert draft (news-alert-drafts plan, section 9). */
+    DRAFT_REPORT_REMOVED,
     PREFERENCES_UPDATE;
 
     static final String PREFIX = "engagement.";

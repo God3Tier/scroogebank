@@ -44,7 +44,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Applies one Inform / Monitor / Dismiss choice to an explicit set of an agent's
+ * Applies one "Plan client briefing" / Dismiss choice to an explicit set of an agent's
  * affected clients, as a single audited group operation with a recorded outcome for
  * every member. "Inform" records the agent's intent; it never contacts a client.
  *
@@ -87,6 +87,9 @@ public class AgentEventActionService {
     @Transactional
     public ActionResult apply(UUID eventId, String actor, String idempotencyKey, UUID correlationId,
             ActionRequest request) {
+        if (!request.decision().accepted()) {
+            throw new IllegalArgumentException("decision is no longer accepted");
+        }
         Set<UUID> distinct = new HashSet<>();
         for (ActionMember member : request.members()) {
             if (!distinct.add(member.alertId())) {
@@ -155,6 +158,10 @@ public class AgentEventActionService {
             next = stateMachine.transition(previous, request.decision());
         } catch (InvalidAlertTransitionException exception) {
             return new MemberResult(member.alertId(), MemberOutcome.INVALID_TRANSITION, previous, null);
+        }
+        if (next == previous) {
+            // The client already has this status: nothing to change and nothing to record.
+            return new MemberResult(member.alertId(), MemberOutcome.APPLIED, previous, next);
         }
         alert.transitionTo(next);
         alerts.saveAndFlush(alert);
