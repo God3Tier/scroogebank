@@ -43,7 +43,7 @@ public record IngestionProperties(
                         "merger", "acquisition", "takeover", "divestment", "buyback",
                         "credit rating", "downgrade", "upgrade", "default", "credit outlook",
                         "appointment", "appointed", "appoints", "resignation", "resigned", "steps down",
-                        // Added 2026-11-07 (Azeez to approve)
+                        // Added 2026-11-07, approved by Azeez
                         "probe", "lawsuit", "settlement", "layoffs", "recall", "bankruptcy",
                         "outlook", "forecast", "deal", "stake", "partnership", "launches",
                         "plans", "cuts", "raises", "rejects", "weighs", "posts",

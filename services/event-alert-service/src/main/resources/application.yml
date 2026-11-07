@@ -136,7 +136,7 @@ alert:
       - resignation
       - resigned
       - steps down
-      # Added 2026-11-07 (AWS test feedback; Azeez to approve): more words that name a company event in a title.
+      # Added 2026-11-07 (AWS test feedback), approved by Azeez: more words that name a company event in a title.
       - probe
       - lawsuit
       - settlement

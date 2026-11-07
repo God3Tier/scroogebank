@@ -123,3 +123,7 @@ still unmet and the benchmark labels have not been human-reviewed.
 ## Addendum, 2026-11-07: wider approved list (Tavily stays restricted)
 
 The shared approved list was widened from reuters.com, cnbc.com and ft.com to about two dozen well-known news and finance sites (see `application.yml`; the alert-worker variable `approved_news_domains`). Tavily is still restricted to the approved sites, each company's official sites and the websites agents add (`include_domains`, mode `restrict`). An open-web search with a local filter was tried the same day and reverted at the requester's request. Azeez's query text and relevance filter (`IssuerSearchQuery.accepts`) are unchanged; the platforms anyone can post on stay blocked.
+
+## Addendum, 2026-11-07: more event words
+
+Thirty words were added to the controlled event vocabulary of decision 4 (probe, lawsuit, settlement, layoffs, recall, bankruptcy, outlook, forecast, deal, stake, partnership, launches, plans, cuts, raises, rejects, weighs, posts, winding down, shares fall, warns, beats, misses, acquires, sues, hack, breach, outage, ban, sanctions). Azeez approved them. The title must still name the company, so a market roundup with no event word stays out. Words that mostly bring market chatter (ipo, valuation, ceo, quarter, rally, sell-off) were tested and left out.
