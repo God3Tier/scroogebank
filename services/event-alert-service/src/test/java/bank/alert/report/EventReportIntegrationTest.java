@@ -682,6 +682,19 @@ class EventReportIntegrationTest {
     }
 
     @Test
+    void theAnthropicCompanyComesWithTheMigrationsAndIsNotDuplicated() {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM instrument WHERE id = 'PRIV-ANTHROPIC' AND active", Long.class)).isOne();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM instrument WHERE id IN ('LSE-SHEL', 'NASDAQ-AAPL')", Long.class))
+                .as("Shell and Apple come from V8").isEqualTo(2);
+        jdbc.update("""
+                INSERT INTO instrument (id, ticker, issuer_name, sector, currency, active, search_aliases, official_domains)
+                SELECT 'PRIV-ANTHROPIC', 'Anthropic', 'Anthropic', 'Technology', 'USD', true, '[]'::jsonb, '[]'::jsonb
+                 WHERE NOT EXISTS (SELECT 1 FROM instrument WHERE id = 'PRIV-ANTHROPIC')
+                """);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM instrument WHERE id = 'PRIV-ANTHROPIC'", Long.class)).isOne();
+    }
+
+    @Test
     void aLaterArticleStartsTheNextEventAndLeavesTheEarlierOneAlone() {
         eventWithInformedCrmClient();
         store("two.example", "2026-09-26T23:00:00Z", "b");

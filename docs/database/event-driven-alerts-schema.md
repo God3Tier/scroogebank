@@ -108,6 +108,9 @@ agent's unapproved edit of one report version), `approved_report` (the frozen te
 and final hashes and `valid_until`; the text is cleared once every client on it is Sent Out or 14 days after it
 expired) and `alert_sent_out` (which email took a client to Sent Out).
 
+`V18__seed_anthropic_instrument.sql` adds the Anthropic company (`PRIV-ANTHROPIC`, a private company searched by name) if it is not
+there, so every environment, including a fresh one after teardown, has it. Shell and Apple come from V8.
+
 Engagement service `V3__news_draft_reports.sql` (ADR-0086) replaces the never-deployed `V3__alert_report_deliveries.sql`.
 It changes `email_drafts` constraints only (purpose `NEWS_ALERT`, tone `NONE`, source `NEWS`, all three together) and
 adds `email_draft_reports` (the approved reports on a news draft; a partial unique index keeps a client's report on

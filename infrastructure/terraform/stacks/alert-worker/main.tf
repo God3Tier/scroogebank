@@ -121,6 +121,7 @@ module "event_alert_worker" {
     ALERT_AI_ENABLED                    = tostring(var.ai_enabled)
     ALERT_AI_PROVIDER                   = var.ai_enabled ? "bedrock" : "none"
     ALERT_AI_BEDROCK_REGION             = var.bedrock_region
+    ALERT_REPORT_SUMMARY_ENABLED        = tostring(var.report_summary_enabled)
     # The API process publishes the audit outbox, including rows a worker run
     # leaves behind, so the worker needs no queue access.
     ALERT_AUDIT_PUBLISHER_ENABLED    = "false"

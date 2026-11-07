@@ -1,7 +1,7 @@
 # News alerts: one email per client with one combined report PDF, sent from Follow-up Emails
 
 Owner: Hayyun (event-driven alerts) and Neo Jia Wen (agent engagement). Reviewers: Azeez (report design).
-Status: Proposed, not started. Last updated: 2026-11-07.
+Status: Built on `task/event-driven-alerts/news-alert-drafts`; review by Jiawen and Azeez pending. Last updated: 2026-11-07.
 Parent plans: [event-driven alerts](event-driven-alerts_plan.md), [full-coverage reports](event-driven-alerts-full-coverage-reports_plan.md), [agent engagement](agent-engagement_plan.md).
 Based on: `feat/event-driven-alerts` at `d6573cf`. This version replaces the 2026-11-06 version (one PDF per report, at most 10 per email) and the first 2026-11-07 draft.
 
@@ -10,6 +10,12 @@ Based on: `feat/event-driven-alerts` at `d6573cf`. This version replaces the 202
 - The email body has an editable **summary** and a generated **guide** to where each company sits in the PDF, with page numbers.
 - The send makes one server call to build the combined PDF, not one call per report.
 - A staleness warning is shown on approved reports.
+
+**Changes in the round-3 revision (2026-11-07, getting ready for AWS)**
+1. **Summary sentence approved:** Azeez approved it. `ALERT_REPORT_SUMMARY_ENABLED` stays off in the application's own default (so a local run never turns it on by accident) and the alert-worker Terraform now sets it on (`report_summary_enabled`, default true).
+2. **Anthropic comes with the migrations (V18)** so every environment, including a fresh one after teardown, has it.
+3. **Test data is re-created by `scripts/seed-demo-portfolios.py --profile news`** (holdings for one client with Shell, Anthropic and Apple, one with Apple and Anthropic, and the rest Apple), with `--add-websites` and `--search`. Nothing local travels to AWS.
+4. **Edit button** reads "Save and preview" and asks before saving; **Download** carries the saved edit; the page **checks for new reports every 20 seconds**; a ticker whose report the AI refused says so.
 
 **Changes in the round-2 revision (2026-11-07, testing and Jiawen's review)**
 1. **Edit mode (5.2):** one Edit / Preview toggle turns the report into a single plain-text box in the same place, with no separate form.
@@ -251,6 +257,8 @@ Where to find each report in the attached PDF (Portfolio-update-2026-11-07.pdf):
 
 ## 6. The summary sentence
 
+**Status:** approved by Azeez. Off in the application's default; on in the alert-worker Terraform (`report_summary_enabled`).
+
 - **What it is:** one sentence per report version, at most 250 characters, saying what happened and why it matters. It is not a summary of a client's set of reports.
 - **Who writes it and when:** the **worker**, straight after it writes the report, as a separate model call. The report schema `alert-client-report-v2` does not change.
   - It is written once and stored on the report. Every agent and every client who gets that report reuses it.
@@ -267,7 +275,7 @@ Where to find each report in the attached PDF (Portfolio-update-2026-11-07.pdf):
   - no citation markers
 
   If any check fails, no sentence is stored, and the summary uses the first sentence of the executive summary instead (5.5).
-- **Switch:** `ALERT_REPORT_SUMMARY_ENABLED`, default `false` until Azeez has reviewed 20 sample sentences. While it is off, every report uses its first sentence.
+- **Switch:** `ALERT_REPORT_SUMMARY_ENABLED`. Azeez has approved the sentence, so the worker's Terraform turns it on; the application's own default stays `false`. While it is off, every report uses its first sentence.
 - **Budget:** each sentence counts toward the worker's existing token quota and the USD 25 monthly guard.
 
 ### Model choice (Nova only)
@@ -550,15 +558,16 @@ The auditor allow-list adds the six new events and drops the four `ALERT_REPORT_
 
 | Task ID | Task | Primary Dev | Collaborators | Files/Components | Branch | Dependencies/Conflict Zones | Status | Last Sync |
 |---|---|---|---|---|---|---|---|---|
-| NA-01 | ADR: alerts amendment | Hayyun | Azeez, Neo Jia Wen | `docs/adr/` | `task/event-driven-alerts/news-alert-drafts` | None | Planned | 2026-11-07 |
-| NA-02 | ADR: engagement amendment | Neo Jia Wen | Hayyun | `docs/adr/` | `task/agent-engagement/news-alert-drafts` | None | Planned | 2026-11-07 |
-| NA-03 | States: remove Monitor, add Sent Out, migration | Hayyun | | `AlertStatus`, `AlertDecisionType`, `AlertStateMachine` | `task/event-driven-alerts/news-alert-drafts` | NA-01 | Planned | 2026-11-07 |
-| NA-04 | Report edits and checks, approval, expiry, retention, staleness values | Hayyun | Azeez | `report/`, `ClientReportValidator`, migration | `task/event-driven-alerts/news-alert-drafts` | NA-03 | Planned | 2026-11-07 |
-| NA-05 | PDF renderer (PDFBox): combined and single-report endpoints, fixed document date and metadata | Hayyun | | `report/`, `pom.xml` | `task/event-driven-alerts/news-alert-drafts` | NA-04 | Planned | 2026-11-07 |
-| NA-06 | Package, send-check, sent-out, approved-reports endpoints | Hayyun | Neo Jia Wen | `api/`, `openapi.yaml` | `task/event-driven-alerts/news-alert-drafts` | NA-04; contract shared with NA-09 | Planned | 2026-11-07 |
-| NA-07 | Summary sentence in the worker, with its checks, behind a switch | Hayyun | Azeez | `report/`, `processing/`, `ai/` | `task/event-driven-alerts/news-alert-drafts` | NA-01 | Planned | 2026-11-07 |
-| NA-08 | Event Alerts page: two options, editor, approve then Notify, staleness line, Sent out tab, dismiss block, single-report download | Hayyun | | `TickerReports.jsx`, `alertEvents.js`, remove `reportPdf.js` | `task/event-driven-alerts/news-alert-drafts` | NA-04 to NA-06, NA-09 | Planned | 2026-11-07 |
-| NA-09 | Engagement: purpose, tone, source, V3 tables, `drafts/news`, summary build and rebuild, preview, guide, fixed text, attachment in mail, send flow and time budget | Neo Jia Wen | Hayyun | `drafting/`, `notifications/`, `integration/sources/`, V1, V3 | `task/agent-engagement/news-alert-drafts` | NA-02, NA-06 | Planned | 2026-11-07 |
-| NA-10 | Remove ADR-0084 part 3 (engagement, auditor, Terraform) | Neo Jia Wen | Hayyun | `alertreports/`, old V3, `AuditAction`, auditor, `stacks/agent-engagement` | `task/agent-engagement/news-alert-drafts` | NA-09 | Planned | 2026-11-07 |
-| NA-11 | Follow-up Emails: locked fields, report list, Preview PDF, summary editor, alternate entry, bulk delete and prompt | Neo Jia Wen | | `AgentDrafts.jsx`, `engagement.js` | `task/agent-engagement/news-alert-drafts` | NA-09; `engagement.js` is changed by both teams | Planned | 2026-11-07 |
-| NA-12 | Runbooks, schema docs, API docs, auditor docs | Hayyun | Neo Jia Wen | `docs/` | Both | All | Planned | 2026-11-07 |
+| NA-01 | ADR: alerts amendment | Hayyun | Azeez, Neo Jia Wen | `docs/adr/` | `task/event-driven-alerts/news-alert-drafts` | None | Built on the branch, review pending | 2026-11-07 |
+| NA-02 | ADR: engagement amendment | Neo Jia Wen | Hayyun | `docs/adr/` | `task/agent-engagement/news-alert-drafts` | None | Built on the branch, review pending | 2026-11-07 |
+| NA-03 | States: remove Monitor, add Sent Out, migration | Hayyun | | `AlertStatus`, `AlertDecisionType`, `AlertStateMachine` | `task/event-driven-alerts/news-alert-drafts` | NA-01 | Built on the branch, review pending | 2026-11-07 |
+| NA-04 | Report edits and checks, approval, expiry, retention, staleness values | Hayyun | Azeez | `report/`, `ClientReportValidator`, migration | `task/event-driven-alerts/news-alert-drafts` | NA-03 | Built on the branch, review pending | 2026-11-07 |
+| NA-05 | PDF renderer (PDFBox): combined and single-report endpoints, fixed document date and metadata | Hayyun | | `report/`, `pom.xml` | `task/event-driven-alerts/news-alert-drafts` | NA-04 | Built on the branch, review pending | 2026-11-07 |
+| NA-06 | Package, send-check, sent-out, approved-reports endpoints | Hayyun | Neo Jia Wen | `api/`, `openapi.yaml` | `task/event-driven-alerts/news-alert-drafts` | NA-04; contract shared with NA-09 | Built on the branch, review pending | 2026-11-07 |
+| NA-07 | Summary sentence in the worker, with its checks, behind a switch | Hayyun | Azeez | `report/`, `processing/`, `ai/` | `task/event-driven-alerts/news-alert-drafts` | NA-01 | Built on the branch, review pending | 2026-11-07 |
+| NA-08 | Event Alerts page: two options, editor, approve then Notify, staleness line, Sent out tab, dismiss block, single-report download | Hayyun | | `TickerReports.jsx`, `alertEvents.js`, remove `reportPdf.js` | `task/event-driven-alerts/news-alert-drafts` | NA-04 to NA-06, NA-09 | Built on the branch, review pending | 2026-11-07 |
+| NA-09 | Engagement: purpose, tone, source, V3 tables, `drafts/news`, summary build and rebuild, preview, guide, fixed text, attachment in mail, send flow and time budget | Neo Jia Wen | Hayyun | `drafting/`, `notifications/`, `integration/sources/`, V1, V3 | `task/agent-engagement/news-alert-drafts` | NA-02, NA-06 | Built on the branch, review pending | 2026-11-07 |
+| NA-10 | Remove ADR-0084 part 3 (engagement, auditor, Terraform) | Neo Jia Wen | Hayyun | `alertreports/`, old V3, `AuditAction`, auditor, `stacks/agent-engagement` | `task/agent-engagement/news-alert-drafts` | NA-09 | Built on the branch, review pending | 2026-11-07 |
+| NA-11 | Follow-up Emails: locked fields, report list, Preview PDF, summary editor, alternate entry, bulk delete and prompt | Neo Jia Wen | | `AgentDrafts.jsx`, `engagement.js` | `task/agent-engagement/news-alert-drafts` | NA-09; `engagement.js` is changed by both teams | Built on the branch, review pending | 2026-11-07 |
+| NA-12 | Runbooks, schema docs, API docs, auditor docs | Hayyun | Neo Jia Wen | `docs/` | Both | All | Done on the branch | 2026-11-07 |
+| NA-13 | Anthropic company (V18), seeding script profile, worker summary switch, AWS checklist | Hayyun | Neo Jia Wen | `db/migration`, `scripts/`, `stacks/alert-worker` | `task/event-driven-alerts/news-alert-drafts` | NA-12 | Done on the branch | 2026-11-07 |

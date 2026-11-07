@@ -31,7 +31,7 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_MAX_QUERIES_PER_RUN` | `1000` | A sanity ceiling on the queries built for one run; every eligible instrument gets two (ADR-0084) |
 | `ALERT_ESTIMATED_SEARCH_COST_USD` | `0.008` | What one search counts as costing against `ALERT_MONTHLY_BUDGET_USD`; a run the budget cannot cover searches nothing |
 | `ALERT_REPORT_APPROVAL_VALID_FOR` | `7d` | How long an approved report can be sent (ADR-0085); the page highlights it from day 5 |
-| `ALERT_REPORT_SUMMARY_ENABLED` | `false` | The worker's one summary sentence per report version, for the news email. Keep off until Azeez has reviewed 20 samples; while off, the email uses each report's first sentence |
+| `ALERT_REPORT_SUMMARY_ENABLED` | `false` (application); on in the alert-worker Terraform | The worker's one summary sentence per report version, for the news email. Approved by Azeez. While off, or when a sentence fails its checks, the email uses the report's first sentence. Set in AWS by the alert-worker variable `report_summary_enabled` |
 | `ALERT_SEARCH_ONLY_INSTRUMENT_ID` | unset | Lower environments only: search just this eligible instrument. An unknown, inactive or ineligible id is refused before any quota is used |
 | `ALERT_MINIMUM_SEARCH_CLIENT_SHARE` | `0.20` | Inclusive fraction of distinct positive-position clients for the common-holding rule |
 | `ALERT_MINIMUM_SEARCH_CLIENT_COUNT` | `2` | Minimum distinct snapshot clients before an instrument's public terms are searchable |
@@ -290,6 +290,28 @@ The token expires after about an hour; a `401` from the script means copy a new
 one. Use an agent's token, not an admin's: only agents can save portfolios, and
 only for their own clients' accounts. Anyone holding the token can act as that
 agent until it expires, so do not paste it into chat, commits or files.
+
+News-alert test on AWS. Nothing local travels to AWS: the test clients, holdings, websites and reports are recreated there.
+Anthropic comes with migration V18; Shell and Apple come with V8. Order:
+
+1. Build and push the images (alerts, engagement, auditor, db-migrate, the page) with one new tag. The migrations (alerts V17 and
+   V18, engagement V3 and V4) ride in the db-migrate image.
+2. Apply the crm stack with `running = true`, `alert_search_on_add = true`, `alert_holdings_mode = database` and the new tag. It
+   redeploys every CRM service, the auditor included; the auditor must carry the `DRAFT_REPORT_REMOVED` allow-list entry.
+3. Apply the alert-worker stack with `ingestion_enabled = true` and `ai_enabled = true` (`report_summary_enabled` is on by default).
+   It runs once at apply; with no holdings yet it finds nothing to search.
+4. Apply the agent-engagement stack (it reads the crm stack's outputs).
+5. Sign in as an agent, copy the access token (above) and, with at least two of the agent's clients holding an active investment
+   account, run `scripts/seed-demo-portfolios.py --profile news --add-websites --search LSE-SHEL --dry-run`, then without
+   `--dry-run`. Websites go in first, because adding one starts a search of what is already held. The first client (accounts in id
+   order) holds Shell, Anthropic and Apple, the second Apple and Anthropic, the rest Apple.
+6. Wait 5 to 7 minutes and refresh Event Alerts. A manual Search now searches every company an agent's clients hold; only the
+   scheduled runs apply the stricter two-clients-or-half-an-account rule, so Shell, held by one client, is searched by hand.
+7. Test: Plan client briefing, Edit, Save and preview, Approve, Notify, then Send from Follow-up Emails to a verified address.
+
+Watch: Nova has not written a report before, so the first may be refused; SES with a display-name sender and a PDF attached is
+untested; a 30-report send must finish inside API Gateway's 30 seconds. Teardown empties alerts-db, so run step 5 again after every
+deployment and within 72 hours of a demo.
 
 Rollback: set `ALERT_HOLDINGS_MODE=fixture` and stop portfolio edits. All recorded
 portfolios, snapshots and audit events remain. Do not restore a former agent's

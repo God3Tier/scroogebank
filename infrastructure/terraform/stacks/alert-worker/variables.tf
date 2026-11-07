@@ -36,6 +36,12 @@ variable "ingestion_enabled" {
   default     = false
 }
 
+variable "report_summary_enabled" {
+  description = "Let the worker write one summary sentence for each new report, for the news email (ALERT_REPORT_SUMMARY_ENABLED, ADR-0085). Approved by Azeez, so on by default; it needs ai_enabled and is skipped, without affecting the report, when the AI is off or the sentence fails its checks."
+  type        = bool
+  default     = true
+}
+
 variable "ai_enabled" {
   description = "Let the worker call Bedrock (ALERT_AI_ENABLED) and give its task role bedrock:InvokeModel on the pinned profile. Keep false until the AI benchmark gates pass (ADR-0010)."
   type        = bool

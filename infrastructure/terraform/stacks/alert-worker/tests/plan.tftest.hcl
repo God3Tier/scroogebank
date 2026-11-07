@@ -62,6 +62,11 @@ run "ingestion_off_by_default" {
   command = plan
 
   assert {
+    condition     = var.report_summary_enabled == true
+    error_message = "The summary sentence is approved, so it is on by default; it does nothing while the AI is off (ADR-0085)."
+  }
+
+  assert {
     condition     = aws_scheduler_schedule.alert_worker.state == "DISABLED" && aws_scheduler_schedule.alert_worker.schedule_expression == "cron(0 0/4 * * ? *)"
     error_message = "With ingestion off the schedule stays DISABLED, at fixed times every four hours (ADR-0081)."
   }

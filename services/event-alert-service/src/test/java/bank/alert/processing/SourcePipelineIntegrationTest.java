@@ -141,7 +141,8 @@ class SourcePipelineIntegrationTest {
     void globalSyntheticCatalogueAndPortfoliosAreSeededByFlyway() {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM synthetic_portfolio", Long.class)).isEqualTo(20);
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM instrument WHERE id <> 'SYN-SGX-001'", Long.class)).isEqualTo(16);
+                "SELECT count(*) FROM instrument WHERE id <> 'SYN-SGX-001'", Long.class))
+                .as("the 16 companies of V8 and V9, and Anthropic from V18").isEqualTo(17);
         assertThat(jdbc.queryForObject("""
                 SELECT search_aliases @> '["DBS"]'::jsonb
                 FROM instrument WHERE id = 'SGX-D05'
