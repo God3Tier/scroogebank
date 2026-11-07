@@ -85,7 +85,55 @@ public class EventReportService {
                 log.warn("event report failed error_code={}", failure.getClass().getSimpleName());
             }
         }
+        for (UUID eventId : eventsToWriteFromSourcesOnly(limit)) {
+            try {
+                if (writeFromSourcesOnly(eventId)) written++;
+            } catch (RuntimeException failure) {
+                log.warn("event report from sources failed error_code={}", failure.getClass().getSimpleName());
+            }
+        }
         return written;
+    }
+
+    /** Events whose report the model could not write after every try and that still have none. */
+    List<UUID> eventsToWriteFromSourcesOnly(int limit) {
+        return jdbc.query("""
+                SELECT pe.id FROM public_event pe
+                 WHERE EXISTS (SELECT 1 FROM alert a WHERE a.public_event_id = pe.id AND a.score >= ?)
+                   AND COALESCE((SELECT attempts FROM event_report_attempt t WHERE t.public_event_id = pe.id), 0) >= ?
+                   AND NOT EXISTS (SELECT 1 FROM event_report r WHERE r.public_event_id = pe.id)
+                 ORDER BY pe.created_at ASC
+                 LIMIT ?
+                """, (rs, row) -> rs.getObject(1, UUID.class), MINIMUM_ALERT_SCORE, MAX_FAILED_ATTEMPTS, limit);
+    }
+
+    /**
+     * The safe way to fail: when every try has been refused, the agent still gets a short report put together from the sources
+     * themselves (no model), so there is always something to read, edit and approve and never an error. A later source that the
+     * report does not cover starts the model's tries afresh.
+     */
+    boolean writeFromSourcesOnly(UUID eventId) {
+        List<SourceRow> linked = linkedSources(eventId);
+        if (linked.isEmpty()) return false;
+        List<EventSourceSelector.Candidate> chosen = EventSourceSelector.select(linked.stream()
+                .map(row -> new EventSourceSelector.Candidate(row.id().toString(), row.domain(), row.publishedAt(), row.url()))
+                .toList());
+        List<String> chosenIds = chosen.stream().map(EventSourceSelector.Candidate::sourceId).toList();
+        Map<String, SourceRow> byId = linked.stream().collect(Collectors.toMap(row -> row.id().toString(), row -> row));
+        List<ReportInput.InstrumentRef> instrumentRefs = instrumentsOf(eventId);
+        List<String> instrumentIds = instrumentRefs.stream().map(ReportInput.InstrumentRef::instrumentId).toList();
+        List<PublicEvidence> evidence = chosenIds.stream().map(byId::get).map(row -> toEvidence(row, instrumentIds)).toList();
+        java.util.Optional<ClientReport> report = FallbackReport.build(evidence);
+        if (report.isEmpty()) {
+            log.warn("event report from sources not written event_id={} reason_code=FALLBACK_NOT_VALID", eventId);
+            return false;
+        }
+        ReportOutcome outcome = new ReportOutcome(ReportOutcome.Status.GENERATED, report.get(), null, 0,
+                FallbackReport.MODEL, FallbackReport.PROMPT_VERSION, clock.instant());
+        int version = persist(eventId, outcome, chosenIds);
+        jdbc.update("DELETE FROM event_report_attempt WHERE public_event_id = ?", eventId);
+        log.info("event report written from the sources only event_id={} version={}", eventId, version);
+        return version > 0;
     }
 
     List<UUID> eventsDueForAReport(int limit) {

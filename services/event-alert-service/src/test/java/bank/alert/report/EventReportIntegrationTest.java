@@ -344,13 +344,33 @@ class EventReportIntegrationTest {
         reportRequests.clear();
         for (int pass = 0; pass < 5; pass++) reports.refresh(20);
 
-        assertThat(reportRequests).as("five tries of two drafts each, then left alone").hasSize(5);
-        assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(10);
-        assertThat(count("event_report")).isZero();
+        assertThat(reportRequests).as("five tries of two drafts each, then the model is left alone").hasSize(5);
+        assertThat(count("event_report")).as("the safe way to fail: a report from the sources alone").isOne();
+        assertThat(jdbc.queryForObject("SELECT model_version FROM event_report", String.class)).isEqualTo("basic-summary-v1");
+        assertThat(jdbc.queryForObject("SELECT prompt_version FROM event_report", String.class)).isEqualTo("fallback-v1");
+        assertThat(count("event_report_attempt")).as("the count of refused drafts is cleared").isZero();
         String agent = jdbc.queryForObject("SELECT assigned_agent_subject FROM alert LIMIT 1", String.class);
         UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);
-        assertThat(eventQueries.detail(eventId, agent).card().reportFailure())
-                .as("the page can say the report was refused, not only that it is missing").isEqualTo("UNSUPPORTED_FIGURE");
+        assertThat(eventQueries.detail(eventId, agent).card().reportFailure()).as("the agent sees a report, never an error").isNull();
+        assertThat(eventQueries.detail(eventId, agent).report()).isNotNull();
+        reportRequests.clear();
+        reports.refresh(20);
+        assertThat(reportRequests).as("the model is not asked again for the same sources").isEmpty();
+        assertThat(count("event_report")).isOne();
+    }
+
+    @Test
+    void anEventStillBeingTriedHasNoFallbackYet() {
+        store("one.example", "2026-09-26T22:00:00Z", "a");
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.PENDING, null, "MODEL_DISABLED", 0));
+        pipeline.processPending();
+        reports.refresh(20);
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.ABSTAINED, null, "INVALID_MODEL_SCHEMA", 2));
+        reportRequests.clear();
+        for (int pass = 0; pass < 4; pass++) reports.refresh(20);
+
+        assertThat(jdbc.queryForObject("SELECT attempts FROM event_report_attempt", Integer.class)).isEqualTo(8);
+        assertThat(count("event_report")).as("eight refused drafts: still the model's turn").isZero();
     }
 
     @Test

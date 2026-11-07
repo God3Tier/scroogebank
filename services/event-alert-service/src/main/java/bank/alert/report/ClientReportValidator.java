@@ -158,6 +158,12 @@ public final class ClientReportValidator {
         return figures;
     }
 
+    /** True when the text holds wording that reads as investment advice. */
+    static boolean containsAdvice(String text) {
+        String lower = text == null ? "" : text.toLowerCase(Locale.ROOT);
+        return ADVICE_PHRASES.stream().anyMatch(lower::contains);
+    }
+
     private static boolean adviceLanguage(ClientReportModelOutput output) {
         StringBuilder all = new StringBuilder(output.headline()).append(' ').append(output.uncertainty());
         output.executiveSummary().forEach(sentence -> all.append(' ').append(sentence.text()));

@@ -57,6 +57,23 @@ describe('report text', () => {
     })
   })
 
+  it('reads back a report built from the sources alone: one sentence, nothing to monitor, no uncertainty note', () => {
+    const bare = { executiveSummary: ['Apple falls on its latest earnings report.'], keyFacts: [], whyItMatters: [], whatToMonitor: [], uncertainty: '' }
+
+    const text = toText(bare)
+    expect(fromText(text, bare)).toEqual({ sections: bare })
+
+    const edited = text.replace('1. Apple falls on its latest earnings report.', '1. Apple fell 2% after its earnings report.')
+    expect(fromText(edited, bare).sections.executiveSummary).toEqual(['Apple fell 2% after its earnings report.'])
+  })
+
+  it('still wants the uncertainty note and two things to monitor when the report has them', () => {
+    const text = toText(sections)
+
+    expect(fromText(text.replace('Partial excerpts.', ''), sections).errors[0].message).toMatch(/Uncertainty cannot be empty/)
+    expect(fromText(text.replace('- Analyst targets', ''), sections).errors[0].message).toMatch(/needs 2 to 4 lines/)
+  })
+
   it('finds the line a server refusal points at', () => {
     const text = toText(sections)
     expect(lineOf(text, 'executiveSummary', 1)).toBe(3)

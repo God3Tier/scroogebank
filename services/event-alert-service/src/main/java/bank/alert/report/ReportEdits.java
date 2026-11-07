@@ -100,7 +100,8 @@ public final class ReportEdits {
         List<String> whyText = strings(sections, "whyItMatters", why.size(), why.size());
         for (int i = 0; i < why.size(); i++) ((ObjectNode) why.get(i)).put("text", whyText.get(i));
 
-        List<String> monitor = strings(sections, "whatToMonitor", 2, 4);
+        // Two to four things to monitor, or fewer when the report itself has fewer (a report built from the sources alone has none).
+        List<String> monitor = strings(sections, "whatToMonitor", Math.min(2, original.path("whatToMonitor").size()), 4);
         ArrayNode monitorNode = merged.putArray("whatToMonitor");
         monitor.forEach(monitorNode::add);
 
@@ -133,7 +134,7 @@ public final class ReportEdits {
      */
     public static Violation check(JsonNode original, JsonNode edited, Map<String, SourceText> sources) {
         // Shape and length, the same limits the model's output meets.
-        Violation shape = shape(edited);
+        Violation shape = shape(edited, original);
         if (shape != null) return shape;
 
         String allSources = haystack(sources.values());
@@ -170,9 +171,13 @@ public final class ReportEdits {
                 List.of(), sources, allSources);
     }
 
-    private static Violation shape(JsonNode report) {
+    private static Violation shape(JsonNode report, JsonNode original) {
         JsonNode summary = report.path("executiveSummary");
-        if (summary.size() < 2 || summary.size() > 3) return v("executiveSummary", -1, "INVALID_SHAPE", "The summary needs 2 or 3 sentences");
+        // 2 or 3 sentences, or 1 when the report has only one (after five refused drafts, or built from the sources alone).
+        int minimumSummary = original.path("executiveSummary").size() < 2 ? 1 : 2;
+        if (summary.size() < minimumSummary || summary.size() > 3) {
+            return v("executiveSummary", -1, "INVALID_SHAPE", minimumSummary == 1 ? "The summary needs 1 to 3 sentences" : "The summary needs 2 or 3 sentences");
+        }
         for (int i = 0; i < summary.size(); i++) {
             Violation v = length("executiveSummary", i, summary.get(i).path("text").asText(), ClientReportValidator.MAX_TEXT);
             if (v != null) return v;
@@ -191,11 +196,14 @@ public final class ReportEdits {
             if (v != null) return v;
         }
         JsonNode monitor = report.path("whatToMonitor");
-        if (monitor.size() < 2 || monitor.size() > 4) return v("whatToMonitor", -1, "INVALID_SHAPE", "List 2 to 4 things to monitor");
+        int minimumMonitor = Math.min(2, original.path("whatToMonitor").size());
+        if (monitor.size() < minimumMonitor || monitor.size() > 4) return v("whatToMonitor", -1, "INVALID_SHAPE", "List " + minimumMonitor + " to 4 things to monitor");
         for (int i = 0; i < monitor.size(); i++) {
             Violation v = length("whatToMonitor", i, monitor.get(i).asText(), 300);
             if (v != null) return v;
         }
+        // A report with no uncertainty note (built from the sources alone) may stay without one.
+        if (report.path("uncertainty").asText().isBlank() && original.path("uncertainty").asText().isBlank()) return null;
         return length("uncertainty", -1, report.path("uncertainty").asText(), 500);
     }
 
