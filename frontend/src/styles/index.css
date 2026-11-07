@@ -3355,3 +3355,10 @@ textarea:focus {
 .queue-auto { margin: 0; padding: 0.35rem 1rem; font-size: 0.78rem; color: var(--on-surface-variant); }
 .inline-empty__note { display: block; margin-top: 0.4rem; opacity: 0.85; }
 .muted { opacity: 0.7; }
+
+/* Affected clients: search and pages when a ticker has more than five clients. */
+.clients-search { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+.clients-search label { display: grid; gap: 0.25rem; font-size: 0.85rem; }
+.clients-search input { min-width: 16rem; }
+.clients-search__count { font-size: 0.85rem; color: var(--on-surface-variant); }
+.clients-pager { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-top: 0.75rem; font-size: 0.9rem; }

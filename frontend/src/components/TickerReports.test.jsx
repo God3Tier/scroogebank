@@ -207,7 +207,7 @@ describe('TickerReports', () => {
 
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Approval is final'))
     await waitFor(() => expect(approveReport).toHaveBeenCalledWith('e1', 1))
-    expect(await screen.findByRole('button', { name: 'Notify selected clients of news' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Notify selected clients about Apple Inc' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Approve report/ })).not.toBeInTheDocument()
     expect(screen.getByText(/Approved by you at/)).toBeInTheDocument()
     expect(screen.getByText(/Approved 2 days ago, can be sent for 5 more days/)).toBeInTheDocument()
@@ -229,7 +229,7 @@ describe('TickerReports', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Notify selected clients of news' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Notify selected clients about Apple Inc' }))
 
     await waitFor(() => expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e1', alertIds: ['a2'] }))
     expect(await screen.findByText('Follow-up Emails page')).toBeInTheDocument()

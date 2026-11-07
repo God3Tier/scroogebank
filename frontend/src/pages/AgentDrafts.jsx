@@ -635,7 +635,7 @@ function AgentDrafts({ now: fixedNow }) {
   const [clients, setClients] = useState([])
   const [status, setStatus] = useState('DRAFT')
   const [list, setList] = useState({ loading: true, error: '', drafts: [] })
-  // "Notify selected clients of news" on Event Alerts opens the client's News Alert draft here.
+  // "Notify selected clients about <company>" on Event Alerts opens the client's News Alert draft here.
   const [openId, setOpenId] = useState(() => searchParams.get('openDraft'))
   const [notice] = useState(() => {
     const made = Number(searchParams.get('news') || 0)

@@ -7,7 +7,7 @@ import { SKIP_REASONS, stalenessText } from '../utils/newsReports.js'
 
 // Edit, approve, then notify (news-alert-drafts plan 5.2). The agent may change the report's wording; the headline
 // and sources stay fixed, and the edited text is checked again. Approval is final and freezes what the client gets.
-// After approval the approve button is replaced by "Notify selected clients of news", which puts the report on each
+// After approval the approve button is replaced by "Notify selected clients about <company>", which puts the report on each
 // selected client's News Alert draft in Follow-up Emails. Nothing here sends an email.
 
 const TIME = new Intl.DateTimeFormat('en-SG', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Singapore' })
@@ -17,7 +17,8 @@ const DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', 
  * clients: the agent's clients on this report; selected: { alertId: true }. Approval and Notify act on the selected
  * clients in Plan client briefing.
  */
-export function ReportReview({ eventId, report, review, clients, selected, editing = false, onReviewChanged }) {
+export function ReportReview({ eventId, report, review, clients, selected, company = 'this company', editing = false, onReviewChanged }) {
+  const notifyLabel = `Notify selected clients about ${company}`
   const navigate = useNavigate()
   const [now] = useState(() => Date.now())
   const [state, setState] = useState({ busy: false, error: '', message: '' })
@@ -35,7 +36,7 @@ export function ReportReview({ eventId, report, review, clients, selected, editi
     try {
       await approveReport(eventId, review.reportVersion)
       onReviewChanged()
-      setState({ busy: false, error: '', message: 'Approved. The button is now "Notify selected clients of news".' })
+      setState({ busy: false, error: '', message: `Approved. The button is now "${notifyLabel}".` })
     } catch (e) {
       setState({ busy: false, error: e.status === 409 ? e.message || 'The report changed. Reload and review it again.' : e.message || 'The report could not be approved.', message: '' })
     }
@@ -82,7 +83,7 @@ export function ReportReview({ eventId, report, review, clients, selected, editi
           </p>
           <button type="button" className="button button--accent report-review__notify" onClick={notify}
             disabled={state.busy || count === 0}>
-            {state.busy ? 'Making drafts…' : 'Notify selected clients of news'}
+            {state.busy ? 'Making drafts…' : notifyLabel}
           </button>
           {count === 0 && <p className="holdings-note">Select the clients in Plan client briefing to notify.</p>}
           <p className="holdings-note report-review__hint">

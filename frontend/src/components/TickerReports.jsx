@@ -6,6 +6,7 @@ import { isCrmClientId, listOpenNewsAlerts } from '../api/engagement.js'
 import { mergeSections, noReportText } from '../utils/newsReports.js'
 import { useReportEditor } from '../utils/useReportEditor.js'
 import { BatchNotify, FloatingBatchHint } from './BatchNotify.jsx'
+import ClientsTable from './ClientsTable.jsx'
 import { CombinedSources, EventReport } from './EventReport.jsx'
 import { ReportReview } from './ReportReview.jsx'
 import SentOutList from './SentOutList.jsx'
@@ -201,6 +202,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
             <>
               <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} editor={editor} />
               <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
+                company={card.issuer || card.ticker}
                 editing={editor.editing} onReviewChanged={() => { reload(); onChanged() }} />
             </>
           ) : (
@@ -228,30 +230,8 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           <div><Icon name="groups" /><h3 id="ticker-clients-title">Affected clients</h3></div>
           <span>{open.length} new · {informed.length} in Plan client briefing</span>
         </div>
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr><th /><th>Client</th><th className="num">Share of portfolio</th><th className="num">Exposure (SGD)</th><th className="num">Score</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.alertId}>
-                  <td>
-                    <input type="checkbox" aria-label={`Select ${clientLabel(client, names)}`}
-                      disabled={!selectable(client)}
-                      checked={Boolean(selected[client.alertId])}
-                      onChange={(e) => setSelected((s) => ({ ...s, [client.alertId]: e.target.checked }))} />
-                  </td>
-                  <td title={client.clientRef}>{clientLabel(client, names)}</td>
-                  <td className="num">{client.portfolioPercentage == null ? '—' : `${Number(client.portfolioPercentage).toFixed(1)}%`}</td>
-                  <td className="num">{Number(client.amountSgd).toLocaleString('en-SG', { minimumFractionDigits: 2 })}</td>
-                  <td className="num">{Number(client.score).toFixed(1)}</td>
-                  <td>{STATUS_LABELS[client.status] || client.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ClientsTable clients={clients} names={names} selected={selected} setSelected={setSelected}
+          selectable={selectable} statusLabels={STATUS_LABELS} clientLabel={clientLabel} />
 
         {clients.length > 0 && (
           <form className="decision-section" onSubmit={submitDecision} aria-label="Decide for the selected clients">

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import AlertWorkspace from '../components/AlertWorkspace.jsx'
 import SearchSources from '../components/SearchSources.jsx'
 import SentOutList from '../components/SentOutList.jsx'
@@ -9,6 +10,7 @@ function EventAlerts({ readOnly = false }) {
   if (readOnly) {
     return (
       <>
+        <div className="back-row"><Link to="/admin">Back to Admin Home</Link></div>
         <AlertWorkspace readOnly />
         <div className="alerts-page"><SentOutList readOnly /></div>
         <SearchSources readOnly />
@@ -17,6 +19,7 @@ function EventAlerts({ readOnly = false }) {
   }
   return (
     <>
+      <div className="back-row"><Link to="/agent">Back to Agent Home</Link></div>
       <TickerReports />
       <SearchSources />
     </>
