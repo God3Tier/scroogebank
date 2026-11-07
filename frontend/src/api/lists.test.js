@@ -1,11 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authorizationHeader } from '../auth/session.js'
 import { createAccount, listAccountTransactions, listAccounts } from './accounts.js'
 import { listClients } from './clients.js'
 import { getDashboard, panelData, windowForDays } from './dashboard.js'
 import { listTransactions } from './transactions.js'
-import { createUser, disableUser, listUsers } from './users.js'
+import { createUser, disableUser, listUsers, resetPassword, updateUser } from './users.js'
+
+vi.hoisted(() => { vi.stubEnv('VITE_API_URL', '') })
+afterAll(() => vi.unstubAllEnvs())
 
 vi.mock('../auth/session.js', () => ({ authorizationHeader: vi.fn() }))
 
@@ -80,10 +83,39 @@ describe('list and admin APIs', () => {
     expect(lastCall()[1].method).toBe('PATCH')
   })
 
+  it('updates only the selected user name with the caller token', async () => {
+    const names = { firstName: 'Updated', lastName: 'Agent' }
+    fetchMock.mockResolvedValue(jsonResponse({ id: 'user-2', ...names }))
+
+    await expect(updateUser('user-2', { ...names, email: 'ignored@example.test', role: 'ADMIN' }))
+      .resolves.toMatchObject(names)
+    const [url, options] = lastCall()
+    expect(url).toBe('/api/users/user-2')
+    expect(options.method).toBe('PUT')
+    expect(options.headers).toMatchObject({ Authorization: 'Bearer synthetic-token', 'Content-Type': 'application/json' })
+    expect(JSON.parse(options.body)).toEqual(names)
+  })
+
   it('treats an empty 204 as no content', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 
     await expect(disableUser('user-1')).resolves.toBeNull()
+  })
+
+  it('requests a password reset with the caller token and accepts an empty 202', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 202 }))
+
+    await expect(resetPassword('user-2')).resolves.toBeNull()
+    const [url, options] = lastCall()
+    expect(url).toBe('/api/users/user-2/reset-password')
+    expect(options.method).toBe('POST')
+    expect(options.headers).toMatchObject({ Authorization: 'Bearer synthetic-token' })
+  })
+
+  it('preserves password-reset permission errors', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'Forbidden' }, 403))
+
+    await expect(resetPassword('user-2')).rejects.toMatchObject({ status: 403, message: 'Forbidden' })
   })
 
   it('asks the dashboard for a window and its options', async () => {

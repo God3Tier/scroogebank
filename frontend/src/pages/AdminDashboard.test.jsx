@@ -1,15 +1,15 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listClients, reassignClients } from '../api/clients.js'
 import { listTransactions } from '../api/transactions.js'
-import { createUser, disableUser, listUsers } from '../api/users.js'
+import { createUser, disableUser, listUsers, resetPassword, updateUser } from '../api/users.js'
 import AdminDashboard from './AdminDashboard.jsx'
 
 vi.mock('../api/clients.js', () => ({ listClients: vi.fn(), reassignClients: vi.fn() }))
 vi.mock('../api/transactions.js', () => ({ listTransactions: vi.fn() }))
-vi.mock('../api/users.js', () => ({ createUser: vi.fn(), disableUser: vi.fn(), listUsers: vi.fn() }))
+vi.mock('../api/users.js', () => ({ createUser: vi.fn(), disableUser: vi.fn(), listUsers: vi.fn(), resetPassword: vi.fn(), updateUser: vi.fn() }))
 vi.mock('../api/activities.js', () => ({
   listActivities: vi.fn().mockResolvedValue({ content: [], nextCursor: null }),
 }))
@@ -114,6 +114,42 @@ describe('admin dashboard', () => {
     expect(disableUser).toHaveBeenCalledWith('user-2')
   })
 
+  it('requests an agent password reset once while pending, then explains the next step', async () => {
+    let finishReset
+    resetPassword.mockReturnValue(new Promise((resolve) => { finishReset = resolve }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    const button = within(row).getByRole('button', { name: 'Reset password' })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('Requesting reset')
+    fireEvent.click(button)
+    expect(resetPassword).toHaveBeenCalledExactlyOnceWith('user-2')
+
+    await act(async () => { finishReset(null) })
+    expect(await screen.findByRole('status')).toHaveTextContent('Synthetic Agent: password reset requested. Cognito will email a reset code.')
+    expect(button).toBeEnabled()
+  })
+
+  it('explains a refused password reset and allows retrying', async () => {
+    resetPassword.mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    const button = within(row).getByRole('button', { name: 'Reset password' })
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have permission to reset this password.')
+    expect(button).toBeEnabled()
+
+    resetPassword.mockResolvedValueOnce(null)
+    fireEvent.click(button)
+    expect(await screen.findByRole('status')).toHaveTextContent('password reset requested')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   // Requirements Q&A UM17, ADR-0060.
   it("moves all of a disabled agent's clients to an enabled agent", async () => {
     listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([], 2) : page([AGENT, LEAVER, OTHER])))
@@ -149,12 +185,86 @@ describe('admin dashboard', () => {
     expect(await within(row).findByRole('alert')).toHaveTextContent('nothing was moved')
   })
 
-  it('offers no reassignment for admins', async () => {
+  it('edits an agent name, prevents duplicate saves and reloads the row', async () => {
+    const updated = { ...AGENT, firstName: 'Updated', lastName: 'Person' }
+    let finishUpdate
+    updateUser.mockReturnValue(new Promise((resolve) => { finishUpdate = resolve }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit name' }))
+    const form = within(row).getByRole('form', { name: 'Edit name for Synthetic Agent' })
+    expect(within(form).getByLabelText('First name')).toHaveValue('Synthetic')
+    expect(within(form).getByLabelText('Last name')).toHaveValue('Agent')
+    fireEvent.change(within(form).getByLabelText('First name'), { target: { value: ' Updated ' } })
+    fireEvent.change(within(form).getByLabelText('Last name'), { target: { value: ' Person ' } })
+    const save = within(form).getByRole('button', { name: 'Save name' })
+    fireEvent.click(save)
+    expect(save).toBeDisabled()
+    expect(within(form).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    fireEvent.click(save)
+    expect(updateUser).toHaveBeenCalledExactlyOnceWith('user-2', { firstName: 'Updated', lastName: 'Person' })
+
+    listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([]) : page([updated])))
+    await act(async () => { finishUpdate(updated) })
+    expect(await screen.findByText('Updated Person (agent@example.test)')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Updated Person: name updated.')
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+  })
+
+  it('cancels a name edit without updating the agent', async () => {
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit name' }))
+    fireEvent.change(within(row).getByLabelText('First name'), { target: { value: 'Unsaved' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }))
+
+    expect(updateUser).not.toHaveBeenCalled()
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+    expect(screen.getByText('Synthetic Agent (agent@example.test)')).toBeInTheDocument()
+  })
+
+  it('rejects whitespace-only names before calling the API', async () => {
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit name' }))
+    fireEvent.change(within(row).getByLabelText('First name'), { target: { value: '   ' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Save name' }))
+
+    expect(within(row).getByRole('alert')).toHaveTextContent('Enter both a first name and a last name.')
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it('keeps edited names after a failed save and allows retrying', async () => {
+    updateUser.mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit name' }))
+    fireEvent.change(within(row).getByLabelText('Last name'), { target: { value: 'Updated' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Save name' }))
+
+    expect(await within(row).findByRole('alert')).toHaveTextContent('You do not have permission to update this agent.')
+    expect(within(row).getByLabelText('Last name')).toHaveValue('Updated')
+    const updated = { ...AGENT, lastName: 'Updated' }
+    updateUser.mockResolvedValueOnce(updated)
+    listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([]) : page([updated])))
+    fireEvent.click(within(row).getByRole('button', { name: 'Save name' }))
+    expect(await screen.findByText('Synthetic Updated (agent@example.test)')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('offers no agent actions for admins', async () => {
     listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([{ ...OTHER, id: 'admin-1', role: 'ADMIN' }]) : page([AGENT])))
     renderDashboard()
     fireEvent.click(screen.getByRole('button', { name: 'Manage Admins' }))
 
     const row = (await screen.findByText(/Other Agent/)).closest('li')
     expect(within(row).queryByRole('button', { name: 'Reassign clients' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Reset password' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Edit name' })).not.toBeInTheDocument()
   })
 })
