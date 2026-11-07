@@ -24,7 +24,7 @@ public record AiProperties(
     public AiProperties {
         region = region == null || region.isBlank() ? "ap-southeast-1" : region;
         modelId = modelId == null || modelId.isBlank() ? "apac.amazon.nova-lite-v1:0" : modelId;
-        temperature = temperature == null ? 0.3F : temperature;
+        temperature = temperature == null ? 0.6F : temperature;
         maxOutputTokens = maxOutputTokens == null ? 600 : maxOutputTokens;
         timeout = timeout == null ? Duration.ofSeconds(15) : timeout;
         dailyDraftsPerAgent = dailyDraftsPerAgent == null ? 20 : dailyDraftsPerAgent;

@@ -84,7 +84,7 @@ engagement:
     enabled: ${ENGAGEMENT_AI_ENABLED:false}
     region: ${BEDROCK_REGION:ap-southeast-1}
     model-id: ${BEDROCK_MODEL_ID:apac.amazon.nova-lite-v1:0}
-    temperature: 0.3
+    temperature: 0.6
     max-output-tokens: 600
     timeout: 15s
     daily-drafts-per-agent: ${ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT:20}

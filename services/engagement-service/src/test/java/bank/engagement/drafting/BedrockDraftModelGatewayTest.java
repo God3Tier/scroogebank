@@ -44,7 +44,7 @@ class BedrockDraftModelGatewayTest {
         ArgumentCaptor<ConverseRequest> request = ArgumentCaptor.forClass(ConverseRequest.class);
         verify(client).converse(request.capture());
         assertThat(request.getValue().modelId()).isEqualTo("apac.amazon.nova-lite-v1:0");
-        assertThat(request.getValue().inferenceConfig().temperature()).isEqualTo(0.3F);
+        assertThat(request.getValue().inferenceConfig().temperature()).isEqualTo(0.6F);
         assertThat(request.getValue().inferenceConfig().maxTokens()).isEqualTo(600);
         assertThat(request.getValue().overrideConfiguration().orElseThrow().apiCallTimeout())
                 .contains(Duration.ofSeconds(15));
