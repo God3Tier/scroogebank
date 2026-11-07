@@ -5,7 +5,7 @@ import { authorizationHeader } from '../auth/session.js'
 // receiver behind user-service).
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
-export async function requestJson(path, { body, headers: extraHeaders, ...options } = {}) {
+export async function requestJson(path, { body, headers: extraHeaders, expectJson = true, ...options } = {}) {
   const headers = {
     Accept: 'application/json',
     ...(await authorizationHeader()),
@@ -31,7 +31,7 @@ export async function requestJson(path, { body, headers: extraHeaders, ...option
     error.problem = problem
     throw error
   }
-  if (response.status === 204) return null
+  if (response.status === 204 || !expectJson) return null
   return response.json()
 }
 

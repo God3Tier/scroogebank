@@ -27,5 +27,5 @@ export function disableUser(id) {
 }
 
 export function resetPassword(id) {
-  return requestJson(`/api/users/${encodeURIComponent(id)}/reset-password`, { method: 'POST' })
+  return requestJson(`/api/users/${encodeURIComponent(id)}/reset-password`, { method: 'POST', expectJson: false })
 }
