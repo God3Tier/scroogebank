@@ -2177,3 +2177,14 @@ retry exhaustion and refusal to retry after the last available reservation.
   placeholders; no client data.
 - Human verification required: Neo Jia Wen to review, deploy, and confirm
   that new prod check-ins come from the AI.
+## 2026-11-07 — Root Admin authorization and account creation
+
+- Team member: Joseph Yau. Tool: Codex.
+- Task: implement the Root Admin application role, root-only Admin provisioning,
+  current-admin endpoint, migration, dashboard choices and contract/docs.
+- Files/components: user-service, frontend, users API, Feature 2 plan, ADR-0087,
+  and database migration documentation.
+- Verification: full user-service suite (86 tests), PostgreSQL migration test,
+  full frontend suite (363 tests), frontend lint, and production build pass.
+  Vite reports a large JavaScript chunk advisory.
+- Data: synthetic test users only; no credentials or real personal data used.

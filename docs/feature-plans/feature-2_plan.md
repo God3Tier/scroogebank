@@ -3,7 +3,7 @@
 - Status: In progress
 - Feature branch: `feat/refactor-feat-2`
 - Primary developer: Joseph Yau
-- Last updated: 2026-10-14
+- Last updated: 2026-11-07
 
 ## Goal
 
@@ -13,6 +13,7 @@ Use the Feature 1 Cognito user pool as the identity source for Feature 2. Every 
 
 | Task | Description | Owner | Expected files/components | Dependencies | Branch | Status |
 |---|---|---|---|---|---|---|
+| F2-ROOT-01 | Distinguish `ROOT_ADMIN` as an application role while retaining Cognito `ADMIN`; migrate the existing non-deletable bootstrap row; allow only Root Admin to create Admins; reject Admin/Root Admin promotions; expose `/api/users/me`; show only permitted creation options and label Root Admin in user lists (ADR-0087) | Joseph Yau | `services/user-service` role, service, controller, migration, contract and tests; `frontend/src/api/users.js`, `pages/AdminDashboard.jsx`, `components/UserList.jsx` and tests; users API, user-service README, database migration/schema docs | Root Admin bootstrap identity remains `ROOT_ADMIN_EMAIL`; no Cognito group change | `task/base-features/root-admin-authorization` | Implemented; user-service 86 tests pass, PostgreSQL migration verified, frontend 363 tests pass, lint and build pass |
 | F2-SEC-01 | Verify Cognito access tokens and enforce Admin/Agent client ownership | Joseph Yau | `services/client-profile-management-service/src/internal/security`, server/router, schema, Bruno collection | Cognito issuer and app-client ID from the shared pool | `feat/refactor-feat-2` | Implemented; build verified, integration tests not run |
 | F1-SEC-01 | Keep Cognito provisioning, JWT validation, and Admin authorization active in the local database profile | Joseph Yau | `services/user-service` security configuration, Makefile, README | Cognito pool and AWS credentials | `feat/refactor-feat-2` | Implemented; package verified, auth flow not integration-tested |
 | F1-AUTH-01 | Frontend sign-in through Cognito managed login with PKCE (S256), pages limited by Cognito group and the access token on API calls; sign-out reports the logout to user-service before revoking the refresh token and ending the Cognito session ([ADR-0025](../adr/ADR-0025-identity-cognito-mfa-pkce-service-tokens.md) decisions 2 and 5) | Neo Jia Wen (review: frontend owner) | `frontend/src/auth`, `pages/Login.jsx`, `pages/SignInCallback.jsx`, `AppRouter.jsx`, `NavBar.jsx`, `api/alerts.js`, `vite.config.js`, README | ADR-0025 accepted (PR #93); the CRM app client set up as decision 2 says | `task/base-features/frontend-sign-in` | Implemented; unit tests, lint and build pass; end-to-end sign-in and sign-out against Cognito not run |
@@ -39,8 +40,10 @@ Use the Feature 1 Cognito user pool as the identity source for Feature 2. Every 
 
 - The Feature 2 service validates the JWT signature against Cognito JWKS and checks issuer, app client, token use, and time claims.
 - `cognito:groups` supplies the `ADMIN` or `AGENT` role. The service fails closed when the token is missing, invalid, or lacks a supported group.
+- user-service resolves admin-management authority from the verified Cognito `sub` and matching enabled database user. The Root Admin row has application role `ROOT_ADMIN` while its Cognito account remains in `ADMIN`; only it may create Admin accounts. Role changes cannot grant `ADMIN` or `ROOT_ADMIN`, and the Root Admin cannot be demoted or disabled (ADR-0087).
 - The opaque Cognito `sub` identifies the creator. It is stored as text because Cognito does not guarantee RFC UUID formatting.
 - Client reads/updates/deletes/verifications and account create/delete requests enforce agent ownership. Admins can read every client, its documents and its accounts; every client and account write refuses them with 403 (ADR-0059). An unverified client's accounts open as Pending, and only the owning agent can change an account's status once its client is verified (ADR-0050).
+- Root Admin remains an admin for cross-service authorization, has no agent ownership, and retains read-only client/account access; Root Admin status grants no client or account write permission.
 - Production service traffic must use TLS, and PostgreSQL connections must verify the RDS certificate. Local HTTP and `sslmode=disable` are limited to local development.
 
 ## Open requirements

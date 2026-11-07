@@ -26,7 +26,17 @@ public class UserService {
     private final IdentityProviderClient identityProviderClient;
 
     @Transactional
-    public User createUser(CreateUserRequest request) {
+    public User createUser(CreateUserRequest request, String callerSub) {
+        User caller = getUserByIdpSub(callerSub);
+        if (request.role() == Role.ROOT_ADMIN) {
+            throw new ForbiddenOperationException("Root Admin status cannot be granted through user management");
+        }
+        if (!caller.isEnabled()) {
+            throw new ForbiddenOperationException("Disabled users cannot create accounts");
+        }
+        if (request.role() == Role.ADMIN && caller.getRole() != Role.ROOT_ADMIN) {
+            throw new ForbiddenOperationException("Only the Root Admin can create Admin accounts");
+        }
         if (userRepository.existsByEmail(request.email())) {
             throw new ConflictException("Email already registered: " + request.email());
         }
@@ -91,8 +101,11 @@ public class UserService {
     @Transactional
     public User changeRole(UUID id, Role newRole) {
         User user = getUser(id);
-        if (!user.isDeletable()) {
+        if (user.getRole() == Role.ROOT_ADMIN || !user.isDeletable()) {
             throw new ForbiddenOperationException("Root admin's role cannot be changed");
+        }
+        if (newRole == Role.ADMIN || newRole == Role.ROOT_ADMIN) {
+            throw new ForbiddenOperationException("Role changes cannot grant Admin or Root Admin status");
         }
         Role oldRole = user.getRole();
         if (oldRole == newRole) {
@@ -108,11 +121,20 @@ public class UserService {
     @Transactional
     public void disableUser(UUID id) {
         User user = getUser(id);
-        if (!user.isDeletable()) {
+        if (user.getRole() == Role.ROOT_ADMIN || !user.isDeletable()) {
             throw new ForbiddenOperationException("Root admin cannot be disabled");
         }
         identityProviderClient.disableUser(user.getIdpSub());
         user.setEnabled(false);
+    }
+
+    /** Resolves an admin's application role from the verified token subject. */
+    public User getCurrentAdmin(String callerSub) {
+        User caller = getUserByIdpSub(callerSub);
+        if (!caller.isEnabled() || (caller.getRole() != Role.ADMIN && caller.getRole() != Role.ROOT_ADMIN)) {
+            throw new ForbiddenOperationException("Admin access required");
+        }
+        return caller;
     }
 
     public void resetPassword(UUID id) {

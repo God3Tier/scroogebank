@@ -7,8 +7,14 @@ export function listUsers({ role, enabled, page = 0, size = 20 } = {}) {
   return requestJson(`/api/users${query({ role, enabled, page, size })}`)
 }
 
-// user is { firstName, lastName, email, role: 'ADMIN' | 'AGENT' }. Cognito
-// e-mails the new user a temporary password.
+// Returns the signed-in admin's application role, resolved from the verified
+// Cognito subject and user-service record.
+export function getCurrentAdmin() {
+  return requestJson('/api/users/me')
+}
+
+// user is { firstName, lastName, email, role: 'ADMIN' | 'AGENT' }. Only the
+// Root Admin may request ADMIN. Cognito e-mails the new user a temporary password.
 export function createUser(user) {
   return requestJson('/api/users', { method: 'POST', body: user })
 }

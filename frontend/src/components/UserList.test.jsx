@@ -22,6 +22,7 @@ it('protects the root admin and yourself, but allows disabling another admin', a
       idpSub: 'root-sub',
       firstName: 'Root',
       lastName: 'Admin',
+      role: 'ROOT_ADMIN',
       email: 'root@example.test',
       enabled: true,
       deletable: false,
@@ -71,6 +72,7 @@ it('protects the root admin and yourself, but allows disabling another admin', a
   }
 
   const rootButton = await buttonFor('root@example.test')
+  expect(await screen.findByText('Root Admin (root@example.test)')).toBeInTheDocument()
   const selfButton = await buttonFor('admin1@example.test')
   const otherButton = await buttonFor('admin2@example.test')
 

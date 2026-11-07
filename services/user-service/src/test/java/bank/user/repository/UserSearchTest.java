@@ -40,7 +40,7 @@ class UserSearchTest {
     @BeforeEach
     void seed() {
         userRepository.deleteAll();
-        userRepository.save(user("Root", "Admin", Role.ADMIN, true));
+        userRepository.save(user("Root", "Admin", Role.ROOT_ADMIN, true));
         userRepository.save(user("Bob", "Brown", Role.AGENT, true));
         userRepository.save(user("Amy", "Brown", Role.AGENT, true));
         userRepository.save(user("Carl", "Cole", Role.AGENT, false));
@@ -60,6 +60,8 @@ class UserSearchTest {
     void filtersByRole() {
         assertThat(userRepository.search(Role.AGENT, null, 0, 20).getContent())
                 .extracting(User::getRole).containsOnly(Role.AGENT).hasSize(3);
+        assertThat(userRepository.search(Role.ADMIN, null, 0, 20).getContent())
+                .extracting(User::getRole).containsExactly(Role.ROOT_ADMIN);
     }
 
     @Test

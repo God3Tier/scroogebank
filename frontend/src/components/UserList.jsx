@@ -125,7 +125,7 @@ function UserList({ role, title, paged = false }) {
         {list.rows.map((user) => (
           <li key={user.id}>
             <span>
-              {user.firstName} {user.lastName} ({user.email})
+              {user.role === 'ROOT_ADMIN' ? 'Root Admin' : `${user.firstName} ${user.lastName}`} ({user.email})
             </span>
             {agentList && (
               <button type="button" className="agent-name-edit" aria-expanded={editingId === user.id}
