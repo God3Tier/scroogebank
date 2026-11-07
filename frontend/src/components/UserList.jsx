@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 
-import { reassignClients } from '../api/clients.js'
+import { listClients, reassignClients } from '../api/clients.js'
 import { disableUser, listUsers, resetPassword, updateUser } from '../api/users.js'
 import EditAgentNameForm from './EditAgentNameForm.jsx'
 import { Pager, ViewAll } from './ListFooter.jsx'
@@ -30,6 +30,11 @@ function UserList({ role, title, paged = false }) {
   const list = usePagedList(source)
   const [problem, setProblem] = useState('')
   const [reassigning, setReassigning] = useState(null)
+  const [picking, setPicking] = useState(null)
+  const [pickedClients, setPickedClients] = useState([])
+  const [selectedClientIds, setSelectedClientIds] = useState([])
+  const [pickLoading, setPickLoading] = useState(false)
+  const [pickError, setPickError] = useState('')
   const [receivers, setReceivers] = useState({ loading: false, users: [] })
   const [moved, setMoved] = useState('')
   const [resettingId, setResettingId] = useState(null)
@@ -109,6 +114,55 @@ function UserList({ role, title, paged = false }) {
     setMoved(`${agentName(from)}: ${movedText(result.reassigned, receiver)}`)
   }
 
+  async function loadAgentClients(user) {
+    const collected = []
+    let page = 0
+
+    while (true) {
+      const result = await listClients({ page, size: 100 })
+      collected.push(...result.content.filter((client) => client.assigned_agent_id === user.idpSub))
+      if (page + 1 >= (result.totalPages || 1)) break
+      page += 1
+    }
+    return collected
+  }
+
+  async function openPickClients(user) {
+    setMoved('')
+    setProblem('')
+    setEditingId(null)
+    setReassigning(null)
+    setPicking(user.id)
+    setPickedClients([])
+    setSelectedClientIds([])
+    setPickLoading(true)
+    setPickError('')
+    setReceivers({ loading: true, users: [] })
+    try {
+      const clients = await loadAgentClients(user)
+      setPickedClients(clients)
+    } catch {
+      setPickError('The clients could not be loaded. Try again.')
+    } finally {
+      setPickLoading(false)
+    }
+    try {
+      const page = await listUsers({ role: 'AGENT', enabled: true, size: RECEIVER_LIMIT })
+      setReceivers({ loading: false, users: page.content })
+    } catch {
+      setReceivers({ loading: false, users: [] })
+      setPickError('The agents could not be loaded. Try again.')
+    }
+  }
+
+  function closePickClients() {
+    setPicking(null)
+    setPickedClients([])
+    setSelectedClientIds([])
+    setPickLoading(false)
+    setPickError('')
+  }
+
   const agentList = role === 'AGENT'
   const empty = !list.loading && !list.error && list.rows.length === 0
   return (
@@ -138,12 +192,15 @@ function UserList({ role, title, paged = false }) {
                 {resettingId === user.id ? 'Requesting reset…' : 'Reset password'}
               </button>
             )}
-            {agentList && reassigning !== user.id && (
+            {agentList && reassigning !== user.id && picking !== user.id && (
               <button type="button" onClick={() => openReassign(user)}>Reassign clients</button>
             )}
+            {agentList && reassigning !== user.id && picking !== user.id && (
+              <button type="button" onClick={() => openPickClients(user)}>Reassign selected clients</button>
+            )}
             {user.enabled ? (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 disabled={Boolean(disableReason(user))}
                 title={disableReason(user)}
                 onClick={() => handleDisable(user)}
@@ -169,6 +226,52 @@ function UserList({ role, title, paged = false }) {
                 onSubmit={(receiver) => handleReassign(user, receiver)}
                 onCancel={() => setReassigning(null)}
               />
+            )}
+            {agentList && picking === user.id && (
+              <div className="reassign-picker">
+                {pickLoading && <p className="empty-note">Loading clients…</p>}
+                {pickError && <p className="form-error" role="alert">{pickError}</p>}
+                {!pickLoading && !pickError && pickedClients.length === 0 && (
+                  <p className="empty-note">This agent has no clients to reassign.</p>
+                )}
+                {!pickLoading && pickedClients.length > 0 && (
+                  <div className="reassign-picker__clients">
+                    <label>
+                      Clients to reassign
+                      <select
+                        multiple
+                        size={Math.min(8, pickedClients.length)}
+                        value={selectedClientIds}
+                        onChange={(event) => setSelectedClientIds(Array.from(event.target.selectedOptions, (option) => option.value))}
+                      >
+                        {pickedClients.map((client) => (
+                          <option key={client.client_id} value={client.client_id}>
+                            {client.first_name} {client.last_name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="section-note">Hold Ctrl/Cmd to select more than one client.</p>
+                    {!receivers.loading && (
+                      <ReassignForm
+                        agents={receivers.users.filter((agent) => agent.enabled && agent.idpSub !== user.idpSub)}
+                        submitLabel={`Reassign ${selectedClientIds.length || 'selected'} client${selectedClientIds.length === 1 ? '' : 's'}`}
+                        onSubmit={async (receiver) => {
+                          if (selectedClientIds.length === 0) return
+                          const result = await reassignClients({ toUserId: receiver.id, clientIds: selectedClientIds })
+                          setPickedClients((current) => current.filter((item) => !selectedClientIds.includes(item.client_id)))
+                          setSelectedClientIds([])
+                          setMoved(`${result.reassigned} client${result.reassigned === 1 ? '' : 's'} moved to ${agentName(receiver)}, with their accounts.`)
+                        }}
+                        onCancel={closePickClients}
+                      />
+                    )}
+                  </div>
+                )}
+                <div className="form-actions">
+                  <button type="button" onClick={closePickClients}>Done</button>
+                </div>
+              </div>
             )}
           </li>
         ))}
