@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { approveReport, discardReportEdit } from '../api/alertEvents.js'
 import { createNewsDrafts, isCrmClientId } from '../api/engagement.js'
-import { isNewsStale, SKIP_REASONS, STALE_NEWS_EXPLAINED, stalenessText } from '../utils/newsReports.js'
+import { FRESH_NEWS_EXPLAINED, isNewsStale, newsAgeText, SKIP_REASONS, STALE_NEWS_EXPLAINED, stalenessText } from '../utils/newsReports.js'
 
 // Edit, approve, then notify (news-alert-drafts plan 5.2). The agent may change the report's wording; the headline
 // and sources stay fixed, and the edited text is checked again. Approval is final and freezes what the client gets.
@@ -14,18 +14,22 @@ const TIME = new Intl.DateTimeFormat('en-SG', { hour: '2-digit', minute: '2-digi
 const DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: 'Asia/Singapore' })
 
 /**
- * "Stale" at the top of a report the agent has not approved, when its news is more than 7 days old. The same words
- * are the hover text, so the meaning is there even without a hover.
+ * "Fresh" or "Stale" at the top of a report the agent has not approved: stale when its news is more than 7 days old,
+ * fresh until then, with how old it is. The same words are the hover text, so the meaning is there without a hover.
  */
-export function StaleNewsNotice({ report, review, now: fixedNow }) {
+export function NewsFreshnessNotice({ report, review, now: fixedNow }) {
   const [loadedAt] = useState(() => Date.now())
   const now = fixedNow ?? loadedAt
   if (!report || !review) return null
   if (review.approval?.valid) return null
-  if (!isNewsStale(review.newsDate || report.createdAt, now)) return null
+  const newsDate = review.newsDate || report.createdAt
+  const age = newsAgeText(newsDate, now)
+  if (!age) return null
+  const stale = isNewsStale(newsDate, now)
+  const explained = stale ? STALE_NEWS_EXPLAINED : FRESH_NEWS_EXPLAINED
   return (
-    <p className="stale-notice" role="note" title={STALE_NEWS_EXPLAINED}>
-      <strong className="stale-notice__chip">Stale</strong> {STALE_NEWS_EXPLAINED}
+    <p className={stale ? 'stale-notice' : 'stale-notice stale-notice--fresh'} role="note" title={explained}>
+      <strong className="stale-notice__chip">{stale ? 'Stale' : 'Fresh'}</strong> {age ? `News ${age}. ` : ''}{explained}
     </p>
   )
 }

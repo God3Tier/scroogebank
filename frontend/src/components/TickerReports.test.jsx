@@ -105,11 +105,11 @@ describe('TickerReports', () => {
     expect(screen.queryByText('Continue monitoring')).not.toBeInTheDocument()
   })
 
-  it('shows the event severity in why this appeared, and a stale chip is not there for fresh news', async () => {
+  it('shows the event severity in why this appeared', async () => {
     renderPage()
 
     expect(await screen.findByText(/Event severity: 18 of 30 \(earnings\)/)).toBeInTheDocument()
-    expect(screen.queryByText('Stale')).not.toBeInTheDocument()
+    // The Fresh or Stale label depends on today's date, so NewsFreshnessNotice.test.jsx covers it with a fixed clock.
   })
 
   it('offers only Plan client briefing and Dismiss, keeps the clients selected and focuses the report', async () => {
