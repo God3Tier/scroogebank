@@ -14,10 +14,45 @@ class SourceDomainPolicyTest {
     private final SourceDomainPolicy policy = new SourceDomainPolicy();
 
     @Test
+    void aNameThatDoesNotExistIsRefusedWithAClearMessage() {
+        SourceDomainPolicy strict = new SourceDomainPolicy(domain -> domain.equals("reuters.com"));
+
+        assertThat(strict.normalise("www.Reuters.com")).isEqualTo("reuters.com");
+        assertThatThrownBy(() -> strict.normalise("asdfghjkl.com"))
+                .isInstanceOfSatisfying(SourceDomainException.class, e -> {
+                    assertThat(e.code()).isEqualTo("DOMAIN_NOT_FOUND");
+                    assertThat(e.getMessage()).contains("asdfghjkl.com", "spelling");
+                });
+    }
+
+    @Test
+    void internalAndExampleNamesAreRefusedWithoutAskingDns() {
+        SourceDomainPolicy neverAsked = new SourceDomainPolicy(domain -> { throw new AssertionError("should not be asked"); });
+
+        for (String name : new String[] {"intranet.local", "server.internal", "shop.test", "site.example", "x.invalid", "a.onion"}) {
+            assertThatThrownBy(() -> neverAsked.normalise(name))
+                    .isInstanceOfSatisfying(SourceDomainException.class, e -> assertThat(e.code()).isEqualTo("NOT_PUBLIC"));
+        }
+    }
+
+    @Test
+    void addressesAndBareNamesAreStillRefusedAsBadFormat() {
+        assertThatThrownBy(() -> policy.normalise("192.168.0.1")).isInstanceOf(SourceDomainException.class);
+        assertThatThrownBy(() -> policy.normalise("localhost")).isInstanceOf(SourceDomainException.class);
+        assertThatThrownBy(() -> policy.normalise("https://reuters.com/news")).isInstanceOf(SourceDomainException.class);
+    }
+
+    @Test
+    void theRealLookupSaysNoForAReservedNameAndNeverFailsClosed() {
+        // ".invalid" is reserved and can never resolve, so this needs no network; a lookup error would answer "exists".
+        assertThat(new DnsDomainLookup().exists("definitely-not-a-site.invalid")).isFalse();
+    }
+
+    @Test
     void lowerCasesTrimsAndDropsWwwAndTrailingDot() {
         assertThat(policy.normalise("  WWW.Example.COM. ")).isEqualTo("example.com");
         assertThat(policy.normalise("news.example.co.uk")).isEqualTo("news.example.co.uk");
-        assertThat(policy.normalise("xn--bcher-kva.example")).isEqualTo("xn--bcher-kva.example");
+        assertThat(policy.normalise("xn--bcher-kva.de")).isEqualTo("xn--bcher-kva.de");
     }
 
     @ParameterizedTest

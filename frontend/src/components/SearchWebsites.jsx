@@ -67,12 +67,14 @@ function SearchWebsites({ websites, readOnly, tickers, onChanged }) {
                 {confirming === entry.id ? (
                   <span className="source-confirm" role="group" aria-label={`Confirm removing ${entry.domain}`}>
                     {' '}Stop searching {entry.domain}?{' '}
-                    <button type="button" disabled={busy} onClick={() => remove(entry)}>Yes, remove</button>{' '}
-                    <button type="button" disabled={busy} onClick={() => setConfirming(null)}>Cancel</button>
+                    <button type="button" className="source-confirm__yes" disabled={busy} onClick={() => remove(entry)}>Yes, remove</button>{' '}
+                    <button type="button" className="source-confirm__no" disabled={busy} onClick={() => setConfirming(null)}>Cancel</button>
                   </span>
                 ) : (
                   <button type="button" className="source-remove" disabled={busy}
-                    aria-label={`Remove ${entry.domain}`} onClick={() => setConfirming(entry.id)}>Remove</button>
+                    aria-label={`Remove ${entry.domain}`} onClick={() => setConfirming(entry.id)}>
+                    <span className="material-symbols-outlined" aria-hidden="true">close</span> Remove
+                  </button>
                 )}
               </li>
             ))}
