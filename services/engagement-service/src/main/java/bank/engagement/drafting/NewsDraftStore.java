@@ -24,10 +24,16 @@ class NewsDraftStore {
             Instant newsDate, Instant validUntil, String finalHash, String summaryLine, int position) {
     }
 
-    record News(UUID draftId, String builtSummaryHash, boolean rebuildSuggested, boolean sentOutSynced) {
+    /** An alert the alerts service refused to mark Sent Out for good, with its reason (NOT_AUTHORISED or INVALID_STATUS). */
+    record Unmarked(UUID alertId, String reason) {
+    }
+
+    record News(UUID draftId, String builtSummaryHash, boolean rebuildSuggested, boolean sentOutSynced,
+            List<Unmarked> unmarked) {
     }
 
     private final JdbcTemplate jdbc;
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper;
 
     List<Report> reports(UUID draftId) {
         return jdbc.query("""
@@ -73,8 +79,12 @@ class NewsDraftStore {
     }
 
     Optional<News> news(UUID draftId) {
-        return jdbc.query("SELECT draft_id, built_summary_hash, rebuild_suggested, sent_out_synced FROM email_draft_news WHERE draft_id = ?",
-                (rs, n) -> new News(rs.getObject(1, UUID.class), rs.getString(2).strip(), rs.getBoolean(3), rs.getBoolean(4)),
+        return jdbc.query("""
+                SELECT draft_id, built_summary_hash, rebuild_suggested, sent_out_synced, sent_out_unmarked::text
+                  FROM email_draft_news WHERE draft_id = ?
+                """,
+                (rs, n) -> new News(rs.getObject(1, UUID.class), rs.getString(2).strip(), rs.getBoolean(3), rs.getBoolean(4),
+                        unmarked(rs.getString(5))),
                 draftId).stream().findFirst();
     }
 
@@ -90,8 +100,27 @@ class NewsDraftStore {
         jdbc.update("UPDATE email_draft_news SET rebuild_suggested = ? WHERE draft_id = ?", suggested, draftId);
     }
 
-    void sentOutSynced(UUID draftId, boolean synced) {
-        jdbc.update("UPDATE email_draft_news SET sent_out_synced = ? WHERE draft_id = ?", synced, draftId);
+    /** After a Sent Out call: whether nothing is left to retry, and the alerts that can never be marked. */
+    void sentOutResult(UUID draftId, boolean synced, List<Unmarked> unmarked) {
+        String json;
+        try {
+            json = mapper.writeValueAsString(unmarked);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+        jdbc.update("UPDATE email_draft_news SET sent_out_synced = ?, sent_out_unmarked = CAST(? AS jsonb) WHERE draft_id = ?",
+                synced, json, draftId);
+    }
+
+    private List<Unmarked> unmarked(String json) {
+        try {
+            List<Unmarked> list = new java.util.ArrayList<>();
+            mapper.readTree(json == null ? "[]" : json).forEach(node ->
+                    list.add(new Unmarked(UUID.fromString(node.path("alertId").asText()), node.path("reason").asText())));
+            return list;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return List.of();
+        }
     }
 
     /** The alerts on the agent's open News Alert drafts, for the dismiss block on Event Alerts. */

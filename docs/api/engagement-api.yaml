@@ -508,7 +508,7 @@ paths:
                         clientRef: { type: string, nullable: true }
                         reason:
                           type: string
-                          enum: [NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, ALREADY_ON_DRAFT, LIMIT_REACHED]
+                          enum: [NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, ALREADY_ON_DRAFT, DRAFT_BEING_SENT, LIMIT_REACHED]
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1026,7 +1026,7 @@ components:
 
     NewsDraft:
       type: object
-      required: [reports, summaryEdited, rebuildSuggested, guide, fixedText, sentOutSynced, maxReports]
+      required: [reports, summaryEdited, rebuildSuggested, guide, fixedText, sentOutSynced, maxReports, unmarkedReports]
       properties:
         reports:
           type: array
@@ -1049,8 +1049,20 @@ components:
         fixedText:
           type: string
           description: The portfolio line, disclaimer and relationship manager's details added to every email. The agent cannot change them.
-        sentOutSynced: { type: boolean, description: 'After sending, whether the clients were moved to Sent Out.' }
+        sentOutSynced: { type: boolean, description: 'After sending: true when nothing is left to retry (every report is Sent Out, or refused for good and listed in unmarkedReports).' }
         maxReports: { type: integer }
+        unmarkedReports:
+          type: array
+          description: |
+            Reports that could not be marked Sent Out after sending and never can be (the client was reassigned, or is not in
+            Plan client briefing). They no longer keep the retry alive; the page says which they are.
+          items:
+            type: object
+            required: [alertId, issuer, reason]
+            properties:
+              alertId: { type: string, format: uuid }
+              issuer: { type: string }
+              reason: { type: string, enum: [NOT_AUTHORISED, INVALID_STATUS] }
 
     Preferences:
       type: object

@@ -300,6 +300,73 @@ class NewsDraftApiTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void twoNotifyClicksAtOnceForOneClientMakeOneDraft() throws Exception {
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            var first = pool.submit(() -> { start.await(); return notify(APPLE_EVENT, APPLE_ALERT); });
+            var second = pool.submit(() -> { start.await(); return notify(SHELL_EVENT, SHELL_ALERT); });
+            start.countDown();
+            first.get();
+            second.get();
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM email_drafts WHERE purpose = 'NEWS_ALERT'", Integer.class))
+                .as("one open draft for the client").isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM email_draft_reports WHERE active", Integer.class))
+                .as("each report on it once").isEqualTo(2);
+    }
+
+    @Test
+    void theDatabaseRefusesASecondOpenNewsDraftForOneClient() {
+        String insert = """
+                INSERT INTO email_drafts (id, owner_agent_sub, client_id, purpose, tone, subject_template, body_template,
+                    edited, source, status, version, created_at, updated_at)
+                VALUES (?, ?, ?, 'NEWS_ALERT', 'NONE', 's', 'b', false, 'NEWS', ?, 0, now(), now())
+                """;
+        jdbc.update(insert, UUID.randomUUID(), Tokens.AGENT, CLIENT, "DRAFT");
+
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(
+                () -> jdbc.update(insert, UUID.randomUUID(), Tokens.AGENT, CLIENT, "SENDING")))
+                .as("a draft being sent counts as open").isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+        jdbc.update("UPDATE email_drafts SET status = 'SENT', subject_template = NULL, body_template = NULL");
+        jdbc.update(insert, UUID.randomUUID(), Tokens.AGENT, CLIENT, "DRAFT");
+    }
+
+    @Test
+    void aClientWhoseDraftIsBeingSentIsSkippedAndNamedAsSuch() throws Exception {
+        String id = notify(APPLE_EVENT, APPLE_ALERT).at("/drafts/0/draftId").asText();
+        jdbc.update("UPDATE email_drafts SET status = 'SENDING' WHERE id = ?::uuid", id);
+
+        JsonNode result = notify(SHELL_EVENT, SHELL_ALERT);
+
+        assertThat(result.get("drafts")).isEmpty();
+        assertThat(result.at("/skipped/0/reason").asText()).isEqualTo("DRAFT_BEING_SENT");
+    }
+
+    @Test
+    void aReportRefusedForGoodAfterTheSendIsListedAndEndsTheRetry() throws Exception {
+        notify(APPLE_EVENT, APPLE_ALERT);
+        String id = notify(SHELL_EVENT, SHELL_ALERT).at("/drafts/0/draftId").asText();
+        checksPass();
+        pdfWith(APPLE_HASH);
+        when(newsReports.sentOut(anyList(), any(), anyString())).thenReturn(List.of(
+                new NewsReports.SentOutItem(APPLE_ALERT, "NOT_AUTHORISED"), new NewsReports.SentOutItem(SHELL_ALERT, "SENT_OUT")));
+        int version = draft(id).get("version").asInt();
+
+        mvc.perform(post("/api/engagement/drafts/" + id + "/send").with(Tokens.agent())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":" + version + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.news.sentOutSynced").value(true))
+                .andExpect(jsonPath("$.news.unmarkedReports.length()").value(1))
+                .andExpect(jsonPath("$.news.unmarkedReports[0].issuer").value("Apple Inc"))
+                .andExpect(jsonPath("$.news.unmarkedReports[0].reason").value("NOT_AUTHORISED"));
+        assertThat(draft(id).at("/news/unmarkedReports/0/alertId").asText()).isEqualTo(APPLE_ALERT.toString());
+    }
+
+    @Test
     void theMimeMessageCarriesThePdf() {
         byte[] raw = bank.engagement.notifications.MimeMessageFactory.build(new OutgoingMail("Agent via Scrooge Bank",
                 "no-reply@mail.example.test", "client@example.test", "agent@example.test", "agent@example.test",

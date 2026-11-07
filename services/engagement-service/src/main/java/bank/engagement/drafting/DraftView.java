@@ -48,10 +48,16 @@ public record DraftView(
      * @param rebuildSuggested the reports changed after the agent edited the summary: offer "Rebuild summary?"
      * @param guide            the read-only guide to the PDF; page numbers are added from the PDF when it is sent
      * @param fixedText        the portfolio line, disclaimer and relationship manager's details added to every email
-     * @param sentOutSynced    after sending: whether the clients were moved to Sent Out
+     * @param sentOutSynced    after sending: true when nothing is left to retry (every report is Sent Out, or the
+     *                         alerts service refused it for good and it is in {@code unmarkedReports})
+     * @param unmarkedReports  reports that could not be marked Sent Out, with the reason, so the page says which
      */
     public record NewsView(List<NewsReport> reports, boolean summaryEdited, boolean rebuildSuggested, String guide,
-            String fixedText, boolean sentOutSynced, int maxReports) {
+            String fixedText, boolean sentOutSynced, int maxReports, List<UnmarkedReport> unmarkedReports) {
+    }
+
+    /** {@code reason}: NOT_AUTHORISED (no longer the agent's client) or INVALID_STATUS (not in Plan client briefing). */
+    public record UnmarkedReport(UUID alertId, String issuer, String reason) {
     }
 
     public record NewsReport(UUID alertId, UUID approvalId, UUID eventId, String issuer, String headline,

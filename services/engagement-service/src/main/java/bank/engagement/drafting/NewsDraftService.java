@@ -18,7 +18,7 @@ import bank.engagement.notifications.OutgoingMail;
 import bank.engagement.web.ApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -44,12 +44,14 @@ import java.util.UUID;
 public class NewsDraftService {
 
     private static final Set<String> SENT_OUT_OK = Set.of("SENT_OUT", "ALREADY_SENT_OUT");
+    /** After a send these never change, so retrying is pointless: the report is listed as not marked. */
+    private static final Set<String> SENT_OUT_FINAL = Set.of("NOT_AUTHORISED", "INVALID_STATUS");
 
     /** What one Notify click did for each client. */
     public record CreatedDraft(UUID draftId, UUID clientId, boolean created, int reportCount, List<UUID> added) {
     }
 
-    /** {@code reason}: NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, ALREADY_ON_DRAFT or LIMIT_REACHED. */
+    /** {@code reason}: NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, ALREADY_ON_DRAFT, DRAFT_BEING_SENT or LIMIT_REACHED. */
     public record SkippedReport(UUID alertId, String clientRef, String reason) {
     }
 
@@ -121,15 +123,41 @@ public class NewsDraftService {
         }
         List<CreatedDraft> drafts = new ArrayList<>();
         for (Map.Entry<UUID, List<NewsReports.PackageItem>> entry : byClient.entrySet()) {
-            CreatedDraft created = transactions.execute(status -> addToDraft(owner, eventId, entry.getKey(), entry.getValue(), skipped));
+            CreatedDraft created = addForClient(owner, eventId, entry.getKey(), entry.getValue(), skipped);
             if (created != null) drafts.add(created);
         }
         return new CreateResult(drafts, skipped);
     }
 
+    /**
+     * One client's reports, in one transaction. Two Notify clicks at the same moment can each try to make the client's
+     * draft, or add the same report: the database refuses the second (one open draft per client, one active draft per
+     * report). A refused statement poisons the Postgres transaction, so the whole client is tried once more in a fresh
+     * one, which then finds the other click's draft and adds to it.
+     */
+    private CreatedDraft addForClient(String owner, UUID eventId, UUID clientId, List<NewsReports.PackageItem> items,
+            List<SkippedReport> skipped) {
+        for (int attempt = 1; ; attempt++) {
+            List<SkippedReport> attemptSkipped = new ArrayList<>();
+            try {
+                CreatedDraft created = transactions.execute(status -> addToDraft(owner, eventId, clientId, items, attemptSkipped));
+                skipped.addAll(attemptSkipped);
+                return created;
+            } catch (DataIntegrityViolationException race) {
+                if (attempt >= 2) throw race;
+            }
+        }
+    }
+
     private CreatedDraft addToDraft(String owner, UUID eventId, UUID clientId, List<NewsReports.PackageItem> items,
             List<SkippedReport> skipped) {
         Instant now = clock.instant();
+        // A draft being sent is not added to: its reports were already read for the send.
+        if (repository.findFirstByOwnerAgentSubAndClientIdAndPurposeAndStatusOrderByCreatedAtDesc(
+                owner, clientId, DraftPurpose.NEWS_ALERT, DraftStatus.SENDING).isPresent()) {
+            items.forEach(item -> skipped.add(new SkippedReport(item.alertId(), item.clientRef(), "DRAFT_BEING_SENT")));
+            return null;
+        }
         Optional<EmailDraft> open = repository.findFirstByOwnerAgentSubAndClientIdAndPurposeAndStatusOrderByCreatedAtDesc(
                 owner, clientId, DraftPurpose.NEWS_ALERT, DraftStatus.DRAFT);
         boolean created = open.isEmpty();
@@ -147,15 +175,12 @@ public class NewsDraftService {
                 skipped.add(new SkippedReport(item.alertId(), item.clientRef(), "LIMIT_REACHED"));
                 continue;
             }
-            try {
-                store.add(new NewsDraftStore.Report(draft.getId(), item.alertId(), item.approvalId(), eventId,
-                        trim(item.issuer(), 200), trim(item.headline(), 300), item.newsDate(), item.validUntil(),
-                        item.finalHash(), trim(item.summaryLine(), 400), count), now);
-                count++;
-                added.add(item.alertId());
-            } catch (DuplicateKeyException race) {
-                skipped.add(new SkippedReport(item.alertId(), item.clientRef(), "ALREADY_ON_DRAFT"));
-            }
+            // A duplicate here (the same report added by a parallel click) aborts this transaction; addForClient retries.
+            store.add(new NewsDraftStore.Report(draft.getId(), item.alertId(), item.approvalId(), eventId,
+                    trim(item.issuer(), 200), trim(item.headline(), 300), item.newsDate(), item.validUntil(),
+                    item.finalHash(), trim(item.summaryLine(), 400), count), now);
+            count++;
+            added.add(item.alertId());
         }
         if (added.isEmpty()) {
             if (created) {
@@ -253,8 +278,13 @@ public class NewsDraftService {
                 .map(r -> new NewsText.GuideLine(r.issuer(), r.headline(), null)).toList());
         String agentName = agents.find(draft.getOwnerAgentSub()).map(AgentProfile::displayName).orElse("your relationship manager");
         String fixed = NewsText.fixed(NewsText.issuers(lines(rows)), agentName, null);
+        Map<UUID, String> issuerByAlert = new HashMap<>();
+        rows.forEach(r -> issuerByAlert.put(r.alertId(), r.issuer()));
+        List<DraftView.UnmarkedReport> unmarked = news.map(NewsDraftStore.News::unmarked).orElse(List.of()).stream()
+                .map(u -> new DraftView.UnmarkedReport(u.alertId(), issuerByAlert.getOrDefault(u.alertId(), "A report"), u.reason()))
+                .toList();
         return new DraftView.NewsView(list, edited, news.map(NewsDraftStore.News::rebuildSuggested).orElse(false),
-                guide, fixed, news.map(NewsDraftStore.News::sentOutSynced).orElse(false), maxReports);
+                guide, fixed, news.map(NewsDraftStore.News::sentOutSynced).orElse(false), maxReports, unmarked);
     }
 
     public List<UUID> openAlerts(String owner) {
@@ -421,16 +451,32 @@ public class NewsDraftService {
         }
     }
 
+    /**
+     * Moves the clients to Sent Out. A report the alerts service refuses for good (the client was reassigned, or is not
+     * in Plan client briefing any more) is final: it is listed as not marked and no longer keeps the retry button
+     * alive. Only a failed call, or an answer we do not know, can still be retried.
+     *
+     * @return true when nothing is left to retry
+     */
     private boolean recordSentOut(UUID draftId, List<UUID> alertIds, String messageId) {
-        boolean synced;
+        boolean synced = true;
+        List<NewsDraftStore.Unmarked> unmarked = new ArrayList<>();
         try {
-            synced = reports.sentOut(alertIds, draftId, messageId).stream().allMatch(item -> SENT_OUT_OK.contains(item.outcome()));
+            for (NewsReports.SentOutItem item : reports.sentOut(alertIds, draftId, messageId)) {
+                if (SENT_OUT_FINAL.contains(item.outcome())) {
+                    unmarked.add(new NewsDraftStore.Unmarked(item.alertId(), item.outcome()));
+                } else if (!SENT_OUT_OK.contains(item.outcome())) {
+                    synced = false;
+                }
+            }
         } catch (RuntimeException ex) {
             log.warn("Sent Out not recorded for draft {}: {}", draftId, ex.getClass().getSimpleName());
             synced = false;
+            unmarked = List.of();
         }
         boolean result = synced;
-        transactions.executeWithoutResult(status -> store.sentOutSynced(draftId, result));
+        List<NewsDraftStore.Unmarked> kept = unmarked;
+        transactions.executeWithoutResult(status -> store.sentOutResult(draftId, result, kept));
         return synced;
     }
 
