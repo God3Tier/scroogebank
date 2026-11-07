@@ -27,6 +27,11 @@ demo_accounts=(
   32f72eae-3cc6-4dd5-aeef-c0596f443d0a # transaction-activity decline
   80272835-28f2-4316-80d1-76b7b3ecc096 # sustained net outflow
   85549ca7-d488-448d-b5dc-dcf25496f0e8 # healthy control
+  # One client with all four scenarios, one per account, seeded 2026-11-07.
+  3a048ae4-8481-4545-adfa-1d5ed98054b0 # recurring-credit interruption
+  7ce1f08f-5371-4060-930a-c4ba63e9d20d # transaction-activity decline
+  c9560b7b-2776-46d3-ae38-7adfc0840d55 # sustained net outflow
+  e9f93879-9763-4350-add1-6371b67c5de5 # healthy control
 )
 
 instance=$(terraform -chdir="$sftp_dir" output -raw instance_id)
