@@ -101,7 +101,12 @@ class NewsDraftStore {
     }
 
     /** After a Sent Out call: whether nothing is left to retry, and the alerts that can never be marked. */
+    /** @param unmarked the reports refused for good; null keeps what an earlier try stored */
     void sentOutResult(UUID draftId, boolean synced, List<Unmarked> unmarked) {
+        if (unmarked == null) {
+            jdbc.update("UPDATE email_draft_news SET sent_out_synced = ? WHERE draft_id = ?", synced, draftId);
+            return;
+        }
         String json;
         try {
             json = mapper.writeValueAsString(unmarked);

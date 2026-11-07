@@ -461,22 +461,35 @@ public class NewsDraftService {
     private boolean recordSentOut(UUID draftId, List<UUID> alertIds, String messageId) {
         boolean synced = true;
         List<NewsDraftStore.Unmarked> unmarked = new ArrayList<>();
+        Set<UUID> answered = new java.util.HashSet<>();
         try {
             for (NewsReports.SentOutItem item : reports.sentOut(alertIds, draftId, messageId)) {
+                answered.add(item.alertId());
                 if (SENT_OUT_FINAL.contains(item.outcome())) {
                     unmarked.add(new NewsDraftStore.Unmarked(item.alertId(), item.outcome()));
                 } else if (!SENT_OUT_OK.contains(item.outcome())) {
                     synced = false;
                 }
             }
+            // A report the answer leaves out was not marked and nothing said it never will be: keep the retry.
+            if (!answered.containsAll(alertIds)) {
+                log.warn("Sent Out answer for draft {} left out {} report(s)", draftId, alertIds.size() - answered.size());
+                synced = false;
+            }
         } catch (RuntimeException ex) {
             log.warn("Sent Out not recorded for draft {}: {}", draftId, ex.getClass().getSimpleName());
             synced = false;
-            unmarked = List.of();
+            unmarked = null; // the call failed, so what an earlier try stored as final stays as it was
         }
         boolean result = synced;
         List<NewsDraftStore.Unmarked> kept = unmarked;
-        transactions.executeWithoutResult(status -> store.sentOutResult(draftId, result, kept));
+        try {
+            transactions.executeWithoutResult(status -> store.sentOutResult(draftId, result, kept));
+        } catch (RuntimeException ex) {
+            // The email is already out. A database failure here must not turn a sent email into a failed send.
+            log.warn("Sent Out result not stored for draft {}: {}", draftId, ex.getClass().getSimpleName());
+            return false;
+        }
         return synced;
     }
 

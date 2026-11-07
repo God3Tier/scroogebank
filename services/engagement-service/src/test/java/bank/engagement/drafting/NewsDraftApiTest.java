@@ -367,6 +367,21 @@ class NewsDraftApiTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void aReportTheSentOutAnswerLeavesOutKeepsTheRetry() throws Exception {
+        notify(APPLE_EVENT, APPLE_ALERT);
+        String id = notify(SHELL_EVENT, SHELL_ALERT).at("/drafts/0/draftId").asText();
+        checksPass();
+        pdfWith(APPLE_HASH);
+        when(newsReports.sentOut(anyList(), any(), anyString())).thenReturn(List.of(new NewsReports.SentOutItem(SHELL_ALERT, "SENT_OUT")));
+        int version = draft(id).get("version").asInt();
+
+        mvc.perform(post("/api/engagement/drafts/" + id + "/send").with(Tokens.agent())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":" + version + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.news.sentOutSynced").value(false));
+    }
+
+    @Test
     void theMimeMessageCarriesThePdf() {
         byte[] raw = bank.engagement.notifications.MimeMessageFactory.build(new OutgoingMail("Agent via Scrooge Bank",
                 "no-reply@mail.example.test", "client@example.test", "agent@example.test", "agent@example.test",

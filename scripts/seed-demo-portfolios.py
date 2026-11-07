@@ -25,8 +25,15 @@ optional extras:
                   companies the agent's clients already hold (ADR-0081), which spends Tavily credits.
   --search ID     then starts one search of that company (for example LSE-SHEL) over every website, as Search now does.
 
+Clients (--create-clients). Creates the agent's demo clients when they are missing, so a fresh deployment needs no clicking:
+for each name in DEMO_CLIENTS it creates the client under the signed-in agent, verifies it without a document, and opens an
+active SGD investment account. A client that already exists (same first and last name) is reused, and one that has an active
+investment account keeps it, so a rerun creates nothing twice. --client-emails gives one address per client, in order; use
+addresses that can receive mail (in the SES sandbox, verified ones). The agent itself is not created here: an admin creates it
+in Manage Agents (docs/runbooks/deploy-aws.md, "Evaluation accounts"), and it then signs in once.
+
 usage: ALERT_AGENT_TOKEN=<access token> python scripts/seed-demo-portfolios.py [--base-url URL] [--dry-run]
-       [--profile dbs|news] [--add-websites] [--search INSTRUMENT_ID]
+       [--profile dbs|news] [--create-clients --client-emails A,B,C] [--add-websites] [--search INSTRUMENT_ID]
 
 The token is the agent's access token: sign in to the app as the agent, then in
 the browser console run
@@ -58,6 +65,7 @@ ANTHROPIC = {"instrumentId": "PRIV-ANTHROPIC", "unitPrice": 100, "valuationCurre
 SHELL = {"instrumentId": "LSE-SHEL", "quantity": 600, "unitPrice": 27, "valuationCurrency": "GBP", "fxToSgd": 1.75}
 # A large Anthropic holding scores above the alert threshold only when it is about half of the portfolio, and a
 # portfolio with Shell in it is bigger, so the client with all three holds more Anthropic.
+DEMO_CLIENTS = [("Chloe", "Tan"), ("Daniel", "Lim"), ("Esther", "Wong")]
 NEWS_WEBSITES = ["cnbc.com", "finance.yahoo.com", "thenextweb.com", "techspot.com", "adage.com"]
 
 
@@ -94,6 +102,62 @@ def search_now(base_url, token, instrument_id):
         sys.exit(f"search {instrument_id}: 403, none of this agent's clients holds it")
     body = require_ok(status, body, f"search {instrument_id}")
     print(f"search {instrument_id}: {body.get('outcome')}; reports appear in about 5 to 7 minutes, refresh the page")
+
+
+def client_body(first, last, email, index):
+    """A valid demo client: adult, Singapore address, a phone number of its own (a phone number cannot be shared)."""
+    return {"first_name": first, "last_name": last, "date_of_birth": "1985-06-15T00:00:00Z", "gender": "Female" if index != 1 else "Male",
+            "email": email, "phone_number": f"+65910000{index:02d}", "address": f"{10 + index} Demo Street",
+            "city": "Singapore", "state": "Singapore", "country": "Singapore", "postal_code": f"01890{index}"}
+
+
+def account_body(client_id):
+    return {"client_id": client_id, "account_type": "INVESTMENT", "status": "ACTIVE", "opening_date": "2026-01-01T00:00:00Z",
+            "initial_deposit": 10000, "currency": "SGD", "branch_id": "SG-001"}
+
+
+def create_clients(base_url, token, emails, dry_run):
+    """Creates the demo clients that are missing, verifies them and opens an active investment account for each."""
+    if len(emails) != len(DEMO_CLIENTS):
+        sys.exit(f"--client-emails needs {len(DEMO_CLIENTS)} addresses, one per client: "
+                 + ", ".join(f"{f} {l}" for f, l in DEMO_CLIENTS))
+    existing = {(c["first_name"], c["last_name"]): c for c in agent_clients(base_url, token)}
+    for index, ((first, last), email) in enumerate(zip(DEMO_CLIENTS, emails)):
+        client = existing.get((first, last))
+        if client is None:
+            if dry_run:
+                print(f"would create client {first} {last} <{email}>, verify it and open an active investment account")
+                continue
+            status, body = request(base_url, token, "POST", "/api/clients", client_body(first, last, email, index + 1))
+            if status == 409:
+                sys.exit(f"create {first} {last}: 409, that email or phone number belongs to another client")
+            if status == 401:
+                sys.exit(f"create {first} {last}: 401, the token is missing or expired; copy a new one")
+            if status == 403:
+                sys.exit(f"create {first} {last}: 403, sign in as an agent, not an admin")
+            if status != 201:
+                sys.exit(f"create {first} {last}: {status} {body}")
+            client = {"client_id": body["client_id"], "first_name": first, "last_name": last, "verification_status": "UNVERIFIED"}
+            print(f"created client {first} {last}")
+        else:
+            print(f"client {first} {last}: already there, reused")
+        if str(client.get("verification_status", "")).upper() != "VERIFIED":
+            if dry_run:
+                print(f"would verify {first} {last}")
+            else:
+                status, body = request(base_url, token, "POST", f"/api/clients/{client['client_id']}/verify")
+                if status not in (200, 409):  # 409 = verified already
+                    sys.exit(f"verify {first} {last}: {status} {body}")
+                print(f"verified {first} {last}")
+        if dry_run:
+            continue
+        if active_investment_accounts(base_url, token, client):
+            print(f"{first} {last}: active investment account already there")
+            continue
+        status, body = request(base_url, token, "POST", "/api/accounts", account_body(client["client_id"]))
+        if status != 201:
+            sys.exit(f"open account for {first} {last}: {status} {body}")
+        print(f"opened an active investment account for {first} {last}")
 
 
 def request(base_url, token, method, path, body=None, headers=None):
@@ -158,6 +222,11 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="list the accounts without saving")
     parser.add_argument("--profile", choices=["dbs", "news"], default="dbs",
                         help="dbs: the DBS and OCBC demo (default); news: Shell, Anthropic and Apple for the news-alert test")
+    parser.add_argument("--create-clients", action="store_true",
+                        help="first create the demo clients and their active investment accounts if they are missing")
+    parser.add_argument("--client-emails", default="",
+                        help="with --create-clients: one email per client, comma separated, in the order " +
+                             ", ".join(f"{f} {l}" for f, l in DEMO_CLIENTS))
     parser.add_argument("--add-websites", action="store_true", help="add the test websites to the shared search list first")
     parser.add_argument("--search", metavar="INSTRUMENT_ID", help="start one search of this company at the end")
     args = parser.parse_args()
@@ -166,6 +235,8 @@ def main():
         sys.exit("set ALERT_AGENT_TOKEN to the agent's access token (see the usage at the top of this script)")
     base_url = args.base_url.rstrip("/")
 
+    if args.create_clients:
+        create_clients(base_url, token, [e.strip() for e in args.client_emails.split(",") if e.strip()], args.dry_run)
     targets = []
     for client in agent_clients(base_url, token):
         for account in active_investment_accounts(base_url, token, client):
@@ -176,7 +247,7 @@ def main():
     for index, (client, account) in enumerate(targets):
         held = ", ".join(f"{p['instrumentId']} x{p['quantity']}" for p in positions_for(args.profile, index))
         print(f"  {account['id']}  {client['first_name']} {client['last_name']}: {held}")
-    if len(holders) < 2:
+    if len(holders) < 2 and not (args.dry_run and args.create_clients):
         sys.exit("the worker searches an instrument only when at least 2 clients hold it: "
                  "verify a second client and open and activate an investment account for them")
     if args.dry_run:

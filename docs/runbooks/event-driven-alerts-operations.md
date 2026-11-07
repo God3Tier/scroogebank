@@ -301,9 +301,12 @@ Anthropic comes with migration V18; Shell and Apple come with V8. Order:
 3. Apply the alert-worker stack with `ingestion_enabled = true` and `ai_enabled = true` (`report_summary_enabled` is on by default).
    It runs once at apply; with no holdings yet it finds nothing to search.
 4. Apply the agent-engagement stack (it reads the crm stack's outputs).
-5. Sign in as an agent, copy the access token (above) and, with at least two of the agent's clients holding an active investment
-   account, run `scripts/seed-demo-portfolios.py --profile news --add-websites --search LSE-SHEL --dry-run`, then without
-   `--dry-run`. Websites go in first, because adding one starts a search of what is already held. The first client (accounts in id
+5. An admin creates the agent in Manage Agents (deploy-aws.md, "Evaluation accounts"), and the agent signs in once. Copy the
+   agent's access token (above) and run `scripts/seed-demo-portfolios.py --profile news --create-clients --client-emails
+   A,B,C --add-websites --search LSE-SHEL --dry-run`, then without `--dry-run`. `--create-clients` creates Chloe Tan, Daniel Lim
+   and Esther Wong under that agent if they are missing (verified, each with an active SGD investment account); use addresses
+   that can receive mail (verified ones in the SES sandbox). A rerun reuses what is there. Without `--create-clients` the
+   script needs at least two of the agent's clients with an active investment account already. Websites go in first, because adding one starts a search of what is already held. The first client (accounts in id
    order) holds Shell, Anthropic and Apple, the second Apple and Anthropic, the rest Apple.
 6. Wait 5 to 7 minutes and refresh Event Alerts. A manual Search now searches every company an agent's clients hold; only the
    scheduled runs apply the stricter two-clients-or-half-an-account rule, so Shell, held by one client, is searched by hand.

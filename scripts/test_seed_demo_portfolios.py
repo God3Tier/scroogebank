@@ -54,5 +54,56 @@ class WebsitesAndSearchTest(unittest.TestCase):
                 seed.search_now("http://x", "t", "LSE-SHEL")
 
 
+class CreateClientsTest(unittest.TestCase):
+    EMAILS = ["a@x.com", "b@x.com", "c@x.com"]
+
+    def fake(self, existing, accounts_for=()):
+        """A tiny stand-in for the CRM: records the calls and answers like it."""
+        calls = []
+
+        def request(base, token, method, path, body=None, headers=None):
+            calls.append((method, path))
+            if method == "GET" and path.startswith("/api/clients?"):
+                return 200, {"content": existing, "totalPages": 1}
+            if method == "GET" and path.startswith("/api/accounts?"):
+                held = any(c in path for c in accounts_for)
+                return 200, [{"id": "acc", "account_type": "INVESTMENT", "status": "ACTIVE"}] if held else []
+            if method == "POST" and path == "/api/clients":
+                return 201, {"client_id": "id-" + body["first_name"]}
+            return 201 if path == "/api/accounts" else 200, {}
+        return request, calls
+
+    def test_a_fresh_agent_gets_three_verified_clients_with_active_accounts(self):
+        request, calls = self.fake([])
+        with mock.patch.object(seed, "request", side_effect=request):
+            seed.create_clients("http://x", "t", self.EMAILS, False)
+        self.assertEqual(sum(c == ("POST", "/api/clients") for c in calls), 3)
+        self.assertEqual(sum(c == ("POST", "/api/accounts") for c in calls), 3)
+        self.assertEqual(sum(c[1].endswith("/verify") for c in calls), 3)
+
+    def test_a_rerun_creates_nothing_when_everything_is_there(self):
+        there = [{"client_id": "id-" + f, "first_name": f, "last_name": l, "verification_status": "VERIFIED"}
+                 for f, l in seed.DEMO_CLIENTS]
+        request, calls = self.fake(there, accounts_for=["id-Chloe", "id-Daniel", "id-Esther"])
+        with mock.patch.object(seed, "request", side_effect=request):
+            seed.create_clients("http://x", "t", self.EMAILS, False)
+        self.assertFalse([c for c in calls if c[0] == "POST"])
+
+    def test_a_dry_run_changes_nothing_and_the_emails_must_match_the_clients(self):
+        request, calls = self.fake([])
+        with mock.patch.object(seed, "request", side_effect=request):
+            seed.create_clients("http://x", "t", self.EMAILS, True)
+            with self.assertRaises(SystemExit):
+                seed.create_clients("http://x", "t", ["only@x.com"], False)
+        self.assertFalse([c for c in calls if c[0] == "POST"])
+
+    def test_every_generated_client_has_its_own_phone_and_a_valid_shape(self):
+        bodies = [seed.client_body(f, l, "e@x.com", i + 1) for i, (f, l) in enumerate(seed.DEMO_CLIENTS)]
+        self.assertEqual(len({b["phone_number"] for b in bodies}), 3)
+        for b in bodies:
+            self.assertRegex(b["phone_number"], r"^\+[0-9]{10,15}$")
+            self.assertRegex(b["postal_code"], r"^[0-9]{6}$")
+
+
 if __name__ == "__main__":
     unittest.main()
