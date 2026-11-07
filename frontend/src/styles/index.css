@@ -3277,7 +3277,11 @@ textarea:focus {
 }
 
 /* Holdings editor and event briefings (current-holdings feature) */
-.holdings-panel { padding: 0 1rem 1rem; }
+.holdings-panel { padding: var(--stack-md) var(--stack-lg); border-bottom: 1px solid var(--outline-variant); }
+/* Tells the agent opening an investment account where its holdings are entered. */
+.holdings-hint { display: flex; align-items: flex-start; gap: var(--stack-sm); padding: 12px; border: 1px solid var(--warning); border-radius: var(--radius); background: var(--warning-bg); color: var(--on-surface); font-size: 0.875rem; }
+.holdings-hint .material-symbols-outlined { flex: none; margin-top: 1px; font-size: 16px; color: var(--warning); }
+.holdings-hint p { margin: 0; }
 .holdings-editor { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
 .holdings-editor input { width: 100%; min-width: 4rem; }
 .holdings-note { font-size: 0.85rem; opacity: 0.8; margin: 0; }

@@ -784,7 +784,7 @@ function AgentDrafts({ now: fixedNow }) {
                 <label>
                   <input type="checkbox" checked={allPicked} aria-label="Select all drafts"
                     onChange={(e) => setPicked(e.target.checked ? Object.fromEntries(deletable.map((d) => [d.id, true])) : {})} />
-                  {' '}Select all
+                  Select all
                 </label>
                 {pickedIds.length > 0 && (
                   <button type="button" className="button--danger" onClick={deleteSelected} disabled={bulk.busy}>
