@@ -342,7 +342,6 @@ module "engagement_service" {
     ENGAGEMENT_MAIL_DOMAIN             = local.mail_domain
     CRM_APP_URL                        = local.crm.app_url
     ENGAGEMENT_AI_ENABLED              = tostring(var.ai_enabled)
-    ENGAGEMENT_ALERT_REPORTS_ENABLED   = tostring(var.alert_reports_enabled)
     ENGAGEMENT_HOLIDAY_SYNC_ENABLED    = "true" # MOM's list from data.gov.sg (ADR-0057)
     BEDROCK_REGION                     = var.aws_region
     BEDROCK_MODEL_ID                   = var.bedrock_model_id

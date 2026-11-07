@@ -75,6 +75,7 @@ public class DraftService {
     private final AuditTrail audit;
     private final TransactionTemplate transactions;
     private final Clock clock;
+    private final NewsDraftService newsDrafts;
 
     public DraftView create(String owner, DraftInput input) {
         Instant now = clock.instant();
@@ -116,6 +117,11 @@ public class DraftService {
             return saved;
         });
         return view(draft, names(owner, client).map(values -> filled(draft, values)).orElse(null));
+    }
+
+    /** A News Alert draft's view after a news route changed it, with its names filled in when they can be. */
+    public DraftView news(String owner, UUID id) {
+        return get(owner, id);
     }
 
     @Transactional(readOnly = true)
@@ -203,6 +209,9 @@ public class DraftService {
         }
         draft.discard(clock.instant());
         repository.saveAndFlush(draft);
+        if (draft.isNews()) {
+            newsDrafts.released(draft.getId());
+        }
         Map<String, Object> data = auditData(draft);
         data.put("reason", "agent");
         audit.record(AuditAction.DRAFT_DISCARD, owner, data);
@@ -218,6 +227,9 @@ public class DraftService {
      */
     public DraftView send(String owner, UUID id, int version) {
         EmailDraft draft = find(owner, id);
+        if (draft.isNews()) {
+            return view(newsDrafts.send(owner, id, version), null);
+        }
         if (draft.getStatus() == DraftStatus.SENT || draft.getStatus() == DraftStatus.DISCARDED) {
             throw ApiException.conflict("This draft has already been " + draft.getStatus().name().toLowerCase());
         }
@@ -287,9 +299,9 @@ public class DraftService {
     }
 
     /**
-     * A follow-up from another feature names the task or alert it came from,
-     * which must be the agent's and about this client (ADR-0068 decision 1).
-     * Only the source's client is read; nothing from it reaches the model.
+     * A follow-up from Client Health names the task it came from, which must
+     * be the agent's and about this client (ADR-0068 decision 1). Only the
+     * task's client is read; nothing from it reaches the model.
      */
     private void checkSource(DraftInput input) {
         DraftPurpose purpose = input.purpose();
@@ -297,8 +309,11 @@ public class DraftService {
         if (input.healthTaskId() != null && purpose != DraftPurpose.HEALTH_CHECK_IN) {
             throw ApiException.badRequest("healthTaskId is only for HEALTH_CHECK_IN");
         }
-        if (input.alertId() != null && purpose != DraftPurpose.ALERT_FOLLOW_UP) {
-            throw ApiException.badRequest("alertId is only for ALERT_FOLLOW_UP");
+        if (purpose == DraftPurpose.ALERT_FOLLOW_UP || input.alertId() != null) {
+            throw ApiException.badRequest("Alert follow-ups were replaced by News Alert drafts; open them from Event Alerts");
+        }
+        if (purpose == DraftPurpose.NEWS_ALERT || input.tone() == DraftTone.NONE) {
+            throw ApiException.badRequest("News Alert drafts are made from approved reports, not written here");
         }
         if (purpose == DraftPurpose.HEALTH_CHECK_IN) {
             if (!hasTask) {
@@ -307,14 +322,6 @@ public class DraftService {
             checkSourceClient(() -> sources.healthTaskClient(input.healthTaskId()), input.clientId(),
                     "healthTaskId must be one of your Client Health tasks", "The Client Health task is not for this client",
                     "Client Health is unavailable; nothing was saved");
-        }
-        if (purpose == DraftPurpose.ALERT_FOLLOW_UP) {
-            if (input.alertId() == null) {
-                throw ApiException.badRequest("alertId is required for ALERT_FOLLOW_UP");
-            }
-            checkSourceClient(() -> sources.alertClient(input.alertId()), input.clientId(),
-                    "alertId must be one of your alerts", "The alert is not for this client",
-                    "Alerts are unavailable; nothing was saved");
         }
     }
 
@@ -421,6 +428,6 @@ public class DraftService {
                 filled == null ? null : filled.subject(), filled == null ? null : filled.body(),
                 draft.getSubjectTemplate(), draft.getBodyTemplate(), draft.isEdited(), draft.getSource(),
                 draft.getSourceReason(), holiday, draft.getStatus().visible(), draft.getSentAt(), draft.getVersion(),
-                draft.getCreatedAt(), draft.getUpdatedAt());
+                draft.getCreatedAt(), draft.getUpdatedAt(), filled == null && !draft.isNews() ? null : newsDrafts.view(draft));
     }
 }

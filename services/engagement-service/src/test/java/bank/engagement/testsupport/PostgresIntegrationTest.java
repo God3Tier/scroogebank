@@ -4,7 +4,7 @@ import bank.engagement.integration.clients.ClientDirectory;
 import bank.engagement.integration.identity.AgentDirectory;
 import bank.engagement.integration.identity.AgentProfile;
 import bank.engagement.integration.sources.FollowUpSources;
-import bank.engagement.integration.sources.ReportPackages;
+import bank.engagement.integration.sources.NewsReports;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
  * dashboard-service convention). No Cognito pool is dialled: tests
  * authenticate with {@code SecurityMockMvcRequestPostProcessors.jwt()}.
  * Scheduling is off, so tests run the dispatcher themselves. client-service,
- * Cognito, Client Health and the alerts are mocked; mail goes to a
+ * Cognito, Client Health and event-alert-service are mocked; mail goes to a
  * {@link RecordingMailChannel}.
  */
 @SpringBootTest(properties = {
@@ -73,7 +73,7 @@ public abstract class PostgresIntegrationTest {
     protected FollowUpSources sources;
 
     @MockitoBean
-    protected ReportPackages reportPackages;
+    protected NewsReports newsReports;
 
     @Autowired
     protected MockMvc mvc;
@@ -89,7 +89,7 @@ public abstract class PostgresIntegrationTest {
 
     @BeforeEach
     void resetState() {
-        jdbc.execute("TRUNCATE events, mail_queue, email_drafts, preferences, ai_usage, audit_outbox, alert_report_delivery, alert_report_batch");
+        jdbc.execute("TRUNCATE events, mail_queue, email_draft_reports, email_draft_news, email_drafts, preferences, ai_usage, audit_outbox");
         clock.set(TestBeans.NOW);
         channel.reset();
         when(agents.find(Tokens.AGENT)).thenReturn(Optional.of(AGENT_PROFILE));

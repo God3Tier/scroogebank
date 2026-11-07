@@ -210,11 +210,8 @@ var engagementActions = map[string]bool{
 	"EMAIL_SEND_FAILED":  true,
 	"PREFERENCES_UPDATE": true,
 
-	// Event reports emailed to chosen clients (ADR-0084).
-	"ALERT_REPORT_APPROVED": true,
-	"ALERT_REPORT_QUEUED":   true,
-	"ALERT_REPORT_SENT":     true,
-	"ALERT_REPORT_FAILED":   true,
+	// A report taken off a News Alert draft (news-alert-drafts plan, section 9).
+	"DRAFT_REPORT_REMOVED": true,
 }
 
 // ValidEngagementPayload is engagement-service's outbox envelope, the same

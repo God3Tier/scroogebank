@@ -59,12 +59,6 @@ variable "ai_enabled" {
   default     = false
 }
 
-variable "alert_reports_enabled" {
-  description = "The rollout kill switch for emailing event reports to clients, ENGAGEMENT_ALERT_REPORTS_ENABLED (ADR-0084). On by default; set false to stop any report being queued or sent. A report is still sent only when an agent approves it, and mail still needs the SES provider and a verified sender."
-  type        = bool
-  default     = true
-}
-
 variable "bedrock_model_id" {
   description = "The inference profile drafts use (ADR-0067, which replaced ADR-0054 decision 3's Nova Micro). A global profile is not allowed."
   type        = string

@@ -99,8 +99,10 @@ class DraftSafetyScreenTest {
                 new HolidayView(UUID.randomUUID(), "SG", LocalDate.of(2027, 2, 6), "Chinese New Year", false),
                 new HolidayView(UUID.randomUUID(), "SG", LocalDate.of(2027, 1, 1), "New Year's Day", false),
                 new HolidayView(UUID.randomUUID(), "SG", LocalDate.of(2026, 5, 27), "Hari Raya Haji", false));
+        // News Alert drafts are built from approved reports, never from a template or a tone.
         for (DraftPurpose purpose : DraftPurpose.values()) {
-            for (DraftTone tone : DraftTone.values()) {
+            if (purpose == DraftPurpose.NEWS_ALERT) continue;
+            for (DraftTone tone : List.of(DraftTone.FORMAL, DraftTone.WARM)) {
                 for (HolidayView holiday : holidays) {
                     DraftTemplates.Text text = DraftTemplates.render(purpose, tone, holiday);
                     DraftSafetyScreen.Result result = screen.check(text.subject(), text.body(), purpose);
