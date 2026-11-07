@@ -3404,3 +3404,4 @@ textarea:focus {
 
 /* Nothing found by the search: said plainly and highlighted, like the "need a decision" label. */
 .queue-empty__notice { display: inline-flex; align-items: center; gap: var(--stack-sm); margin: 0 0 0.75rem; padding: 10px 14px; color: var(--primary); background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); font-size: 14px; }
+.event-outcomes__done { display: inline-flex; align-items: center; gap: var(--stack-sm); margin: 0.5rem 0; padding: 10px 14px; color: var(--primary); background: var(--surface-container); border-radius: var(--radius-lg); font-size: 14px; }

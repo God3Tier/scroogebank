@@ -259,14 +259,27 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
             </div>
           </form>
         )}
-        {result && (
-          <ul className="event-outcomes" role="status">
-            {result.members.map((member) => {
-              const client = detail.clients.find((c) => c.alertId === member.alertId)
-              return <li key={member.alertId}>{client ? clientLabel(client, names) : member.alertId.slice(0, 8)}: {OUTCOME_LABELS[member.outcome] || member.outcome}</li>
-            })}
-          </ul>
-        )}
+        {result && (() => {
+          const notDone = result.members.filter((member) => member.outcome !== 'APPLIED')
+          const done = result.members.length - notDone.length
+          return (
+            <div className="event-outcomes" role="status">
+              {notDone.length === 0 ? (
+                <p className="event-outcomes__done"><Icon name="check_circle" /> <strong>All done</strong> for {done} client{done === 1 ? '' : 's'}.</p>
+              ) : (
+                <>
+                  <p className="event-outcomes__done"><Icon name="check_circle" /> <strong>{done} done.</strong> {notDone.length} could not be changed:</p>
+                  <ul>
+                    {notDone.map((member) => {
+                      const client = detail.clients.find((c) => c.alertId === member.alertId)
+                      return <li key={member.alertId}>{client ? clientLabel(client, names) : member.alertId.slice(0, 8)}: {OUTCOME_LABELS[member.outcome] || member.outcome}</li>
+                    })}
+                  </ul>
+                </>
+              )}
+            </div>
+          )
+        })()}
       </section>
     </>
   )

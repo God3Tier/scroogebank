@@ -127,6 +127,30 @@ describe('TickerReports', () => {
     expect(document.activeElement).toHaveAttribute('aria-labelledby', 'ticker-report-title')
   })
 
+  it('says All done in one line when every client was changed, instead of listing each one', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected clients' }))
+
+    expect(await screen.findByText('All done')).toBeInTheDocument()
+    expect(screen.getByText(/for 1 client\./)).toBeInTheDocument()
+    expect(screen.queryByText('Chloe Tan: Done')).not.toBeInTheDocument()
+  })
+
+  it('names only the clients that could not be changed when some could not', async () => {
+    recordEventAction.mockResolvedValue({ members: [{ alertId: 'a1', outcome: 'APPLIED' }, { alertId: 'a2', outcome: 'STALE_VERSION' }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Daniel Lim' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected clients' }))
+
+    expect(await screen.findByText('1 done.')).toBeInTheDocument()
+    expect(screen.getByText('Daniel Lim: Changed since you looked, reload')).toBeInTheDocument()
+    expect(screen.queryByText('Chloe Tan: Done')).not.toBeInTheDocument()
+  })
+
   it('does not dismiss a client who is on an open news draft', async () => {
     listOpenNewsAlerts.mockResolvedValue({ alertIds: ['a2'] })
     renderPage()

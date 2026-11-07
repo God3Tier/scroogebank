@@ -48,12 +48,12 @@ variable "ai_enabled" {
   default     = false
 }
 
-# TEMPORARY, 2026-11-07: every five minutes for the AWS check of the automatic cycle. Spends Tavily credits at every run. After the
+# TEMPORARY, 2026-11-07: every twenty minutes for the AWS check of the automatic cycle. Spends Tavily credits at every run. After the
 # check, set this back to "cron(0 0/4 * * ? *)" (every four hours) and the crm stack's alert_schedule_interval back to "PT4H".
 variable "schedule" {
   description = "EventBridge Scheduler expression for worker runs, in Singapore time. The default is every four hours at fixed times, 00:00, 04:00, 08:00, 12:00, 16:00 and 20:00 (ADR-0031 decision 1, ADR-0081), so the Event Alerts page can show the next one. If you change it, change ALERT_SCHEDULE_INTERVAL on the alerts service to match."
   type        = string
-  default     = "cron(0/5 * * * ? *)"
+  default     = "cron(0/20 * * * ? *)"
 }
 
 variable "run_on_apply" {
