@@ -18,4 +18,18 @@ class DraftPromptTest {
                 .contains(Placeholders.CLIENT_FIRST_NAME_TOKEN, Placeholders.AGENT_NAME_TOKEN)
                 .contains("Reply with only a JSON object and nothing else");
     }
+
+    /**
+     * v4 names the stock phrases the v3 drafts all shared, the everyday words
+     * the screen still blocks (Nova Lite's "offer" failed health check-ins),
+     * and how to write a line break in JSON.
+     */
+    @ParameterizedTest
+    @EnumSource(DraftPurpose.class)
+    void everyPurposeIsToldWhatMadeDraftsGenericOrRejected(DraftPurpose purpose) {
+        assertThat(DraftPrompt.system(purpose))
+                .contains("I hope this message finds you well", "timeSinceLastMeeting", "upcomingPublicHolidays")
+                .contains("offer, interest, return")
+                .contains("write each line break as \\n, never as \\\\n");
+    }
 }

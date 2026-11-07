@@ -55,9 +55,18 @@ public class DraftSafetyScreen {
         if (draft.subject() == null || draft.body() == null) {
             return Result.rejected("invalid_json");
         }
-        String subject = draft.subject().strip();
-        String body = draft.body().strip();
+        String subject = unescapeLineBreaks(draft.subject()).strip();
+        String body = unescapeLineBreaks(draft.body()).strip();
         return check(subject, body, purpose);
+    }
+
+    /**
+     * Nova Lite sometimes escapes its line breaks twice, so the parsed text
+     * holds a backslash and an {@code n} where a line break belongs. No email
+     * needs those two characters, so they become the line break they stand for.
+     */
+    static String unescapeLineBreaks(String text) {
+        return text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n");
     }
 
     /**
