@@ -72,3 +72,20 @@ func TestListActivities(t *testing.T) {
 		})
 	}
 }
+
+func TestListAuditLogs(t *testing.T) {
+	db := openTestDB(t)
+	loadTestFixture(t, db, "list_activities.sql")
+
+	actual, err := New(db).ListAuditLogs(context.Background(), models.AuditLogFilter{
+		BeforeSequenceNo: 13,
+		Limit:            4,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []int64{12, 11, 10, 9}, []int64{
+		actual[0].SequenceNo, actual[1].SequenceNo, actual[2].SequenceNo, actual[3].SequenceNo,
+	})
+	assert.Equal(t, models.TransactionServiceType, actual[2].SourceService)
+	assert.Equal(t, "TRANSACTION_INGESTION", actual[2].EventType)
+}

@@ -19,8 +19,9 @@ import software.amazon.awssdk.services.cognitoidentityprovider.model.UsernameExi
 import java.util.List;
 
 /**
- * AWS Cognito User Pool. Group membership ("Admin" / "Agent") is the source of
- * role truth; MFA and password storage are handled entirely by Cognito.
+ * AWS Cognito User Pool. Group membership ("Admin" / "Agent") supplies
+ * cross-service authorization; the Root Admin distinction exists only in
+ * user-service. MFA and password storage are handled by Cognito.
  */
 @Component
 public class CognitoIdentityProviderClient implements IdentityProviderClient {

@@ -232,6 +232,17 @@ function GenerateForm({ clients, now, linked, onCreated, draftOpen = false }) {
         <span className="material-symbols-outlined" aria-hidden="true">auto_fix_high</span>
         <h2>Write a follow-up email</h2>
       </div>
+      {/* A Client Health follow-up is checked against its task, so it starts on that task (ADR-0068). */}
+      {!values.healthTaskId && (
+        <p className="engagement-info engagement-info--notice draft-generate__notice" role="note">
+          <span className="material-symbols-outlined" aria-hidden="true">info</span>
+          <span>
+            <strong>Following up on a Client Health task?</strong> Start that email from the task on
+            the <Link to="/agent/client-health">Client Health</Link> page, with <strong>Draft email</strong>.
+            Client Health emails cannot be written from here.
+          </span>
+        </p>
+      )}
       <div className="draft-generate__fields">
         <label><span className="label--required">Purpose</span>
           <select value={values.purpose} onChange={setField('purpose')}>
@@ -263,7 +274,7 @@ function GenerateForm({ clients, now, linked, onCreated, draftOpen = false }) {
         )}
         {needsMeeting && (
           <div className="draft-generate__full draft-generate__context">
-            <span className="draft-generate__hint">From your calendar</span>
+            <span className="draft-generate__tag">From your calendar</span>
             <label><span className="label--required">Meeting</span>
               <select value={values.eventId} onChange={setField('eventId')}>
                 <option value="">Choose a past meeting</option>
@@ -275,8 +286,11 @@ function GenerateForm({ clients, now, linked, onCreated, draftOpen = false }) {
           </div>
         )}
         {source && (
-          <div className="draft-generate__full draft-generate__context">
-            <span className="draft-generate__hint">From Client Health task {values.healthTaskId}</span>
+          <div className="draft-generate__full draft-generate__context draft-generate__source">
+            <p className="draft-generate__source-title">
+              <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
+              <span>From Client Health task {values.healthTaskId}</span>
+            </p>
             <p className="draft-generate__hint">
               The AI writes a general note. You add the details where it says {DETAILS_PROMPT}.
             </p>
@@ -773,7 +787,7 @@ function AgentDrafts({ now: fixedNow }) {
                 <label>
                   <input type="checkbox" checked={allPicked} aria-label="Select all drafts"
                     onChange={(e) => setPicked(e.target.checked ? Object.fromEntries(deletable.map((d) => [d.id, true])) : {})} />
-                  {' '}Select all
+                  Select all
                 </label>
                 {pickedIds.length > 0 && (
                   <button type="button" className="button--danger" onClick={deleteSelected} disabled={bulk.busy}>

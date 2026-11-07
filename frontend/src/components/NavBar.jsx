@@ -5,9 +5,9 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ADMIN, AGENT, inAnyGroup } from '../auth/roles.js'
 import { signOut } from '../auth/signOut.js'
 
-// import logo
-import logo from '/scrooge-global-bank-logo.svg'
-// import logotrans from '/scrooge-global-bank-transparent.svg'
+// Served from public/ at the site root. A plain path, not an import, so tests
+// on Windows can load this module.
+const logo = '/scrooge-global-bank-logo.svg'
 
 
 // The agent pages under /agent with a link of their own.
@@ -15,6 +15,7 @@ const AGENT_PAGES = [
   { to: '/agent/client-health', icon: 'monitor_heart', label: 'Client Health' },
   { to: '/agent/calendar', icon: 'calendar_month', label: 'Calendar' },
   { to: '/agent/drafts', icon: 'drafts', label: 'Follow-up Emails' },
+  { to: '/agent/alerts', icon: 'notifications_active', label: 'Event Driven Alerts' },
 ]
 
 // A home link is current on its own page and on the pages under it without a
@@ -81,13 +82,17 @@ function NavBar() {
         )}
         {isAdmin && (
           <>
-            <HomeLink to="/admin" others={['/admin/client-health', '/admin/audit-logs']}>
+            <HomeLink to="/admin" others={['/admin/client-health', '/admin/alerts', '/admin/audit-logs']}>
               <span className="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
               Admin Home
             </HomeLink>
             <NavLink to="/admin/client-health">
               <span className="material-symbols-outlined" aria-hidden="true">monitor_heart</span>
               Client Health
+            </NavLink>
+            <NavLink to="/admin/alerts">
+              <span className="material-symbols-outlined" aria-hidden="true">notifications_active</span>
+              Event Driven Alerts
             </NavLink>
             <NavLink to="/insights/admin">
               <span className="material-symbols-outlined" aria-hidden="true">insights</span>

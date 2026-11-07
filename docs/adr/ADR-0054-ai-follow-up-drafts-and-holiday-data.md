@@ -104,7 +104,7 @@ A cross-region inference profile is an ID passed in place of a model ID. The ser
    - Global inference profiles are not allowed.
    - If Nova Micro passes fewer than 90% of the evaluation cases (Validation), Nova Lite through its Asia-Pacific profile replaces it without a new ADR. Any other model needs a new decision.
    - The ID comes from `BEDROCK_MODEL_ID`.
-   - Settings: temperature 0.3, at most 600 output tokens, and a 15-second timeout.
+   - Settings: temperature 0.6 (0.3 until 2026-11-07; see the revision history), at most 600 output tokens, and a 15-second timeout.
    - The system prompt is versioned in code, and each draft stores its `prompt_version` and `model_id`.
 4. **Safety screen.** The model must return JSON `{"subject": "...", "body": "..."}`. The draft is rejected unless:
    - the subject is 1–120 characters and the body 1–1,500;
@@ -222,3 +222,4 @@ Nova Micro is Amazon's lowest-priced text model on Bedrock. AWS charges cross-re
 - 2026-10-21: decision 6 superseded in part by [ADR-0056](ADR-0056-drafts-edited-as-plain-text.md): agents edit plain text with the names filled in, and drafts are still stored with placeholders. This record is otherwise unchanged.
 - 2026-10-21: decision 8 superseded in part by [ADR-0057](ADR-0057-holiday-sync-from-data-gov-sg.md): new Singapore years are added by a sync from MOM's data.gov.sg dataset; the migrations stay as the baseline. This record is otherwise unchanged.
 - 2026-11-01: decision 3's model and the "kill switch stays off outside demo runs" guidance superseded in part by [ADR-0067](ADR-0067-nova-lite-asia-pacific-for-client-derived-wording.md), as decided by the decision owner: drafts use Nova Lite through `apac.amazon.nova-lite-v1:0` (same six regions), and AI is on in prod. This record is otherwise unchanged.
+- 2026-11-07: decision 3's temperature raised from 0.3 to 0.6 by the decision owner, with prompt `drafts-v4`. At 0.3, drafts for the same purpose and tone were nearly identical and read as generic. Model input (decision 2) and the safety screen (decision 4) are unchanged. In a live run, 30 of 30 Nova Lite drafts across every purpose, tone and meeting band passed the screen.

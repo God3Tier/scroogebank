@@ -1,7 +1,10 @@
 package bank.user.activity;
 
 import bank.audit.grpc.v1.Activity;
+import bank.audit.grpc.v1.AuditLogEntry;
 import bank.audit.grpc.v1.AuditServiceGrpc;
+import bank.audit.grpc.v1.ListAuditLogsRequest;
+import bank.audit.grpc.v1.ListAuditLogsResponse;
 import bank.audit.grpc.v1.ListActivitiesRequest;
 import bank.audit.grpc.v1.ListActivitiesResponse;
 import bank.user.domain.Role;
@@ -50,6 +53,9 @@ class ActivityServiceTest {
     private final AtomicReference<Metadata> receivedHeaders = new AtomicReference<>();
     private final AtomicReference<ListActivitiesResponse> reply =
             new AtomicReference<>(ListActivitiesResponse.getDefaultInstance());
+    private final AtomicReference<ListAuditLogsRequest> receivedAuditLogs = new AtomicReference<>();
+    private final AtomicReference<ListAuditLogsResponse> auditLogReply =
+            new AtomicReference<>(ListAuditLogsResponse.getDefaultInstance());
     /** Failures to return, one per call, before the reply. */
     private final Deque<Status> failures = new ArrayDeque<>();
     private final AtomicInteger calls = new AtomicInteger();
@@ -85,6 +91,19 @@ class ActivityServiceTest {
                         observer.onNext(reply.get());
                         observer.onCompleted();
                     }
+
+                    @Override
+                    public void listAuditLogs(ListAuditLogsRequest request, StreamObserver<ListAuditLogsResponse> observer) {
+                        calls.incrementAndGet();
+                        receivedAuditLogs.set(request);
+                        Status failure = failures.poll();
+                        if (failure != null) {
+                            observer.onError(failure.asRuntimeException());
+                            return;
+                        }
+                        observer.onNext(auditLogReply.get());
+                        observer.onCompleted();
+                    }
                 }, captureHeaders))
                 .build().start();
         channel = InProcessChannelBuilder.forName(name).directExecutor().build();
@@ -101,6 +120,31 @@ class ActivityServiceTest {
 
     private static ActivityQuery anyActivity() {
         return new ActivityQuery(null, null, null, null, 20, null);
+    }
+
+    @Test
+    void sendsTheCompleteAuditLogRequestAndMapsTransactionServiceEntries() {
+        auditLogReply.set(ListAuditLogsResponse.newBuilder()
+                .addEntries(AuditLogEntry.newBuilder()
+                        .setId("entry-20").setEventType("CRUD")
+                        .setSourceService("TRANSACTION_SERVICE").setAction("READ")
+                        .setActorId("admin-sub")
+                        .setTimestamp(Timestamp.newBuilder().setSeconds(1_789_000_000L))
+                        .setPayload("{\"status_code\":200}"))
+                .setNextPageToken("20")
+                .build());
+
+        AuditLogPage page = service.listAuditLogs(1, "21", "caller-token");
+
+        assertThat(receivedHeaders.get().get(ActivityService.AUTHORIZATION)).isEqualTo("Bearer caller-token");
+        assertThat(receivedAuditLogs.get().getPageSize()).isEqualTo(1);
+        assertThat(receivedAuditLogs.get().getPageToken()).isEqualTo("21");
+        assertThat(page.nextCursor()).isEqualTo("20");
+        AuditLogResponse entry = page.content().getFirst();
+        assertThat(entry.eventType()).isEqualTo("CRUD");
+        assertThat(entry.sourceService()).isEqualTo("TRANSACTION_SERVICE");
+        assertThat(entry.action()).isEqualTo("READ");
+        assertThat(entry.payload().get("status_code").asInt()).isEqualTo(200);
     }
 
     @Test

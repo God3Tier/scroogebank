@@ -3,13 +3,13 @@ import { useAuth } from 'react-oidc-context'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
+import { deleteAccount, listAccountTransactions, listAccounts, updateAccountStatus } from '../api/accounts.js'
 import { getClient } from '../api/clients.js'
 import ClientTransactions from './ClientTransactions.jsx'
 
 vi.mock('react-oidc-context', () => ({ useAuth: vi.fn() }))
 vi.mock('../api/clients.js', () => ({ getClient: vi.fn() }))
-vi.mock('../api/accounts.js', () => ({ listAccounts: vi.fn(), listAccountTransactions: vi.fn(), updateAccountStatus: vi.fn() }))
+vi.mock('../api/accounts.js', () => ({ deleteAccount: vi.fn(), listAccounts: vi.fn(), listAccountTransactions: vi.fn(), updateAccountStatus: vi.fn() }))
 
 // Synthetic data only.
 const CLIENT = { client_id: 'client-1', first_name: 'Synthetic', last_name: 'Client', email: 'client@example.test' }
@@ -145,5 +145,45 @@ describe('client transactions', () => {
     expect(await screen.findByText('Pending', { selector: '.badge' })).toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByText('Verify this client to change account statuses.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
+  })
+
+  it("lets an agent delete an unverified client's account, and stops listing it", async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    getClient.mockResolvedValue(CLIENT)
+    listAccounts.mockResolvedValue([ACCOUNT])
+    deleteAccount.mockResolvedValue({ status: 'Account deleted successfully' })
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete account' }))
+
+    expect(await screen.findByText('This client has no accounts, so no transactions.')).toBeInTheDocument()
+    expect(deleteAccount).toHaveBeenCalledWith(ACCOUNT.id)
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('savings account account-'))
+  })
+
+  it('does not delete an account when the agent cancels', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    getClient.mockResolvedValue(VERIFIED_CLIENT)
+    listAccounts.mockResolvedValue([ACCOUNT])
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete account' }))
+
+    expect(deleteAccount).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: /savings account/ })).toBeInTheDocument()
+  })
+
+  it('keeps the account and explains a refused delete', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    getClient.mockResolvedValue(VERIFIED_CLIENT)
+    listAccounts.mockResolvedValue([ACCOUNT])
+    deleteAccount.mockRejectedValue(Object.assign(new Error('Request failed (404)'), { status: 404 }))
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This account is no longer available.')
+    expect(screen.getByRole('heading', { name: /savings account/ })).toBeInTheDocument()
   })
 })

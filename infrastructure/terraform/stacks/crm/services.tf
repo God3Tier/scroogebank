@@ -212,7 +212,8 @@ module "user_service" {
     health_check_path = "/actuator/health"
     rules = [
       { priority = 20, paths = ["/api/users", "/api/users/*", "/api/activities", "/api/activities/*"] },
-      { priority = 21, paths = ["/api/corrupted-logs", "/api/corrupted-logs/*"] },
+      # An ALB rule takes at most 5 path values, so the audit log shares rule 21.
+      { priority = 21, paths = ["/api/corrupted-logs", "/api/corrupted-logs/*", "/api/audit-logs", "/api/audit-logs/*"] },
     ]
   })
 

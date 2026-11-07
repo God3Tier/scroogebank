@@ -7,6 +7,8 @@ a decision it governs.
 
 ## Accepted decisions
 
+- [ADR-0087](ADR-0087-root-admin-role-and-provisioning.md) — Root Admin is an application role that stays in Cognito `ADMIN`; only its verified, enabled user record can create Admins; role changes cannot grant Admin or Root Admin status, and existing admin access to client data is unchanged.
+
 - [ADR-0001](ADR-0001-user-directed-push-policy.md) — PRs are the default, while warned and explicitly authorized direct integration is allowed only for unprotected task and feature branches.
 - [ADR-0002](ADR-0002-direct-dev-governance-updates.md) — Azeez authorizes narrowly scoped Git-workflow and agent-instruction updates directly to `dev`, subject to file allowlisting, warning, synchronization, and non-forced-push checks.
 - [ADR-0003](ADR-0003-maintain-one-line-adr-index.md) — Every ADR must have a one-line entry in the ADR index, which agents scan for relevance before reading applicable decisions in full.
@@ -123,6 +125,7 @@ ADR-0069 to ADR-0074 were accepted by Neo Jia Wen on 2026-11-02, and ADR-0075 an
 - [ADR-0080](ADR-0080-alert-worker-runs-once-on-every-apply.md) — Proposed 2026-11-04 (owner Hayyun; review pending): the alert-worker stack starts one worker run at the end of every apply, then the four-hour schedule carries on; switch off with `run_on_apply = false`; each run spends Tavily credits.
 - [ADR-0081](ADR-0081-producer-sync-leaves-out-seeded-demo-accounts.md) — Proposed 2026-11-04 (owner Neo Jia Wen; Joseph Yau to review): `scripts/sync-producer-accounts.sh` leaves out the four Client Health demo accounts listed in the script, so they keep only their deterministic history; supersedes ADR-0045 decision 3 in part.
 
+- [ADR-0082](ADR-0082-admin-complete-audit-log-view.md) — Proposed 2026-11-07 (owner Joseph, confirmation required): administrators read every audit event through a new user-service endpoint and internal gRPC method; the existing activity feed stays changes-only.
 - [ADR-0081](ADR-0081-search-starts-when-an-agent-adds-a-domain.md) — Proposed 2026-11-05 (owner Hayyun; review pending): a search starts when an agent adds a website or presses Search now (15-minute cooldown per company, no small cap on searches per run, monthly quota stays); the automatic schedule runs at fixed Singapore times every 4 hours and the page shows the next one; off unless `alert_search_on_add` is set.
 - [ADR-0082](ADR-0082-one-shared-list-of-search-websites.md) — Proposed 2026-11-05 (owner Hayyun; review pending): one shared list of websites that agents add and that is searched for every company, replacing ADR-0079's per-company websites; any agent adds, any agent or admin removes, at most 20, with the format and blocklist rules, audit events, and a holdings overview of which clients hold each company.
 - [ADR-0083](ADR-0083-claude-through-the-anthropic-api-for-development.md) — Proposed 2026-11-05 (owner Hayyun; review pending): Claude through the Anthropic API as a second model gateway, for a developer machine only (`alert.ai.provider=anthropic`, key from the environment, never deployed), so a search can be taken to an alert on the page without AWS; public text only; Bedrock stays the deployed model.

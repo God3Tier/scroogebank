@@ -6,7 +6,7 @@ API contracts: [`users-api.yaml`](../../docs/api/users-api.yaml), [`audit-activi
 
 ## What it owns
 
-- The `User` table (`users_db`): `id`, `firstName`, `lastName`, `email`, `role` (ADMIN/AGENT), `enabled`, `deletable`, `idp_sub`, timestamps — matches Appendix 2's User attributes plus the bookkeeping fields needed to enforce "root admin cannot be deleted" and to link a local user row to its identity-provider account.
+- The `User` table (`users_db`): `id`, `firstName`, `lastName`, `email`, `role` (ROOT_ADMIN/ADMIN/AGENT), `enabled`, `deletable`, `idp_sub`, timestamps — matches Appendix 2's User attributes plus the bookkeeping fields needed to enforce root protection and link a local user row to its identity-provider account.
 - Provisioning users in the Cognito user pool — this service never stores or hashes a password itself.
 - The `audit_outbox` table (`users_db`): audit events saved but not yet sent to the Auditor's queue (see [Audit events](#audit-events)).
 
@@ -14,12 +14,13 @@ API contracts: [`users-api.yaml`](../../docs/api/users-api.yaml), [`audit-activi
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| POST | `/api/users` | ADMIN | Create a user (agent or admin) |
-| GET | `/api/users` | ADMIN | List users, paged; optional `role` (`ADMIN`/`AGENT`) and `enabled` filters, `page` (default 0) and `size` (default 20, max 100). Sorted by last name, first name |
+| POST | `/api/users` | ADMIN | Create an Agent; only Root Admin may create an Admin |
+| GET | `/api/users` | ADMIN | List users, paged; optional `role` (`ROOT_ADMIN`/`ADMIN`/`AGENT`) and `enabled` filters; `role=ADMIN` includes Root Admin. `page` (default 0), `size` (default 20, max 100). Sorted by last name, first name |
+| GET | `/api/users/me` | ADMIN | Return the current admin resolved from the verified Cognito `sub`, including the application role (`ADMIN` or `ROOT_ADMIN`) |
 | GET | `/api/users/{id}` | ADMIN | Fetch a user |
 | GET | `/api/activities` | ADMIN/AGENT | The activity feed, newest first: changes CRM users made, never reads. An admin sees every agent and may narrow it with `agentId` (a Cognito `sub`); an agent sees only their own (another `agentId` is 403). Optional `from`/`to` (ISO-8601, `from` inclusive, `to` exclusive), `size` (default 20, max 100) and `cursor` (the previous page's `nextCursor`). Each entry carries `actorName` when the actor is a CRM user here |
 | PUT | `/api/users/{id}` | ADMIN | Update first/last name |
-| PATCH | `/api/users/{id}/role` | ADMIN | Change role (`{"role":"ADMIN"}` or `AGENT`); root admin: rejected with 403 |
+| PATCH | `/api/users/{id}/role` | ADMIN | Change role to a non-admin role; any request for `ADMIN` or `ROOT_ADMIN` is rejected with 403; Root Admin cannot be changed |
 | PATCH | `/api/users/{id}/disable` | ADMIN | Disable a user (root admin: rejected with 403) |
 | POST | `/api/users/{id}/reset-password` | ADMIN | Trigger the IdP's password-reset flow |
 | POST | `/api/users/me/logout` | Any signed-in user | Record that the caller signed out, for the audit log. Revokes nothing; see [Logout](#logout). No body; 204, or 404 if the token's `sub` has no user here |
@@ -37,11 +38,11 @@ Transactions are not read here. transaction-service (`services/sftp/receiver`) s
 
 **Cognito does the security-sensitive work.** OAuth2/OIDC, MFA, and password hashing/storage are Cognito's job, not this service's. `CognitoIdentityProviderClient` uses AWS SDK v2 (`AdminCreateUser`, `AdminAddUserToGroup`, `AdminRemoveUserFromGroup`, `AdminDisableUser`, `AdminResetUserPassword`) against the configured user pool. This service has no login endpoint: users sign in through Cognito's Hosted UI from the frontend. It sits behind an `IdentityProviderClient` interface — one implementation, kept as an interface so the IdP can be swapped without touching controllers or the security config.
 
-Role is sourced from **Cognito group membership** (`Admin`/`Agent` groups), read off the JWT's `cognito:groups` claim — see `security/JwtRoleConverter.java`. This is the single source of role truth; the local `User.role` column mirrors it for query convenience, but the JWT claim is what every service's `@PreAuthorize` actually checks.
+Cross-service role authority is sourced from Cognito group membership (`Admin`/`Agent` groups), read off the JWT's `cognito:groups` claim — see `security/JwtRoleConverter.java`. `ROOT_ADMIN` is the exception used only in user-service: the bootstrapped account remains in Cognito `ADMIN`, while its local role marks the extra user-management privilege. Creation resolves the verified token's `sub` to that enabled local record. All other services continue to authorize the root account as an ordinary Admin.
 
 **Zero Trust.** `SecurityConfig` makes this service an OAuth2 Resource Server validating every request's JWT against `OIDC_ISSUER_URI` — no session state, and the gateway's own validation is not trusted as sufficient (defense in depth: every service re-validates independently).
 
-**Root admin.** Seeded on first startup by `RootAdminInitializer` (a `CommandLineRunner`) rather than a SQL migration, because seeding requires creating the corresponding Cognito account too (an API call Flyway can't make). Cognito emails the temporary password; MFA enrolment happens on first sign-in. `deletable=false` is enforced in `UserService.disableUser` (403 if violated) — the spec only requires "cannot be deleted," and disabling is the closest destructive-equivalent operation this service exposes, so it's guarded the same way. `UserService.changeRole` applies the same guard: demoting the root admin would leave the system without a guaranteed admin.
+**Root Admin.** The first-startup `RootAdminInitializer` creates the Cognito user in the `ADMIN` group and records the database role as `ROOT_ADMIN`; Cognito emails the temporary password, and MFA enrolment happens on first sign-in. V2 migrates the existing `deletable=false` bootstrap row to `ROOT_ADMIN` while leaving Cognito membership untouched. A unique partial index permits only one Root Admin. Only a caller whose verified Cognito `sub` resolves to that Root Admin row may create an Admin; regular Admins may create Agents. The role-change API cannot grant either `ADMIN` or `ROOT_ADMIN`. Root Admin cannot be demoted or disabled. Root Admin remains an ordinary admin in every other service, has no agent-owned clients, and retains the same read-only client data access as Admin.
 
 **Role changes.** `PATCH /api/users/{id}/role` moves the user between Cognito groups and then updates the local `role` column. It adds the new group before removing the old one, so a failure part-way leaves the user in both groups rather than in none; both calls are idempotent, so repeating the request completes the change. Tokens already issued still carry the old `cognito:groups` claim until they expire and are refreshed, so a demoted admin keeps admin access for up to one access-token lifetime.
 
@@ -57,7 +58,7 @@ Each step runs even if the one before fails, so an audit failure never blocks a 
 
 ## NFR notes
 
-- **Maintainability/Extensibility**: adding a role means a new Cognito group plus an enum value; swapping the IdP entirely means one new `IdentityProviderClient` implementation — no changes to controllers or the security config.
+- **Maintainability/Extensibility**: adding a cross-service group-backed role means a Cognito group plus an enum value; user-service can also carry an application-only distinction such as `ROOT_ADMIN`. Swapping the IdP entirely means one new `IdentityProviderClient` implementation.
 - **Security**: no password ever touches this service's code or database — see "Cognito does the security-sensitive work" above. User-management actions are sent to the Auditor through an outbox and SQS; audit payloads omit names, email addresses, passwords, and request bodies.
 - **Resiliency**: audit events wait in the outbox while SQS or the Auditor is unavailable, and are sent when it recovers; user requests never wait on either.
 - **Scalability**: stateless (JWT-based auth, no server-side session) — horizontally scalable behind the gateway with no sticky-session requirement.

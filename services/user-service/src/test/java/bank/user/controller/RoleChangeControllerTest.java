@@ -2,7 +2,6 @@ package bank.user.controller;
 
 import bank.user.audit.AuditEventPublisher;
 import bank.user.domain.Role;
-import bank.user.domain.User;
 import bank.user.exception.ForbiddenOperationException;
 import bank.user.security.JwtRoleConverter;
 import bank.user.security.SecurityConfig;
@@ -15,10 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.Instant;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
@@ -50,22 +47,26 @@ class RoleChangeControllerTest {
     private final UUID id = UUID.randomUUID();
 
     @Test
-    void adminChangesRole() throws Exception {
-        User promoted = new User(id, "Alice", "Tan", "alice@scroogebank.com", Role.ADMIN, "sub-alice");
-        // Set by Hibernate when the row is saved.
-        ReflectionTestUtils.setField(promoted, "createdAt", Instant.parse("2026-09-01T00:00:00Z"));
-        ReflectionTestUtils.setField(promoted, "updatedAt", Instant.parse("2026-09-02T00:00:00Z"));
-        when(userService.changeRole(id, Role.ADMIN)).thenReturn(promoted);
-
+    void adminCannotPromoteAgentToAdmin() throws Exception {
+        when(userService.changeRole(id, Role.ADMIN))
+                .thenThrow(new ForbiddenOperationException("Role changes cannot grant Admin or Root Admin status"));
         mvc.perform(patch("/api/users/{id}/role", id)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ADMIN\"}")
                         .with(jwt().jwt(token -> token.subject("sub-admin"))
                                 .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("ADMIN"));
+                .andExpect(status().isForbidden());
+        verify(userService).changeRole(id, Role.ADMIN);
+    }
 
-        verify(auditEventPublisher).publish("ROLE_CHANGE", "sub-admin", "USER", id.toString(),
-                "/api/users/{id}/role", "PATCH", 200, "ADMIN");
+    @Test
+    void rootAdminCannotBeGrantedByRoleChange() throws Exception {
+        when(userService.changeRole(id, Role.ROOT_ADMIN))
+                .thenThrow(new ForbiddenOperationException("Role changes cannot grant Admin or Root Admin status"));
+        mvc.perform(patch("/api/users/{id}/role", id)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"ROOT_ADMIN\"}")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                .andExpect(status().isForbidden());
+        verify(userService).changeRole(id, Role.ROOT_ADMIN);
     }
 
     @Test

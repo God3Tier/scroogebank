@@ -198,6 +198,17 @@ function AccountOpener({ clientId, pendingOnly, onOpened, onCancel }) {
           {statuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
+      {form.account_type === 'INVESTMENT' && (
+        <div className="holdings-hint form-grid__full" role="note">
+          <span className="material-symbols-outlined" aria-hidden="true">info</span>
+          <p>
+            <strong>Holdings are not set here.</strong> Open the account first, then go to Manage accounts and
+            transactions and choose <strong>Record holdings</strong> on this account. Add one position for each
+            security it holds: instrument ID (exchange and ticker, such as NASDAQ-AAPL or SGX-D05), quantity, unit price, currency and the FX rate to SGD.
+            This is dummy data; saving it does not buy or sell anything.
+          </p>
+        </div>
+      )}
       {pendingOnly && <p className="section-note form-grid__full">{PENDING_UNTIL_VERIFIED} Verify the client to make them Active.</p>}
       <label>Initial Deposit:
         <input type="number" required min="0" step="0.01" value={form.initial_deposit} onChange={setField('initial_deposit')} />

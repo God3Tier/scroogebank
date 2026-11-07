@@ -65,6 +65,12 @@ To deploy it, build and push the db-migrate image with the service's image
 ([deploy-aws.md](../runbooks/deploy-aws.md) steps 2 and 5): the service's own
 image doesn't apply it in AWS.
 
+user-service V2 adds `ROOT_ADMIN` to the role constraint and changes the
+existing bootstrap row (`deletable = false`, previously role `ADMIN`) to
+`ROOT_ADMIN`. It does not change Cognito group membership. A partial unique
+index limits the database to one Root Admin row. On a new database, the
+bootstrap initializer creates this role after migrations have run.
+
 **The Go services:**
 
 1. **Add a new file** to the service's `data/` directory, named `V<n>_<description>.sql`, with `<n>` one more than the highest version. Each version is a whole number.

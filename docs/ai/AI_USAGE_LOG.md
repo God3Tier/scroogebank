@@ -2178,3 +2178,41 @@ retry exhaustion and refusal to retry after the last available reservation.
   placeholders; no client data.
 - Human verification required: Neo Jia Wen to review, deploy, and confirm
   that new prod check-ins come from the AI.
+## 2026-11-07 — Root Admin authorization and account creation
+
+- Team member: Joseph Yau. Tool: Codex.
+- Task: implement the Root Admin application role, root-only Admin provisioning,
+  current-admin endpoint, migration, dashboard choices and contract/docs.
+- Files/components: user-service, frontend, users API, Feature 2 plan, ADR-0087,
+  and database migration documentation.
+- Verification: full user-service suite (86 tests), PostgreSQL migration test,
+  full frontend suite (363 tests), frontend lint, and production build pass.
+  Vite reports a large JavaScript chunk advisory. Follow-up OpenAPI fix separates
+  extensible response roles from request/filter enums; OpenAPI validator 0.9.0,
+  oasdiff against origin/dev, and focused MockMvc contract tests pass.
+- Data: synthetic test users only; no credentials or real personal data used.
+
+## 2026-11-07 — Generic AI drafts and literal \n in draft bodies (prompt drafts-v4)
+
+- Team member: Neo Jia Wen. Tool: Claude Code (Anthropic).
+- Task: make AI follow-up drafts less generic within ADR-0054 decision 2's
+  inputs, and fix drafts whose body showed literal `\n`.
+- Finding: Nova Lite sometimes escapes line breaks twice in its JSON, which
+  parses to a backslash and an `n`. At temperature 0.3 with prompt
+  `drafts-v3`, drafts shared stock phrases ("I hope this message finds you
+  well", "touch base") and ignored the meeting band.
+- Files: `DraftPrompt.java` (`drafts-v4`), `DraftSafetyScreen.java`,
+  `AiProperties.java`, `application.yml` (temperature 0.6), their tests,
+  ADR-0054 decision 3 and revision history, AE-T14 in the feature plan,
+  the agent-engagement live-checks log.
+- Verification: 161 engagement-service tests pass. A live run through the
+  real prompt, gateway and screen (crm account, Nova Lite): 30 of 30 drafts
+  over every purpose, tone and meeting band passed the screen, none was
+  double-escaped, 21 of 30 opened with a distinct sentence, and no Client
+  Health subject implied anything was noticed. "I hope you are well" still
+  appears in 7 of 30. Not yet deployed.
+- Data: the model received only purpose, tone, language, one synthetic
+  holiday (Deepavali 2026-11-08), a meeting band and placeholders; no client
+  data.
+- Human verification required: Neo Jia Wen to review the prompt wording,
+  deploy, and read a few new prod drafts.

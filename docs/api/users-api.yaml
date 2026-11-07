@@ -11,9 +11,11 @@ info:
   title: Scrooge CRM - Users
   version: v1
   description: |
-    CRM users, kept in step with Cognito: the Cognito group is the role that
-    tokens carry. Every route but logout is for admins. The root admin's role
-    cannot be changed and it cannot be disabled.
+    CRM users, kept in step with Cognito. Cognito's ADMIN group authorizes both
+    Admin and Root Admin; ROOT_ADMIN is an application-only role carried by the
+    matching user-service row. Only Root Admin can create Admins. No endpoint
+    can grant or transfer Root Admin status. Root Admin cannot be demoted or
+    disabled.
 
 servers:
   - url: /
@@ -30,6 +32,7 @@ paths:
     post:
       tags: [users]
       summary: Create a user, in Cognito and here
+      description: Admins may create Agents; only the Root Admin may create Admins. ROOT_ADMIN cannot be requested.
       operationId: createUser
       requestBody:
         required: true
@@ -42,7 +45,7 @@ paths:
                 firstName: { type: string, minLength: 1 }
                 lastName: { type: string, minLength: 1 }
                 email: { type: string, format: email }
-                role: { $ref: '#/components/schemas/Role' }
+                role: { $ref: '#/components/schemas/RoleInput' }
       responses:
         '201':
           description: Created; Cognito emails the user a temporary password.
@@ -60,11 +63,12 @@ paths:
     get:
       tags: [users]
       summary: Users, a page at a time
+      description: role=ADMIN includes both ADMIN and ROOT_ADMIN users; role=ROOT_ADMIN selects only the bootstrap Root Admin.
       operationId: listUsers
       parameters:
         - name: role
           in: query
-          schema: { $ref: '#/components/schemas/Role' }
+          schema: { $ref: '#/components/schemas/RoleFilter' }
         - name: enabled
           in: query
           schema: { type: boolean }
@@ -93,6 +97,22 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Error' }
+
+  /api/users/me:
+    get:
+      tags: [users]
+      summary: Identify the signed-in Admin
+      description: Resolves the verified access-token sub to its matching user record. Both Admin and Root Admin are in Cognito's ADMIN group; the returned role distinguishes them.
+      operationId: getCurrentAdmin
+      responses:
+        '200':
+          description: The signed-in admin user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
 
   /api/users/{id}:
     parameters:
@@ -142,7 +162,7 @@ paths:
     patch:
       tags: [users]
       summary: Move a user to another role
-      description: The new Cognito group is added before the old one is removed, so repeating a request completes a change that stopped half-way.
+      description: Role changes may demote an Admin to Agent. No role change may grant ADMIN or ROOT_ADMIN; the root account cannot be changed. Cognito group updates are added before removed.
       operationId: changeUserRole
       requestBody:
         required: true
@@ -152,7 +172,7 @@ paths:
               type: object
               required: [role]
               properties:
-                role: { $ref: '#/components/schemas/Role' }
+                role: { $ref: '#/components/schemas/RoleInput' }
       responses:
         '200':
           description: The user with the new role.
@@ -162,7 +182,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403':
-          description: The caller is not an admin, or the user is the root admin.
+          description: The caller is not an admin, the target is Root Admin, or the requested role grants ADMIN or ROOT_ADMIN.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -181,7 +201,7 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403':
-          description: The caller is not an admin, or the user is the root admin.
+          description: The caller is not an admin, or the user is Root Admin.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -227,7 +247,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: A Cognito access token from the CRM app client; every route but logout needs the ADMIN group.
+      description: A Cognito access token from the CRM app client; user-management routes other than logout need the ADMIN group. Admin-only privileges are resolved against the matching user-service record where specified.
 
   parameters:
     UserId:
@@ -249,7 +269,15 @@ components:
   schemas:
     Role:
       type: string
-      enum: [ADMIN, AGENT]
+      x-extensible-enum: [ROOT_ADMIN, ADMIN, AGENT]
+
+    RoleInput:
+      type: string
+      enum: [ROOT_ADMIN, ADMIN, AGENT]
+
+    RoleFilter:
+      type: string
+      enum: [ROOT_ADMIN, ADMIN, AGENT]
 
     Error:
       type: object

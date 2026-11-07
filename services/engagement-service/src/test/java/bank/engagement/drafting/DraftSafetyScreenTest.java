@@ -48,6 +48,19 @@ class DraftSafetyScreenTest {
         assertThat(screen.inspect(withSlot, DraftPurpose.CHECK_IN).reason()).isEqualTo("unknown_placeholder");
     }
 
+    /** Nova Lite sometimes writes \\n in its JSON, which parses to a backslash and an n, not a line break. */
+    @Test
+    void turnsDoubleEscapedLineBreaksIntoLineBreaks() {
+        DraftSafetyScreen.Result result = screen.inspect(json("Keeping in touch",
+                "Dear {{client_first_name}},\\\\n\\\\n{{agent_details}}\\\\r\\\\n\\\\nWarm regards,\\\\n{{agent_name}}"),
+                DraftPurpose.HEALTH_CHECK_IN);
+
+        assertThat(result.accepted()).isTrue();
+        assertThat(result.body())
+                .isEqualTo("Dear {{client_first_name}},\n\n{{agent_details}}\n\nWarm regards,\n{{agent_name}}")
+                .doesNotContain("\\");
+    }
+
     @Test
     void acceptsJsonInsideAMarkdownFence() {
         String fenced = "```json\n" + json("Hello", "Hi {{client_first_name}}, all the best.") + "\n```";

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { listClients } from '../api/clients.js'
-import { createUser, listUsers } from '../api/users.js'
+import { createUser, getCurrentAdmin, listUsers } from '../api/users.js'
 import ActivityFeed from '../components/ActivityFeed.jsx'
 import StatCard from '../components/StatCard.jsx'
 import TransactionsTable from '../components/TransactionsTable.jsx'
@@ -26,8 +26,8 @@ async function totalOf(load) {
   }
 }
 
-function CreateUserForm({ onCreated }) {
-  const [user, setUser] = useState(EMPTY_USER)
+function CreateUserForm({ onCreated, rootAdmin }) {
+  const [user, setUser] = useState({ ...EMPTY_USER, role: rootAdmin ? '' : 'AGENT' })
   const [saving, setSaving] = useState({ busy: false, error: '', created: '' })
 
   const setField = (name) => (event) => setUser((current) => ({ ...current, [name]: event.target.value }))
@@ -38,7 +38,7 @@ function CreateUserForm({ onCreated }) {
     try {
       await createUser(user)
       setSaving({ busy: false, error: '', created: user.email })
-      setUser(EMPTY_USER)
+      setUser({ ...EMPTY_USER, role: rootAdmin ? '' : 'AGENT' })
       onCreated()
     } catch (error) {
       setSaving({ busy: false, error: createProblem(error), created: '' })
@@ -47,17 +47,17 @@ function CreateUserForm({ onCreated }) {
 
   return (
     <form className="card form-grid" onSubmit={handleSubmit}>
-      <h2>Create Admin / Agent</h2>
+      <h2>{rootAdmin ? 'Create Admin / Agent' : 'Create Agent'}</h2>
       <label>First Name:<input type="text" required value={user.firstName} onChange={setField('firstName')} /></label>
       <label>Last Name:<input type="text" required value={user.lastName} onChange={setField('lastName')} /></label>
       <label>Email:<input type="email" required value={user.email} onChange={setField('email')} /></label>
-      <label>Role:
+      {rootAdmin && <label>Role:
         <select required value={user.role} onChange={setField('role')}>
           <option value="">Select Role</option>
           <option value="ADMIN">Admin</option>
           <option value="AGENT">Agent</option>
         </select>
-      </label>
+      </label>}
       {saving.error && <p className="form-error form-grid__full" role="alert">{saving.error}</p>}
       {saving.created && (
         <p className="form-grid__full" role="status">
@@ -76,6 +76,7 @@ function AdminDashboard() {
   const [totals, setTotals] = useState({ admins: null, agents: null, clients: null })
   // Bumped when a user is created, so open lists and totals reload.
   const [version, setVersion] = useState(0)
+  const [rootAdmin, setRootAdmin] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -89,6 +90,16 @@ function AdminDashboard() {
     })
     return () => { current = false }
   }, [version])
+
+  useEffect(() => {
+    let current = true
+    getCurrentAdmin().then((user) => {
+      if (current) setRootAdmin(user.role === 'ROOT_ADMIN')
+    }).catch(() => {
+      if (current) setRootAdmin(false)
+    })
+    return () => { current = false }
+  }, [])
 
   function toggleSection(section) {
     setOpenSection(openSection === section ? null : section)
@@ -111,12 +122,16 @@ function AdminDashboard() {
         <button onClick={() => navigate('/admin/alerts')}>
           Review Event Alerts
         </button>
-        <button
+        {rootAdmin && <button
           onClick={() => toggleSection('createUser')}
           aria-expanded={openSection === 'createUser'}
         >
           Create Admin / Agent
-        </button>
+        </button>}
+        {!rootAdmin && <button
+          onClick={() => toggleSection('createUser')}
+          aria-expanded={openSection === 'createUser'}
+        >Create Agent</button>}
         <button
           onClick={() => toggleSection('manageAdmins')}
           aria-expanded={openSection === 'manageAdmins'}
@@ -131,7 +146,7 @@ function AdminDashboard() {
         </button>
       </div>
 
-      {openSection === 'createUser' && <CreateUserForm onCreated={() => setVersion((v) => v + 1)} />}
+      {openSection === 'createUser' && <CreateUserForm rootAdmin={rootAdmin} onCreated={() => setVersion((v) => v + 1)} />}
       {openSection === 'manageAdmins' && <UserList key={`admins-${version}`} role="ADMIN" title="Manage Admins" />}
       {openSection === 'manageAgents' && <UserList key={`agents-${version}`} role="AGENT" title="Manage Agents" />}
 

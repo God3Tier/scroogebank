@@ -90,7 +90,7 @@ function AppRouter() {
         <ListPage title="All transactions" subtitle="Every account's transactions, newest first" back="/admin"><TransactionsTable paged /></ListPage>
       </RequireAuth>} />
       <Route path="/admin/audit-logs" element={<RequireAuth groups={[ADMIN]}>
-        <ListPage title="Audit Activity" subtitle="Successful changes recorded across the CRM, newest first" back="/admin"><AdminAuditLogs /></ListPage>
+        <ListPage title="Audit Log" subtitle="Every recorded event across CRM services, newest first" back="/admin"><AdminAuditLogs /></ListPage>
       </RequireAuth>} />
     </Routes>
   )

@@ -33,6 +33,7 @@ describe('NavBar', () => {
     expect(screen.getByRole('link', { name: /Agent Dashboard/ })).toHaveAttribute('href', '/insights/agent')
     expect(screen.getByRole('link', { name: /Calendar/ })).toHaveAttribute('href', '/agent/calendar')
     expect(screen.getByRole('link', { name: /Follow-up Emails/ })).toHaveAttribute('href', '/agent/drafts')
+    expect(screen.getByRole('link', { name: /Event Driven Alerts/ })).toHaveAttribute('href', '/agent/alerts')
     expect(screen.queryByRole('link', { name: /Admin Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Admin Dashboard/ })).not.toBeInTheDocument()
     expect(screen.getByText('synthetic.agent@example.test')).toBeInTheDocument()
@@ -48,6 +49,7 @@ describe('NavBar', () => {
 
     expect(screen.getByRole('link', { name: /Admin Home/ })).toHaveAttribute('href', '/admin')
     expect(screen.getByRole('link', { name: /Admin Dashboard/ })).toHaveAttribute('href', '/insights/admin')
+    expect(screen.getByRole('link', { name: /Event Driven Alerts/ })).toHaveAttribute('href', '/admin/alerts')
     expect(screen.queryByRole('link', { name: /Agent Home/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Agent Dashboard/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Calendar/ })).not.toBeInTheDocument()
@@ -67,7 +69,17 @@ describe('NavBar', () => {
     expect(screen.getByRole('link', { name: /Agent Home/ })).toHaveAttribute('aria-current', 'page')
   })
 
-  it.each(['/agent/alerts', '/agent/client/client-1/transactions'])(
+  it.each([['/agent/alerts', /Event Driven Alerts/], ['/agent/drafts', /Follow-up Emails/]])(
+    'highlights only the link for %s',
+    (path, name) => {
+      renderNavBar(AGENT_AUTH, path)
+
+      expect(screen.getByRole('link', { name })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getAllByRole('link').filter((link) => link.getAttribute('aria-current'))).toHaveLength(1)
+    },
+  )
+
+  it.each(['/agent/clients', '/agent/client/client-1/transactions'])(
     'highlights Agent Home on %s, which has no link of its own',
     (path) => {
       renderNavBar(AGENT_AUTH, path)
@@ -78,7 +90,7 @@ describe('NavBar', () => {
   )
 
   it('highlights Admin Home on the admin pages under it', () => {
-    renderNavBar(ADMIN_AUTH, '/admin/alerts')
+    renderNavBar(ADMIN_AUTH, '/admin/agents')
 
     expect(screen.getByRole('link', { name: /Admin Home/ })).toHaveAttribute('aria-current', 'page')
   })

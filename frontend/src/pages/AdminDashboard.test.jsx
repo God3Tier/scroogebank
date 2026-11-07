@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listClients, reassignClients } from '../api/clients.js'
 import { listTransactions } from '../api/transactions.js'
-import { createUser, disableUser, listUsers, resetPassword, updateUser } from '../api/users.js'
+import { createUser, disableUser, getCurrentAdmin, listUsers, resetPassword, updateUser } from '../api/users.js'
 import AdminDashboard from './AdminDashboard.jsx'
 
 vi.mock('../api/clients.js', () => ({ listClients: vi.fn(), reassignClients: vi.fn() }))
 vi.mock('../api/transactions.js', () => ({ listTransactions: vi.fn() }))
-vi.mock('../api/users.js', () => ({ createUser: vi.fn(), disableUser: vi.fn(), listUsers: vi.fn(), resetPassword: vi.fn(), updateUser: vi.fn() }))
+vi.mock('../api/users.js', () => ({ createUser: vi.fn(), disableUser: vi.fn(), getCurrentAdmin: vi.fn(), listUsers: vi.fn(), resetPassword: vi.fn(), updateUser: vi.fn() }))
 vi.mock('../api/activities.js', () => ({
   listActivities: vi.fn().mockResolvedValue({ content: [], nextCursor: null }),
 }))
@@ -45,6 +45,7 @@ function renderDashboard() {
 
 describe('admin dashboard', () => {
   beforeEach(() => {
+    getCurrentAdmin.mockResolvedValue({ role: 'ROOT_ADMIN' })
     listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([], 2) : page([AGENT], 5)))
     listClients.mockResolvedValue(page([], 40))
     listTransactions.mockResolvedValue({ content: [TRANSACTION], nextCursor: null })
@@ -90,7 +91,8 @@ describe('admin dashboard', () => {
   it('creates an agent and says Cognito e-mails the password', async () => {
     createUser.mockResolvedValue({ id: 'user-3' })
     renderDashboard()
-    fireEvent.click(screen.getByRole('button', { name: 'Create Admin / Agent' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Admin / Agent' }))
+    expect(screen.getByRole('option', { name: 'Admin' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('First Name:'), { target: { value: 'New' } })
     fireEvent.change(screen.getByLabelText('Last Name:'), { target: { value: 'Agent' } })
@@ -99,6 +101,21 @@ describe('admin dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
 
     expect(await screen.findByText(/temporary password/)).toBeInTheDocument()
+    expect(createUser).toHaveBeenCalledWith({ firstName: 'New', lastName: 'Agent', email: 'new.agent@example.test', role: 'AGENT' })
+  })
+
+  it('shows regular Admins only the Agent creation choice', async () => {
+    getCurrentAdmin.mockResolvedValue({ role: 'ADMIN' })
+    renderDashboard()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create Agent' }))
+    expect(await screen.findByRole('heading', { name: 'Create Agent' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Role:')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('First Name:'), { target: { value: 'New' } })
+    fireEvent.change(screen.getByLabelText('Last Name:'), { target: { value: 'Agent' } })
+    fireEvent.change(screen.getByLabelText('Email:'), { target: { value: 'new.agent@example.test' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
     expect(createUser).toHaveBeenCalledWith({ firstName: 'New', lastName: 'Agent', email: 'new.agent@example.test', role: 'AGENT' })
   })
 

@@ -6,7 +6,7 @@ import { Pager, ViewAll } from './ListFooter.jsx'
 import { numberedSource, usePagedList } from './paging.js'
 
 function deleteProblem(error) {
-    if (error.status === 409) return 'This client still has accounts. Delete them first.'
+    if (error.status === 409) return 'This client still has accounts. Delete them under View Accounts and Transactions first.'
     if (error.status === 503) return 'The client could not be checked for accounts. Try again.'
     return 'The client could not be deleted. Try again.'
 }
