@@ -148,7 +148,7 @@ describe('TickerReports', () => {
     expect(screen.queryByLabelText('Sentence 1')).not.toBeInTheDocument()
     expect(box.value).toContain('EXECUTIVE SUMMARY')
     expect(screen.getByRole('heading', { name: 'Apple beats revenue estimates' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Approve report/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Approve Apple Inc report/ })).toBeDisabled()
     expect(screen.getByText('Click Save and preview to save your edits first.')).toBeInTheDocument()
 
     fireEvent.change(box, { target: { value: box.value.replace('Partial excerpts.', 'Changed.') } })
@@ -211,12 +211,12 @@ describe('TickerReports', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve report for 1 selected client' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Apple Inc report for 1 selected client' }))
 
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Approval is final'))
     await waitFor(() => expect(approveReport).toHaveBeenCalledWith('e1', 1))
     expect(await screen.findByRole('button', { name: 'Notify selected clients about Apple Inc' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Approve report/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve Apple Inc report/ })).not.toBeInTheDocument()
     expect(screen.getByText(/Approved by you at/)).toBeInTheDocument()
     expect(screen.getByText(/Approved 2 days ago, can be sent for 5 more days/)).toBeInTheDocument()
   })
@@ -225,7 +225,7 @@ describe('TickerReports', () => {
     window.confirm.mockReturnValue(false)
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve report for 1 selected client' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve Apple Inc report for 1 selected client' }))
     expect(approveReport).not.toHaveBeenCalled()
   })
 
@@ -253,7 +253,7 @@ describe('TickerReports', () => {
     renderPage()
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Daniel Lim' }))
     expect(screen.getByText(/Your approval expired/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Approve again' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve Apple Inc report again' })).toBeEnabled()
   })
 
   it('opens another ticker when its row is chosen, and says when a report is not written yet', async () => {

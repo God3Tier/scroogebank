@@ -121,7 +121,7 @@ export function ReportReview({ eventId, report, review, clients, selected, compa
               <button type="button" className="button button--secondary" onClick={discardEdits} disabled={state.busy}>Undo my edits</button>
             )}
             <button type="button" className="button button--primary" onClick={approve} disabled={state.busy || editing || count === 0}>
-              {approval ? 'Approve again' : `Approve report for ${count} selected client${count === 1 ? '' : 's'}`}
+              {approval ? `Approve ${company} report again` : `Approve ${company} report for ${count} selected client${count === 1 ? '' : 's'}`}
             </button>
           </div>
           {editing && <p className="holdings-note">Click Save and preview to save your edits first.</p>}
