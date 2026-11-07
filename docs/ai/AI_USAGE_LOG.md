@@ -2186,5 +2186,7 @@ retry exhaustion and refusal to retry after the last available reservation.
   and database migration documentation.
 - Verification: full user-service suite (86 tests), PostgreSQL migration test,
   full frontend suite (363 tests), frontend lint, and production build pass.
-  Vite reports a large JavaScript chunk advisory.
+  Vite reports a large JavaScript chunk advisory. Follow-up OpenAPI fix separates
+  extensible response roles from request/filter enums; OpenAPI validator 0.9.0,
+  oasdiff against origin/dev, and focused MockMvc contract tests pass.
 - Data: synthetic test users only; no credentials or real personal data used.
