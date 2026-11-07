@@ -46,12 +46,12 @@ class HttpUserRosterAdapterTest {
         server.expect(requestTo(page(0)))
                 .andRespond(upstream("users-api.yaml", withSuccess(userPage(0, 2, """
                         {"id":"00000000-0000-4000-8000-000000000001","idpSub":"sub-ada","firstName":"Ada","lastName":"Lim","email":"ada@x.com",
-                         "role":"AGENT","enabled":true,"createdAt":"2026-09-01T00:00:00Z","updatedAt":"2026-09-01T00:00:00Z"}
+                         "role":"AGENT","enabled":true,"deletable":true,"createdAt":"2026-09-01T00:00:00Z","updatedAt":"2026-09-01T00:00:00Z"}
                         """), MediaType.APPLICATION_JSON)));
         server.expect(requestTo(page(1)))
                 .andRespond(upstream("users-api.yaml", withSuccess(userPage(1, 2, """
                         {"id":"00000000-0000-4000-8000-000000000002","idpSub":"sub-ben","firstName":"Ben","lastName":"Chua","email":"ben@x.com",
-                         "role":"AGENT","enabled":false,"createdAt":"2026-09-01T00:00:00Z","updatedAt":"2026-09-01T00:00:00Z"}
+                         "role":"AGENT","enabled":false,"deletable":true,"createdAt":"2026-09-01T00:00:00Z","updatedAt":"2026-09-01T00:00:00Z"}
                         """), MediaType.APPLICATION_JSON)));
 
         List<AgentSummary> agents = adapter.agents();
