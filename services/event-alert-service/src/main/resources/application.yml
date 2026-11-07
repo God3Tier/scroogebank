@@ -102,7 +102,7 @@ alert:
       timeout: 30s
       max-response-bytes: 262144
       # Shared publishers authorized by the requester (the first three on 2026-10-30, the list widened on 2026-11-07); see ADR-0051.
-      # Tavily searches the open web and only results from these sites, a company's official sites and the websites agents add are kept.
+      # Tavily is restricted to these sites, a company's official sites and the websites agents add (include_domains).
       # Every issuer also adds its official domains from the instrument master.
       approved-domains: [reuters.com, cnbc.com, ft.com, bloomberg.com, wsj.com, barrons.com, marketwatch.com, finance.yahoo.com, investing.com, benzinga.com, fool.com, forbes.com, businesstimes.com.sg, straitstimes.com, channelnewsasia.com, theedgesingapore.com, apnews.com, bbc.com, theguardian.com, techcrunch.com, theverge.com, thenextweb.com, techspot.com, adage.com]
     event-terms:

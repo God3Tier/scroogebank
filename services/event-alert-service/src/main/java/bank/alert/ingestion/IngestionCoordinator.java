@@ -38,6 +38,9 @@ public class IngestionCoordinator {
     private final OutboundControlService outboundControls;
     private final IngestionRunLock runLock;
     private final Clock clock;
+    private static final Duration RESEARCH_POLL = Duration.ofSeconds(5);
+    private static final int RESEARCH_MAX_WAITS = 120; // 10 minutes
+    private Pause pause = IngestionCoordinator::sleep;
 
     public IngestionCoordinator(IngestionProperties properties, PublicSearchProvider provider,
             IssuerQueryBuilder queryBuilder, BoundedRetryExecutor retryExecutor,
@@ -89,7 +92,38 @@ public class IngestionCoordinator {
     public IngestionOutcome research(Instant windowFrom, Instant windowTo, List<InstrumentSearchTerms> catalogue,
             List<String> sharedDomains) {
         if (!properties.enabled()) return IngestionOutcome.skipped(IngestionStatus.DISABLED, windowTo);
-        return execute(windowFrom, windowTo, catalogue, false, sharedDomains);
+        IngestionOutcome outcome = execute(windowFrom, windowTo, catalogue, false, sharedDomains);
+        // Only one search runs at a time. Searches started a moment apart (one Search now per company) must take turns,
+        // not be dropped: wait for the lock, a few seconds at a time, for up to RESEARCH_MAX_WAITS * RESEARCH_POLL.
+        for (int waits = 0; waits < RESEARCH_MAX_WAITS && waitingForTheLock(outcome); waits++) {
+            if (!pause.pause(RESEARCH_POLL)) break;
+            outcome = execute(windowFrom, windowTo, catalogue, false, sharedDomains);
+        }
+        return outcome;
+    }
+
+    /** True when the search was refused only because another search holds the lock (no run was started). */
+    private static boolean waitingForTheLock(IngestionOutcome outcome) {
+        return outcome.status() == IngestionStatus.ALREADY_RUNNING && outcome.runId() == null;
+    }
+
+    /** Waits between tries; false if the wait was interrupted, so the caller stops waiting. Replaceable in tests. */
+    interface Pause {
+        boolean pause(Duration duration);
+    }
+
+    private static boolean sleep(Duration duration) {
+        try {
+            Thread.sleep(duration.toMillis());
+            return true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    void usePause(Pause replacement) {
+        this.pause = replacement;
     }
 
     private IngestionOutcome execute(Instant windowFrom, Instant windowTo,

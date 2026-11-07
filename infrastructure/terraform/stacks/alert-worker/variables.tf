@@ -71,7 +71,7 @@ variable "minimum_search_client_share" {
 }
 
 variable "approved_news_domains" {
-  description = "Requester-approved news sites. Tavily is not restricted to them: it searches the open web, and the worker keeps only results from these sites, each company's official sites and the websites agents add. Plain domains only, none of the platforms anyone can post on. See ADR-0051 and its 2026-11-07 addendum."
+  description = "Requester-approved news sites. Tavily is restricted to them, each company's official sites and the websites agents add (include_domains). Plain domains only, none of the platforms anyone can post on. See ADR-0051 and its 2026-11-07 addendum."
   type        = list(string)
   default     = ["reuters.com", "cnbc.com", "ft.com", "bloomberg.com", "wsj.com", "barrons.com", "marketwatch.com", "finance.yahoo.com", "investing.com", "benzinga.com", "fool.com", "forbes.com", "businesstimes.com.sg", "straitstimes.com", "channelnewsasia.com", "theedgesingapore.com", "apnews.com", "bbc.com", "theguardian.com", "techcrunch.com", "theverge.com", "thenextweb.com", "techspot.com", "adage.com"]
 
