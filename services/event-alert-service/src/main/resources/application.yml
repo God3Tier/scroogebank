@@ -60,6 +60,9 @@ alert:
     enabled: ${ALERT_RETENTION_ENABLED:true}
     interval: ${ALERT_RETENTION_INTERVAL:1h}
     batch-size: ${ALERT_RETENTION_BATCH_SIZE:100}
+  # The most new alerts one agent gets in a UTC day; 0 means no limit. It was 10 (ADR-0004) until 2026-11-07.
+  generation:
+    daily-limit: ${ALERT_DAILY_ALERT_LIMIT:200}
   # When the automatic searches run, for the page to show the next one (ADR-0081). The schedule itself is
   # EventBridge Scheduler's, in stacks/alert-worker; keep these two in step.
   schedule:
