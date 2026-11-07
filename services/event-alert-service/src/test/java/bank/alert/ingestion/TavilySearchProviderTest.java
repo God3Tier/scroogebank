@@ -78,6 +78,14 @@ class TavilySearchProviderTest {
     }
 
     @Test
+    void aSearchMayAskForTwentyResultsAndNoMore() {
+        Instant from = Instant.parse("2026-10-23T04:00:00Z");
+        assertThat(new PublicSearchRequest("SYN1 earnings", List.of("sgx.com"), from, NOW, 20).maximumResults()).isEqualTo(20);
+        assertThatThrownBy(() -> new PublicSearchRequest("SYN1 earnings", List.of("sgx.com"), from, NOW, 21))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void sendsOnlyBoundedNewsFiltersAndAuthenticatesInTheHeader() {
         provider().search(request());
 
@@ -91,9 +99,9 @@ class TavilySearchProviderTest {
         assertThat(body.path("start_date").asText()).isEqualTo("2026-10-23");
         assertThat(body.path("end_date").asText()).isEqualTo("2026-10-24");
         assertThat(body.path("filter_by_published_date").asBoolean()).isTrue();
-        assertThat(body.path("include_domains_mode").asText()).isEqualTo("restrict");
-        assertThat(body.path("include_domains")).extracting(JsonNode::asText)
-                .containsExactly("sgx.com", "mas.gov.sg");
+        // Tavily is not told which sites to use; the approved sites are applied to what comes back.
+        assertThat(body.has("include_domains")).isFalse();
+        assertThat(body.has("include_domains_mode")).isFalse();
         assertThat(body.path("include_answer").asBoolean()).isFalse();
         assertThat(body.path("include_raw_content").asBoolean()).isFalse();
         assertThat(body.has("api_key")).isFalse();

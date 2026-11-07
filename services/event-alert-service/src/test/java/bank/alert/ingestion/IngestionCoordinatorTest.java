@@ -320,7 +320,7 @@ class IngestionCoordinatorTest {
     private IngestionCoordinator coordinator(boolean enabled) {
         IngestionProperties properties = new IngestionProperties(enabled,
                 "tavily", Duration.ofMinutes(5), Duration.ofHours(4),
-                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
+                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2,
                 List.of("mas.gov.sg", "sgx.com"), List.of("earnings"));
         return new IngestionCoordinator(properties, provider, new IssuerQueryBuilder(),
                 new BoundedRetryExecutor(), new PublicUrlCanonicalizer(), searchRuns, sourceResults,

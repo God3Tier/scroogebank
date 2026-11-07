@@ -4,8 +4,6 @@ import bank.alert.config.IngestionProperties;
 import bank.alert.fixture.SyntheticFixtureLoader;
 import bank.alert.fixture.SyntheticHoldingFixture;
 import bank.alert.ingestion.SearchUniverseProvider;
-import bank.alert.scoring.ExposureCalculator;
-import bank.alert.scoring.ExposureStatus;
 import bank.alert.operations.OperationalMetrics;
 import bank.alert.domain.HoldingSnapshot;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,15 +24,13 @@ public class SyntheticHoldingsSearchUniverseProvider implements SearchUniversePr
 
     private final SyntheticFixtureLoader fixtures;
     private final IngestionProperties properties;
-    private final ExposureCalculator exposureCalculator;
     private final OperationalMetrics metrics;
 
     public SyntheticHoldingsSearchUniverseProvider(
             SyntheticFixtureLoader fixtures, IngestionProperties properties,
-            ExposureCalculator exposureCalculator, OperationalMetrics metrics) {
+            OperationalMetrics metrics) {
         this.fixtures = fixtures;
         this.properties = properties;
-        this.exposureCalculator = exposureCalculator;
         this.metrics = metrics;
     }
 
@@ -62,20 +58,8 @@ public class SyntheticHoldingsSearchUniverseProvider implements SearchUniversePr
                         && clientShare(entry.getValue().size(), clientTotal)
                         .compareTo(properties.minimumSearchClientShare()) >= 0)
                 .map(Map.Entry::getKey).collect(Collectors.toSet());
-        Set<String> concentrated = heldPositions.stream()
-                .collect(Collectors.groupingBy(SyntheticHoldingFixture.Position::accountRef))
-                .values().stream()
-                .flatMap(account -> account.stream().map(position -> Map.entry(position.instrumentId(),
-                        exposureCalculator.calculate(account.stream().map(SyntheticHoldingsSearchUniverseProvider::snapshot).toList(),
-                                Set.of(position.instrumentId())))))
-                .filter(entry -> entry.getValue().status() == ExposureStatus.EVALUABLE)
-                .filter(entry -> entry.getValue().portfolioPercentage().compareTo(
-                        properties.minimumAccountConcentration().movePointRight(2)) >= 0)
-                .map(Map.Entry::getKey).collect(Collectors.toSet());
-        List<String> eligible = java.util.stream.Stream.concat(common.stream(), concentrated.stream()).distinct()
-                .sorted()
-                .toList();
-        metrics.searchUniverse(eligible.size(), common.size(), concentrated.size());
+        List<String> eligible = common.stream().sorted().toList();
+        metrics.searchUniverse(eligible.size(), common.size());
         return eligible;
     }
 

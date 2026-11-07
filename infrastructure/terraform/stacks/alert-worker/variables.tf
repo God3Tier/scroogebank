@@ -61,7 +61,7 @@ variable "run_on_apply" {
 }
 
 variable "minimum_search_client_share" {
-  description = "Inclusive distinct-client share required by the common-holding search rule."
+  description = "Inclusive share of the clients holding anything that must hold a company, with at least minimum_search_client_count of them, before the scheduled runs search it. A large share of one account no longer qualifies a company."
   type        = number
   default     = 0.20
   validation {
@@ -70,26 +70,20 @@ variable "minimum_search_client_share" {
   }
 }
 
-variable "minimum_account_concentration" {
-  description = "Inclusive per-account SGD portfolio concentration required by the concentration search rule."
-  type        = number
-  default     = 0.50
-  validation {
-    condition     = var.minimum_account_concentration > 0 && var.minimum_account_concentration <= 1
-    error_message = "minimum_account_concentration must be greater than zero and at most one."
-  }
-}
-
 variable "approved_news_domains" {
-  description = "Requester-authorized commercial news domains added to every issuer query; summaries retain source citations. See ADR-0051's 2026-10-30 addendum."
+  description = "Requester-approved news sites. Tavily is not restricted to them: it searches the open web, and the worker keeps only results from these sites, each company's official sites and the websites agents add. Plain domains only, none of the platforms anyone can post on. See ADR-0051 and its 2026-11-07 addendum."
   type        = list(string)
-  default     = ["reuters.com", "cnbc.com", "ft.com"]
+  default     = ["reuters.com", "cnbc.com", "ft.com", "bloomberg.com", "wsj.com", "barrons.com", "marketwatch.com", "finance.yahoo.com", "investing.com", "benzinga.com", "fool.com", "forbes.com", "businesstimes.com.sg", "straitstimes.com", "channelnewsasia.com", "theedgesingapore.com", "apnews.com", "bbc.com", "theguardian.com", "techcrunch.com", "theverge.com", "thenextweb.com", "techspot.com", "adage.com"]
 
   validation {
     condition = alltrue([
-      for domain in var.approved_news_domains : contains(["reuters.com", "cnbc.com", "ft.com"], domain)
+      for domain in var.approved_news_domains :
+      can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", domain))
+      && !contains(["reddit.com", "x.com", "twitter.com", "facebook.com", "instagram.com", "tiktok.com", "youtube.com", "youtu.be",
+        "medium.com", "substack.com", "quora.com", "linkedin.com", "t.me", "telegram.org", "pinterest.com", "tumblr.com",
+        "blogspot.com", "wordpress.com", "stocktwits.com", "discord.com", "whatsapp.com"], domain)
     ])
-    error_message = "approved_news_domains may contain only the reviewed candidate domains: reuters.com, cnbc.com, and ft.com."
+    error_message = "approved_news_domains may hold only plain domain names such as example.com, and none of the open posting platforms (reddit.com, x.com and the like)."
   }
 }
 

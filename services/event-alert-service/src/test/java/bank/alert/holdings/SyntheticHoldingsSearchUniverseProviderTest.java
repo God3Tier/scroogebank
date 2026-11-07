@@ -4,7 +4,6 @@ import bank.alert.config.IngestionProperties;
 import bank.alert.domain.ValuationFreshness;
 import bank.alert.fixture.SyntheticFixtureLoader;
 import bank.alert.fixture.SyntheticHoldingFixture;
-import bank.alert.scoring.ExposureCalculator;
 import bank.alert.operations.OperationalMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -26,13 +25,12 @@ class SyntheticHoldingsSearchUniverseProviderTest {
     void selectsExpectedGlobalFixtureUniverse() {
         OperationalMetrics metrics = mock(OperationalMetrics.class);
         SyntheticHoldingsSearchUniverseProvider provider = new SyntheticHoldingsSearchUniverseProvider(
-                new SyntheticFixtureLoader(new ObjectMapper().findAndRegisterModules()), properties(),
-                new ExposureCalculator(), metrics);
+                new SyntheticFixtureLoader(new ObjectMapper().findAndRegisterModules()), properties(), metrics);
 
         assertThat(provider.eligibleInstrumentIds()).containsExactly(
-                "HKEX-0700", "LSE-HSBA", "LSE-SHEL", "NASDAQ-AAPL", "NASDAQ-MSFT",
-                "NASDAQ-NVDA", "NYSE-JPM", "NYSE-V", "SGX-C6L", "SGX-D05", "SGX-O39", "SGX-Z74");
-        verify(metrics).searchUniverse(12, 10, 2);
+                "HKEX-0700", "LSE-SHEL", "NASDAQ-AAPL", "NASDAQ-MSFT",
+                "NYSE-JPM", "NYSE-V", "SGX-C6L", "SGX-D05", "SGX-O39", "SGX-Z74");
+        verify(metrics).searchUniverse(10, 10);
     }
 
     @Test
@@ -54,11 +52,11 @@ class SyntheticHoldingsSearchUniverseProviderTest {
         when(fixtures.loadDefault()).thenReturn(new SyntheticHoldingFixture(1,
                 Instant.parse("2026-09-30T00:00:00Z"), positions, List.of()));
         SyntheticHoldingsSearchUniverseProvider provider =
-                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(), new ExposureCalculator(),
+                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(),
                         metrics);
 
-        assertThat(provider.eligibleInstrumentIds()).containsExactly("AT-50", "BASE", "COMMON-20");
-        verify(metrics).searchUniverse(3, 2, 2);
+        assertThat(provider.eligibleInstrumentIds()).containsExactly("BASE", "COMMON-20");
+        verify(metrics).searchUniverse(2, 2);
     }
 
     @Test
@@ -84,13 +82,12 @@ class SyntheticHoldingsSearchUniverseProviderTest {
                 Instant.parse("2026-10-29T00:00:00Z"), positions, List.of()));
 
         SyntheticHoldingsSearchUniverseProvider provider =
-                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(),
-                        new ExposureCalculator(), metrics);
+                new SyntheticHoldingsSearchUniverseProvider(fixtures, properties(), metrics);
 
         assertThat(provider.eligibleInstrumentIds())
-                .containsExactly("ASX-BHP", "NYSE-TSM", "TSE-7203")
-                .doesNotContain("XETRA-SAP");
-        verify(metrics).searchUniverse(3, 2, 2);
+                .containsExactly("ASX-BHP", "TSE-7203")
+                .doesNotContain("XETRA-SAP", "NYSE-TSM");
+        verify(metrics).searchUniverse(2, 2);
     }
 
     private static SyntheticHoldingFixture.Position position(
@@ -105,7 +102,7 @@ class SyntheticHoldingsSearchUniverseProviderTest {
     private static IngestionProperties properties() {
         return new IngestionProperties(false, "tavily",
                 Duration.ofMinutes(5), Duration.ofHours(4), 4, 10, 3,
-                Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
+                Duration.ofDays(90), new BigDecimal("0.20"), 2,
                 List.of("sgx.com"), List.of("earnings"));
     }
 }

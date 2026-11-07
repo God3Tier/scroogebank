@@ -4,7 +4,6 @@ import bank.alert.config.IngestionProperties;
 import bank.alert.domain.HoldingSnapshot;
 import bank.alert.domain.ValuationFreshness;
 import bank.alert.operations.OperationalMetrics;
-import bank.alert.scoring.ExposureCalculator;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -26,7 +25,7 @@ class SearchUniverseSelectorTest {
     @Test
     void thirtyClientsAcrossAgentsAndAccountsAreCountedByDistinctClient() {
         OperationalMetrics metrics = mock(OperationalMetrics.class);
-        SearchUniverseSelector selector = new SearchUniverseSelector(properties(), new ExposureCalculator(), metrics);
+        SearchUniverseSelector selector = new SearchUniverseSelector(properties(), metrics);
         List<HoldingSnapshot> positions = new ArrayList<>();
         for (int client = 1; client <= 30; client++) {
             String agent = "agent-" + (client % 3);
@@ -44,25 +43,24 @@ class SearchUniverseSelectorTest {
         }
         addSecondAccount(positions, 11, "a11-second", "agent-2", "BELOW");
         addSecondAccount(positions, 12, "a12-second", "agent-0", "BELOW");
-        // One client puts exactly half of one account in CONCENTRATED, which another client's account does not.
+        // One client puts half of one account in CONCENTRATED. One client is not enough: the account share no longer qualifies it.
         positions.add(position(20, "a20", "agent-2", "CONCENTRATED", "1000.00"));
-        positions.add(position(21, "a21", "agent-0", "NOT-CONCENTRATED", "999.00"));
 
         List<String> universe = selector.select(positions);
 
-        assertThat(universe).containsExactly("BASE", "COMMON", "CONCENTRATED");
-        verify(metrics).searchUniverse(3, 2, 2);
+        assertThat(universe).containsExactly("BASE", "COMMON");
+        verify(metrics).searchUniverse(2, 2);
     }
 
     @Test
-    void anAccountsWholePortfolioIsTheConcentrationDenominator() {
-        SearchUniverseSelector selector = new SearchUniverseSelector(
-                properties(), new ExposureCalculator(), mock(OperationalMetrics.class));
-        // 10 of 100 is 10%, not 100% of the affected subset.
-        List<HoldingSnapshot> tenPercent = List.of(
-                position(1, "a1", "agent-1", "SMALL", "10.00"), position(1, "a1", "agent-1", "LARGE", "90.00"));
+    void aCompanyOneClientHoldsIsNotSearchedHoweverLargeTheHolding() {
+        SearchUniverseSelector selector = new SearchUniverseSelector(properties(), mock(OperationalMetrics.class));
+        // 90 of 100 is 90% of the account, but only one client holds it, so it is not searched.
+        List<HoldingSnapshot> oneClient = List.of(
+                position(1, "a1", "agent-1", "SMALL", "10.00"), position(1, "a1", "agent-1", "LARGE", "90.00"),
+                position(2, "a2", "agent-1", "OTHER", "100.00"));
 
-        assertThat(selector.select(tenPercent)).containsExactly("LARGE");
+        assertThat(selector.select(oneClient)).isEmpty();
     }
 
     /** A second account of the same client: a small position next to a large filler, so it is not itself concentrated. */
@@ -79,7 +77,7 @@ class SearchUniverseSelectorTest {
 
     private static IngestionProperties properties() {
         return new IngestionProperties(false, "tavily", Duration.ofMinutes(5), Duration.ofHours(4), 4, 10, 3,
-                Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
+                Duration.ofDays(90), new BigDecimal("0.20"), 2,
                 List.of("sgx.com"), List.of("earnings"));
     }
 }

@@ -82,7 +82,7 @@ run "ingestion_on_while_running" {
   variables {
     ingestion_enabled     = true
     ai_enabled            = true
-    approved_news_domains = ["reuters.com", "cnbc.com", "ft.com"]
+    approved_news_domains = ["reuters.com", "cnbc.com", "ft.com", "bloomberg.com"]
   }
 
   assert {
@@ -144,11 +144,11 @@ run "no_run_on_apply_while_ingestion_is_off" {
   }
 }
 
-run "rejects_unreviewed_news_domain" {
+run "rejects_an_open_posting_platform_as_a_news_domain" {
   command = plan
 
   variables {
-    approved_news_domains = ["unreviewed.example"]
+    approved_news_domains = ["reddit.com"]
   }
 
   expect_failures = [var.approved_news_domains]

@@ -3,7 +3,6 @@ package bank.alert.holdings;
 import bank.alert.config.IngestionProperties;
 import bank.alert.ingestion.SearchUniverseProvider;
 import bank.alert.operations.OperationalMetrics;
-import bank.alert.scoring.ExposureCalculator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -24,9 +23,9 @@ public class DatabaseSearchUniverseProvider implements SearchUniverseProvider {
     private final Clock clock;
 
     public DatabaseSearchUniverseProvider(CurrentHoldingsReader reader, IngestionProperties properties,
-            ExposureCalculator exposureCalculator, OperationalMetrics metrics, Clock clock) {
+            OperationalMetrics metrics, Clock clock) {
         this.reader = reader;
-        this.selector = new SearchUniverseSelector(properties, exposureCalculator, metrics);
+        this.selector = new SearchUniverseSelector(properties, metrics);
         this.clock = clock;
     }
 

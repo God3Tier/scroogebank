@@ -114,11 +114,9 @@ public final class TavilySearchProvider implements PublicSearchProvider {
         body.put("include_raw_content", false);
         body.put("include_images", false);
         body.put("include_favicon", false);
-        body.put("include_domains_mode", "restrict");
         body.put("auto_parameters", false);
         body.put("safe_search", true);
-        body.putArray("include_domains").addAll(request.approvedDomains().stream()
-                .map(mapper.getNodeFactory()::textNode).toList());
+        // No include_domains: Tavily searches the open web, and toResult() keeps only the approved sites (approvedHttpsUrl).
         try {
             return mapper.writeValueAsBytes(body);
         } catch (JsonProcessingException impossible) {

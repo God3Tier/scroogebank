@@ -19,4 +19,4 @@ ai_enabled        = false
 
 # Requester-authorized sources; summaries include source links (ADR-0051).
 # Official issuer/exchange/regulator domains also come from alerts-db.
-approved_news_domains = ["reuters.com", "cnbc.com", "ft.com"]
+approved_news_domains = ["reuters.com", "cnbc.com", "ft.com", "bloomberg.com", "wsj.com", "barrons.com", "marketwatch.com", "finance.yahoo.com", "investing.com", "benzinga.com", "fool.com", "forbes.com", "businesstimes.com.sg", "straitstimes.com", "channelnewsasia.com", "theedgesingapore.com", "apnews.com", "bbc.com", "theguardian.com", "techcrunch.com", "theverge.com", "thenextweb.com", "techspot.com", "adage.com"]

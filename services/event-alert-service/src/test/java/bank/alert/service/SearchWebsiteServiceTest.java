@@ -40,7 +40,7 @@ class SearchWebsiteServiceTest {
     @BeforeEach
     void setUp() {
         IngestionProperties ingestion = new IngestionProperties(true, "tavily", Duration.ofMinutes(5), Duration.ofHours(4),
-                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2, new BigDecimal("0.50"),
+                4, 10, 3, Duration.ofDays(90), new BigDecimal("0.20"), 2,
                 List.of("reuters.com", "cnbc.com", "ft.com"), List.of("earnings"));
         service = new SearchWebsiteService(websites, outbox, new SourceDomainPolicy(), ingestion, new ObjectMapper(),
                 Clock.fixed(NOW, ZoneOffset.UTC), 10_000);
