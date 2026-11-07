@@ -37,16 +37,17 @@ locals {
   # worker at start-up rather than falling back to fixture data.
   database_holdings = local.crm.holdings_mode == "database"
 
-  # The global inference profile the service pins (application.yml
-  # alert.ai.model), and the foundation model behind it. A global profile can
-  # route to any Region, so the model ARN is Region-wildcarded and tied to the
+  # The Asia-Pacific inference profile the service pins (application.yml
+  # alert.ai.model), and the foundation model behind it. The profile may run
+  # the request only in the Regions listed in bedrock_profile_regions, so the
+  # model ARN is listed per Region rather than wildcarded, and tied to the
   # profile by the bedrock:InferenceProfileArn condition.
   #
-  # Nova 2 Lite is the accepted production model (ADR-0050). It is called from
-  # Singapore through its global inference profile; live-news retrieval is a
+  # Nova Pro (ADR-0088, replacing Nova 2 Lite from ADR-0050). It is called from
+  # Singapore through its Asia-Pacific profile; live-news retrieval is a
   # separate, direct Tavily call and does not require a Tokyo Bedrock endpoint.
-  bedrock_profile_id  = "global.amazon.nova-2-lite-v1:0"
-  bedrock_model_id    = "amazon.nova-2-lite-v1:0"
+  bedrock_profile_id  = "apac.amazon.nova-pro-v1:0"
+  bedrock_model_id    = "amazon.nova-pro-v1:0"
   bedrock_profile_arn = "arn:${local.partition}:bedrock:${var.bedrock_region}:${local.account_id}:inference-profile/${local.bedrock_profile_id}"
 }
 
@@ -62,7 +63,7 @@ data "aws_iam_policy_document" "bedrock" {
   statement {
     sid       = "InvokeTheModelOnlyThroughThatProfile"
     actions   = ["bedrock:InvokeModel"]
-    resources = ["arn:${local.partition}:bedrock:*::foundation-model/${local.bedrock_model_id}"]
+    resources = [for region in var.bedrock_profile_regions : "arn:${local.partition}:bedrock:${region}::foundation-model/${local.bedrock_model_id}"]
     condition {
       test     = "StringLike"
       variable = "bedrock:InferenceProfileArn"
@@ -108,19 +109,19 @@ module "event_alert_worker" {
   cpu_architecture   = local.crm.cpu_architecture
 
   environment = merge({
-    ALERT_MODE                          = "WORKER"
-    ALERT_HOLDINGS_MODE                 = local.crm.holdings_mode
-    EVENT_ALERT_DB_URL                  = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
-    SPRING_FLYWAY_ENABLED               = "false" # db-migrate applies the migrations, as for the API (found by the AWS test)
-    AWS_REGION                          = var.aws_region
-    ALERT_INGESTION_ENABLED             = tostring(var.ingestion_enabled)
-    ALERT_SEARCH_PROVIDER               = "tavily"
-    ALERT_MINIMUM_SEARCH_CLIENT_SHARE   = tostring(var.minimum_search_client_share)
-    ALERT_INGESTION_APPROVED_DOMAINS    = join(",", var.approved_news_domains)
-    ALERT_AI_ENABLED                    = tostring(var.ai_enabled)
-    ALERT_AI_PROVIDER                   = var.ai_enabled ? "bedrock" : "none"
-    ALERT_AI_BEDROCK_REGION             = var.bedrock_region
-    ALERT_REPORT_SUMMARY_ENABLED        = tostring(var.report_summary_enabled)
+    ALERT_MODE                        = "WORKER"
+    ALERT_HOLDINGS_MODE               = local.crm.holdings_mode
+    EVENT_ALERT_DB_URL                = "jdbc:postgresql://${local.crm.alerts_db_address}:5432/${local.crm.alerts_db_name}?sslmode=require"
+    SPRING_FLYWAY_ENABLED             = "false" # db-migrate applies the migrations, as for the API (found by the AWS test)
+    AWS_REGION                        = var.aws_region
+    ALERT_INGESTION_ENABLED           = tostring(var.ingestion_enabled)
+    ALERT_SEARCH_PROVIDER             = "tavily"
+    ALERT_MINIMUM_SEARCH_CLIENT_SHARE = tostring(var.minimum_search_client_share)
+    ALERT_INGESTION_APPROVED_DOMAINS  = join(",", var.approved_news_domains)
+    ALERT_AI_ENABLED                  = tostring(var.ai_enabled)
+    ALERT_AI_PROVIDER                 = var.ai_enabled ? "bedrock" : "none"
+    ALERT_AI_BEDROCK_REGION           = var.bedrock_region
+    ALERT_REPORT_SUMMARY_ENABLED      = tostring(var.report_summary_enabled)
     # The API process publishes the audit outbox, including rows a worker run
     # leaves behind, so the worker needs no queue access.
     ALERT_AUDIT_PUBLISHER_ENABLED    = "false"

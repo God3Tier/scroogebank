@@ -24,7 +24,7 @@ and deployment evidence remain pending approved AWS access.
 | `ALERT_INGESTION_APPROVED_DOMAINS` | empty | Optional comma-separated reviewed commercial publishers; keep empty until ADR-0011 terms approval. Issuer official domains come from alerts-db |
 | `ALERT_AI_ENABLED` | `false` | Allows model invocation and model-token reservations |
 | `ALERT_AI_PROVIDER` | `none` | Set to `bedrock` together with `ALERT_AI_ENABLED=true`; the worker stack sets it automatically |
-| `ALERT_AI_MODEL` | `global.amazon.nova-2-lite-v1:0` | Pinned Nova 2 Lite global inference profile |
+| `ALERT_AI_MODEL` | `apac.amazon.nova-pro-v1:0` | Pinned Nova Pro Asia-Pacific inference profile |
 | `ALERT_AI_BEDROCK_REGION` | `ap-southeast-1` | Singapore source Region for Bedrock Runtime; global inference may process elsewhere |
 | `ALERT_MONTHLY_SEARCH_QUOTA` | `1000` | Search reservations per UTC month |
 | `ALERT_MAX_SEARCHES_PER_RUN` | `1000` | A sanity ceiling on one run's search reservation; the run is reserved whole and the monthly quota and budget decide (ADR-0084) |

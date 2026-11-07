@@ -83,16 +83,22 @@ variable "approved_news_domains" {
       can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?[.])+[a-z]{2,63}$", domain))
       && !contains(["reddit.com", "x.com", "twitter.com", "facebook.com", "instagram.com", "tiktok.com", "youtube.com", "youtu.be",
         "medium.com", "substack.com", "quora.com", "linkedin.com", "t.me", "telegram.org", "pinterest.com", "tumblr.com",
-        "blogspot.com", "wordpress.com", "stocktwits.com", "discord.com", "whatsapp.com"], domain)
+      "blogspot.com", "wordpress.com", "stocktwits.com", "discord.com", "whatsapp.com"], domain)
     ])
     error_message = "approved_news_domains may hold only plain domain names such as example.com, and none of the open posting platforms (reddit.com, x.com and the like)."
   }
 }
 
 variable "bedrock_region" {
-  description = "Singapore source Region for the global Nova 2 Lite inference profile (ALERT_AI_BEDROCK_REGION). Global inference may process the request in another supported AWS Region."
+  description = "Singapore source Region for the Asia-Pacific Nova Pro inference profile (ALERT_AI_BEDROCK_REGION)."
   type        = string
   default     = "ap-southeast-1"
+}
+
+variable "bedrock_profile_regions" {
+  description = "Where the apac. inference profile may run the request. Re-check with aws bedrock get-inference-profile before applying."
+  type        = list(string)
+  default     = ["ap-southeast-1", "ap-southeast-2", "ap-northeast-1", "ap-northeast-2", "ap-northeast-3", "ap-south-1"]
 }
 
 variable "cloudwatch_metrics_enabled" {

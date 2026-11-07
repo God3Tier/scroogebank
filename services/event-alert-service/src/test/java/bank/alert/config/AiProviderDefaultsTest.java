@@ -7,12 +7,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AiProviderDefaultsTest {
 
     @Test
-    void defaultsToNovaGlobalInferenceFromSingapore() {
+    void defaultsToNovaProAsiaPacificFromSingapore() {
         AiProperties ai = new AiProperties(false, null, null, 0, 0, 0, 0,
                 null, null);
         BedrockAiProperties bedrock = new BedrockAiProperties(null);
 
-        assertThat(ai.model()).isEqualTo("global.amazon.nova-2-lite-v1:0");
+        assertThat(ai.model()).isEqualTo("apac.amazon.nova-pro-v1:0");
         assertThat(bedrock.region()).isEqualTo("ap-southeast-1");
     }
 }

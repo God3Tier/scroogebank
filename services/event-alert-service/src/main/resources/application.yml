@@ -171,9 +171,9 @@ alert:
     # Independent fail-closed switch; no model can be invoked by default.
     enabled: ${ALERT_AI_ENABLED:false}
     provider: ${ALERT_AI_PROVIDER:none}
-    # Bedrock's Nova 2 Lite by default; a developer machine can use Claude through the Anthropic API
+    # Bedrock's Nova Pro by default; a developer machine can use Claude through the Anthropic API
     # (ALERT_AI_PROVIDER=anthropic, ALERT_AI_MODEL=claude-sonnet-5-5, ALERT_ANTHROPIC_API_KEY) (ADR-0083).
-    model: ${ALERT_AI_MODEL:global.amazon.nova-2-lite-v1:0}
+    model: ${ALERT_AI_MODEL:apac.amazon.nova-pro-v1:0}
     prompt-version: alert-public-v1
     max-input-characters: 12000
     max-output-characters: 8000

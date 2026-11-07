@@ -26,7 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class BedrockAiModelGatewayTest {
-    private static final String MODEL = "global.amazon.nova-2-lite-v1:0";
+    private static final String MODEL = "apac.amazon.nova-pro-v1:0";
 
     @Test
     void sendsOnlyTheBoundedPublicRequestAndReturnsText() {

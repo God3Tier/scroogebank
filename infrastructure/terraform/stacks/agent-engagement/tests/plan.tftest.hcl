@@ -139,8 +139,8 @@ run "prod" {
     error_message = "The service sends through SES as the mail-identity stack's no-reply address and configuration set."
   }
   assert {
-    condition     = module.engagement_service.app_environment.ENGAGEMENT_AI_ENABLED == "false" && module.engagement_service.app_environment.BEDROCK_MODEL_ID == "apac.amazon.nova-lite-v1:0"
-    error_message = "AI drafting is off by default, with the Nova Lite Asia-Pacific profile (ADR-0067)."
+    condition     = module.engagement_service.app_environment.ENGAGEMENT_AI_ENABLED == "false" && module.engagement_service.app_environment.BEDROCK_MODEL_ID == "apac.amazon.nova-pro-v1:0"
+    error_message = "AI drafting is off by default, with the Nova Pro Asia-Pacific profile (ADR-0067)."
   }
   assert {
     condition     = module.engagement_service.app_environment.ENGAGEMENT_HOLIDAY_SYNC_ENABLED == "true" && aws_cloudwatch_log_metric_filter.holiday_data.pattern == "?\"holiday_coverage_short\" ?\"holiday_sync_mismatch\""
@@ -164,13 +164,13 @@ run "prod" {
   }
   assert {
     condition = toset(flatten([for s in data.aws_iam_policy_document.engagement.statement : tolist(s.resources) if s.sid == "InvokeDraftModel"])) == toset([
-      "arn:aws:bedrock:ap-southeast-1:123456789012:inference-profile/apac.amazon.nova-lite-v1:0",
-      "arn:aws:bedrock:ap-southeast-1::foundation-model/amazon.nova-lite-v1:0",
-      "arn:aws:bedrock:ap-southeast-2::foundation-model/amazon.nova-lite-v1:0",
-      "arn:aws:bedrock:ap-northeast-1::foundation-model/amazon.nova-lite-v1:0",
-      "arn:aws:bedrock:ap-northeast-2::foundation-model/amazon.nova-lite-v1:0",
-      "arn:aws:bedrock:ap-northeast-3::foundation-model/amazon.nova-lite-v1:0",
-      "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-lite-v1:0",
+      "arn:aws:bedrock:ap-southeast-1:123456789012:inference-profile/apac.amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:ap-southeast-1::foundation-model/amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:ap-southeast-2::foundation-model/amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:ap-northeast-1::foundation-model/amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:ap-northeast-2::foundation-model/amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:ap-northeast-3::foundation-model/amazon.nova-pro-v1:0",
+      "arn:aws:bedrock:ap-south-1::foundation-model/amazon.nova-pro-v1:0",
     ])
     error_message = "Bedrock is allowed on the Asia-Pacific profile and its model in the six regions ADR-0067 lists, nothing else."
   }
