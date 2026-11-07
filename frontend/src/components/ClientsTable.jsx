@@ -3,8 +3,8 @@ import { useMemo, useState } from 'react'
 const CLIENTS_PER_PAGE = 5
 
 // The affected clients of one ticker. With more than CLIENTS_PER_PAGE clients it adds a search box and pages; ticks are kept
-// by the page (selected: { alertId: true }), so they survive searching and paging.
-function ClientsTable({ clients, names, selected, setSelected, selectable, statusLabels, clientLabel }) {
+// by the page (selected: { alertId: true }), so they survive searching and paging. Read only (an administrator): no ticks.
+function ClientsTable({ clients, names, selected = {}, setSelected = () => {}, selectable = () => false, statusLabels, clientLabel, readOnly = false }) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const paged = clients.length > CLIENTS_PER_PAGE
@@ -34,7 +34,7 @@ function ClientsTable({ clients, names, selected, setSelected, selectable, statu
               onChange={(e) => { setSearch(e.target.value); setPage(0) }} />
           </label>
           <span role="status" className="clients-search__count">
-            {matching.length} of {clients.length} clients · {ticked} ticked
+            {matching.length} of {clients.length} clients{readOnly ? '' : ` · ${ticked} ticked`}
           </span>
         </div>
       )}
@@ -42,22 +42,26 @@ function ClientsTable({ clients, names, selected, setSelected, selectable, statu
         <table className="data-table">
           <thead>
             <tr>
-              <th>
-                <input type="checkbox" aria-label={paged && search.trim() ? 'Select all matching clients' : 'Select all clients'}
-                  disabled={chooseable.length === 0} checked={allChosen} onChange={(e) => selectAll(e.target.checked)} />
-              </th>
-              <th>Client <span className="clients-selectall-hint">(tick the box to select all {chooseable.length})</span></th><th className="num">Share of portfolio</th><th className="num">Exposure (SGD)</th><th className="num">Score</th><th>Status</th>
+              {!readOnly && (
+                <th>
+                  <input type="checkbox" aria-label={paged && search.trim() ? 'Select all matching clients' : 'Select all clients'}
+                    disabled={chooseable.length === 0} checked={allChosen} onChange={(e) => selectAll(e.target.checked)} />
+                </th>
+              )}
+              <th>Client {!readOnly && <span className="clients-selectall-hint">(tick the box to select all {chooseable.length})</span>}</th><th className="num">Share of portfolio</th><th className="num">Exposure (SGD)</th><th className="num">Score</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((client) => (
               <tr key={client.alertId}>
-                <td>
-                  <input type="checkbox" aria-label={`Select ${clientLabel(client, names)}`}
-                    disabled={!selectable(client)}
-                    checked={Boolean(selected[client.alertId])}
-                    onChange={(e) => setSelected((s) => ({ ...s, [client.alertId]: e.target.checked }))} />
-                </td>
+                {!readOnly && (
+                  <td>
+                    <input type="checkbox" aria-label={`Select ${clientLabel(client, names)}`}
+                      disabled={!selectable(client)}
+                      checked={Boolean(selected[client.alertId])}
+                      onChange={(e) => setSelected((s) => ({ ...s, [client.alertId]: e.target.checked }))} />
+                  </td>
+                )}
                 <td title={client.clientRef}>{clientLabel(client, names)}</td>
                 <td className="num">{client.portfolioPercentage == null ? '—' : `${Number(client.portfolioPercentage).toFixed(1)}%`}</td>
                 <td className="num">{Number(client.amountSgd).toLocaleString('en-SG', { minimumFractionDigits: 2 })}</td>
@@ -66,7 +70,7 @@ function ClientsTable({ clients, names, selected, setSelected, selectable, statu
               </tr>
             ))}
             {paged && shown.length === 0 && (
-              <tr><td colSpan={6} className="muted">No client matches "{search.trim()}".</td></tr>
+              <tr><td colSpan={readOnly ? 5 : 6} className="muted">No client matches "{search.trim()}".</td></tr>
             )}
           </tbody>
         </table>

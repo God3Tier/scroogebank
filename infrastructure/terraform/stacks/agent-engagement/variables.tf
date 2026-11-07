@@ -62,7 +62,7 @@ variable "ai_enabled" {
 variable "bedrock_model_id" {
   description = "The inference profile drafts use (ADR-0067, which replaced ADR-0054 decision 3's Nova Micro). A global profile is not allowed."
   type        = string
-  default     = "apac.amazon.nova-lite-v1:0"
+  default     = "apac.amazon.nova-pro-v1:0"
 
   validation {
     condition     = startswith(var.bedrock_model_id, "apac.")
@@ -73,7 +73,7 @@ variable "bedrock_model_id" {
 variable "bedrock_foundation_model_id" {
   description = "The foundation model behind bedrock_model_id."
   type        = string
-  default     = "amazon.nova-lite-v1:0"
+  default     = "amazon.nova-pro-v1:0"
 }
 
 variable "bedrock_profile_regions" {

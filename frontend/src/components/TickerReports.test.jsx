@@ -64,11 +64,11 @@ const client = (alertId, clientRef, status, version = 0) => ({
 const severity = { points: 18, maximum: 30, eventType: 'EARNINGS', direction: 'POSITIVE' }
 const appleDetail = (clients) => ({ card: appleCard, clients, latestAction: null, report, severity })
 
-function renderPage() {
+function renderPage(props = {}) {
   return render(
     <MemoryRouter initialEntries={['/agent/alerts']}>
       <Routes>
-        <Route path="/agent/alerts" element={<TickerReports />} />
+        <Route path="/agent/alerts" element={<TickerReports {...props} />} />
         <Route path="/agent/drafts" element={<p>Follow-up Emails page</p>} />
       </Routes>
     </MemoryRouter>,
@@ -103,6 +103,68 @@ describe('TickerReports', () => {
     expect(screen.getByText('Plan client briefing', { selector: 'td' })).toBeInTheDocument()
     expect(screen.getAllByRole('checkbox', { name: /^Select (?!all)/ })).toHaveLength(2)
     expect(screen.queryByText('Continue monitoring')).not.toBeInTheDocument()
+  })
+
+  describe('read only, for an administrator', () => {
+    it('shows the same tickers, report and clients, with no ticks, decisions, approval or notifying', async () => {
+      renderPage({ readOnly: true })
+
+      expect(await screen.findByRole('heading', { name: 'Apple Inc (AAPL)' })).toBeInTheDocument()
+      expect(screen.getByText('Apple reported higher revenue. [1] [2]')).toBeInTheDocument()
+      expect(await screen.findByText('Chloe Tan')).toBeInTheDocument()
+      expect(screen.getByText('Read only')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Download report as PDF' })).toBeInTheDocument()
+      expect(screen.getByText(/Event severity: 18 of 30/)).toBeInTheDocument()
+
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+      expect(screen.queryByRole('button', { name: /^Approve / })).toBeNull()
+      expect(screen.queryByRole('button', { name: /Notify/ })).toBeNull()
+      expect(screen.queryByText('Notify several tickers at once')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Apply to selected clients' })).toBeNull()
+      expect(screen.queryByText(/need a decision/)).toBeNull()
+      expect(screen.queryByText('Only tickers needing a decision')).toBeNull()
+    })
+
+    it('never asks for what only an agent has: the approval, the approved reports or the open drafts', async () => {
+      renderPage({ readOnly: true })
+      await screen.findByText('Chloe Tan')
+
+      expect(getReportReview).not.toHaveBeenCalled()
+      expect(listApprovedReports).not.toHaveBeenCalled()
+      expect(listOpenNewsAlerts).not.toHaveBeenCalled()
+      expect(recordEventAction).not.toHaveBeenCalled()
+    })
+
+    it('shows the news as Fresh or Stale from its sources, with no approval to hide it', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      try {
+        vi.setSystemTime(new Date('2026-11-04T00:00:00Z')) // two days after the newest source
+        renderPage({ readOnly: true })
+        expect(await screen.findByText('Fresh', { selector: '.stale-notice__chip' })).toBeInTheDocument()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('still shows the clients five at a time with a search box', async () => {
+      const many = Array.from({ length: 8 }, (_, i) => client(`m${i}`, CHLOE, 'NEW', 0))
+      getEvent.mockImplementation(async () => appleDetail(many))
+      renderPage({ readOnly: true })
+
+      expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument()
+      expect(screen.getByLabelText('Search clients')).toBeInTheDocument()
+      expect(screen.getByText('8 of 8 clients')).toBeInTheDocument()
+      expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    })
+
+    it('shows the Sent out tab read only', async () => {
+      listSentOut.mockResolvedValue([])
+      renderPage({ readOnly: true })
+      fireEvent.click(await screen.findByRole('tab', { name: 'Sent out' }))
+
+      expect(await screen.findByText('Read-only')).toBeInTheDocument()
+    })
   })
 
   it('shows the event severity in why this appeared', async () => {

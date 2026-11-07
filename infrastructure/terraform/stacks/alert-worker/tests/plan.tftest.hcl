@@ -98,8 +98,8 @@ run "ingestion_on_while_running" {
     error_message = "The worker runs in the private app subnets."
   }
   assert {
-    condition     = var.bedrock_region == "ap-southeast-1" && local.bedrock_profile_id == "global.amazon.nova-2-lite-v1:0"
-    error_message = "AI must use Nova 2 Lite global inference from the Singapore source Region."
+    condition     = var.bedrock_region == "ap-southeast-1" && local.bedrock_profile_id == "apac.amazon.nova-pro-v1:0"
+    error_message = "AI must use the Nova Pro Asia-Pacific profile from the Singapore source Region."
   }
   assert {
     condition     = can(regex("--cluster crm-sg-prod .*--launch-type FARGATE", output.run_once_command)) && can(regex("securityGroups=\\[sg-0alerts\\]", output.run_once_command))

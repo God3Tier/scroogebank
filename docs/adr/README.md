@@ -8,6 +8,7 @@ a decision it governs.
 ## Accepted decisions
 
 - [ADR-0087](ADR-0087-root-admin-role-and-provisioning.md) — Root Admin is an application role that stays in Cognito `ADMIN`; only its verified, enabled user record can create Admins; role changes cannot grant Admin or Root Admin status, and existing admin access to client data is unchanged.
+- [ADR-0088](ADR-0088-nova-pro-for-alert-reports-and-agent-drafts.md) — The alert worker and the agent-engagement drafts use Amazon Nova Pro on the Asia-Pacific profile; supersedes the model choice in ADR-0050 decision 3 and ADR-0067 in part.
 
 - [ADR-0001](ADR-0001-user-directed-push-policy.md) — PRs are the default, while warned and explicitly authorized direct integration is allowed only for unprotected task and feature branches.
 - [ADR-0002](ADR-0002-direct-dev-governance-updates.md) — Azeez authorizes narrowly scoped Git-workflow and agent-instruction updates directly to `dev`, subject to file allowlisting, warning, synchronization, and non-forced-push checks.
