@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useAuth } from 'react-oidc-context'
 
-import { cited, downloadReportPdf } from '../utils/reportPdf.js'
+import { downloadReportPdf } from '../api/alertEvents.js'
+import { saveBlob } from '../api/request.js'
+import { cited } from '../utils/citations.js'
 
 // The combined report for one event: written once from every source linked to the event, shared by all the
 // clients who hold the stock. It never holds client or portfolio details (ADR-0084).
@@ -13,25 +14,39 @@ function formatDateTime(value) {
   }).format(new Date(value))
 }
 
-export function EventReport({ report }) {
+// body: the text to show, when it is not the AI's original (the agent's saved edit or approved text).
+// label: says which text is shown. The PDF is rendered on the server, in the layout the client receives.
+export function EventReport({ report, eventId, body: shown, label }) {
   const [pdfError, setPdfError] = useState('')
-  const auth = useAuth()
+  const [downloading, setDownloading] = useState(false)
   if (!report) return null
-  const body = report.report
-  const profile = auth?.user?.profile || {}
-  const agent = { name: profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(' '), email: profile.email }
+  const body = shown || report.report
   const mark = (item) => cited(item.text, item.sourceRefs, report.sources || [])
+
+  async function download() {
+    setDownloading(true)
+    try {
+      saveBlob(await downloadReportPdf(eventId, report.version))
+      setPdfError('')
+    } catch {
+      setPdfError('The PDF could not be made. Try again.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <div className="event-report" aria-label="Combined event report">
       <div className="event-report__bar">
         <p className="event-report__version">
           Version {report.version}{report.versionCount ? ` of ${report.versionCount}` : ''} ·{' '}
-          {report.schemaVersion === 'briefing-v1-legacy' ? 'migrated from an earlier single-article briefing' : 'AI-written from public sources, checked before it is shown'}
+          {label || (report.schemaVersion === 'briefing-v1-legacy' ? 'migrated from an earlier single-article briefing' : 'AI-written from public sources, checked before it is shown')}
         </p>
-        <button className="button button--secondary" type="button"
-          onClick={() => downloadReportPdf(report, agent).then(() => setPdfError(''), () => setPdfError('The PDF could not be made. Try again.'))}>
-          Download report as PDF
-        </button>
+        {eventId && (
+          <button className="button button--secondary" type="button" onClick={download} disabled={downloading}>
+            {downloading ? 'Preparing PDF…' : 'Download report as PDF'}
+          </button>
+        )}
       </div>
       {pdfError && <p className="error-text" role="alert">{pdfError}</p>}
       <h4 className="event-report__headline">{body.headline}</h4>

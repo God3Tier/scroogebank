@@ -69,10 +69,11 @@ public class ReportReviewService {
 
     /**
      * What the Event Alerts page needs to edit and approve the latest report: the agent's saved edit (the sections in
-     * the edit request's shape, or null), the original sections, and the agent's approval of this version, if any.
+     * the edit request's shape, or null), the original sections, the agent's approval of this version, if any, and
+     * the approved text while it is kept.
      */
     public record ReviewView(UUID eventId, int reportVersion, boolean editable, JsonNode originalSections,
-            JsonNode editedSections, ApprovalView approval, Instant newsDate) {
+            JsonNode editedSections, ApprovalView approval, JsonNode approvedSections, Instant newsDate) {
     }
 
     /** {@code outcome}: OK, NOT_AUTHORISED, NOT_INFORMED or NOT_APPROVED. The other fields are null unless OK. */
@@ -145,14 +146,17 @@ public class ReportReviewService {
         EventDetail detail = events.detail(eventId, agent);
         StoredReport report = latestReport(eventId).orElse(null);
         if (detail.report() == null || report == null) {
-            return new ReviewView(eventId, 0, false, null, null, null, null);
+            return new ReviewView(eventId, 0, false, null, null, null, null, null);
         }
         JsonNode edit = jdbc.query("SELECT sections::text FROM report_edit WHERE event_report_id = ? AND agent_sub = ?",
                 (rs, n) -> read(rs.getString(1)), report.id(), agent).stream().findFirst().orElse(null);
         boolean editable = ReportEdits.editable(report.schemaVersion());
+        Optional<StoredApproval> approved = approvalForReport(report.id(), agent);
+        JsonNode approvedSections = approved.map(StoredApproval::text).filter(java.util.Objects::nonNull)
+                .map(text -> (JsonNode) ReportEdits.sectionsOf(text, mapper)).orElse(null);
         return new ReviewView(eventId, report.version(), editable,
                 editable ? ReportEdits.sectionsOf(report.json(), mapper) : null, edit,
-                approvalOf(report.id(), agent).orElse(null), newsDate(report));
+                approved.map(this::view).orElse(null), approvedSections, newsDate(report));
     }
 
     /**

@@ -527,6 +527,8 @@ class EventReportIntegrationTest {
         assertThat(approval.valid()).isTrue();
         assertThat(approval.validUntil()).isEqualTo(NOW.plus(Duration.ofDays(7)));
         assertThat(count("report_edit")).as("the edit becomes the approval").isZero();
+        assertThat(reviews.review(ids[0], agent).approvedSections().path("executiveSummary").get(0).asText())
+                .isEqualTo("One, said more plainly.");
         assertThat(jdbc.queryForObject("SELECT final_text->'executiveSummary'->0->>'text' FROM approved_report", String.class))
                 .isEqualTo("One, said more plainly.");
         assertThat(jdbc.queryForObject("SELECT report->'executiveSummary'->0->>'text' FROM event_report", String.class))

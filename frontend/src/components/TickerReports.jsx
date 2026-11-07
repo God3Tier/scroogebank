@@ -1,34 +1,39 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { getEvent, listEvents, recordEventAction } from '../api/alertEvents.js'
+import { getEvent, getReportReview, listEvents, recordEventAction } from '../api/alertEvents.js'
 import { getClient } from '../api/clients.js'
-import { isCrmClientId, sendAlertReport } from '../api/engagement.js'
+import { isCrmClientId, listOpenNewsAlerts } from '../api/engagement.js'
 import { CombinedSources, EventReport } from './EventReport.jsx'
+import { mergeSections } from '../utils/newsReports.js'
+import { ReportReview } from './ReportReview.jsx'
+import SentOutList from './SentOutList.jsx'
 
-// Event alerts for an agent, by ticker (ADR-0084). Each row on the left is one ticker with the report written from
-// its newest articles; the right shows that report, the sources it combines, and the agent's clients who hold the
-// stock. The agent decides per client (Inform, Monitor, Dismiss), then sends the report to the clients marked Inform.
+// Event alerts for an agent, by ticker (ADR-0084, news-alert-drafts plan). Each row on the left is one ticker with
+// the report written from its newest articles; the right shows that report, its sources and the agent's clients who
+// hold the stock. The agent chooses Plan client briefing or Dismiss per client, may edit the report, approves it,
+// then notifies the chosen clients: that makes News Alert drafts in Follow-up Emails. Nothing here sends an email.
 
 function Icon({ name, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`.trim()} aria-hidden="true">{name}</span>
 }
 
-const STATUS_LABELS = { NEW: 'New', MONITORING: 'Monitoring', INFORMED: 'Inform planned', DISMISSED: 'Dismissed' }
-const DELIVERY_LABELS = { QUEUED: 'Queued', SENT: 'Sent', FAILED: 'Failed', NOT_AUTHORISED: 'Not authorised' }
+const STATUS_LABELS = {
+  NEW: 'New', MONITORING: 'Monitoring (earlier)', INFORMED: 'Plan client briefing', DISMISSED: 'Dismissed', SENT_OUT: 'Sent Out',
+}
 const OUTCOME_LABELS = {
   APPLIED: 'Done',
   STALE_VERSION: 'Changed since you looked, reload',
-  INVALID_TRANSITION: 'Already closed',
+  INVALID_TRANSITION: 'Already sent out',
   NOT_AUTHORISED: 'No longer yours',
 }
 const ACTIONS = [
-  { value: 'INFORM_CLIENT', label: 'Plan client briefing', help: 'Records that you plan to inform them. No message is sent yet.' },
-  { value: 'MONITOR', label: 'Continue monitoring', help: 'Keep these clients on watch for follow-up.' },
-  { value: 'DISMISS', label: 'Dismiss', help: 'Close this for the selected clients without contacting them.' },
+  { value: 'INFORM_CLIENT', label: 'Plan client briefing', help: 'Records that you plan to brief them, then takes you to review and approve the report. No message is sent yet.' },
+  { value: 'DISMISS', label: 'Dismiss', help: 'Close this for the selected clients without contacting them. You can change it back until a report is sent.' },
 ]
-const MAX_CONTINUES = 5
+export const ON_DRAFT_MESSAGE = 'This client is on an open news draft. Remove the report from that draft in Follow-up Emails first.'
 
-const actionable = (client) => client.status === 'NEW' || client.status === 'MONITORING'
+// Every client except Sent Out can still be chosen: the agent can change their mind until the email is sent.
+const selectable = (client) => client.status !== 'SENT_OUT'
 
 function formatDate(value) {
   if (!value) return 'Not supplied'
@@ -49,17 +54,17 @@ function clientLabel(client, names) {
 
 function TickerDetail({ eventId, onChanged }) {
   const [detail, setDetail] = useState(null)
+  const [review, setReview] = useState(null)
   const [error, setError] = useState('')
   const [names, setNames] = useState({})
   const [selected, setSelected] = useState({})
-  const [decision, setDecision] = useState('MONITOR')
+  const [decision, setDecision] = useState('INFORM_CLIENT')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
-  const [agentNote, setAgentNote] = useState('')
-  const [approved, setApproved] = useState(false)
-  const [sendState, setSendState] = useState({ sending: false, error: '', deliveries: null })
+  const [announce, setAnnounce] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const reportPanel = useRef(null)
 
   useEffect(() => {
     let current = true
@@ -70,6 +75,10 @@ function TickerDetail({ eventId, onChanged }) {
         setError('')
       },
       (e) => { if (current) setError(problemText(e)) },
+    )
+    getReportReview(eventId).then(
+      (next) => { if (current) setReview(next) },
+      () => { if (current) setReview(null) },
     )
     return () => { current = false }
   }, [eventId, reloadKey])
@@ -92,17 +101,39 @@ function TickerDetail({ eventId, onChanged }) {
 
   async function submitDecision(event) {
     event.preventDefault()
-    const members = detail.clients
-      .filter((client) => selected[client.alertId] && actionable(client))
-      .map((client) => ({ alertId: client.alertId, expectedVersion: client.version }))
-    if (members.length === 0) return
+    const chosen = detail.clients.filter((client) => selected[client.alertId] && selectable(client))
+    if (chosen.length === 0) return
     setBusy(true)
+    setError('')
     try {
+      if (decision === 'DISMISS') {
+        // A client on an open news draft is dismissed only from Follow-up Emails, so the two pages agree (plan 5.1).
+        let open
+        try {
+          open = new Set((await listOpenNewsAlerts()).alertIds)
+        } catch {
+          setError('Open news drafts could not be checked, so nothing was dismissed. Try again.')
+          return
+        }
+        const blocked = chosen.filter((client) => open.has(client.alertId))
+        if (blocked.length > 0) {
+          setError(`${blocked.map((client) => clientLabel(client, names)).join(', ')}: ${ON_DRAFT_MESSAGE}`)
+          return
+        }
+      }
+      const members = chosen.map((client) => ({ alertId: client.alertId, expectedVersion: client.version }))
       setResult(await recordEventAction(eventId, { decision, note, members }))
-      setSelected({})
       setNote('')
       setReloadKey((key) => key + 1)
       onChanged()
+      if (decision === 'INFORM_CLIENT') {
+        // The same clients stay selected; the agent goes on to review and approve the report.
+        setAnnounce('Saved. Review and approve the report next.')
+        reportPanel.current?.focus()
+      } else {
+        setSelected({})
+        setAnnounce('Saved.')
+      }
     } catch (e) {
       setError(problemText(e))
     } finally {
@@ -110,41 +141,20 @@ function TickerDetail({ eventId, onChanged }) {
     }
   }
 
-  async function sendReport() {
-    const alertIds = detail.clients
-      .filter((client) => selected[client.alertId] && client.status === 'INFORMED' && isCrmClientId(client.clientRef))
-      .map((client) => client.alertId)
-    if (alertIds.length === 0 || !approved) return
-    setSendState({ sending: true, error: '', deliveries: null })
-    const key = crypto.randomUUID()
-    const request = { eventId, expectedReportVersion: detail.report.version, alertIds, agentNote: agentNote.trim() }
-    try {
-      let outcome = await sendAlertReport(request, key)
-      // Recipients not reached within one request stay QUEUED; the same request carries on with them.
-      for (let round = 0; round < MAX_CONTINUES && outcome.recipients.some((r) => r.status === 'QUEUED'); round += 1) {
-        outcome = await sendAlertReport(request, key)
-      }
-      setSendState({ sending: false, error: '', deliveries: outcome.recipients })
-      setApproved(false)
-    } catch (e) {
-      setSendState({
-        sending: false,
-        deliveries: null,
-        error: e.status === 409 ? 'The report changed since you looked. Reload and review it again.'
-          : e.status === 503 ? 'Sending is switched off or a service is unavailable. Nothing more was sent.'
-            : problemText(e),
-      })
-    }
-  }
-
   if (error && !detail) return <p className="error-text" role="alert">{error}</p>
   if (!detail) return <p className="empty-note" role="status">Loading…</p>
 
-  const { card, report, clients } = detail
-  const open = clients.filter(actionable)
+  const { card, report } = detail
+  // Sent Out clients are listed in the Sent out tab, not here.
+  const clients = detail.clients.filter((client) => client.status !== 'SENT_OUT')
+  const open = clients.filter((c) => c.status === 'NEW')
   const informed = clients.filter((c) => c.status === 'INFORMED')
-  const sendable = clients.filter((c) => selected[c.alertId] && c.status === 'INFORMED' && isCrmClientId(c.clientRef))
   const heading = card.issuer ? `${card.issuer} (${card.ticker})` : card.headline
+  const shownSections = review?.approval?.valid ? review.approvedSections : review?.editedSections
+  const shownBody = report && shownSections ? mergeSections(report.report, shownSections) : null
+  const shownLabel = review?.approval?.valid
+    ? `Approved version ${review.approval.version}${review.approval.edited ? ', with your edits' : ''}`
+    : review?.editedSections ? 'Your edited version, not approved yet' : null
 
   return (
     <>
@@ -162,15 +172,22 @@ function TickerDetail({ eventId, onChanged }) {
         </div>
       </header>
 
+      <div className="visually-hidden" aria-live="polite">{announce}</div>
       {error && <p className="error-text" role="alert">{error}</p>}
 
       <div className="detail-columns">
-        <section className="detail-section" aria-labelledby="ticker-report-title">
+        <section className="detail-section" aria-labelledby="ticker-report-title" ref={reportPanel} tabIndex={-1}>
           <div className="section-heading">
             <div><Icon name="auto_awesome" /><h3 id="ticker-report-title">Report</h3></div>
-            <span>Decision support</span>
+            <span>Review, edit and approve</span>
           </div>
-          {report ? <EventReport report={report} /> : (
+          {report ? (
+            <>
+              <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} />
+              <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
+                onReviewChanged={() => setReloadKey((key) => key + 1)} />
+            </>
+          ) : (
             <div className="inline-empty"><Icon name="autorenew" /> The report for this ticker is still being written. {card.summary}</div>
           )}
         </section>
@@ -190,7 +207,7 @@ function TickerDetail({ eventId, onChanged }) {
       <section className="detail-section" aria-labelledby="ticker-clients-title">
         <div className="section-heading">
           <div><Icon name="groups" /><h3 id="ticker-clients-title">Affected clients</h3></div>
-          <span>{open.length} open · {informed.length} marked Inform</span>
+          <span>{open.length} new · {informed.length} in Plan client briefing</span>
         </div>
         <div className="table-wrap">
           <table className="data-table">
@@ -202,7 +219,7 @@ function TickerDetail({ eventId, onChanged }) {
                 <tr key={client.alertId}>
                   <td>
                     <input type="checkbox" aria-label={`Select ${clientLabel(client, names)}`}
-                      disabled={client.status === 'DISMISSED'}
+                      disabled={!selectable(client)}
                       checked={Boolean(selected[client.alertId])}
                       onChange={(e) => setSelected((s) => ({ ...s, [client.alertId]: e.target.checked }))} />
                   </td>
@@ -217,7 +234,7 @@ function TickerDetail({ eventId, onChanged }) {
           </table>
         </div>
 
-        {open.length > 0 && (
+        {clients.length > 0 && (
           <form className="decision-section" onSubmit={submitDecision} aria-label="Decide for the selected clients">
             <fieldset className="decision-options">
               <legend>What would you like to do for the selected clients?</legend>
@@ -234,9 +251,9 @@ function TickerDetail({ eventId, onChanged }) {
               <textarea maxLength={500} rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
             </label>
             <div className="decision-submit">
-              <p>Applies to the selected clients that are still New or Monitoring.</p>
+              <p>Applies to the selected clients that are not Sent Out.</p>
               <button className="button button--primary" type="submit"
-                disabled={busy || !clients.some((c) => selected[c.alertId] && actionable(c))}>
+                disabled={busy || !clients.some((c) => selected[c.alertId] && selectable(c))}>
                 {busy ? 'Saving…' : 'Apply to selected clients'}
               </button>
             </div>
@@ -245,40 +262,10 @@ function TickerDetail({ eventId, onChanged }) {
         {result && (
           <ul className="event-outcomes" role="status">
             {result.members.map((member) => {
-              const client = clients.find((c) => c.alertId === member.alertId)
+              const client = detail.clients.find((c) => c.alertId === member.alertId)
               return <li key={member.alertId}>{client ? clientLabel(client, names) : member.alertId.slice(0, 8)}: {OUTCOME_LABELS[member.outcome] || member.outcome}</li>
             })}
           </ul>
-        )}
-
-        {report && informed.length > 0 && (
-          <div className="send-report">
-            <h4>Email this report to clients</h4>
-            <p className="holdings-note">
-              Tick the clients marked Inform, add an optional note, confirm you have reviewed the report, and send. Each client
-              gets their own email. The report text cannot be edited; your note is sent under its own label.
-            </p>
-            <label>Note to the selected clients (optional)
-              <textarea maxLength={500} rows={2} value={agentNote} onChange={(e) => setAgentNote(e.target.value)} />
-            </label>
-            <label className="send-report__confirm">
-              <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} />
-              I have reviewed version {report.version} of this report and approve sending it
-            </label>
-            <button className="button button--primary" type="button" onClick={sendReport}
-              disabled={sendState.sending || !approved || sendable.length === 0}>
-              {sendState.sending ? 'Sending…' : `Send report to ${sendable.length} selected client${sendable.length === 1 ? '' : 's'}`}
-            </button>
-            {sendState.error && <p className="error-text" role="alert">{sendState.error}</p>}
-            {sendState.deliveries && (
-              <ul role="status">
-                {sendState.deliveries.map((d) => {
-                  const client = clients.find((c) => c.alertId === d.alertId)
-                  return <li key={d.alertId}>{client ? clientLabel(client, names) : d.alertId.slice(0, 8)}: {DELIVERY_LABELS[d.status] || d.status}{d.errorCode ? ` (${d.errorCode})` : ''}</li>
-                })}
-              </ul>
-            )}
-          </div>
         )}
       </section>
     </>
@@ -286,6 +273,7 @@ function TickerDetail({ eventId, onChanged }) {
 }
 
 function TickerReports() {
+  const [view, setView] = useState('open')
   const [onlyOpen, setOnlyOpen] = useState(false)
   const [state, setState] = useState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
   const [selectedId, setSelectedId] = useState(null)
@@ -334,58 +322,65 @@ function TickerReports() {
         </div>
       </header>
 
-      <section className="alerts-workspace" aria-label="Tickers and their reports">
-        <aside className="alert-queue" aria-label="Tickers">
-          <div className="queue-toolbar">
-            <div className="queue-toolbar__title"><Icon name="filter_list" /><span>Tickers</span></div>
-            <button className="icon-button" type="button" onClick={() => load()} aria-label="Refresh tickers"><Icon name="refresh" /></button>
-          </div>
-          <div className="queue-filters">
-            <label>
-              <input type="checkbox" checked={onlyOpen} onChange={(e) => {
-                setOnlyOpen(e.target.checked)
-                setState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
-              }} />
-              {' '}Only tickers needing a decision
-            </label>
-          </div>
-          {state.error && <div className="queue-error" role="alert">{state.error}</div>}
-          {state.loading && <div className="queue-loading" role="status"><Icon name="autorenew" /> Loading tickers…</div>}
-          {!state.loading && !state.error && state.items.length === 0 && (
-            <div className="queue-empty"><h2>No tickers need review</h2><p>New reports will appear here after the next search run.</p></div>
-          )}
-          <ol className="alert-list">
-            {state.items.map((item) => (
-              <li key={item.eventId}>
-                <button type="button" className={item.eventId === selectedId ? 'alert-row alert-row--selected' : 'alert-row'}
-                  aria-current={item.eventId === selectedId ? 'true' : undefined}
-                  onClick={() => setSelectedId(item.eventId)}>
-                  <span className="signal-marker" aria-hidden="true" />
-                  <span className="alert-row__time">{formatDate(item.latestAlertAt)}</span>
-                  <span className="alert-row__headline">{item.issuer ? `${item.issuer} (${item.ticker})` : item.headline}</span>
-                  <span className="alert-row__meta">
-                    <span className="score"><strong>{Number(item.topScore).toFixed(1)}</strong>/100</span>
-                    <span>{item.affectedClientCount} client{item.affectedClientCount === 1 ? '' : 's'} · {item.openClientCount} open</span>
-                  </span>
-                  <span className="alert-row__client">{item.headline}</span>
-                  <Icon name="chevron_right" className="alert-row__chevron" />
-                </button>
-              </li>
-            ))}
-          </ol>
-          {!state.loading && state.nextCursor && (
-            <button className="load-more" type="button" onClick={loadMore} disabled={state.loadingMore}>
-              {state.loadingMore ? 'Loading…' : 'Load more tickers'}
-            </button>
-          )}
-        </aside>
+      <div className="drafts-tabs alerts-tabs" role="tablist" aria-label="Open reports or sent out">
+        <button type="button" role="tab" aria-selected={view === 'open'} onClick={() => setView('open')}>Open reports</button>
+        <button type="button" role="tab" aria-selected={view === 'sent'} onClick={() => setView('sent')}>Sent out</button>
+      </div>
 
-        <article className="alert-detail" aria-live="polite">
-          {selectedId
-            ? <TickerDetail key={selectedId} eventId={selectedId} onChanged={() => load()} />
-            : <div className="detail-empty"><Icon name="find_in_page" /><h2>Select a ticker to review</h2><p>Its report, sources and affected clients will open here.</p></div>}
-        </article>
-      </section>
+      {view === 'sent' ? <SentOutList /> : (
+        <section className="alerts-workspace" aria-label="Tickers and their reports">
+          <aside className="alert-queue" aria-label="Tickers">
+            <div className="queue-toolbar">
+              <div className="queue-toolbar__title"><Icon name="filter_list" /><span>Tickers</span></div>
+              <button className="icon-button" type="button" onClick={() => load()} aria-label="Refresh tickers"><Icon name="refresh" /></button>
+            </div>
+            <div className="queue-filters">
+              <label>
+                <input type="checkbox" checked={onlyOpen} onChange={(e) => {
+                  setOnlyOpen(e.target.checked)
+                  setState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
+                }} />
+                {' '}Only tickers needing a decision
+              </label>
+            </div>
+            {state.error && <div className="queue-error" role="alert">{state.error}</div>}
+            {state.loading && <div className="queue-loading" role="status"><Icon name="autorenew" /> Loading tickers…</div>}
+            {!state.loading && !state.error && state.items.length === 0 && (
+              <div className="queue-empty"><h2>No tickers need review</h2><p>New reports will appear here after the next search run.</p></div>
+            )}
+            <ol className="alert-list">
+              {state.items.map((item) => (
+                <li key={item.eventId}>
+                  <button type="button" className={item.eventId === selectedId ? 'alert-row alert-row--selected' : 'alert-row'}
+                    aria-current={item.eventId === selectedId ? 'true' : undefined}
+                    onClick={() => setSelectedId(item.eventId)}>
+                    <span className="signal-marker" aria-hidden="true" />
+                    <span className="alert-row__time">{formatDate(item.latestAlertAt)}</span>
+                    <span className="alert-row__headline">{item.issuer ? `${item.issuer} (${item.ticker})` : item.headline}</span>
+                    <span className="alert-row__meta">
+                      <span className="score"><strong>{Number(item.topScore).toFixed(1)}</strong>/100</span>
+                      <span>{item.affectedClientCount} client{item.affectedClientCount === 1 ? '' : 's'} · {item.openClientCount} new</span>
+                    </span>
+                    <span className="alert-row__client">{item.headline}</span>
+                    <Icon name="chevron_right" className="alert-row__chevron" />
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {!state.loading && state.nextCursor && (
+              <button className="load-more" type="button" onClick={loadMore} disabled={state.loadingMore}>
+                {state.loadingMore ? 'Loading…' : 'Load more tickers'}
+              </button>
+            )}
+          </aside>
+
+          <article className="alert-detail" aria-live="polite">
+            {selectedId
+              ? <TickerDetail key={selectedId} eventId={selectedId} onChanged={() => load()} />
+              : <div className="detail-empty"><Icon name="find_in_page" /><h2>Select a ticker to review</h2><p>Its report, sources and affected clients will open here.</p></div>}
+          </article>
+        </section>
+      )}
     </div>
   )
 }

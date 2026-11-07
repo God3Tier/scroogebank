@@ -35,7 +35,7 @@ describe('holdings and event APIs', () => {
   it('posts an event action with an explicit member list', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok({ members: [] }))
     vi.stubGlobal('fetch', fetchMock)
-    await recordEventAction('event-1', { decision: 'MONITOR', members: [{ alertId: 'a', expectedVersion: 0 }] }, 'idem-key-0002')
+    await recordEventAction('event-1', { decision: 'DISMISS', members: [{ alertId: 'a', expectedVersion: 0 }] }, 'idem-key-0002')
     const [url, options] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/alerts/events/event-1/actions')
     expect(options.headers['Idempotency-Key']).toBe('idem-key-0002')

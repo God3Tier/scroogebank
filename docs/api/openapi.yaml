@@ -1015,7 +1015,7 @@ components:
     ReportReview:
       type: object
       additionalProperties: false
-      required: [eventId, reportVersion, editable, originalSections, editedSections, approval, newsDate]
+      required: [eventId, reportVersion, editable, originalSections, editedSections, approval, approvedSections, newsDate]
       properties:
         eventId: {type: string, format: uuid}
         reportVersion: {type: integer, minimum: 0}
@@ -1029,6 +1029,10 @@ components:
         approval:
           nullable: true
           allOf: [{$ref: '#/components/schemas/ReportApproval'}]
+        approvedSections:
+          nullable: true
+          description: The approved text, while it is kept (until every client on it is Sent Out, or it expired 14 days ago).
+          allOf: [{$ref: '#/components/schemas/ReportSections'}]
         newsDate: {type: string, format: date-time, nullable: true}
     ApprovedReportItem:
       type: object

@@ -8,14 +8,14 @@ function Icon({ name, className = '' }) {
 
 const STATUS_LABELS = {
   NEW: 'New',
-  MONITORING: 'Monitoring',
-  INFORMED: 'Inform planned',
+  MONITORING: 'Monitoring (earlier)',
+  INFORMED: 'Plan client briefing',
   DISMISSED: 'Dismissed',
+  SENT_OUT: 'Sent Out',
 }
 
 const DECISIONS = [
   { value: 'INFORM_CLIENT', label: 'Plan client briefing', help: 'Records intent only. No message is sent.' },
-  { value: 'MONITOR', label: 'Continue monitoring', help: 'Keep this alert active for follow-up.' },
   { value: 'DISMISS', label: 'Dismiss alert', help: 'Close this alert without contacting the client.' },
 ]
 
@@ -31,7 +31,7 @@ function formatDate(value, withTime = true) {
 
 function statusTone(status) {
   if (status === 'NEW') return 'attention'
-  if (status === 'MONITORING') return 'monitoring'
+  if (status === 'MONITORING' || status === 'SENT_OUT') return 'monitoring'
   if (status === 'INFORMED') return 'verified'
   return 'quiet'
 }
@@ -101,7 +101,7 @@ function AlertWorkspace({ readOnly = false }) {
   const [nextCursor, setNextCursor] = useState(null)
   const [listState, setListState] = useState({ loading: true, error: null })
   const [detailState, setDetailState] = useState({ loading: false, error: null })
-  const [decision, setDecision] = useState('MONITOR')
+  const [decision, setDecision] = useState('INFORM_CLIENT')
   const [note, setNote] = useState('')
   const [decisionState, setDecisionState] = useState({ saving: false, error: null, message: '' })
   const [feedbackState, setFeedbackState] = useState({ saving: false, message: '', error: null })
@@ -152,7 +152,7 @@ function AlertWorkspace({ readOnly = false }) {
   }, [loadDetail, selectedId])
 
   const activeCount = useMemo(
-    () => alerts.filter((alert) => alert.status === 'NEW' || alert.status === 'MONITORING').length,
+    () => alerts.filter((alert) => alert.status === 'NEW').length,
     [alerts],
   )
 
@@ -198,7 +198,7 @@ function AlertWorkspace({ readOnly = false }) {
 
   const selectedDecision = DECISIONS.find((item) => item.value === decision)
   const filtered = Boolean(status || minimumScore)
-  const canRecordDecision = detail?.status === 'NEW' || detail?.status === 'MONITORING'
+  const canRecordDecision = detail?.status === 'NEW'
 
   return (
     <div className="alerts-page" id="main-content">
@@ -231,9 +231,9 @@ function AlertWorkspace({ readOnly = false }) {
               <select value={status} onChange={(event) => setStatus(event.target.value)}>
                 <option value="">All statuses</option>
                 <option value="NEW">New</option>
-                <option value="MONITORING">Monitoring</option>
-                <option value="INFORMED">Inform planned</option>
+                <option value="INFORMED">Plan client briefing</option>
                 <option value="DISMISSED">Dismissed</option>
+                <option value="SENT_OUT">Sent Out</option>
               </select>
             </label>
             <label>

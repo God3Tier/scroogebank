@@ -3152,3 +3152,29 @@ textarea:focus {
 .send-report__confirm { display: flex; gap: 0.5rem; align-items: flex-start; }
 .ticker-why { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: 0.4rem; }
 .event-outcomes { margin: 0.75rem 0 0; padding-left: 1.25rem; }
+
+/* News alerts: tabs, report editor, approve then notify, staleness (news-alert-drafts plan 5.2 to 5.8). */
+.alerts-tabs { display: inline-flex; gap: 2px; margin: 0 0 1rem; padding: 2px; border: 1px solid var(--outline-variant); border-radius: var(--radius); background: var(--surface-low); }
+.alerts-tabs button { padding: 0.35rem 0.8rem; border: 0; border-radius: var(--radius); background: transparent; color: var(--on-surface-variant); cursor: pointer; font: inherit; }
+.alerts-tabs button[aria-selected='true'] { background: var(--surface-lowest); color: var(--on-surface); font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+.report-review { display: grid; gap: 0.6rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--outline-variant); }
+.report-review__buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.report-review__approved { margin: 0; font-weight: 600; color: var(--secondary); }
+.alerts-page .report-review__notify.button { background: var(--primary); border: 1px solid var(--primary); color: var(--on-primary); justify-self: start; }
+.alerts-page .report-review__notify.button:hover:not(:disabled) { background: var(--primary-container); border-color: var(--primary-container); }
+.staleness { margin: 0; font-size: 0.875rem; color: var(--on-surface-variant); }
+.staleness--warn { padding: 0.4rem 0.6rem; border-radius: var(--radius); background: var(--warning-bg); color: var(--warning); font-weight: 600; }
+.report-editor { display: grid; gap: 1rem; margin-top: 1rem; }
+.report-editor fieldset { display: grid; gap: 0.6rem; margin: 0; padding: 0.75rem; border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); }
+.report-editor legend { padding: 0 0.25rem; font-weight: 600; }
+.report-editor label { display: grid; gap: 0.25rem; font-size: 0.875rem; }
+.report-editor textarea, .report-editor input { width: 100%; box-sizing: border-box; font: inherit; padding: 0.45rem 0.55rem; border: 1px solid var(--outline-variant); border-radius: var(--radius); }
+.report-editor textarea { min-height: 4.5rem; resize: vertical; }
+.report-editor__fact { display: grid; gap: 0.4rem; grid-template-columns: 1fr 1fr; }
+.report-editor__fact label:last-child { grid-column: 1 / -1; }
+.report-editor__actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.sent-out { margin-top: 1rem; }
+@media (max-width: 640px) {
+  .report-editor__fact { grid-template-columns: 1fr; }
+  .report-review__buttons .button, .report-review__notify.button { width: 100%; }
+}

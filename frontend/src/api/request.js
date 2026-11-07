@@ -19,6 +19,30 @@ export async function requestJson(path, { body, headers: extraHeaders, ...option
   })
   if (!response.ok) {
     let message = ''
+    let problem = null
+    try {
+      problem = await response.json()
+      message = problem.message || problem.detail || problem.error || ''
+    } catch {
+      // No JSON body.
+    }
+    const error = new Error(message || `Request failed (${response.status})`)
+    error.status = response.status
+    error.problem = problem
+    throw error
+  }
+  if (response.status === 204) return null
+  return response.json()
+}
+
+// A file such as a PDF, as a Blob with the file name the server gave it.
+export async function requestBlob(path, { headers: extraHeaders, ...options } = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: { Accept: 'application/pdf, application/json', ...(await authorizationHeader()), ...extraHeaders },
+  })
+  if (!response.ok) {
+    let message = ''
     try {
       const problem = await response.json()
       message = problem.message || problem.detail || problem.error || ''
@@ -29,8 +53,21 @@ export async function requestJson(path, { body, headers: extraHeaders, ...option
     error.status = response.status
     throw error
   }
-  if (response.status === 204) return null
-  return response.json()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const named = /filename="?([^";]+)"?/i.exec(disposition)
+  return { blob: await response.blob(), fileName: named ? named[1] : 'report.pdf' }
+}
+
+// Saves a Blob in the browser under the given name.
+export function saveBlob({ blob, fileName }) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 // Builds a query string from the given values, leaving out empty ones.
