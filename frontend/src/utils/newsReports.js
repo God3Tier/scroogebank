@@ -66,15 +66,11 @@ export function draftReportApproval(report, now) {
   return { approvedAt, validUntil, stale: now - approvedAt >= STALE_AFTER_DAYS * DAY }
 }
 
-/** What to tell the agent when a ticker has no report: still in progress, or the AI could not write one. */
-export function noReportText(card) {
-  if (card.reportFailure === 'MODEL_ABSTAINED') {
-    return 'The AI could not write a report from the sources found: they hold no real facts, for example only page menus. '
-      + 'A newer article about this company may fix it on a later search.'
-  }
-  if (card.reportFailure) {
-    return `The AI's draft did not pass the checks (${card.reportFailure.toLowerCase().replace(/_/g, ' ')}). It tries again on the next run, up to three times.`
-  }
+/**
+ * What to tell the agent when a ticker has no report yet. The agent is never shown why (a draft that failed its checks, or
+ * sources with no real facts): the system retries by itself, and the reason is in the worker's log, not on the page.
+ */
+export function noReportText() {
   return 'The report for this ticker is still being written. This page updates by itself.'
 }
 

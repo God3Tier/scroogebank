@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getClient } from '../api/clients.js'
+import { listUsers } from '../api/users.js'
 import HeldCompanies from './HeldCompanies.jsx'
 
 vi.mock('../api/clients.js', () => ({ getClient: vi.fn() }))
@@ -46,6 +47,19 @@ describe('HeldCompanies', () => {
     expect(apple.queryByText('Aaron Teo')).toBeNull()
     expect(apple.getByText('Fiona Tay')).toBeInTheDocument()
     expect(shell.getByText('Page 1 of 2')).toBeInTheDocument() // the other company did not move
+  })
+
+  it('pages and searches the same way for an administrator, with the Agent column', async () => {
+    listUsers.mockResolvedValue({ content: [{ idpSub: 'agent', firstName: 'Agent', lastName: 'One' }] })
+    render(<HeldCompanies holdings={[company(12)]} admin tickers={{}} />)
+    await screen.findByText('Aaron Teo')
+    expect(screen.getByRole('columnheader', { name: 'Agent' })).toBeInTheDocument()
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(5)
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Search the clients holding Apple Inc'), { target: { value: 'zzz' } })
+    expect(screen.getByText('No client matches "zzz".').closest('td')).toHaveAttribute('colspan', '5')
   })
 
   it('searches the holders of one company by name and says when nothing matches', async () => {

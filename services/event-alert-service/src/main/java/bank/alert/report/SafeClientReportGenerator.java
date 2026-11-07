@@ -55,7 +55,16 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
              "required":["abstain","abstentionReason","headline","executiveSummary","keyFacts","whyItMatters","marketContext","whatToMonitor","uncertainty","sourceRefs"]}
             """;
 
-    static final String PROMPT_VERSION = "alert-client-report-v2.1";
+    static final String PROMPT_VERSION = "alert-client-report-v2.2";
+
+    /** The first five drafts of an event are strict. After five refusals a one-sentence summary is accepted, for the three that follow. */
+    public static final int RELAX_SUMMARY_AFTER_FAILED_DRAFTS = 5;
+
+    /**
+     * Refused drafts of one event after which the model is left alone: a report is then put together from the sources (a fallback),
+     * or the event is not shown if even that is not possible.
+     */
+    public static final int GIVE_UP_AFTER_FAILED_DRAFTS = 8;
 
     private static final String SYSTEM_INSTRUCTION = "Write one factual report about a public company for a bank's "
             + "clients, using only the supplied public sources. The sources may describe several different "
@@ -66,7 +75,12 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
             + "Every factual claim must cite the supplied source IDs, and every number in a key fact must appear in a "
             + "cited source. Mark anything that is not stated in the sources as a POTENTIAL_IMPLICATION. Do not give "
             + "investment advice, do not mention any client or portfolio, do not state prices or market data, state "
-            + "what is uncertain, keep every field short and plain, and return only the closed schema.";
+            + "what is uncertain, keep every field short and plain, and return only the closed schema. Follow these sizes "
+            + "exactly or the report is refused: executiveSummary has 2 or 3 sentences, never 1; keyFacts has at most 4 "
+            + "items; whyItMatters has 1 to 4 items; whatToMonitor has 2 to 4 items; sourceRefs has at least 1 item; the "
+            + "headline is at most 300 characters; every sentence or item is at most 600 characters (whatToMonitor items at "
+            + "most 300); a key fact label is at most 100 characters and its value at most 200; the uncertainty note is at "
+            + "most 500 characters.";
 
     private final AiProperties properties;
     private static final Logger log = LoggerFactory.getLogger(SafeClientReportGenerator.class);
@@ -91,6 +105,11 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
 
     @Override
     public ReportOutcome generate(ReportInput input) {
+        return generate(input, 0);
+    }
+
+    @Override
+    public ReportOutcome generate(ReportInput input, int failedDraftsSoFar) {
         if (!properties.enabled()) return outcome(ReportOutcome.Status.PENDING, null, "MODEL_DISABLED", 0);
         for (PublicEvidence evidence : input.evidence()) {
             SafetyDecision decision = safety.inspect(evidence, properties.maxInputCharacters());
@@ -110,7 +129,9 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
                 SYSTEM_INSTRUCTION, publicJson, OUTPUT_SCHEMA, outputTokens);
         String lastReason = "PROVIDER_FAILURE";
         int attemptsMade = 0;
-        for (int attempt = 1; attempt <= properties.maxAttempts(); attempt++) {
+        // Never more drafts than are left before giving up, so an event's refused drafts add up to eight and no more.
+        int allowedDrafts = Math.min(properties.maxAttempts(), Math.max(1, GIVE_UP_AFTER_FAILED_DRAFTS - failedDraftsSoFar));
+        for (int attempt = 1; attempt <= allowedDrafts; attempt++) {
             attemptsMade = attempt;
             ReservationResult reservation = outboundControls.reserveModelTokens(outputTokens);
             if (!reservation.allowed()) {
@@ -123,13 +144,19 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
                     continue;
                 }
                 ClientReportModelOutput output = mapper.readValue(raw, ClientReportModelOutput.class);
-                String invalid = ClientReportValidator.validate(output, input.evidence());
+                // After enough refused drafts of this event, one summary sentence is good enough.
+                boolean relaxed = failedDraftsSoFar + (attempt - 1) >= RELAX_SUMMARY_AFTER_FAILED_DRAFTS;
+                String invalid = ClientReportValidator.validate(output, input.evidence(), relaxed);
                 if (invalid != null) {
                     lastReason = invalid;
                     // Sizes only, never text: enough to see which part of the answer broke the rules.
-                    log.warn("report output refused reason={} summary={} keyFacts={} whyItMatters={} whatToMonitor={} sourceRefs={}",
+                    log.warn("report output refused reason={} summary={} keyFacts={} whyItMatters={} whatToMonitor={} sourceRefs={} "
+                                    + "headlineLength={} uncertaintyLength={} longestSentence={} longestKeyFactValue={} relaxed={} "
+                                    + "failedDraftsBefore={}",
                             invalid, size(output.executiveSummary()), size(output.keyFacts()), size(output.whyItMatters()),
-                            size(output.whatToMonitor()), size(output.sourceRefs()));
+                            size(output.whatToMonitor()), size(output.sourceRefs()), length(output.headline()),
+                            length(output.uncertainty()), longestSentence(output), longestKeyFactValue(output), relaxed,
+                            failedDraftsSoFar);
                     continue;
                 }
                 if (Boolean.TRUE.equals(output.abstain())) {
@@ -155,6 +182,35 @@ public class SafeClientReportGenerator implements ClientReportGenerator {
 
     private static int size(java.util.List<?> list) {
         return list == null ? -1 : list.size();
+    }
+
+    private static int length(String text) {
+        return text == null ? -1 : text.length();
+    }
+
+    private static int longestSentence(ClientReportModelOutput output) {
+        int longest = -1;
+        if (output.executiveSummary() != null) {
+            for (ClientReport.CitedText sentence : output.executiveSummary()) {
+                if (sentence != null) longest = Math.max(longest, length(sentence.text()));
+            }
+        }
+        if (output.whyItMatters() != null) {
+            for (ClientReport.Implication item : output.whyItMatters()) {
+                if (item != null) longest = Math.max(longest, length(item.text()));
+            }
+        }
+        return longest;
+    }
+
+    private static int longestKeyFactValue(ClientReportModelOutput output) {
+        int longest = -1;
+        if (output.keyFacts() != null) {
+            for (ClientReport.KeyFact fact : output.keyFacts()) {
+                if (fact != null) longest = Math.max(longest, length(fact.value()));
+            }
+        }
+        return longest;
     }
 
     private ReportOutcome outcome(ReportOutcome.Status status, ClientReport report, String reason, int attempts) {

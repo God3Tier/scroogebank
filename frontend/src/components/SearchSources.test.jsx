@@ -115,6 +115,95 @@ describe('search sources', () => {
     expect(await screen.findByLabelText('Remove businesstimes.com.sg')).toBeInTheDocument()
   })
 
+  const many = (count) => Array.from({ length: count }, (_, i) => (
+    { id: `w${i}`, domain: `site${String.fromCharCode(97 + i)}.com`, addedAt: '2026-11-03T04:00:00Z', addedByYou: i % 2 === 0 }))
+
+  it('lists the added websites five at a time with a search box once there are more than five', async () => {
+    listSearchWebsites.mockResolvedValue(websites({ added: many(12) }))
+    render(<SearchSources />)
+
+    expect(await screen.findByLabelText('Remove sitea.com')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(5)
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+    expect(screen.getByText('12 of 12 websites')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Remove sitea.com')).toBeNull()
+    expect(screen.getByLabelText('Remove sitef.com')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Search the added websites'), { target: { value: 'SITEK' } })
+    expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
+    expect(screen.getByText('1 of 12 websites')).toBeInTheDocument()
+    expect(screen.getByLabelText('Remove sitek.com')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Search the added websites'), { target: { value: 'zzz' } })
+    expect(screen.getByText('No website matches "zzz".')).toBeInTheDocument()
+  })
+
+  it('shows no search or pages for five websites or fewer', async () => {
+    listSearchWebsites.mockResolvedValue(websites({ added: many(5) }))
+    render(<SearchSources />)
+
+    expect(await screen.findByLabelText('Remove sitea.com')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Search the added websites')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Added websites pages' })).toBeNull()
+  })
+
+  it('changes a website: the new name is added and checked first, then the old one is removed', async () => {
+    listSearchWebsites.mockResolvedValueOnce(websites({ added: [MINE] })).mockResolvedValueOnce(websites({ added: [{ ...MINE, id: 'w9', domain: 'straitstimes.com' }] }))
+    addSearchWebsite.mockResolvedValue({
+      id: 'w9', domain: 'straitstimes.com', search: { outcome: 'STARTED', started: ['SGX-D05'], cooldown: [], lookbackDays: 7 },
+    })
+    removeSearchWebsite.mockResolvedValue(null)
+    render(<SearchSources />)
+
+    fireEvent.click(await screen.findByLabelText('Edit businesstimes.com.sg'))
+    fireEvent.change(screen.getByLabelText('New name for businesstimes.com.sg'), { target: { value: 'StraitsTimes.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText(/Changed businesstimes.com.sg to straitstimes.com/)).toBeInTheDocument()
+    expect(addSearchWebsite).toHaveBeenCalledWith('StraitsTimes.com')
+    expect(removeSearchWebsite).toHaveBeenCalledWith('w1')
+    expect(addSearchWebsite.mock.invocationCallOrder[0]).toBeLessThan(removeSearchWebsite.mock.invocationCallOrder[0])
+  })
+
+  it('keeps the old website when the new name is refused, and shows why', async () => {
+    listSearchWebsites.mockResolvedValue(websites({ added: [MINE] }))
+    addSearchWebsite.mockRejectedValue(Object.assign(new Error('we could not find asdfgh.com, check the spelling'), { status: 400 }))
+    render(<SearchSources />)
+
+    fireEvent.click(await screen.findByLabelText('Edit businesstimes.com.sg'))
+    fireEvent.change(screen.getByLabelText('New name for businesstimes.com.sg'), { target: { value: 'asdfgh.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('we could not find asdfgh.com, check the spelling')).toBeInTheDocument()
+    expect(removeSearchWebsite).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('New name for businesstimes.com.sg')).toBeInTheDocument() // still editing, nothing lost
+  })
+
+  it('does nothing when the name is left the same, and Cancel closes the editor', async () => {
+    listSearchWebsites.mockResolvedValue(websites({ added: [MINE] }))
+    render(<SearchSources />)
+
+    fireEvent.click(await screen.findByLabelText('Edit businesstimes.com.sg'))
+    fireEvent.change(screen.getByLabelText('New name for businesstimes.com.sg'), { target: { value: 'WWW.BusinessTimes.com.sg' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(addSearchWebsite).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('New name for businesstimes.com.sg')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Edit businesstimes.com.sg'))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('New name for businesstimes.com.sg')).toBeNull()
+  })
+
+  it('does not offer Edit to an administrator, who can still remove', async () => {
+    listSearchWebsites.mockResolvedValue(websites({ added: [MINE, THEIRS], canAdd: false }))
+    render(<SearchSources readOnly />)
+
+    expect(await screen.findByLabelText('Remove businesstimes.com.sg')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Edit businesstimes.com.sg')).toBeNull()
+  })
+
   it('says which companies were skipped because they were searched a moment ago', async () => {
     addSearchWebsite.mockResolvedValue({
       ...MINE, search: { outcome: 'STARTED', started: ['NASDAQ-AAPL'],

@@ -59,16 +59,16 @@ variable "enable_test_tooling" {
   default     = false
 }
 
-# TEMPORARY, 2026-11-07: PT5M matches the alert-worker's five-minute check. Set it back to "PT4H" with the alert-worker `schedule`
+# TEMPORARY, 2026-11-07: PT20M matches the alert-worker's twenty-minute check. Set it back to "PT4H" with the alert-worker `schedule`
 # (cron(0 0/4 * * ? *)) after the check.
 variable "alert_schedule_interval" {
-  description = "How often the automatic searches run, as the Event Alerts page shows it (ALERT_SCHEDULE_INTERVAL, an ISO-8601 duration, counted from midnight in Singapore). It only changes what the page says: the schedule itself is the alert-worker stack's `schedule`, and the two must be changed together. PT4H matches cron(0 0/4 * * ? *); PT5M matches cron(0/5 * * * ? *) for a test."
+  description = "How often the automatic searches run, as the Event Alerts page shows it (ALERT_SCHEDULE_INTERVAL, an ISO-8601 duration, counted from midnight in Singapore). It only changes what the page says: the schedule itself is the alert-worker stack's `schedule`, and the two must be changed together. PT4H matches cron(0 0/4 * * ? *); PT20M matches cron(0/20 * * * ? *) for a test."
   type        = string
-  default     = "PT5M"
+  default     = "PT20M"
 
   validation {
     condition     = can(regex("^PT([0-9]+H)?([0-9]+M)?$", var.alert_schedule_interval)) && var.alert_schedule_interval != "PT"
-    error_message = "alert_schedule_interval must be an ISO-8601 time duration such as PT4H or PT5M."
+    error_message = "alert_schedule_interval must be an ISO-8601 time duration such as PT4H or PT20M."
   }
 }
 

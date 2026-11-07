@@ -77,8 +77,8 @@ class SafeClientReportGeneratorTest {
         ReportOutcome outcome = generator((request, timeout) -> GOOD, true).generate(withEarlier);
 
         assertThat(outcome.status()).isEqualTo(ReportOutcome.Status.GENERATED);
-        assertThat(sent.get().promptVersion()).isEqualTo("alert-client-report-v2.1");
-        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2.1");
+        assertThat(sent.get().promptVersion()).isEqualTo("alert-client-report-v2.2");
+        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2.2");
         assertThat(sent.get().systemInstruction()).contains("alreadyReported").contains("write only what is new")
                 .contains("several different developments");
         assertThat(sent.get().publicInputJson()).contains("Microsoft earlier headline").contains("Microsoft guided revenue higher.");
@@ -99,7 +99,7 @@ class SafeClientReportGeneratorTest {
         assertThat(outcome.report().headline()).isEqualTo("Microsoft reports first quarter results");
         assertThat(outcome.report().executiveSummary()).hasSize(2);
         assertThat(outcome.report().marketContext()).isNull();
-        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2.1");
+        assertThat(outcome.promptVersion()).isEqualTo("alert-client-report-v2.2");
         assertThat(outcome.generatedAt()).isEqualTo(NOW);
     }
 
@@ -134,6 +134,70 @@ class SafeClientReportGeneratorTest {
         assertThat(outcome.reasonCode()).isEqualTo("UNSUPPORTED_FIGURE");
         assertThat(outcome.report()).isNull();
         assertThat(calls.get()).isEqualTo(2);
+    }
+
+    private static final String ONE_SENTENCE = GOOD.replaceAll(
+            "\\s*,\\s*\\{\"text\":\"Revenue rose 19% from a year earlier\\.\",\"sourceRefs\":\\[\"source-1\"\\]\\}", "");
+
+    @Test
+    void aOneSentenceSummaryIsRefusedAtFirst() {
+        assertThat(ONE_SENTENCE).as("the test draft really has one sentence").doesNotContain("Revenue rose 19%");
+
+        ReportOutcome outcome = generator((request, timeout) -> ONE_SENTENCE, true).generate(input());
+
+        assertThat(outcome.status()).isEqualTo(ReportOutcome.Status.ABSTAINED);
+        assertThat(outcome.reasonCode()).isEqualTo("INVALID_MODEL_SCHEMA");
+        assertThat(calls.get()).isEqualTo(2);
+    }
+
+    @Test
+    void aOneSentenceSummaryIsAcceptedOnceFiveDraftsOfTheEventHaveBeenRefused() {
+        ReportOutcome afterFour = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 4);
+        // Four refused drafts so far: the first try of this call is still strict, the second (the fifth refusal) is relaxed.
+        assertThat(afterFour.status()).isEqualTo(ReportOutcome.Status.GENERATED);
+        assertThat(afterFour.attempts()).isEqualTo(2);
+
+        calls.set(0);
+        ReportOutcome afterFive = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 5);
+        assertThat(afterFive.status()).isEqualTo(ReportOutcome.Status.GENERATED);
+        assertThat(afterFive.attempts()).as("accepted at the first try").isEqualTo(1);
+        assertThat(afterFive.report().executiveSummary()).hasSize(1);
+    }
+
+    @Test
+    void theFirstFiveDraftsAreStrictSoAOneSentenceSummaryIsRefusedUntilThen() {
+        ReportOutcome afterThree = generator((request, timeout) -> ONE_SENTENCE, true).generate(input(), 3);
+
+        // Draft 4 is strict (3 refused so far); draft 5 is strict too (4 refused so far): both refused, one call made two drafts.
+        assertThat(afterThree.status()).isEqualTo(ReportOutcome.Status.ABSTAINED);
+        assertThat(afterThree.reasonCode()).isEqualTo("INVALID_MODEL_SCHEMA");
+        assertThat(afterThree.attempts()).isEqualTo(2);
+    }
+
+    @Test
+    void theRefusedDraftsOfOneEventNeverAddUpToMoreThanEight() {
+        calls.set(0);
+        ReportOutcome sevenSoFar = generator((request, timeout) -> "{}", true).generate(input(), 7);
+
+        assertThat(calls.get()).as("one draft left, not two").isEqualTo(1);
+        assertThat(sevenSoFar.attempts()).isEqualTo(1);
+    }
+
+    @Test
+    void relaxingOnlyAllowsTheShortSummaryAndNothingElse() {
+        String invented = ONE_SENTENCE.replace("$92,279 million\",\"context", "$99,999 million\",\"context");
+
+        ReportOutcome outcome = generator((request, timeout) -> invented, true).generate(input(), 6);
+
+        assertThat(outcome.status()).isEqualTo(ReportOutcome.Status.ABSTAINED);
+        assertThat(outcome.reasonCode()).isEqualTo("UNSUPPORTED_FIGURE");
+    }
+
+    @Test
+    void theModelIsToldTheExactSizesTheReportMustHave() {
+        generator((request, timeout) -> GOOD, true).generate(input());
+
+        assertThat(sent.get().systemInstruction()).contains("2 or 3 sentences, never 1", "at most 300 characters", "at most 4");
     }
 
     @Test

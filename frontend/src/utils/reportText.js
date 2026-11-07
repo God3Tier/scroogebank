@@ -2,7 +2,8 @@
 // The sections have the shape the server takes: executiveSummary and whyItMatters are lists of text, keyFacts is a list
 // of { label, value, context }, whatToMonitor is a list of text and uncertainty is text. Source citations are not shown
 // here: each stays with its item by position, so the number of summary sentences, key facts and why-it-matters points
-// cannot change. What to monitor can have 2 to 4 lines.
+// cannot change. What to monitor can have 2 to 4 lines, or fewer when the report itself has fewer (a report built from the
+// sources alone has none), and the uncertainty note may stay empty when the report has none.
 
 const HEADINGS = [
   { key: 'executiveSummary', title: 'EXECUTIVE SUMMARY', name: 'Executive summary' },
@@ -128,12 +129,13 @@ export function fromText(text, original) {
   sections.keyFacts = facts
   sections.whyItMatters = fixed('whyItMatters').map((item) => item.text)
   const monitor = byKey.whatToMonitor.items
-  if (monitor.length < MONITOR_MIN || monitor.length > MONITOR_MAX) {
-    errors.push({ line: byKey.whatToMonitor.line, message: `What to monitor needs ${MONITOR_MIN} to ${MONITOR_MAX} lines; there ${monitor.length === 1 ? 'is' : 'are'} ${monitor.length}.` })
+  const monitorMin = Math.min(MONITOR_MIN, wanted('whatToMonitor'))
+  if (monitor.length < monitorMin || monitor.length > MONITOR_MAX) {
+    errors.push({ line: byKey.whatToMonitor.line, message: `What to monitor needs ${monitorMin} to ${MONITOR_MAX} lines; there ${monitor.length === 1 ? 'is' : 'are'} ${monitor.length}.` })
   }
   sections.whatToMonitor = monitor.map((item) => item.text)
   sections.uncertainty = byKey.uncertainty.items.map((item) => item.text).join(' ')
-  if (!sections.uncertainty) errors.push({ line: byKey.uncertainty.line, message: 'Uncertainty cannot be empty.' })
+  if (!sections.uncertainty && original?.uncertainty) errors.push({ line: byKey.uncertainty.line, message: 'Uncertainty cannot be empty.' })
 
   return errors.length > 0 ? { errors } : { sections }
 }

@@ -208,8 +208,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
             </>
           ) : (
             <div className="inline-empty">
-              <Icon name={card.reportFailure ? 'info' : 'autorenew'} /> {noReportText(card)}
-              {card.reportFailure && card.summary && <small className="inline-empty__note"> What the AI said: {card.summary}</small>}
+              <Icon name="autorenew" /> {noReportText()}
             </div>
           )}
         </section>
@@ -260,14 +259,27 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
             </div>
           </form>
         )}
-        {result && (
-          <ul className="event-outcomes" role="status">
-            {result.members.map((member) => {
-              const client = detail.clients.find((c) => c.alertId === member.alertId)
-              return <li key={member.alertId}>{client ? clientLabel(client, names) : member.alertId.slice(0, 8)}: {OUTCOME_LABELS[member.outcome] || member.outcome}</li>
-            })}
-          </ul>
-        )}
+        {result && (() => {
+          const notDone = result.members.filter((member) => member.outcome !== 'APPLIED')
+          const done = result.members.length - notDone.length
+          return (
+            <div className="event-outcomes" role="status">
+              {notDone.length === 0 ? (
+                <p className="event-outcomes__done"><Icon name="check_circle" /> <strong>All done</strong> for {done} client{done === 1 ? '' : 's'}.</p>
+              ) : (
+                <>
+                  <p className="event-outcomes__done"><Icon name="check_circle" /> <strong>{done} done.</strong> {notDone.length} could not be changed:</p>
+                  <ul>
+                    {notDone.map((member) => {
+                      const client = detail.clients.find((c) => c.alertId === member.alertId)
+                      return <li key={member.alertId}>{client ? clientLabel(client, names) : member.alertId.slice(0, 8)}: {OUTCOME_LABELS[member.outcome] || member.outcome}</li>
+                    })}
+                  </ul>
+                </>
+              )}
+            </div>
+          )
+        })()}
       </section>
     </>
   )
@@ -392,7 +404,13 @@ function TickerReports() {
             {state.error && <div className="queue-error" role="alert">{state.error}</div>}
             {state.loading && <div className="queue-loading" role="status"><Icon name="autorenew" /> Loading tickers…</div>}
             {!state.loading && !state.error && state.items.length === 0 && (
-              <div className="queue-empty"><h2>No tickers need review</h2><p>New reports will appear here after the next search run.</p></div>
+              <div className="queue-empty">
+                <p className="queue-empty__notice" role="status">
+                  <Icon name="search_off" /> <strong>No news found in the past 4 hours.</strong>
+                </p>
+                <h2>No tickers need review</h2>
+                <p>New reports will appear here after the next search run.</p>
+              </div>
             )}
             <ol className="alert-list">
               {state.items.map((item) => (

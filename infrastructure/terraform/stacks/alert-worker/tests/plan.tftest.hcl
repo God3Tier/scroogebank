@@ -67,8 +67,8 @@ run "ingestion_off_by_default" {
   }
 
   assert {
-    condition     = aws_scheduler_schedule.alert_worker.state == "DISABLED" && aws_scheduler_schedule.alert_worker.schedule_expression == "cron(0/5 * * * ? *)"
-    error_message = "With ingestion off the schedule stays DISABLED. It is every five minutes for the 2026-11-07 check; set it back to every four hours (ADR-0081) afterwards."
+    condition     = aws_scheduler_schedule.alert_worker.state == "DISABLED" && aws_scheduler_schedule.alert_worker.schedule_expression == "cron(0/20 * * * ? *)"
+    error_message = "With ingestion off the schedule stays DISABLED. It is every twenty minutes for the 2026-11-07 check; set it back to every four hours (ADR-0081) afterwards."
   }
   assert {
     condition     = module.event_alert_worker.task_definition_family == "crm-sg-prod-event-alert-worker" && module.event_alert_worker.service_name == null

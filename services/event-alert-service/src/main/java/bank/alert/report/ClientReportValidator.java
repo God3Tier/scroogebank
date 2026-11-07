@@ -32,13 +32,22 @@ public final class ClientReportValidator {
 
     /** Returns the reason code if the output must be refused, or null when it is acceptable. */
     public static String validate(ClientReportModelOutput output, List<PublicEvidence> evidence) {
+        return validate(output, evidence, false);
+    }
+
+    /**
+     * The same checks. With {@code relaxed} a one-sentence summary is accepted (it is otherwise two or three sentences):
+     * used only after a report has been refused several times, so an event is not left without one for ever.
+     */
+    public static String validate(ClientReportModelOutput output, List<PublicEvidence> evidence, boolean relaxed) {
         if (output.abstain() == null) return "INVALID_MODEL_SCHEMA";
         if (Boolean.TRUE.equals(output.abstain())) {
             return output.abstentionReason() == null || output.abstentionReason().isBlank() ? "INVALID_ABSTENTION" : null;
         }
         if (blankOrLong(output.headline(), 300) || blankOrLong(output.uncertainty(), 500)) return "INVALID_MODEL_SCHEMA";
         if (output.marketContext() != null) return "MARKET_CONTEXT_NOT_ALLOWED";
-        if (size(output.executiveSummary()) < 2 || size(output.executiveSummary()) > 3) return "INVALID_MODEL_SCHEMA";
+        int minimumSummary = relaxed ? 1 : 2;
+        if (size(output.executiveSummary()) < minimumSummary || size(output.executiveSummary()) > 3) return "INVALID_MODEL_SCHEMA";
         if (output.keyFacts() == null || output.keyFacts().size() > 4) return "INVALID_MODEL_SCHEMA";
         if (size(output.whyItMatters()) < 1 || size(output.whyItMatters()) > 4) return "INVALID_MODEL_SCHEMA";
         if (size(output.whatToMonitor()) < 2 || size(output.whatToMonitor()) > 4) return "INVALID_MODEL_SCHEMA";
@@ -147,6 +156,12 @@ public final class ClientReportValidator {
         Matcher matcher = NUMBER.matcher(value.toLowerCase(Locale.ROOT));
         while (matcher.find()) figures.add(matcher.group().replace(",", ""));
         return figures;
+    }
+
+    /** True when the text holds wording that reads as investment advice. */
+    static boolean containsAdvice(String text) {
+        String lower = text == null ? "" : text.toLowerCase(Locale.ROOT);
+        return ADVICE_PHRASES.stream().anyMatch(lower::contains);
     }
 
     private static boolean adviceLanguage(ClientReportModelOutput output) {

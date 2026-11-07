@@ -1,10 +1,12 @@
 package bank.alert.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -22,6 +24,22 @@ public class SourceDomainPolicy {
             "youtube.com", "youtu.be", "medium.com", "substack.com", "quora.com", "linkedin.com",
             "t.me", "telegram.org", "pinterest.com", "tumblr.com", "blogspot.com", "wordpress.com",
             "stocktwits.com", "discord.com", "whatsapp.com");
+
+    /** Endings that are only ever used inside a network or for examples, never for a public website. */
+    static final Set<String> NOT_PUBLIC_ENDINGS = Set.of("local", "localhost", "localdomain", "internal", "intranet", "lan", "home",
+            "corp", "test", "example", "invalid", "onion");
+
+    private final DomainLookup lookup;
+
+    @Autowired
+    public SourceDomainPolicy(DomainLookup lookup) {
+        this.lookup = lookup;
+    }
+
+    /** Without a lookup: for tests that must not need the network. Every well-formed name is taken to exist. */
+    public SourceDomainPolicy() {
+        this(domain -> true);
+    }
 
     private static final Pattern HOST = Pattern.compile(
             "^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+(xn--[a-z0-9-]{1,59}|[a-z]{2,63})$");
@@ -42,6 +60,15 @@ public class SourceDomainPolicy {
         if (BLOCKED.stream().anyMatch(blocked -> covers(blocked, host))) {
             throw SourceDomainException.invalid("BLOCKED_DOMAIN",
                     "social, forum and blog platforms cannot be used as news sources");
+        }
+        String ending = value.substring(value.lastIndexOf('.') + 1);
+        if (NOT_PUBLIC_ENDINGS.contains(ending)) {
+            throw SourceDomainException.invalid("NOT_PUBLIC",
+                    "enter a public website; names ending in ." + ending + " are not on the internet");
+        }
+        if (!lookup.exists(value)) {
+            throw SourceDomainException.invalid("DOMAIN_NOT_FOUND",
+                    "we could not find " + value + ", check the spelling");
         }
         return value;
     }

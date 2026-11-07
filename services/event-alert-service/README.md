@@ -37,8 +37,9 @@ instruments on SGX, NASDAQ, NYSE, LSE, and HKEX, plus the legacy synthetic
 instrument used by downstream pipeline tests. The `instrument` catalogue maps
 stable IDs deterministically to public ticker, issuer, and sector terms. By
 default an instrument is eligible when it is held by at least two clients and
-20% of clients in the snapshot, or reaches 50% of one account's positive SGD
-value. Tavily receives none of those counts or private holding facts.
+20% of clients in the snapshot. (The old second rule, "or 50% of one account's
+positive SGD value", was removed on 2026-11-07: ADR-0084.) Tavily receives none of
+those counts or private holding facts.
 Unknown/inactive IDs and an empty eligible universe fail closed.
 Each selected instrument contributes governed aliases and official domains.
 Results persist only when the title contains a controlled event phrase and

@@ -3294,7 +3294,18 @@ textarea:focus {
 .source-chip { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.85rem; border: 1px solid var(--border, rgba(127, 127, 127, 0.45)); }
 .source-chip--added { font-weight: 600; }
 .source-added { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; width: 100%; }
-.source-remove { margin-left: 0.5rem; }
+/* The websites agents added: one tidy row each, with a quiet Remove that turns red when pointed at. */
+.source-added li { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; align-items: center; gap: 0.35rem 0.6rem; padding: 0.45rem 0.7rem; border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); background: var(--surface-lowest, transparent); }
+.source-remove { display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem; grid-column: 3; min-width: 6rem; padding: 0.25rem 0.7rem 0.25rem 0.5rem; font-size: 0.82rem; font-weight: 500; color: var(--error); background: transparent; border: 1px solid color-mix(in srgb, var(--error) 35%, transparent); border-radius: 999px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.source-remove .material-symbols-outlined { font-size: 1rem; }
+.source-remove:hover:not(:disabled), .source-remove:focus-visible { background: var(--error-container); border-color: var(--error); }
+.source-remove:disabled { opacity: 0.5; cursor: not-allowed; }
+.source-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.4rem; grid-column: 2 / 4; justify-self: end; font-size: 0.85rem; }
+.source-confirm button { padding: 0.25rem 0.8rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500; cursor: pointer; }
+.source-confirm__yes { color: #fff; background: var(--error); border: 1px solid var(--error); }
+.source-confirm__yes:hover:not(:disabled) { filter: brightness(0.92); }
+.source-confirm__no { color: var(--on-surface-variant); background: transparent; border: 1px solid var(--outline-variant); }
+.source-confirm__no:hover:not(:disabled) { background: var(--surface-container); }
 .source-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .source-add input { min-width: 14rem; flex: 1 1 14rem; }
 .muted { opacity: 0.7; }
@@ -3390,3 +3401,17 @@ textarea:focus {
 .stale-notice--fresh { border-color: var(--ok, #1b7f3b); }
 .stale-notice--fresh .stale-notice__chip { background: var(--ok, #1b7f3b); }
 .clients-selectall-hint { font-weight: 400; font-size: 0.75rem; color: var(--on-surface-variant); }
+
+/* Nothing found by the search: said plainly and highlighted, like the "need a decision" label. */
+.queue-empty__notice { display: inline-flex; align-items: center; gap: var(--stack-sm); margin: 0 0 0.75rem; padding: 10px 14px; color: var(--primary); background: var(--surface-container); border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); font-size: 14px; }
+.event-outcomes__done { display: inline-flex; align-items: center; gap: var(--stack-sm); margin: 0.5rem 0; padding: 10px 14px; color: var(--primary); background: var(--surface-container); border-radius: var(--radius-lg); font-size: 14px; }
+/* Added websites: five at a time with a search box, and an inline Edit. */
+.source-search { margin: 0.6rem 0 0.4rem; }
+.source-actions { grid-column: 3; display: inline-flex; align-items: center; gap: 0.4rem; justify-self: end; }
+.source-edit__open { display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem; min-width: 5rem; padding: 0.25rem 0.7rem 0.25rem 0.5rem; font-size: 0.82rem; font-weight: 500; color: var(--primary); background: transparent; border: 1px solid var(--outline-variant); border-radius: 999px; cursor: pointer; }
+.source-edit__open .material-symbols-outlined { font-size: 1rem; }
+.source-edit__open:hover:not(:disabled), .source-edit__open:focus-visible { background: var(--surface-container); border-color: var(--primary); }
+.source-edit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.source-edit input { flex: 1 1 14rem; min-width: 12rem; }
+.source-edit button { padding: 0.25rem 0.9rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500; cursor: pointer; }
+

@@ -258,8 +258,8 @@ combines three differentiating capabilities:
 3. EventBridge Scheduler starts a bounded alert-worker task in Singapore.
 4. The worker aggregates the approved holdings snapshot and selects instruments
    that satisfy the configured minimum population controls. The current defaults
-   are at least two clients and at least 20% of clients with positions, or at
-   least 50% of one account's value.
+   are at least two clients and at least 20% of clients with positions. (The
+   "or 50% of one account's value" rule was removed on 2026-11-07.)
 5. Singapore converts eligible instrument IDs into public ticker, issuer, sector
    and event terms. It sends only those public terms, approved domains, inclusive
    UTC dates and a bounded result count to the Tavily search API.

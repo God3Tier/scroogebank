@@ -127,6 +127,30 @@ describe('TickerReports', () => {
     expect(document.activeElement).toHaveAttribute('aria-labelledby', 'ticker-report-title')
   })
 
+  it('says All done in one line when every client was changed, instead of listing each one', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected clients' }))
+
+    expect(await screen.findByText('All done')).toBeInTheDocument()
+    expect(screen.getByText(/for 1 client\./)).toBeInTheDocument()
+    expect(screen.queryByText('Chloe Tan: Done')).not.toBeInTheDocument()
+  })
+
+  it('names only the clients that could not be changed when some could not', async () => {
+    recordEventAction.mockResolvedValue({ members: [{ alertId: 'a1', outcome: 'APPLIED' }, { alertId: 'a2', outcome: 'STALE_VERSION' }] })
+    renderPage()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Chloe Tan' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Daniel Lim' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected clients' }))
+
+    expect(await screen.findByText('1 done.')).toBeInTheDocument()
+    expect(screen.getByText('Daniel Lim: Changed since you looked, reload')).toBeInTheDocument()
+    expect(screen.queryByText('Chloe Tan: Done')).not.toBeInTheDocument()
+  })
+
   it('does not dismiss a client who is on an open news draft', async () => {
     listOpenNewsAlerts.mockResolvedValue({ alertIds: ['a2'] })
     renderPage()
@@ -410,15 +434,26 @@ describe('TickerReports', () => {
     }
   })
 
-  it('says when the AI could not write a report, instead of saying it is still being written', async () => {
-    const refused = { ...appleCard, reportFailure: 'MODEL_ABSTAINED', summary: 'The source holds only navigation text.' }
+  it('never shows the agent why a report is missing: a refused draft reads the same as one in progress', async () => {
+    const refused = { ...appleCard, reportFailure: 'INVALID_MODEL_SCHEMA', summary: 'The AI wrote one sentence.' }
     listEvents.mockResolvedValue({ items: [refused], nextCursor: null })
     getEvent.mockImplementation(async () => ({ card: refused, clients: [client('a1', CHLOE, 'NEW')], latestAction: null, report: null }))
     renderPage()
 
-    expect(await screen.findByText(/The AI could not write a report from the sources found/)).toBeInTheDocument()
-    expect(screen.getByText(/What the AI said: The source holds only navigation text/)).toBeInTheDocument()
-    expect(screen.queryByText(/still being written/)).not.toBeInTheDocument()
+    expect(await screen.findByText(/The report for this ticker is still being written/)).toBeInTheDocument()
+    expect(screen.queryByText(/did not pass the checks/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/invalid model schema/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/What the AI said/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/The AI could not write a report/)).not.toBeInTheDocument()
+  })
+
+  it('says, highlighted, that nothing was found in the past 4 hours when no ticker is listed', async () => {
+    listEvents.mockResolvedValue({ items: [], nextCursor: null })
+    renderPage()
+
+    const notice = await screen.findByText('No news found in the past 4 hours.')
+    expect(notice.closest('.queue-empty__notice')).toBeInTheDocument()
+    expect(screen.getByText('No tickers need review')).toBeInTheDocument()
   })
 
   it('keeps Download off while editing, so the PDF always has the saved edit', async () => {
