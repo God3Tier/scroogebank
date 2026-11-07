@@ -121,6 +121,7 @@ module "event_alert_worker" {
     ALERT_AI_ENABLED                    = tostring(var.ai_enabled)
     ALERT_AI_PROVIDER                   = var.ai_enabled ? "bedrock" : "none"
     ALERT_AI_BEDROCK_REGION             = var.bedrock_region
+    ALERT_REPORT_SUMMARY_ENABLED        = tostring(var.report_summary_enabled)
     # The API process publishes the audit outbox, including rows a worker run
     # leaves behind, so the worker needs no queue access.
     ALERT_AUDIT_PUBLISHER_ENABLED    = "false"
@@ -215,7 +216,7 @@ resource "aws_iam_role_policy" "scheduler" {
 
 resource "aws_scheduler_schedule" "alert_worker" {
   name                         = "${local.name}-alert-worker"
-  description                  = "One alert ingestion window every four hours (ADR-0031, ADR-0048)"
+  description                  = "One alert ingestion window every four hours at fixed times (ADR-0031, ADR-0048, ADR-0081)"
   schedule_expression          = var.schedule
   schedule_expression_timezone = "Asia/Singapore"
   state                        = local.schedule_on ? "ENABLED" : "DISABLED"
@@ -250,7 +251,7 @@ resource "aws_scheduler_schedule" "alert_worker" {
 
 # ------------------------------------------------------ a run on every apply
 
-# A schedule's first run comes one interval (four hours) after it is created or
+# A schedule's first run comes at its next fixed time, up to four hours after it is created or
 # switched on, so a fresh deployment would otherwise show no alerts for hours.
 # This starts one run at the end of every apply (ADR-0080); the schedule then
 # carries on as before. The worker's run lock stops it overlapping a scheduled

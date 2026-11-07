@@ -34,6 +34,16 @@ public class AlertApiExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Alert mutation conflict", exception.getMessage());
     }
 
+    /** An edited report that failed a check (news-alert-drafts plan 5.3): which section and item, and why. */
+    @ExceptionHandler(bank.alert.report.ReportEdits.EditRefused.class)
+    ResponseEntity<ProblemDetail> editRefused(bank.alert.report.ReportEdits.EditRefused exception) {
+        ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, "Edit refused", exception.violation().message());
+        problem.setProperty("code", exception.violation().code());
+        problem.setProperty("section", exception.violation().section());
+        problem.setProperty("index", exception.violation().index());
+        return ResponseEntity.unprocessableEntity().body(problem);
+    }
+
     @ExceptionHandler(AuditUnavailableException.class)
     ResponseEntity<ProblemDetail> unavailable(AuditUnavailableException exception) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

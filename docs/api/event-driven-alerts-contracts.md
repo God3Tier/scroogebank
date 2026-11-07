@@ -94,9 +94,9 @@ bodies and idempotency match the alert routes above.
 |---|---|---|---|
 | GET | `/api/alert-portfolios/{accountId}` | the client's current agent; admin read-only | Complete recorded portfolio and `revision`. 404 when nothing was recorded or the account is not visible (indistinguishable). An explicitly recorded empty portfolio returns `positions: []` with its revision. |
 | PUT | `/api/alert-portfolios/{accountId}` | the client's current agent | Atomic complete replacement. Body `{expectedRevision, sourceLabel, positions[<=100]}`; each position `{instrumentId, quantity, unitPrice, valuationCurrency, fxToSgd, valuedAt}`. `Idempotency-Key` required. The client and agent are never taken from the body. |
-| GET | `/api/alerts/events?onlyOpen&limit&cursor` | agent | One card per public event: shared summary, evidence, `affectedClientCount`, `openClientCount`. Returns an opaque `nextCursor` for the next page. Each page rechecks current client ownership. |
+| GET | `/api/alerts/events?onlyOpen&includeClosed&limit&cursor` | agent | One card per public event (events whose clients are all Sent Out or Dismissed are left out unless `includeClosed`): shared summary, evidence, `affectedClientCount`, `openClientCount`. Returns an opaque `nextCursor` for the next page. Each page rechecks current client ownership. |
 | GET | `/api/alerts/events/{eventId}` | agent | The card, the agent's affected clients (alert ID, client, scoring account, instrument, score, share of portfolio, status, version) and the latest action. |
-| POST | `/api/alerts/events/{eventId}/actions` | agent | `{decision: INFORM_CLIENT\|MONITOR\|DISMISS, note, members[1..200]:{alertId, expectedVersion}}` with `Idempotency-Key`. Applies only to the listed clients and returns a per-member outcome. |
+| POST | `/api/alerts/events/{eventId}/actions` | agent | `{decision: INFORM_CLIENT\|DISMISS, note, members[1..200]:{alertId, expectedVersion}}` with `Idempotency-Key`. Applies only to the listed clients and returns a per-member outcome. Recording the status a client already has changes nothing; a Sent Out client is `INVALID_TRANSITION`. |
 
 PUT refusals: 409 stale `expectedRevision`, key reuse with a different body, or a
 non-active/non-investment account; 422 unknown instrument, duplicate instrument,
@@ -113,9 +113,12 @@ intent only. Replaying the same key and body returns the stored result.
 
 | Method | Path | Roles | Contract |
 |---|---|---|---|
-| GET | `/api/alerts/search-sources` | agent, admin | Companies the agent's clients currently hold (admin: all active), each with `official`, `shared`, `custom[{id, domain, addedAt, addedByYou}]`, `canAdd`, `maxCustom`. |
-| POST | `/api/alerts/search-sources/{instrumentId}/domains` | agent | `{domain}`. 201 with the entry. 400 `INVALID_FORMAT` or `BLOCKED_DOMAIN`; 403 `NOT_HELD`; 404 unknown company; 409 `ALREADY_COVERED` or `LIMIT_REACHED`. Audited as `alert.search-domain-added`. |
-| DELETE | `/api/alerts/search-sources/{instrumentId}/domains/{domainId}` | agent who holds the company, admin | 204. Keeps the row as history. Audited as `alert.search-domain-deactivated`. |
+| GET | `/api/alerts/search-websites` | agent, admin | `shared` (the deployment's news sites), `added[{id, domain, addedAt, addedByYou}]`, `canAdd`, `max`. Searched for every company (ADR-0082). |
+| POST | `/api/alerts/search-websites` | agent | `{domain}`. 201 with the entry and `search` (what happened to the search started for the agent's companies, ADR-0081). 400 `INVALID_FORMAT` or `BLOCKED_DOMAIN`; 409 `ALREADY_COVERED` or `LIMIT_REACHED`. Audited as `alert.search-website-added`. |
+| DELETE | `/api/alerts/search-websites/{websiteId}` | agent, admin | 204. Keeps the row as history. Audited as `alert.search-website-removed`. |
+| GET | `/api/alerts/search-holdings` | agent, admin | Each company held by the agent's clients (admin: everyone's) with `officialDomains` and `holders[{clientId, accountId, quantity, valueSgd, sharePercent, ownerAgentSubject}]`. Client ids are anonymous; the page looks names up in the CRM. The owner is given to admins only. |
+| POST | `/api/alerts/search-now` | agent, admin | Optional `{instrumentId}`. Searches one company or every company the caller may search, over 14 days on every website. Returns `{outcome, started[], cooldown[{instrumentId, availableAt}], lookbackDays}`. 403 `NOT_HELD`. Never changes the automatic schedule (ADR-0081). |
+| GET | `/api/alerts/search-schedule` | agent, admin | `{enabled, intervalMinutes, zone, previousRunAt, nextRunAt}`. |
 
 Refusals are RFC 9457 problems with an extra `code`. The worker reads active rows from `instrument_source_domain` on every run and adds them to the company's approved domains; they are not official domains, so the strict relevance gate applies in full.
 
@@ -130,14 +133,38 @@ read case-insensitively. `owner_agent_id` is the client's current agent: the CRM
 reassignment (ADR-0060). The transaction import's token cannot call this route, and this token cannot call the
 import's.
 
-## Follow-up emails (engagement-service, ADR-0068)
+## News alerts: edit, approve, then send from Follow-up Emails (ADR-0085, ADR-0086)
 
-After an agent chooses Inform clients, the event briefing links each informed
-client whose `clientRef` is a CRM client ID to a follow-up email in
-engagement-service. engagement-service reads `GET /api/alerts/{alertId}`
-through the internal ALB with the agent's own token, to check that the alert
-is the agent's and its `clientRef` equals the email's client
-([ADR-0068](../adr/ADR-0068-follow-ups-from-client-health-and-alerts-and-draft-retention.md)).
-It reads `clientRef` only and treats 401, 403 and 404 as "not yours". The
-headline, holdings and briefing are never read, stored or sent to a model.
-Inform still sends nothing: the agent writes and sends the email themselves.
+`GET /api/alerts/events/{eventId}` carries `report`: the latest validated `alert-client-report-v2` (or a
+migrated `briefing-v1-legacy`), every source linked to the event with the ones the model saw marked
+`usedInReport`, the fixed portfolio line per affected instrument, and the disclaimer. A client's status is
+`NEW`, `INFORMED` (Plan client briefing), `DISMISSED` or `SENT_OUT` (final). `MONITOR`/`MONITORING` are history
+only; a new `MONITOR` decision is a 400.
+
+Event Alerts (agent token, event-alert-service):
+
+| Method | Path | Behaviour |
+|---|---|---|
+| GET | `/api/alerts/events/{eventId}/report/review` | The original sections, the agent's saved edit, the agent's approval of the latest version and its approved text. |
+| PUT | `/api/alerts/events/{eventId}/report/edit` | `{expectedReportVersion, sections}`. Rewords the summary, key facts, why it matters, what to monitor and uncertainty; headline, sources and citations are fixed. Checked again; a failure is a 422 with `code`, `section` and `index`. 409 if the version changed or the report is approved. |
+| DELETE | `/api/alerts/events/{eventId}/report/edit` | Throws the unapproved edit away. |
+| POST | `/api/alerts/events/{eventId}/report/approval` | `{expectedReportVersion}`. Final. Needs a client in Plan client briefing. Valid for 7 days; an expired approval can be renewed. |
+| GET | `/api/alerts/events/{eventId}/report/pdf?version=` | One report as the server-rendered PDF; agents and admins; no approval needed ("Not yet reviewed"). |
+| GET | `/api/alerts/sent-out` | The Sent out view: the agent's clients, or everyone's for an admin. |
+
+engagement-service, with the agent's token:
+
+| Method | Path | Behaviour |
+|---|---|---|
+| GET | `/api/alerts/approved-reports?clientRef=` | The caller's approved, unsent reports in Plan client briefing (the News Alert entry). |
+| POST | `/api/alerts/approved-reports/package` | `{eventId, alertIds}`. Per alert `OK` (approval ID, client, issuer, headline, news date, valid until, final hash, summary line) or `NOT_AUTHORISED`, `NOT_INFORMED`, `NOT_APPROVED`. |
+| POST | `/api/alerts/approved-reports/pdf` | `{approvalIds, preparedBy}`. The combined PDF (base64), its hash, each report's final hash and each company's start page. No client data; byte-for-byte the same for the same approvals. |
+| POST | `/api/alerts/send-check` | `{alertIds}`. Per alert `OK` with the current approval and hash, or `NOT_AUTHORISED`, `NOT_INFORMED`, `NOT_APPROVED`, `EXPIRED`. |
+| POST | `/api/alerts/sent-out` | `{alertIds, draftId, sesMessageId}`. Moves the clients to `SENT_OUT`. Idempotent. |
+
+Follow-up Emails (engagement-service, `docs/api/engagement-api.yaml`): `POST /api/engagement/drafts/news`
+makes or extends each chosen client's News Alert draft from the package; `DELETE .../drafts/{id}/reports/{alertId}`,
+`POST .../summary/rebuild`, `GET .../pdf`, `POST .../news-status` and `GET .../drafts/news/open-alerts`. Sending a
+News Alert draft runs the send-check, fetches the combined PDF, sends one email with it attached, then calls
+sent-out. The alert follow-up of ADR-0068 (`GET /api/alerts/{alertId}` for `clientRef`) is removed, and so is
+ADR-0084's `report/delivery-package` and `alert-report-deliveries`.

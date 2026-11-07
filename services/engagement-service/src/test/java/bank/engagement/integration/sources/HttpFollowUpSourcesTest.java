@@ -39,7 +39,7 @@ class HttpFollowUpSourcesTest {
         server = MockRestServiceServer.bindTo(builder).build();
         sources = new HttpFollowUpSources(builder.build(), new CurrentUser(), new ObjectMapper(),
                 new FollowUpSourceProperties("https://alb.example.test/", "https://alb.example.test",
-                        Duration.ofSeconds(5)));
+                        Duration.ofSeconds(5), null));
         Jwt jwt = Jwt.withTokenValue("agent-token").header("alg", "none").subject("agent-sub").build();
         SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
     }
@@ -69,19 +69,6 @@ class HttpFollowUpSourcesTest {
     }
 
     @Test
-    void readsAnAlertsClientReference() {
-        server.expect(requestTo(ALERT_URL))
-                .andExpect(header("Authorization", "Bearer agent-token"))
-                .andRespond(withSuccess("""
-                        {"id":"%s","clientRef":"%s","instrumentId":"SGX:D05","headline":"Synthetic headline",
-                         "status":"NEW","score":0.82,"createdAt":"2026-10-30T02:00:00Z","version":1}
-                        """.formatted(ALERT, CLIENT), MediaType.APPLICATION_JSON));
-
-        assertThat(sources.alertClient(ALERT)).isEqualTo(CLIENT);
-        server.verify();
-    }
-
-    @Test
     void aTaskIdIsEncodedIntoThePath() {
         server.expect(requestTo("https://alb.example.test/api/relationship-health/tasks/task%2F1"))
                 .andRespond(withStatus(HttpStatus.NOT_FOUND));
@@ -93,8 +80,8 @@ class HttpFollowUpSourcesTest {
     void refusalsAreNotFound() {
         for (HttpStatus status : new HttpStatus[] {HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN, HttpStatus.NOT_FOUND}) {
             server.reset();
-            server.expect(requestTo(ALERT_URL)).andRespond(withStatus(status));
-            assertThatThrownBy(() -> sources.alertClient(ALERT)).isInstanceOf(SourceNotFoundException.class);
+            server.expect(requestTo(TASK_URL)).andRespond(withStatus(status));
+            assertThatThrownBy(() -> sources.healthTaskClient("task-000001")).isInstanceOf(SourceNotFoundException.class);
         }
     }
 
@@ -109,18 +96,14 @@ class HttpFollowUpSourcesTest {
         assertThatThrownBy(() -> sources.healthTaskClient("task-000001"))
                 .isInstanceOf(SourceUnavailableException.class);
 
-        server.reset();
-        server.expect(requestTo(ALERT_URL)).andRespond(withSuccess("{\"id\":\"x\"}", MediaType.APPLICATION_JSON));
-        assertThatThrownBy(() -> sources.alertClient(ALERT)).isInstanceOf(SourceUnavailableException.class);
     }
 
     @Test
     void noBaseUrlFailsClosed() {
         HttpFollowUpSources unconfigured = new HttpFollowUpSources(RestClient.create(), new CurrentUser(),
-                new ObjectMapper(), new FollowUpSourceProperties("", null, null));
+                new ObjectMapper(), new FollowUpSourceProperties("", null, null, null));
 
         assertThatThrownBy(() -> unconfigured.healthTaskClient("task-000001"))
                 .isInstanceOf(SourceUnavailableException.class);
-        assertThatThrownBy(() -> unconfigured.alertClient(ALERT)).isInstanceOf(SourceUnavailableException.class);
     }
 }

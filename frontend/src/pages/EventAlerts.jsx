@@ -1,26 +1,23 @@
 import AlertWorkspace from '../components/AlertWorkspace.jsx'
-import EventBriefings from '../components/EventBriefings.jsx'
 import SearchSources from '../components/SearchSources.jsx'
+import SentOutList from '../components/SentOutList.jsx'
+import TickerReports from '../components/TickerReports.jsx'
 
-// Agents start from one briefing per event; the per-client list stays available
-// beneath it, then the sites searched for each company. Admins have read-only
-// access to the per-client list and can remove a search site an agent added.
+// Agents review one report per ticker, with the clients it may affect, then see what is searched and when.
+// Admins have read-only access to the per-client alerts and the Sent out view, and can remove a website an agent added.
 function EventAlerts({ readOnly = false }) {
   if (readOnly) {
     return (
       <>
         <AlertWorkspace readOnly />
+        <div className="alerts-page"><SentOutList readOnly /></div>
         <SearchSources readOnly />
       </>
     )
   }
   return (
     <>
-      <EventBriefings />
-      <details className="client-alert-list">
-        <summary>All client alerts</summary>
-        <AlertWorkspace readOnly={false} />
-      </details>
+      <TickerReports />
       <SearchSources />
     </>
   )

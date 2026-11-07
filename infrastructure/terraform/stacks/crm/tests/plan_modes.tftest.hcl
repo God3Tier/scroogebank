@@ -678,6 +678,28 @@ run "test_tooling_enabled" {
   }
 }
 
+run "search_on_add_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(module.event_alert_service.app_environment), "ALERT_SEARCH_ON_ADD_MODE")
+    error_message = "The API does not start the worker unless alert_search_on_add is true."
+  }
+}
+
+run "search_on_add_lets_the_api_start_the_worker" {
+  command = plan
+
+  variables {
+    alert_search_on_add = true
+  }
+
+  assert {
+    condition     = module.event_alert_service.app_environment["ALERT_SEARCH_ON_ADD_MODE"] == "ecs" && module.event_alert_service.app_environment["ALERT_SEARCH_ON_ADD_TASK_DEFINITION"] == "crm-sg-prod-event-alert-worker"
+    error_message = "With alert_search_on_add the API is told to start the worker's task definition through ECS."
+  }
+}
+
 run "mfa_required_without_triggers" {
   command = plan
 

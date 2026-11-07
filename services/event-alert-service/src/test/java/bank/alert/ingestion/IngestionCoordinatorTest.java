@@ -100,6 +100,33 @@ class IngestionCoordinatorTest {
     }
 
     @Test
+    void researchSearchesOnlyTheGivenDomainAndLeavesTheWatermarkAlone() {
+        when(provider.search(any())).thenReturn(List.of());
+        List<InstrumentSearchTerms> catalogue = List.of(new InstrumentSearchTerms("SYN", "Synthetic Issuer",
+                "Synthetic", List.of(), List.of("earnings"), List.of(), List.of("added.example.com")));
+
+        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, catalogue, List.of());
+
+        ArgumentCaptor<PublicSearchRequest> requests = ArgumentCaptor.forClass(PublicSearchRequest.class);
+        verify(provider, times(2)).search(requests.capture());
+        assertThat(requests.getAllValues()).allSatisfy(request ->
+                assertThat(request.approvedDomains()).containsExactly("added.example.com"));
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.SUCCEEDED);
+        verify(finalizer).succeedReplay(any(), any(Integer.class), any());
+        verify(finalizer, never()).succeed(any(), any(), any(), any(), any(Integer.class), any());
+    }
+
+    @Test
+    void researchIsSkippedWhileAnotherRunHoldsTheLock() {
+        when(runLock.tryAcquire()).thenReturn(Optional.empty());
+
+        IngestionOutcome outcome = coordinator.research(NOW.minus(Duration.ofDays(14)), NOW, CATALOGUE, List.of());
+
+        assertThat(outcome.status()).isEqualTo(IngestionStatus.ALREADY_RUNNING);
+        verify(provider, never()).search(any());
+    }
+
+    @Test
     void releasesTheLockAfterASuccessfulRun() {
         when(sourceResults.existsByCanonicalUrlHash(any())).thenReturn(false);
         when(sourceResults.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));

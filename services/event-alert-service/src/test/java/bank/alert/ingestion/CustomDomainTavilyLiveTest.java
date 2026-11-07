@@ -51,7 +51,7 @@ class CustomDomainTavilyLiveTest {
                 new InstrumentSearchTerms("D05", "DBS Group Holdings Ltd", "Financials", List.of("DBS"),
                         List.of("earnings", "results", "profit", "revenue", "guidance", "financial results"),
                         List.of("sgx.com", "dbs.com"), List.of(CUSTOM))),
-                List.of("reuters.com", "cnbc.com", "ft.com"), 4);
+                List.of("reuters.com", "cnbc.com", "ft.com"));
         assertThat(queries).hasSize(2);
 
         for (IssuerSearchQuery query : queries) {

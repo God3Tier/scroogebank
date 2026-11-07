@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import { getEvent as getAlertEvent, listApprovedReports, recordEventAction } from '../api/alertEvents.js'
 import { listClients } from '../api/clients.js'
+import { saveBlob } from '../api/request.js'
 import { Pager } from '../components/ListFooter.jsx'
 import { useArrayPages } from '../components/paging.js'
+import { draftReportApproval, SKIP_REASONS, stalenessText } from '../utils/newsReports.js'
 import {
   createDraft,
+  createNewsDrafts,
   DETAILS_PROMPT,
   discardDraft,
   formatWhen,
   getDraft,
   listDrafts,
   listEvents,
+  previewNewsPdf,
+  PURPOSE_LABELS,
   PURPOSES,
+  rebuildNewsSummary,
+  removeNewsReport,
+  retryNewsStatus,
   sendDraft,
   SINGAPORE,
   SOURCE_REASONS,
@@ -34,8 +43,13 @@ const SHORT_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'sh
 // A holiday's date is a calendar date (YYYY-MM-DD), so it is formatted in UTC.
 const HOLIDAY_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 const wordCount = (text) => (text.trim() ? text.trim().split(/\s+/).length : 0)
-const PURPOSE_LABELS = Object.fromEntries(PURPOSES.map((purpose) => [purpose.value, purpose.label]))
 const PAST_MEETING_DAYS = 92
+// Why a report could not be marked Sent Out after the email went out (it never can be, so there is no retry).
+const UNMARKED_REASONS = {
+  NOT_AUTHORISED: 'the client is no longer yours',
+  INVALID_STATUS: 'the client is not in Plan client briefing',
+}
+const NEWS_DATE = new Intl.DateTimeFormat('en-SG', { day: 'numeric', month: 'short', timeZone: SINGAPORE })
 // engagement-service's largest draft list (docs/api/engagement-api.yaml).
 const DRAFT_LIMIT = 100
 
@@ -89,6 +103,87 @@ function linkedValues(params) {
   return { purpose: purpose.value, clientId: params.get('clientId'), [source]: params.get(source) }
 }
 
+// The News Alert entry (plan 5.5): a client with approved, unsent reports in Plan client briefing, and those reports.
+function NewsEntry({ clients, onCreated }) {
+  const [approved, setApproved] = useState({ loading: true, error: '', items: [] })
+  const [clientRef, setClientRef] = useState('')
+  const [ticked, setTicked] = useState({})
+  const [state, setState] = useState({ saving: false, error: '', message: '' })
+
+  useEffect(() => {
+    let current = true
+    listApprovedReports().then(
+      (items) => { if (current) setApproved({ loading: false, error: '', items }) },
+      () => { if (current) setApproved({ loading: false, error: 'Approved reports cannot be loaded right now.', items: [] }) },
+    )
+    return () => { current = false }
+  }, [])
+
+  const names = Object.fromEntries(clients.map((client) => [client.client_id, `${client.first_name} ${client.last_name}`]))
+  const withReports = [...new Set(approved.items.map((item) => item.clientRef))]
+  const reports = approved.items.filter((item) => item.clientRef === clientRef)
+  const chosen = reports.filter((item) => ticked[item.alertId] !== false)
+
+  async function create() {
+    if (chosen.length === 0) return
+    setState({ saving: true, error: '', message: '' })
+    const byEvent = new Map()
+    chosen.forEach((item) => byEvent.set(item.eventId, [...(byEvent.get(item.eventId) || []), item.alertId]))
+    let first = null
+    const skipped = []
+    try {
+      for (const [eventId, alertIds] of byEvent) {
+        const result = await createNewsDrafts({ eventId, alertIds })
+        first = first || result.drafts[0]?.draftId || null
+        skipped.push(...(result.skipped || []))
+      }
+    } catch (e) {
+      setState({ saving: false, error: e.status === 503 ? 'Event alerts are unavailable. No draft was made.' : e.message || 'The draft could not be made.', message: '' })
+      return
+    }
+    if (!first) {
+      setState({ saving: false, error: `No draft was made: ${skipped.map((s) => SKIP_REASONS[s.reason] || s.reason).join(', ')}.`, message: '' })
+      return
+    }
+    setState({ saving: false, error: '', message: skipped.length ? `${skipped.length} report${skipped.length === 1 ? ' was' : 's were'} not added.` : '' })
+    onCreated({ id: first })
+  }
+
+  return (
+    <div className="draft-generate__full draft-generate__context news-entry">
+      <label><span className="label--required">Client</span>
+        <select value={clientRef} onChange={(e) => { setClientRef(e.target.value); setTicked({}) }}>
+          <option value="">{approved.loading ? 'Loading…' : 'Choose a client with approved reports'}</option>
+          {withReports.map((ref) => <option key={ref} value={ref}>{names[ref] || ref.slice(0, 8)}</option>)}
+        </select>
+      </label>
+      {reports.length > 0 && (
+        <fieldset className="news-entry__reports">
+          <legend>Reports to include</legend>
+          {reports.map((item) => (
+            <label key={item.alertId} className="news-entry__report">
+              <input type="checkbox" checked={ticked[item.alertId] !== false}
+                onChange={(e) => setTicked((t) => ({ ...t, [item.alertId]: e.target.checked }))} />
+              <span><strong>{item.issuer}</strong>: {item.headline}<small>News from {NEWS_DATE.format(new Date(item.newsDate))}{item.edited ? ' · with your edits' : ''}</small></span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <p className="draft-generate__hint">
+        Can&apos;t find the report you wanted? It must be set with a status of &apos;Plan client briefing&apos; and be approved by you.{' '}
+        <a href="/agent/alerts">See all reports</a>
+      </p>
+      {approved.error && <p className="form-error" role="alert">{approved.error}</p>}
+      {state.error && <p className="form-error" role="alert">{state.error}</p>}
+      {state.message && <p className="success-message" role="status">{state.message}</p>}
+      <button type="button" className="draft-generate__submit" onClick={create} disabled={state.saving || chosen.length === 0}>
+        <span className="material-symbols-outlined" aria-hidden="true">attach_file</span>
+        {state.saving ? 'Making draft…' : 'Create draft'}
+      </button>
+    </div>
+  )
+}
+
 function GenerateForm({ clients, now, linked, onCreated }) {
   const [values, setValues] = useState(() => ({
     clientId: '', purpose: 'CHECK_IN', tone: 'FORMAL', eventId: '', healthTaskId: '', alertId: '', ...linked,
@@ -96,9 +191,10 @@ function GenerateForm({ clients, now, linked, onCreated }) {
   const [state, setState] = useState({ saving: false, error: '' })
   const needsMeeting = values.purpose === 'MEETING_FOLLOW_UP'
   const meetings = usePastMeetings(values.clientId, needsMeeting, now)
-  // A follow-up from another feature is offered only for the task or alert it was opened from.
+  // A Client Health follow-up is offered only for the task it was opened from.
   const purposes = PURPOSES.filter((purpose) => !purpose.source || values[purpose.source])
   const source = PURPOSES.find((purpose) => purpose.value === values.purpose)?.source
+  const news = values.purpose === 'NEWS_ALERT'
 
   function setField(name) {
     return (e) => setValues((current) => ({ ...current, [name]: e.target.value, ...(name === 'clientId' ? { eventId: '' } : {}) }))
@@ -106,6 +202,7 @@ function GenerateForm({ clients, now, linked, onCreated }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (news) return
     if (!values.clientId) {
       setState({ saving: false, error: 'Choose a client.' })
       return
@@ -136,25 +233,34 @@ function GenerateForm({ clients, now, linked, onCreated }) {
         <h2>Write a follow-up email</h2>
       </div>
       <div className="draft-generate__fields">
-        <label className="draft-generate__full"><span className="label--required">Client</span>
-          <select value={values.clientId} onChange={setField('clientId')}>
-            <option value="">Choose a client</option>
-            {clients.map((client) => (
-              <option key={client.client_id} value={client.client_id}>{client.first_name} {client.last_name}</option>
-            ))}
-          </select>
-        </label>
         <label><span className="label--required">Purpose</span>
           <select value={values.purpose} onChange={setField('purpose')}>
             {purposes.map((purpose) => <option key={purpose.value} value={purpose.value}>{purpose.label}</option>)}
           </select>
         </label>
-        <label><span className="label--required">Tone</span>
-          <select value={values.tone} onChange={setField('tone')}>
-            <option value="FORMAL">Formal</option>
-            <option value="WARM">Warm</option>
-          </select>
-        </label>
+        {news ? (
+          <label><span>Tone</span>
+            <select value="NONE" disabled aria-describedby="news-tone-note"><option value="NONE">None</option></select>
+            <small id="news-tone-note" className="draft-generate__hint">The text comes from the approved reports.</small>
+          </label>
+        ) : (
+          <label><span className="label--required">Tone</span>
+            <select value={values.tone} onChange={setField('tone')}>
+              <option value="FORMAL">Formal</option>
+              <option value="WARM">Warm</option>
+            </select>
+          </label>
+        )}
+        {news ? <NewsEntry clients={clients} onCreated={onCreated} /> : (
+          <label className="draft-generate__full"><span className="label--required">Client</span>
+            <select value={values.clientId} onChange={setField('clientId')}>
+              <option value="">Choose a client</option>
+              {clients.map((client) => (
+                <option key={client.client_id} value={client.client_id}>{client.first_name} {client.last_name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {needsMeeting && (
           <div className="draft-generate__full draft-generate__context">
             <span className="draft-generate__hint">From your calendar</span>
@@ -170,23 +276,25 @@ function GenerateForm({ clients, now, linked, onCreated }) {
         )}
         {source && (
           <div className="draft-generate__full draft-generate__context">
-            <span className="draft-generate__hint">
-              {source === 'healthTaskId' ? `From Client Health task ${values.healthTaskId}` : 'From an event alert'}
-            </span>
+            <span className="draft-generate__hint">From Client Health task {values.healthTaskId}</span>
             <p className="draft-generate__hint">
               The AI writes a general note. You add the details where it says {DETAILS_PROMPT}.
             </p>
           </div>
         )}
-        <p className="draft-generate__full engagement-info engagement-info--privacy">
-          <span className="material-symbols-outlined" aria-hidden="true">verified_user</span>
-          <span>The AI sees only the purpose, the tone and upcoming public holidays, never the client&apos;s name or details. You review every email before it is sent.</span>
-        </p>
-        {state.error && <p className="form-error draft-generate__full" role="alert">{state.error}</p>}
-        <button type="submit" className="draft-generate__full draft-generate__submit" disabled={state.saving}>
-          <span className="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
-          {state.saving ? 'Writing…' : 'Write draft'}
-        </button>
+        {!news && (
+          <>
+            <p className="draft-generate__full engagement-info engagement-info--privacy">
+              <span className="material-symbols-outlined" aria-hidden="true">verified_user</span>
+              <span>The AI sees only the purpose, the tone and upcoming public holidays, never the client&apos;s name or details. You review every email before it is sent.</span>
+            </p>
+            {state.error && <p className="form-error draft-generate__full" role="alert">{state.error}</p>}
+            <button type="submit" className="draft-generate__full draft-generate__submit" disabled={state.saving}>
+              <span className="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+              {state.saving ? 'Writing…' : 'Write draft'}
+            </button>
+          </>
+        )}
       </div>
     </form>
   )
@@ -195,7 +303,8 @@ function GenerateForm({ clients, now, linked, onCreated }) {
 // The agent edits plain text with the client's and their own names written
 // out; the service turns the names back into placeholders when it saves, so
 // no names are stored (ADR-0056).
-function DraftEditor({ draftId, clientName, onChanged, onClose }) {
+function DraftEditor({ draftId, clientName, now: today, onChanged, onClose }) {
+  const now = today.getTime()
   const [draft, setDraft] = useState(null)
   const [values, setValues] = useState({ subject: '', body: '' })
   const [state, setState] = useState({ busy: false, error: '', message: '' })
@@ -208,7 +317,7 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
     } catch {
       setState({ busy: false, error: 'The draft could not be loaded.', message: '' })
     }
-  }, [draftId])
+  }, [draftId, setValues])
 
   useEffect(() => {
     // The draft is server-owned; fetching it is this panel's external synchronization.
@@ -233,6 +342,62 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   const needsDetails = editable && named && `${values.subject}\n${values.body}`.includes(DETAILS_PROMPT)
   const changed = named && (values.subject !== draft.subject || values.body !== draft.body)
   const badge = STATUS_BADGES[draft.status]
+  const news = draft.purpose === 'NEWS_ALERT' ? draft.news : null
+
+  function showDraft(next) {
+    setDraft(next)
+    setValues({ subject: next.subject ?? '', body: next.body ?? '' })
+  }
+
+  async function handleRemove(report) {
+    if (!window.confirm(`Take the ${report.issuer} report off this email? The client stays in Plan client briefing.`)) return
+    setState({ busy: true, error: '', message: '' })
+    try {
+      const next = await removeNewsReport(draft.id, report.alertId)
+      onChanged()
+      if (next.status === 'DISCARDED') {
+        onClose()
+        return
+      }
+      showDraft(next)
+      setState({ busy: false, error: '', message: `${report.issuer} was taken off.` })
+    } catch (error) {
+      setState({ busy: false, error: error.message || 'The report could not be taken off.', message: '' })
+    }
+  }
+
+  async function handleRebuild(keep) {
+    setState({ busy: true, error: '', message: '' })
+    try {
+      showDraft(await rebuildNewsSummary(draft.id, { keep }))
+      setState({ busy: false, error: '', message: keep ? 'Your text is kept.' : 'The summary was built again from the reports.' })
+      onChanged()
+    } catch (error) {
+      setState({ busy: false, error: error.message || 'The summary could not be rebuilt.', message: '' })
+    }
+  }
+
+  async function handlePreview() {
+    setState({ busy: true, error: '', message: '' })
+    try {
+      const file = await previewNewsPdf(draft.id)
+      const url = URL.createObjectURL(file.blob)
+      if (!window.open(url, '_blank', 'noopener')) saveBlob(file)
+      setState({ busy: false, error: '', message: '' })
+    } catch (error) {
+      setState({ busy: false, error: error.message || 'The PDF could not be made right now.', message: '' })
+    }
+  }
+
+  async function handleRetry() {
+    setState({ busy: true, error: '', message: '' })
+    try {
+      showDraft(await retryNewsStatus(draft.id))
+      setState({ busy: false, error: '', message: 'The clients are now Sent Out.' })
+    } catch (error) {
+      setState({ busy: false, error: error.message || 'The status could not be updated. Try again later.', message: '' })
+    }
+  }
 
   async function handleSave() {
     setState({ busy: true, error: '', message: '' })
@@ -247,7 +412,10 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
   }
 
   async function handleSend() {
-    if (!window.confirm(`Send this email to ${clientName}?`)) return
+    const question = news
+      ? `Send this email to ${clientName} with ${news.reports.length} report${news.reports.length === 1 ? '' : 's'} in the attached PDF?`
+      : `Send this email to ${clientName}?`
+    if (!window.confirm(question)) return
     setState({ busy: true, error: '', message: '' })
     // Unsaved edits are saved first, so the email sent is the one on screen.
     let version = draft.version
@@ -296,7 +464,9 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
           <span className={`material-symbols-outlined draft-editor__source-icon${draft.source === 'AI' ? ' draft-editor__source-icon--ai' : ''}`} aria-hidden="true">
             {draft.source === 'AI' ? 'smart_toy' : 'article'}
           </span>
-          {draft.source === 'AI' ? (
+          {news ? (
+            <span>News Alert: built from the reports you approved</span>
+          ) : draft.source === 'AI' ? (
             <span>AI-generated: review before sending</span>
           ) : (
             <span>Template{draft.sourceReason && SOURCE_REASONS[draft.sourceReason] ? `, because ${SOURCE_REASONS[draft.sourceReason]}` : ''}</span>
@@ -319,7 +489,63 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
           <dd>your work email</dd>
           <dt>Bcc:</dt>
           <dd>you, as your copy</dd>
+          {news && (
+            <>
+              <dt>Purpose:</dt>
+              <dd>News Alert (fixed)</dd>
+              <dt>Tone:</dt>
+              <dd>None (fixed)</dd>
+              <dt>Attached:</dt>
+              <dd>one PDF with {news.reports.length} report{news.reports.length === 1 ? '' : 's'}</dd>
+            </>
+          )}
         </dl>
+        {news && (
+          <section className="news-reports" aria-labelledby="news-reports-heading">
+            <div className="news-reports__head">
+              <h3 id="news-reports-heading">Reports in the PDF</h3>
+              {editable && <button type="button" onClick={handlePreview} disabled={state.busy}>Preview PDF</button>}
+            </div>
+            <ul>
+              {news.reports.map((report) => {
+                const approval = draftReportApproval(report, now)
+                return (
+                  <li key={report.alertId}>
+                    <span><strong>{report.issuer}</strong>: {report.headline}</span>
+                    <small className={approval.stale && editable ? 'staleness staleness--warn' : 'staleness'}>
+                      News from {NEWS_DATE.format(new Date(report.newsDate))}{editable ? ` · ${stalenessText(approval, now)}` : ''}
+                    </small>
+                    {editable && (
+                      <button type="button" className="button--danger" onClick={() => handleRemove(report)} disabled={state.busy}
+                        aria-label={`Remove the ${report.issuer} report`}>Remove</button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+            {editable && news.rebuildSuggested && (
+              <div className="engagement-hint news-reports__rebuild" role="status">
+                <span>The reports on this draft changed. Rebuild summary?</span>
+                <button type="button" onClick={() => handleRebuild(false)} disabled={state.busy}>Rebuild summary</button>
+                <button type="button" onClick={() => handleRebuild(true)} disabled={state.busy}>Keep my text</button>
+              </div>
+            )}
+            {draft.status === 'SENT' && (news.unmarkedReports || []).length > 0 && (
+              <div className="engagement-hint" role="status">
+                <span>
+                  The email was sent, but these reports could not be marked Sent Out:{' '}
+                  {news.unmarkedReports.map((report) => `${report.issuer} (${UNMARKED_REASONS[report.reason] || report.reason})`).join('; ')}.
+                </span>
+              </div>
+            )}
+            {draft.status === 'SENT' && !news.sentOutSynced && (
+              <div className="engagement-hint" role="status">
+                <span>The email was sent, but the clients could not be marked Sent Out.</span>
+                <button type="button" onClick={handleRetry} disabled={state.busy}>Retry status update</button>
+              </div>
+            )}
+          </section>
+        )}
         {closed ? (
           <p className="engagement-hint" role="status">
             <span className="material-symbols-outlined" aria-hidden="true">inventory_2</span>
@@ -350,6 +576,14 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
             <span>The client&apos;s or your name could not be looked up, so this email cannot be shown right now. Try again later.</span>
           </p>
         )}
+        {news && editable && (
+          <div className="news-fixed" aria-label="Added when the email is sent">
+            <p className="news-fixed__label">Added from the PDF. Updates automatically.</p>
+            <pre>{news.guide}</pre>
+            <p className="news-fixed__label">Added to every email. You cannot change this.</p>
+            <pre>{news.fixedText}</pre>
+          </div>
+        )}
         {needsDetails && (
           <p className="engagement-hint" role="status">
             <span className="material-symbols-outlined" aria-hidden="true">edit_note</span>
@@ -364,7 +598,7 @@ function DraftEditor({ draftId, clientName, onChanged, onClose }) {
         )}
         {draft.status === 'SENT' && <p className="success-message" role="status">Sent {formatWhen(draft.sentAt)}.</p>}
         {state.error && <p className="form-error" role="alert">{state.error}</p>}
-        {state.message && draft.status !== 'SENT' && <p className="success-message" role="status">{state.message}</p>}
+        {state.message && (draft.status !== 'SENT' || news) && <p className="success-message" role="status">{state.message}</p>}
       </div>
       <div className="draft-editor__actions">
         {editable && (
@@ -401,9 +635,23 @@ function AgentDrafts({ now: fixedNow }) {
   const [clients, setClients] = useState([])
   const [status, setStatus] = useState('DRAFT')
   const [list, setList] = useState({ loading: true, error: '', drafts: [] })
-  const [openId, setOpenId] = useState(null)
+  // "Notify selected clients of news" on Event Alerts opens the client's News Alert draft here.
+  const [openId, setOpenId] = useState(() => searchParams.get('openDraft'))
+  const [notice] = useState(() => {
+    const made = Number(searchParams.get('news') || 0)
+    const skipped = Number(searchParams.get('skipped') || 0)
+    if (!made) return ''
+    return `${made} News Alert draft${made === 1 ? ' was' : 's were'} made or updated.${skipped ? ` ${skipped} report${skipped === 1 ? ' was' : 's were'} not added.` : ''}`
+  })
   const [version, setVersion] = useState(0)
+  const [picked, setPicked] = useState({})
+  const [bulk, setBulk] = useState({ busy: false, error: '', message: '', failed: {} })
   const pages = useArrayPages(list.drafts)
+
+  useEffect(() => {
+    // The link has done its job; a reload should not reopen it.
+    if (searchParams.get('openDraft')) setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     let current = true
@@ -431,6 +679,62 @@ function AgentDrafts({ now: fixedNow }) {
   const nameOf = (clientId) => names[clientId] || 'your client'
 
   const open = list.drafts.find((draft) => draft.id === openId)
+  const deletable = status === 'DRAFT' ? list.drafts.filter((draft) => draft.status === 'DRAFT') : []
+  const pickedIds = deletable.filter((draft) => picked[draft.id]).map((draft) => draft.id)
+  const allPicked = deletable.length > 0 && pickedIds.length === deletable.length
+
+  // Deletes the selected drafts one by one; a failure is reported against its row and the others still go (plan 5.7).
+  async function deleteSelected() {
+    if (pickedIds.length === 0) return
+    if (!window.confirm(`Delete ${pickedIds.length} selected draft${pickedIds.length === 1 ? '' : 's'}?`)) return
+    setBulk({ busy: true, error: '', message: '', failed: {} })
+    const failed = {}
+    const deletedNews = []
+    for (const id of pickedIds) {
+      const draft = list.drafts.find((d) => d.id === id)
+      try {
+        await discardDraft(id)
+        if (draft?.purpose === 'NEWS_ALERT') deletedNews.push(draft)
+      } catch {
+        failed[id] = 'Could not be deleted'
+      }
+    }
+    setPicked({})
+    if (openId && pickedIds.includes(openId) && !failed[openId]) setOpenId(null)
+    let message = `${pickedIds.length - Object.keys(failed).length} deleted.`
+    if (deletedNews.length > 0 && window.confirm(
+      `Do you also want to dismiss the related reports for the ${deletedNews.length} deleted draft${deletedNews.length === 1 ? '' : 's'}?`)) {
+      message += ` ${await dismissReports(deletedNews)}`
+    }
+    setBulk({ busy: false, error: Object.keys(failed).length ? 'Some drafts could not be deleted.' : '', message, failed })
+    setVersion((v) => v + 1)
+  }
+
+  // Sets every report on the deleted news drafts to Dismiss for that client. Sent Out or Dismissed ones are skipped.
+  async function dismissReports(drafts) {
+    const byEvent = new Map()
+    drafts.flatMap((draft) => draft.news?.reports || []).forEach((report) => {
+      byEvent.set(report.eventId, [...(byEvent.get(report.eventId) || []), report.alertId])
+    })
+    let dismissed = 0
+    let skipped = 0
+    for (const [eventId, alertIds] of byEvent) {
+      try {
+        const event = await getAlertEvent(eventId)
+        const members = event.clients
+          .filter((client) => alertIds.includes(client.alertId) && (client.status === 'NEW' || client.status === 'INFORMED'))
+          .map((client) => ({ alertId: client.alertId, expectedVersion: client.version }))
+        skipped += alertIds.length - members.length
+        if (members.length > 0) {
+          const result = await recordEventAction(eventId, { decision: 'DISMISS', note: null, members })
+          dismissed += result.members.filter((member) => member.outcome === 'APPLIED').length
+        }
+      } catch {
+        skipped += alertIds.length
+      }
+    }
+    return `${dismissed} report${dismissed === 1 ? '' : 's'} dismissed.${skipped ? ` ${skipped} skipped because they were already Sent Out or Dismissed, or could not be checked.` : ''}`
+  }
 
   return (
     <div className="page engagement-page">
@@ -438,6 +742,7 @@ function AgentDrafts({ now: fixedNow }) {
         <h1>Follow-up Emails</h1>
         <p className="page-subtitle">AI helps write the first draft. Nothing is sent until you press Send.</p>
       </header>
+      {notice && <p className="success-message" role="status">{notice}</p>}
 
       <div className="drafts-layout">
         <div className="drafts-layout__side">
@@ -460,12 +765,29 @@ function AgentDrafts({ now: fixedNow }) {
               </div>
             </div>
             {list.error && <p className="form-error drafts-list__note" role="alert">{list.error}</p>}
+            {deletable.length > 0 && (
+              <div className="drafts-bulk">
+                <label>
+                  <input type="checkbox" checked={allPicked} aria-label="Select all drafts"
+                    onChange={(e) => setPicked(e.target.checked ? Object.fromEntries(deletable.map((d) => [d.id, true])) : {})} />
+                  {' '}Select all
+                </label>
+                {pickedIds.length > 0 && (
+                  <button type="button" className="button--danger" onClick={deleteSelected} disabled={bulk.busy}>
+                    {bulk.busy ? 'Deleting…' : `Delete selected (${pickedIds.length})`}
+                  </button>
+                )}
+              </div>
+            )}
+            {bulk.error && <p className="form-error drafts-list__note" role="alert">{bulk.error}</p>}
+            {bulk.message && <p className="success-message drafts-list__note" role="status">{bulk.message}</p>}
             {!list.loading && !list.error && list.drafts.length === 0 && <p className="empty-note drafts-list__note">Nothing here yet.</p>}
             {list.drafts.length > 0 && (
               <div className="table-wrap">
                 <table className="data-table drafts-table">
                   <thead>
                     <tr>
+                      {status === 'DRAFT' && <th scope="col"><span className="visually-hidden">Select</span></th>}
                       <th scope="col">Client</th>
                       <th scope="col">Purpose</th>
                       <th scope="col">Source</th>
@@ -476,13 +798,21 @@ function AgentDrafts({ now: fixedNow }) {
                   <tbody>
                     {pages.rows.map((draft) => (
                       <tr key={draft.id} className={draft.id === openId ? 'drafts-table__row--open' : undefined}>
+                        {status === 'DRAFT' && (
+                          <td>
+                            <input type="checkbox" aria-label={`Select the draft to ${nameOf(draft.clientId)}`}
+                              disabled={draft.status !== 'DRAFT'} checked={Boolean(picked[draft.id])}
+                              onChange={(e) => setPicked((p) => ({ ...p, [draft.id]: e.target.checked }))} />
+                          </td>
+                        )}
                         <td>
                           <span className="drafts-table__client">{nameOf(draft.clientId)}</span>
+                          {bulk.failed[draft.id] && <span className="form-error"> {bulk.failed[draft.id]}</span>}
                         </td>
                         <td className="drafts-table__purpose">{PURPOSE_LABELS[draft.purpose] ?? draft.purpose}</td>
                         <td>
-                          <span className={`source-badge${draft.source === 'AI' ? ' source-badge--ai' : ''}`}>
-                            {draft.source === 'AI' ? 'AI' : 'Template'}
+                          <span className={`source-badge${draft.source === 'AI' ? ' source-badge--ai' : ''}${draft.source === 'NEWS' ? ' source-badge--news' : ''}`}>
+                            {draft.source === 'AI' ? 'AI' : draft.source === 'NEWS' ? 'News' : 'Template'}
                           </span>
                         </td>
                         <td><time dateTime={draft.updatedAt ?? draft.createdAt} title={formatWhen(draft.updatedAt ?? draft.createdAt)}>{SHORT_DATE.format(new Date(draft.updatedAt ?? draft.createdAt))}</time></td>
@@ -514,6 +844,7 @@ function AgentDrafts({ now: fixedNow }) {
               key={openId}
               draftId={openId}
               clientName={nameOf(open?.clientId)}
+              now={now}
               onChanged={() => setVersion((v) => v + 1)}
               onClose={() => setOpenId(null)}
             />

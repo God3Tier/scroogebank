@@ -449,6 +449,222 @@ paths:
               schema: { $ref: '#/components/schemas/Problem' }
         '503': { $ref: '#/components/responses/ClientServiceUnavailable' }
 
+  /api/engagement/drafts/news:
+    post:
+      tags: [drafts]
+      summary: Put an approved report on each chosen client's News Alert draft (news-alert-drafts plan 5.5)
+      description: |
+        "Notify selected clients of news" on Event Alerts. engagement-service reads each chosen
+        client's approved report from event-alert-service with the caller's token
+        (`POST /api/alerts/approved-reports/package`), which releases a client only when the alert
+        is still the agent's, in Plan client briefing and covered by a valid approval. Each client's
+        report goes on that client's open News Alert draft, or a new one. A report already on an open
+        or sent draft is not added again, and a draft holds at most
+        `engagement.news.max-reports-per-email` reports (default 30). No model is called: the subject
+        and summary are built from the reports. Purpose `NEWS_ALERT`, tone `NONE` and source `NEWS`
+        are fixed.
+      operationId: createNewsDrafts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, alertIds]
+              properties:
+                eventId: { type: string, format: uuid }
+                alertIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The drafts made or extended, and the reports skipped with the reason.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [drafts, skipped]
+                properties:
+                  drafts:
+                    type: array
+                    items:
+                      type: object
+                      required: [draftId, clientId, created, reportCount, added]
+                      properties:
+                        draftId: { type: string, format: uuid }
+                        clientId: { type: string, format: uuid }
+                        created: { type: boolean }
+                        reportCount: { type: integer }
+                        added: { type: array, items: { type: string, format: uuid } }
+                  skipped:
+                    type: array
+                    items:
+                      type: object
+                      required: [alertId, reason]
+                      properties:
+                        alertId: { type: string, format: uuid }
+                        clientRef: { type: string, nullable: true }
+                        reason:
+                          type: string
+                          enum: [NOT_AUTHORISED, NOT_INFORMED, NOT_APPROVED, ALREADY_ON_DRAFT, DRAFT_BEING_SENT, LIMIT_REACHED]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: The event is not one of the caller's.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: event-alert-service is unavailable. No draft was made.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/engagement/drafts/news/open-alerts:
+    get:
+      tags: [drafts]
+      summary: The alerts on the caller's open News Alert drafts
+      description: Event Alerts uses this to stop a client on an open news draft being dismissed there (plan 5.1).
+      operationId: listOpenNewsAlerts
+      responses:
+        '200':
+          description: Alert IDs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alertIds]
+                properties:
+                  alertIds: { type: array, items: { type: string, format: uuid } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/engagement/drafts/{draftId}/reports/{alertId}:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+      - name: alertId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [drafts]
+      summary: Take one report off an open News Alert draft
+      description: |
+        The client stays in Plan client briefing. The summary and subject are rebuilt unless the
+        agent changed them (then `news.rebuildSuggested` is true). Removing the last report discards
+        the draft. Audited as `DRAFT_REPORT_REMOVED`.
+      operationId: removeNewsReport
+      responses:
+        '200':
+          description: The draft as it is now.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft or report for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/engagement/drafts/{draftId}/summary/rebuild:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [drafts]
+      summary: Build a News Alert draft's summary and subject again from its reports (no model call)
+      description: With `keep=true` the agent's text is kept and the "Rebuild summary?" prompt is cleared.
+      operationId: rebuildNewsSummary
+      parameters:
+        - name: keep
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: The draft as it is now.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/engagement/drafts/{draftId}/pdf:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    get:
+      tags: [drafts]
+      summary: Preview a News Alert draft's combined PDF
+      description: |
+        Exactly the file the client gets: rendered by event-alert-service from the draft's
+        approvals (`POST /api/alerts/approved-reports/pdf`), with the caller's name on the cover.
+        It holds no client data and is not stored.
+      operationId: previewNewsPdf
+      responses:
+        '200':
+          description: The PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503':
+          description: event-alert-service could not make the PDF.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/engagement/drafts/{draftId}/news-status:
+    parameters:
+      - $ref: '#/components/parameters/DraftId'
+    post:
+      tags: [drafts]
+      summary: Retry moving a sent News Alert draft's clients to Sent Out
+      description: |
+        After SES accepted the email, engagement-service calls `POST /api/alerts/sent-out`. If that
+        failed, the draft is still `SENT` with `news.sentOutSynced` false, and this retries it. The
+        call is idempotent and never sends the email again.
+      operationId: retryNewsStatus
+      responses:
+        '200':
+          description: The draft with `news.sentOutSynced` true.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: No such draft for the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503':
+          description: event-alert-service is unavailable; try again later.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
   /api/engagement/preferences:
     get:
       tags: [preferences]
@@ -669,14 +885,19 @@ components:
 
     DraftPurpose:
       type: string
-      enum: [CHECK_IN, MEETING_FOLLOW_UP, HOLIDAY_GREETING, PRE_HOLIDAY_REVIEW, HEALTH_CHECK_IN, ALERT_FOLLOW_UP]
+      enum: [CHECK_IN, MEETING_FOLLOW_UP, HOLIDAY_GREETING, PRE_HOLIDAY_REVIEW, HEALTH_CHECK_IN, ALERT_FOLLOW_UP, NEWS_ALERT]
       description: |
-        `HEALTH_CHECK_IN` and `ALERT_FOLLOW_UP` are follow-ups from Client
-        Health and event alerts (ADR-0068).
+        `HEALTH_CHECK_IN` is a follow-up from Client Health (ADR-0068).
+        `NEWS_ALERT` is a client's email with the reports the agent approved on
+        Event Alerts; it is made only by `POST /api/engagement/drafts/news`,
+        never through `POST /api/engagement/drafts` (400). `ALERT_FOLLOW_UP`
+        appears only on older drafts: it was replaced by `NEWS_ALERT`, and a
+        new one is refused (400).
 
     DraftTone:
       type: string
-      enum: [FORMAL, WARM]
+      enum: [FORMAL, WARM, NONE]
+      description: '`NONE` only with `NEWS_ALERT`, whose text comes from the reports.'
 
     DraftStatus:
       type: string
@@ -710,8 +931,8 @@ components:
           format: uuid
           nullable: true
           description: |
-            The caller's alert about this client, whose `clientRef` is this
-            client's ID. Required for `ALERT_FOLLOW_UP` and allowed only there.
+            Not accepted any more: alert follow-ups were replaced by News Alert
+            drafts (400).
 
     DraftUpdate:
       type: object
@@ -777,7 +998,8 @@ components:
             {{agent_name}}
         source:
           type: string
-          enum: [AI, TEMPLATE]
+          enum: [AI, TEMPLATE, NEWS]
+          description: '`NEWS` for a News Alert draft, built from approved reports with no model call.'
         sourceReason:
           type: string
           nullable: true
@@ -796,6 +1018,51 @@ components:
         version: { type: integer }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        news:
+          anyOf:
+            - $ref: '#/components/schemas/NewsDraft'
+            - $ref: '#/components/schemas/NullValue'
+          description: A News Alert draft's reports and what is added at send time; null for other drafts.
+
+    NewsDraft:
+      type: object
+      required: [reports, summaryEdited, rebuildSuggested, guide, fixedText, sentOutSynced, maxReports, unmarkedReports]
+      properties:
+        reports:
+          type: array
+          items:
+            type: object
+            required: [alertId, approvalId, eventId, issuer, headline, newsDate, validUntil]
+            properties:
+              alertId: { type: string, format: uuid }
+              approvalId: { type: string, format: uuid }
+              eventId: { type: string, format: uuid }
+              issuer: { type: string }
+              headline: { type: string }
+              newsDate: { type: string, format: date-time }
+              validUntil: { type: string, format: date-time, description: The approval can be used to send until then. }
+        summaryEdited: { type: boolean, description: The agent changed the summary the service built. }
+        rebuildSuggested: { type: boolean, description: 'The reports changed after the agent edited the summary: offer "Rebuild summary?".' }
+        guide:
+          type: string
+          description: The read-only "Where to find each report" guide. Page numbers are added from the PDF when it is sent.
+        fixedText:
+          type: string
+          description: The portfolio line, disclaimer and relationship manager's details added to every email. The agent cannot change them.
+        sentOutSynced: { type: boolean, description: 'After sending: true when nothing is left to retry (every report is Sent Out, or refused for good and listed in unmarkedReports).' }
+        maxReports: { type: integer }
+        unmarkedReports:
+          type: array
+          description: |
+            Reports that could not be marked Sent Out after sending and never can be (the client was reassigned, or is not in
+            Plan client briefing). They no longer keep the retry alive; the page says which they are.
+          items:
+            type: object
+            required: [alertId, issuer, reason]
+            properties:
+              alertId: { type: string, format: uuid }
+              issuer: { type: string }
+              reason: { type: string, enum: [NOT_AUTHORISED, INVALID_STATUS] }
 
     Preferences:
       type: object

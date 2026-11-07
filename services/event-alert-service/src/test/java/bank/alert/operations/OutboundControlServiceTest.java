@@ -138,4 +138,44 @@ class OutboundControlServiceTest {
         return new OutboundControlService(properties, auditSink,
                 new OperationalMetrics(registry), CLOCK);
     }
+
+    @Test
+    void everySearchIsCountedAgainstTheMonthlyBudget() {
+        OperationalProperties properties = new OperationalProperties(true, true, 1_000, 1_000, 100, 60,
+                new BigDecimal("0.05"), new BigDecimal("0.02"));
+        OutboundControlService controls = service(properties, event -> { });
+
+        assertThat(controls.reserveSearches(2).allowed()).isTrue();
+
+        assertThat(controls.usage().estimatedCostUsd()).isEqualByComparingTo("0.04");
+        assertThat(controls.usage().searchQueries()).isEqualTo(2);
+    }
+
+    @Test
+    void aRunThatTheBudgetCannotCoverSearchesNothingAndLeavesTheControlOn() {
+        OperationalProperties properties = new OperationalProperties(true, true, 1_000, 1_000, 100, 60,
+                new BigDecimal("0.05"), new BigDecimal("0.02"));
+        OutboundControlService controls = service(properties, event -> { });
+        controls.reserveSearches(2);
+
+        ReservationResult refused = controls.reserveSearches(1);
+
+        assertThat(refused.allowed()).isFalse();
+        assertThat(refused.code()).isEqualTo("MONTHLY_BUDGET_REACHED");
+        assertThat(controls.usage().searchQueries()).isEqualTo(2);
+        assertThat(controls.usage().estimatedCostUsd()).isEqualByComparingTo("0.04");
+        assertThat(controls.status(OutboundCapability.INGESTION).enabled()).isTrue();
+    }
+
+    @Test
+    void aWholeRunIsReservedTogetherOrNotAtAll() {
+        OutboundControlService controls = service(new OperationalProperties(true, true, 10, 10, 100, 60,
+                BigDecimal.TEN, new BigDecimal("0.008")), event -> { });
+
+        assertThat(controls.reserveSearches(8).allowed()).isTrue();
+        ReservationResult refused = controls.reserveSearches(4);
+
+        assertThat(refused.code()).isEqualTo("SEARCH_QUOTA_REACHED");
+        assertThat(controls.usage().searchQueries()).isEqualTo(8);
+    }
 }

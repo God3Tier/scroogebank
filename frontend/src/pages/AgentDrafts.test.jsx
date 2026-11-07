@@ -2,11 +2,16 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { getEvent as getAlertEvent, listApprovedReports, recordEventAction } from '../api/alertEvents.js'
 import { listClients } from '../api/clients.js'
-import { createDraft, discardDraft, getDraft, listDrafts, listEvents, sendDraft, updateDraft } from '../api/engagement.js'
+import {
+  createDraft, createNewsDrafts, discardDraft, getDraft, listDrafts, listEvents, rebuildNewsSummary, removeNewsReport,
+  retryNewsStatus, sendDraft, updateDraft,
+} from '../api/engagement.js'
 import AgentDrafts from './AgentDrafts.jsx'
 
 vi.mock('../api/clients.js', () => ({ listClients: vi.fn() }))
+vi.mock('../api/alertEvents.js', () => ({ listApprovedReports: vi.fn(), getEvent: vi.fn(), recordEventAction: vi.fn() }))
 vi.mock('../api/engagement.js', async (importOriginal) => ({
   ...(await importOriginal()),
   listDrafts: vi.fn(),
@@ -16,6 +21,11 @@ vi.mock('../api/engagement.js', async (importOriginal) => ({
   sendDraft: vi.fn(),
   discardDraft: vi.fn(),
   listEvents: vi.fn(),
+  createNewsDrafts: vi.fn(),
+  removeNewsReport: vi.fn(),
+  rebuildNewsSummary: vi.fn(),
+  retryNewsStatus: vi.fn(),
+  previewNewsPdf: vi.fn(),
 }))
 
 const NOW = new Date('2026-10-21T02:00:00Z')
@@ -94,12 +104,13 @@ describe('AgentDrafts', () => {
     expect(getDraft).toHaveBeenCalledWith('draft-1')
   })
 
-  it('offers the follow-ups from Client Health and alerts only from their links', async () => {
+  it('offers the Client Health follow-up only from its link, and News Alert in place of the alert follow-up', async () => {
     renderDrafts()
 
-    const purposes = (await screen.findByLabelText('Purpose')).querySelectorAll('option')
-    expect([...purposes].map((option) => option.value)).not.toContain('HEALTH_CHECK_IN')
-    expect([...purposes].map((option) => option.value)).not.toContain('ALERT_FOLLOW_UP')
+    const purposes = [...(await screen.findByLabelText('Purpose')).querySelectorAll('option')].map((option) => option.value)
+    expect(purposes).not.toContain('HEALTH_CHECK_IN')
+    expect(purposes).not.toContain('ALERT_FOLLOW_UP')
+    expect(purposes).toContain('NEWS_ALERT')
   })
 
   it('fills the form in from a Client Health task and sends the task with the request', async () => {
@@ -290,5 +301,134 @@ describe('AgentDrafts', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
 
     await vi.waitFor(() => expect(discardDraft).toHaveBeenCalledWith('draft-1'))
+  })
+
+  describe('News Alert drafts', () => {
+    const REPORTS = [
+      { alertId: 'a1', approvalId: 'p1', eventId: 'e1', issuer: 'Apple Inc', headline: 'Apple reports record revenue',
+        newsDate: '2026-10-19T01:00:00Z', validUntil: '2026-10-26T01:00:00Z' },
+      { alertId: 'a2', approvalId: 'p2', eventId: 'e2', issuer: 'Shell plc', headline: 'Shell raises its dividend',
+        newsDate: '2026-10-19T01:00:00Z', validUntil: '2026-10-26T01:00:00Z' },
+    ]
+    const NEWS_DRAFT = {
+      ...AI_DRAFT, id: 'news-1', purpose: 'NEWS_ALERT', tone: 'NONE', source: 'NEWS', holiday: null,
+      subject: 'Your portfolio update: Apple Inc and Shell plc',
+      body: 'Dear Synthetic,\n\nHere is an update on 2 companies in your portfolio.',
+      news: { reports: REPORTS, summaryEdited: false, rebuildSuggested: false, maxReports: 30, sentOutSynced: false,
+        unmarkedReports: [], guide: 'Where to find each report in the attached PDF (the attached PDF):', fixedText: 'Your portfolio has exposure to Apple Inc and Shell plc' },
+    }
+
+    it('opens the draft made by Notify, with its reports, the guide and the fixed text', async () => {
+      listDrafts.mockResolvedValue([NEWS_DRAFT])
+      getDraft.mockResolvedValue(NEWS_DRAFT)
+      renderDrafts('/agent/drafts?openDraft=news-1&news=1')
+
+      expect(await screen.findByText('1 News Alert draft was made or updated.')).toBeInTheDocument()
+      expect(await screen.findByText('News Alert: built from the reports you approved')).toBeInTheDocument()
+      expect(screen.getByText('News Alert (fixed)')).toBeInTheDocument()
+      expect(screen.getByText('None (fixed)')).toBeInTheDocument()
+      expect(screen.getByText('Apple reports record revenue', { exact: false })).toBeInTheDocument()
+      expect(screen.getByText('Added to every email. You cannot change this.')).toBeInTheDocument()
+      expect(screen.getByText('Added from the PDF. Updates automatically.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Preview PDF' })).toBeInTheDocument()
+      expect(screen.getAllByText(/can be sent for 5 more days/)).toHaveLength(2)
+    })
+
+    it('takes a report off and offers to rebuild a summary the agent changed', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      getDraft.mockResolvedValue({ ...NEWS_DRAFT, news: { ...NEWS_DRAFT.news, rebuildSuggested: true, summaryEdited: true } })
+      listDrafts.mockResolvedValue([NEWS_DRAFT])
+      removeNewsReport.mockResolvedValue({ ...NEWS_DRAFT, news: { ...NEWS_DRAFT.news, reports: [REPORTS[0]] } })
+      rebuildNewsSummary.mockResolvedValue(NEWS_DRAFT)
+      renderDrafts('/agent/drafts?openDraft=news-1')
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Rebuild summary' }))
+      await vi.waitFor(() => expect(rebuildNewsSummary).toHaveBeenCalledWith('news-1', { keep: false }))
+      expect(await screen.findByText('The summary was built again from the reports.')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove the Shell plc report' }))
+      await vi.waitFor(() => expect(removeNewsReport).toHaveBeenCalledWith('news-1', 'a2'))
+      expect(await screen.findByText('Shell plc was taken off.')).toBeInTheDocument()
+    })
+
+    it('offers to retry the status update after a send whose Sent Out call failed', async () => {
+      const sent = { ...NEWS_DRAFT, status: 'SENT', subject: null, body: null, sentAt: '2026-10-21T03:00:00Z' }
+      listDrafts.mockResolvedValue([sent])
+      getDraft.mockResolvedValue(sent)
+      retryNewsStatus.mockResolvedValue({ ...sent, news: { ...sent.news, sentOutSynced: true } })
+      renderDrafts('/agent/drafts?openDraft=news-1')
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry status update' }))
+
+      await vi.waitFor(() => expect(retryNewsStatus).toHaveBeenCalledWith('news-1'))
+      expect(await screen.findByText('The clients are now Sent Out.')).toBeInTheDocument()
+    })
+
+    it('lists reports that could not be marked Sent Out and offers no retry for them', async () => {
+      const sent = { ...NEWS_DRAFT, status: 'SENT', subject: null, body: null, sentAt: '2026-10-21T03:00:00Z',
+        news: { ...NEWS_DRAFT.news, sentOutSynced: true,
+          unmarkedReports: [{ alertId: 'a1', issuer: 'Apple Inc', reason: 'NOT_AUTHORISED' }] } }
+      listDrafts.mockResolvedValue([sent])
+      getDraft.mockResolvedValue(sent)
+      renderDrafts('/agent/drafts?openDraft=news-1')
+
+      expect(await screen.findByText(/these reports could not be marked Sent Out: Apple Inc \(the client is no longer yours\)/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry status update' })).not.toBeInTheDocument()
+    })
+
+    it('makes a News Alert draft from a client and the approved reports chosen on this page', async () => {
+      listDrafts.mockResolvedValue([])
+      listApprovedReports.mockResolvedValue([
+        { alertId: 'a1', clientRef: 'client-1', eventId: 'e1', approvalId: 'p1', issuer: 'Apple Inc', headline: 'Apple reports',
+          newsDate: '2026-10-19T01:00:00Z', edited: false },
+        { alertId: 'a2', clientRef: 'client-1', eventId: 'e2', approvalId: 'p2', issuer: 'Shell plc', headline: 'Shell raises',
+          newsDate: '2026-10-19T01:00:00Z', edited: true },
+      ])
+      createNewsDrafts.mockResolvedValue({ drafts: [{ draftId: 'news-1', clientId: 'client-1', created: true, reportCount: 1, added: ['a1'] }], skipped: [] })
+      getDraft.mockResolvedValue(NEWS_DRAFT)
+      renderDrafts()
+
+      fireEvent.change(await screen.findByLabelText('Purpose'), { target: { value: 'NEWS_ALERT' } })
+      expect(screen.getByText(/It must be set with a status of 'Plan client briefing' and be approved by you/)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'See all reports' })).toHaveAttribute('href', '/agent/alerts')
+      fireEvent.change(await screen.findByLabelText('Client'), { target: { value: 'client-1' } })
+      fireEvent.click(await screen.findByRole('checkbox', { name: /Shell plc/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Create draft' }))
+
+      await vi.waitFor(() => expect(createNewsDrafts).toHaveBeenCalledWith({ eventId: 'e1', alertIds: ['a1'] }))
+      expect(createNewsDrafts).toHaveBeenCalledTimes(1)
+    })
+
+    async function deleteBoth(dismiss) {
+      vi.spyOn(window, 'confirm').mockImplementation((question) => (question.startsWith('Do you also want') ? dismiss : true))
+      listDrafts.mockResolvedValue([NEWS_DRAFT, AI_DRAFT])
+      discardDraft.mockResolvedValue(null)
+      renderDrafts()
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all drafts' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Delete selected (2)' }))
+      await vi.waitFor(() => expect(discardDraft).toHaveBeenCalledTimes(2))
+    }
+
+    it('deletes several drafts and, on Yes, dismisses the reports of the news ones', async () => {
+      getAlertEvent.mockImplementation(async (eventId) => ({
+        clients: eventId === 'e1' ? [{ alertId: 'a1', status: 'INFORMED', version: 3 }] : [{ alertId: 'a2', status: 'SENT_OUT', version: 4 }],
+      }))
+      recordEventAction.mockResolvedValue({ members: [{ alertId: 'a1', outcome: 'APPLIED' }] })
+      await deleteBoth(true)
+
+      expect(window.confirm).toHaveBeenCalledWith('Do you also want to dismiss the related reports for the 1 deleted draft?')
+      await vi.waitFor(() => expect(recordEventAction).toHaveBeenCalledWith('e1', {
+        decision: 'DISMISS', note: null, members: [{ alertId: 'a1', expectedVersion: 3 }],
+      }))
+      expect(recordEventAction).toHaveBeenCalledTimes(1)
+      expect(await screen.findByText(/2 deleted\. 1 report dismissed\. 1 skipped/)).toBeInTheDocument()
+    })
+
+    it('deletes several drafts and, on No, leaves the clients in Plan client briefing', async () => {
+      await deleteBoth(false)
+
+      expect(await screen.findByText('2 deleted.')).toBeInTheDocument()
+      expect(recordEventAction).not.toHaveBeenCalled()
+    })
   })
 })

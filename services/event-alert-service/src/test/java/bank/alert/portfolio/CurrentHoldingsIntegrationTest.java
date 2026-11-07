@@ -395,14 +395,14 @@ class CurrentHoldingsIntegrationTest {
                         List.of(new ActionMember(selected.alertId(), selected.version())))))
                 .hasMessageContaining("idempotency");
 
-        // the unselected client is untouched; a second action on the finished one is recorded, not applied
+        // the unselected client is untouched; recording the same status again on the chosen one changes nothing
         assertThat(alerts.findById(unselected.alertId()).orElseThrow().getStatus()).isEqualTo(AlertStatus.NEW);
         ActionResult second = eventActions.apply(eventId, "agent-a", "action-key-0002", UUID.randomUUID(),
-                new ActionRequest(AlertDecisionType.MONITOR, null, List.of(
+                new ActionRequest(AlertDecisionType.INFORM_CLIENT, null, List.of(
                         new ActionMember(selected.alertId(), selected.version() + 1),
                         new ActionMember(unselected.alertId(), 99))));
         assertThat(second.members()).extracting(m -> m.outcome())
-                .containsExactlyInAnyOrder(MemberOutcome.INVALID_TRANSITION, MemberOutcome.STALE_VERSION);
+                .containsExactlyInAnyOrder(MemberOutcome.APPLIED, MemberOutcome.STALE_VERSION);
         assertThat(alerts.findById(unselected.alertId()).orElseThrow().getStatus()).isEqualTo(AlertStatus.NEW);
 
         // another agent can neither see the event nor act on its clients
@@ -508,7 +508,8 @@ class CurrentHoldingsIntegrationTest {
     void eventPagesUseAStableCursorAndRecheckCurrentOwnership() {
         put(ACCOUNT_1, "key-82500001", 0, position("SYN-SGX-001", "90", "1.0"), position("SYN-SGX-002", "10", "1.0"));
         generate("agent-a", 2);
-        generate("agent-a", 3);
+        reportEveryEvent(); // a ticker's event is closed by its report, so the next article starts a new one
+        generate("agent-a", 3, EventType.CREDIT);
 
         var first = eventQueries.list("agent-a", false, null, 1);
         assertThat(first.items()).hasSize(1);
@@ -625,6 +626,22 @@ class CurrentHoldingsIntegrationTest {
     }
 
     private AlertGenerationOutcome generate(String agent, int sourceNumber) {
+        return generate(agent, sourceNumber, EventType.EARNINGS);
+    }
+
+    /** An empty report for every event that has none: the pass that writes a ticker's report is what closes its event (ADR-0084). */
+    private void reportEveryEvent() {
+        jdbc.update("""
+                INSERT INTO event_report (id, public_event_id, version, schema_version, report, source_ids, model_version,
+                                          prompt_version, ai_generated, created_at, expires_at)
+                SELECT gen_random_uuid(), pe.id, 1, 'alert-client-report-v2', '{}'::jsonb, '[]'::jsonb, 'fixture', 'fixture',
+                       TRUE, now(), now() + interval '90 days'
+                  FROM public_event pe WHERE NOT EXISTS (SELECT 1 FROM event_report r WHERE r.public_event_id = pe.id)
+                """);
+    }
+
+    /** The type does not decide the event any more: one ticker's open event takes every article (ADR-0084). */
+    private AlertGenerationOutcome generate(String agent, int sourceNumber, EventType eventType) {
         jdbc.update("""
                 INSERT INTO search_run (id, window_from, window_to, status, created_at)
                 VALUES ('70000000-0000-4000-8000-000000000001', '2026-10-29T20:00:00Z', '2026-10-30T00:00:00Z',
@@ -637,7 +654,7 @@ class CurrentHoldingsIntegrationTest {
                 Instant.parse("2026-10-30T00:00:00Z"), NOW, "d".repeat(64), Instant.parse("2027-01-28T00:00:00Z"));
         if (sourceResults.findById(source.getId()).isEmpty()) sourceResults.saveAndFlush(source);
         EventClassification classification = new EventClassification("Synthetic earnings event",
-                EventType.EARNINGS, EventDirection.POSITIVE, new BigDecimal("0.90"),
+                eventType, EventDirection.POSITIVE, new BigDecimal("0.90"),
                 List.of(new AffectedInstrument("SYN-SGX-001", source.getId().toString())),
                 List.of(source.getId().toString()), "fixture-model-v1", "prompt-v1", NOW);
         AgentBriefing briefing = new AgentBriefing("Synthetic issuer update",

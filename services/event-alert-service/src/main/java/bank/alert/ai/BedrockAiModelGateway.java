@@ -99,6 +99,9 @@ public final class BedrockAiModelGateway implements AiModelGateway {
             if (response.output() == null || response.output().message() == null) {
                 throw failure("EMPTY_MODEL_RESPONSE", true);
             }
+            // A reply stopped by the token limit is cut off mid-answer. Refuse it here, with a clear reason, rather than
+            // hand on incomplete output (the Anthropic gateway does the same).
+            if ("max_tokens".equals(response.stopReasonAsString())) throw failure("MODEL_OUTPUT_TRUNCATED", false);
             ToolUseBlock toolUse = response.output().message().content().stream()
                     .map(ContentBlock::toolUse)
                     .filter(Objects::nonNull)

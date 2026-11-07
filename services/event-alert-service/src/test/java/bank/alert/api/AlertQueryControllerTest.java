@@ -94,7 +94,7 @@ class AlertQueryControllerTest {
     @Test
     void agentCanReadAssignedAlertDetail() throws Exception {
         AlertDetailResponse detail = new AlertDetailResponse(
-                ALERT_ID, "syn-client-001", "SYN-SGX-001", "Synthetic event",
+                ALERT_ID, java.util.UUID.fromString("10000000-0000-4000-8000-000000000001"), "syn-client-001", "SYN-SGX-001", "Synthetic event",
                 AlertStatus.NEW, new BigDecimal("72.50"),
                 Instant.parse("2026-09-27T00:01:00Z"), 0L,
                 new ExposureResponse(

@@ -49,16 +49,6 @@ public class HttpFollowUpSources implements FollowUpSources {
         return task.clientId();
     }
 
-    @Override
-    public String alertClient(UUID alertId) {
-        Alert alert = read(properties.alertsBaseUrl(), "/api/alerts/{alertId}", alertId, Alert.class,
-                "event-alert-service");
-        if (alert.clientRef() == null || alert.clientRef().isBlank()) {
-            throw new SourceUnavailableException("event-alert-service returned no client");
-        }
-        return alert.clientRef();
-    }
-
     private <T> T read(String baseUrl, String path, Object id, Class<T> type, String service) {
         if (!StringUtils.hasText(baseUrl)) {
             throw new SourceUnavailableException(service + " base URL is not configured");
@@ -101,7 +91,4 @@ public class HttpFollowUpSources implements FollowUpSources {
     }
 
     /** The one field read from an alert; its headline, holdings and briefing are ignored. */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record Alert(String clientRef) {
-    }
 }

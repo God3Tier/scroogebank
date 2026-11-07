@@ -50,10 +50,16 @@ public class OutboundControlService {
         if (disabled.isPresent()) {
             return denied(OutboundCapability.INGESTION, disabled.get().name(), remainingSearches());
         }
+        // The whole run must fit in the month's budget as well as its quota, or nothing is searched (ADR-0084).
+        BigDecimal runCost = properties.estimatedSearchCostUsd().multiply(BigDecimal.valueOf(requested));
+        if (usage().estimatedCostUsd().add(runCost).compareTo(properties.monthlyBudgetUsd()) > 0) {
+            return denied(OutboundCapability.INGESTION, ControlReason.MONTHLY_BUDGET_REACHED.name(), remainingSearches());
+        }
         if (!store.reserveSearches(currentMonth(), requested, properties.monthlySearchQuota())) {
             disableInternal(OutboundCapability.INGESTION, ControlReason.SEARCH_QUOTA_REACHED);
             return denied(OutboundCapability.INGESTION, "SEARCH_QUOTA_REACHED", remainingSearches());
         }
+        if (runCost.signum() > 0) recordEstimatedCost(runCost);
         updateUsageMetrics();
         metrics.reservation(OutboundCapability.INGESTION, "ALLOWED");
         return ReservationResult.allowed(remainingSearches());

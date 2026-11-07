@@ -25,6 +25,7 @@ import java.util.UUID;
 public class DraftController {
 
     private final DraftService drafts;
+    private final NewsDraftService news;
     private final CurrentUser currentUser;
 
     @GetMapping
@@ -58,6 +59,57 @@ public class DraftController {
     public ResponseEntity<Void> discard(@PathVariable UUID draftId) {
         drafts.discard(currentUser.subject(), draftId);
         return ResponseEntity.noContent().build();
+    }
+
+    public record NewsRequest(@jakarta.validation.constraints.NotNull UUID eventId,
+            @jakarta.validation.constraints.NotEmpty @jakarta.validation.constraints.Size(max = 200)
+            List<@jakarta.validation.constraints.NotNull UUID> alertIds) {
+    }
+
+    public record OpenAlerts(List<UUID> alertIds) {
+    }
+
+    /** "Notify selected clients of news": the approved report goes on each chosen client's News Alert draft. */
+    @PostMapping("/news")
+    public NewsDraftService.CreateResult createNews(@Valid @RequestBody NewsRequest request) {
+        return news.create(currentUser.subject(), request.eventId(), request.alertIds());
+    }
+
+    /** The alerts on the agent's open News Alert drafts, so Event Alerts can stop them being dismissed there. */
+    @GetMapping("/news/open-alerts")
+    public OpenAlerts openAlerts() {
+        return new OpenAlerts(news.openAlerts(currentUser.subject()));
+    }
+
+    @DeleteMapping("/{draftId}/reports/{alertId}")
+    public DraftView removeReport(@PathVariable UUID draftId, @PathVariable UUID alertId) {
+        news.removeReport(currentUser.subject(), draftId, alertId);
+        return drafts.news(currentUser.subject(), draftId);
+    }
+
+    /** Builds the summary again from the reports, or with {@code keep=true} keeps the agent's text. No model call. */
+    @PostMapping("/{draftId}/summary/rebuild")
+    public DraftView rebuildSummary(@PathVariable UUID draftId, @RequestParam(defaultValue = "false") boolean keep) {
+        news.rebuild(currentUser.subject(), draftId, keep);
+        return drafts.news(currentUser.subject(), draftId);
+    }
+
+    /** "Preview PDF": exactly the file the client would get. */
+    @GetMapping(value = "/{draftId}/pdf", produces = org.springframework.http.MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> previewPdf(@PathVariable UUID draftId) {
+        var pdf = news.preview(currentUser.subject(), draftId);
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        org.springframework.http.ContentDisposition.inline().filename(pdf.fileName()).build().toString())
+                .contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+                .body(pdf.bytes());
+    }
+
+    /** "Retry status update": moves the clients of a sent News Alert draft to Sent Out. */
+    @PostMapping("/{draftId}/news-status")
+    public DraftView retryNewsStatus(@PathVariable UUID draftId) {
+        news.retrySentOut(currentUser.subject(), draftId);
+        return drafts.news(currentUser.subject(), draftId);
     }
 
     @PostMapping("/{draftId}/send")

@@ -28,7 +28,7 @@ public record IngestionProperties(
                 ? "tavily" : provider.strip().toLowerCase(Locale.ROOT);
         overlap = overlap == null ? Duration.ofMinutes(5) : overlap;
         initialLookback = initialLookback == null ? Duration.ofHours(4) : initialLookback;
-        maxQueriesPerRun = maxQueriesPerRun <= 0 ? 4 : Math.min(maxQueriesPerRun, 4);
+        maxQueriesPerRun = maxQueriesPerRun <= 0 ? 1_000 : Math.min(maxQueriesPerRun, 1_000); // a sanity ceiling, not a cap (ADR-0084)
         maxResultsPerQuery = maxResultsPerQuery <= 0 ? 10 : Math.min(maxResultsPerQuery, 10);
         maxAttempts = maxAttempts <= 0 ? 3 : Math.min(maxAttempts, 3);
         retention = retention == null ? Duration.ofDays(90) : retention;

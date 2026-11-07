@@ -15,14 +15,18 @@ import lombok.experimental.UtilityClass;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Properties;
 
 /**
- * Builds the raw MIME message SES sends (ADR-0053 decision 6). An invite is
- * {@code multipart/mixed}: a {@code multipart/alternative} of plain text, HTML
- * and {@code text/calendar}, plus the same calendar as {@code invite.ics}
- * (ADR-0052 decision 3). Any other message is the alternative alone.
+ * Builds the raw MIME message SES sends (ADR-0053 decision 6). A message with
+ * attachments is {@code multipart/mixed}: a {@code multipart/alternative} of
+ * plain text and HTML (and {@code text/calendar} for an invite), then each
+ * file: an invite's {@code invite.ics} (ADR-0052 decision 3), or a News Alert's
+ * report PDF (news-alert-drafts plan 5.6). Any other message is the
+ * alternative alone.
  */
 @UtilityClass
 public final class MimeMessageFactory {
@@ -44,22 +48,33 @@ public final class MimeMessageFactory {
             alternative.addBodyPart(textPart(mail.textBody(), "plain"));
             alternative.addBodyPart(textPart(mail.htmlBody(), "html"));
 
-            if (mail.calendar() == null) {
-                message.setContent(alternative);
-            } else {
+            List<MimeBodyPart> attachments = new ArrayList<>();
+            if (mail.calendar() != null) {
                 byte[] ics = mail.calendar().icsText().getBytes(StandardCharsets.UTF_8);
                 alternative.addBodyPart(dataPart(ics,
                         "text/calendar; charset=UTF-8; method=" + mail.calendar().method()));
+                MimeBodyPart invite = dataPart(ics, "application/ics; name=\"invite.ics\"");
+                invite.setFileName("invite.ics");
+                invite.setDisposition(Part.ATTACHMENT);
+                attachments.add(invite);
+            }
+            for (OutgoingMail.Attachment file : mail.attachments()) {
+                MimeBodyPart part = dataPart(file.content(), file.contentType() + "; name=\"" + file.fileName() + "\"");
+                part.setFileName(file.fileName());
+                part.setDisposition(Part.ATTACHMENT);
+                attachments.add(part);
+            }
 
+            if (attachments.isEmpty()) {
+                message.setContent(alternative);
+            } else {
                 MimeBodyPart body = new MimeBodyPart();
                 body.setContent(alternative);
-                MimeBodyPart attachment = dataPart(ics, "application/ics; name=\"invite.ics\"");
-                attachment.setFileName("invite.ics");
-                attachment.setDisposition(Part.ATTACHMENT);
-
                 MimeMultipart mixed = new MimeMultipart("mixed");
                 mixed.addBodyPart(body);
-                mixed.addBodyPart(attachment);
+                for (MimeBodyPart attachment : attachments) {
+                    mixed.addBodyPart(attachment);
+                }
                 message.setContent(mixed);
             }
             message.saveChanges();

@@ -24,6 +24,7 @@ public record UserResponse(
         String email,
         Role role,
         boolean enabled,
+        boolean deletable,
         Instant createdAt,
         Instant updatedAt
 ) {
@@ -36,6 +37,7 @@ public record UserResponse(
                 user.getEmail(),
                 user.getRole(),
                 user.isEnabled(),
+                user.isDeletable(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );

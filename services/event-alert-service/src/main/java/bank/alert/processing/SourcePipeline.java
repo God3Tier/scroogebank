@@ -4,6 +4,7 @@ import bank.alert.config.AiProperties;
 import bank.alert.config.PipelineProperties;
 import bank.alert.domain.Instrument;
 import bank.alert.domain.SourceResult;
+import bank.alert.report.EventReportService;
 import bank.alert.matching.InstrumentMatch;
 import bank.alert.matching.InstrumentMatcher;
 import bank.alert.repository.InstrumentRepository;
@@ -36,6 +37,7 @@ import java.util.Set;
 public class SourcePipeline {
 
     private static final Logger log = LoggerFactory.getLogger(SourcePipeline.class);
+    private static final int MAX_REPORTS_PER_PASS = 20;
 
     /** Reasons that mean "not now", not "no": the source is tried again on a later run. */
     static final Set<String> DEFERRED_REASONS = Set.of(
@@ -49,10 +51,19 @@ public class SourcePipeline {
     private final AiProperties ai;
     private final PipelineProperties properties;
     private final Clock clock;
+    private final EventReportService reports;
 
     public SourcePipeline(SourceResultRepository sources, InstrumentRepository instruments,
             InstrumentMatcher matcher, SourceResultProcessor processor, AiProperties ai,
             PipelineProperties properties, Clock clock) {
+        this(sources, instruments, matcher, processor, ai, properties, clock, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SourcePipeline(SourceResultRepository sources, InstrumentRepository instruments,
+            InstrumentMatcher matcher, SourceResultProcessor processor, AiProperties ai,
+            PipelineProperties properties, Clock clock, EventReportService reports) {
+        this.reports = reports;
         this.sources = sources;
         this.instruments = instruments;
         this.matcher = matcher;
@@ -110,7 +121,19 @@ public class SourcePipeline {
                     : "NO_HOLDERS".equals(outcome.reasonCode()) ? "NO_HOLDERS" : "NO_ALERTS", now);
             processed++;
         }
+        writeDueReports();
         return new PipelineSummary(examined, noMatch, processed, created, deferred, errors, null);
+    }
+
+    /** One client report per event that now has an alert of 60 or more, or a new set of sources (ADR-0084). */
+    private void writeDueReports() {
+        if (reports == null) return;
+        try {
+            int written = reports.refresh(MAX_REPORTS_PER_PASS);
+            if (written > 0) log.info("pipeline reports written={}", written);
+        } catch (RuntimeException failure) {
+            log.warn("pipeline reports failed error_code={}", failure.getClass().getSimpleName());
+        }
     }
 
     private void finish(SourceResult source, String outcome, Instant at) {

@@ -95,3 +95,28 @@ fixture-only foreign key from `holding_snapshot.client_ref` to
 `holding_snapshot` and every alert are untouched; legacy detail keeps its original
 grouping (client, source version, valuation time), new detail uses the snapshot
 group. CRM IDs are references checked through the directory, never foreign keys.
+
+`V12__event_reports.sql` (ADR-0084) is additive. It adds `public_event_source` (every source linked to an event,
+backfilled from `public_event`), `event_report` (one versioned report per event, with the source IDs the model saw,
+model and prompt versions, and an expiry; existing briefings are copied in as `briefing-v1-legacy` version 1) and
+`event_report_attempt` (failed generation attempts). The `briefing` table is kept for rollback. V13 is skipped on
+purpose: the search-on-add branch uses V14 and V15.
+
+`V17__news_alert_approvals.sql` (ADR-0085) turns open `MONITORING` alerts into `NEW` and allows `SENT_OUT`. It adds
+`event_report.summary_sentence` and `summary_model` (the worker's optional one-sentence summary), `report_edit` (one
+agent's unapproved edit of one report version), `approved_report` (the frozen text the client receives, the original
+and final hashes and `valid_until`; the text is cleared once every client on it is Sent Out or 14 days after it
+expired) and `alert_sent_out` (which email took a client to Sent Out).
+
+`V18__seed_anthropic_instrument.sql` adds the Anthropic company (`PRIV-ANTHROPIC`, a private company searched by name) if it is not
+there, so every environment, including a fresh one after teardown, has it. Shell and Apple come from V8.
+
+Engagement service `V3__news_draft_reports.sql` (ADR-0086) replaces the never-deployed `V3__alert_report_deliveries.sql`.
+It changes `email_drafts` constraints only (purpose `NEWS_ALERT`, tone `NONE`, source `NEWS`, all three together) and
+adds `email_draft_reports` (the approved reports on a news draft; a partial unique index keeps a client's report on
+at most one open or sent draft) and `email_draft_news` (the built summary's hash and whether Sent Out was recorded).
+Client addresses are never stored; the report summary lines are cleared when the draft is sent or discarded.
+
+Engagement service `V4__one_open_news_draft_per_client.sql` adds a partial unique index on `email_drafts (owner_agent_sub, client_id)`
+where the purpose is `NEWS_ALERT` and the status is `DRAFT` or `SENDING` (one open news draft per client), and
+`email_draft_news.sent_out_unmarked` (the alerts refused for good after a send, with the reason).

@@ -72,6 +72,37 @@ data "aws_iam_policy_document" "send_audit" {
   }
 }
 
+# The API starts the alert worker's task when an agent adds a search domain (ADR-0080). Only that
+# task definition, in this cluster, and only its own two roles may be handed to it. The worker's
+# family and role names follow the ecs-service module ("<family>-task" and "<family>-exec"), so
+# they are known here without reading the alert-worker stack, which is applied after this one.
+data "aws_iam_policy_document" "start_alert_worker" {
+  statement {
+    sid       = "StartAlertWorker"
+    actions   = ["ecs:RunTask"]
+    resources = ["arn:${data.aws_partition.current.partition}:ecs:${local.region}:${local.account_id}:task-definition/${local.name}-event-alert-worker:*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = [aws_ecs_cluster.this.arn]
+    }
+  }
+
+  statement {
+    sid     = "PassAlertWorkerRoles"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${local.account_id}:role/${local.name}-event-alert-worker-task",
+      "arn:${data.aws_partition.current.partition}:iam::${local.account_id}:role/${local.name}-event-alert-worker-exec",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
 data "aws_iam_policy_document" "client_health_metrics" {
   statement {
     sid       = "PublishClientHealthMetrics"
@@ -644,6 +675,16 @@ module "transaction_service" {
 # Ingestion and the model stay switched off.
 
 locals {
+  # What the API needs to start the worker once for an agent's new domain (ADR-0080). The worker runs in
+  # this cluster, in the same subnets and security group as the API, under the family named here.
+  alert_search_on_add_environment = var.alert_search_on_add ? {
+    ALERT_SEARCH_ON_ADD_MODE            = "ecs"
+    ALERT_SEARCH_ON_ADD_CLUSTER         = aws_ecs_cluster.this.name
+    ALERT_SEARCH_ON_ADD_TASK_DEFINITION = "${local.name}-event-alert-worker"
+    ALERT_SEARCH_ON_ADD_SUBNETS         = join(",", local.app_subnet_ids)
+    ALERT_SEARCH_ON_ADD_SECURITY_GROUP  = local.sg["alerts"]
+  } : {}
+
   # Holdings source for the API and the worker (ADR-0066). The worker reads the same
   # values from alerts_worker_inputs, so the two cannot disagree. The directory is
   # reached through the internal ALB over HTTPS with the alert-directory app client;
@@ -702,14 +743,17 @@ module "event_alert_service" {
     ALERT_INGESTION_ENABLED       = "false"
     ALERT_AI_ENABLED              = "false"
     SPRING_FLYWAY_ENABLED         = "false" # db-migrate applies its migrations
-  })
+  }, local.alert_search_on_add_environment)
   secrets = merge(local.alert_holdings_secrets, {
     EVENT_ALERT_DB_USERNAME = "${local.app_login_secret["event_alert_service"]}:username::"
     EVENT_ALERT_DB_PASSWORD = "${local.app_login_secret["event_alert_service"]}:password::"
   })
   # The master secret is for db-migrate only.
-  secret_arns        = concat([local.app_login_secret["event_alert_service"], local.db_master_secret["alerts"]], local.alert_holdings_secret_arns)
-  task_role_policies = { service = data.aws_iam_policy_document.send_audit.json }
+  secret_arns = concat([local.app_login_secret["event_alert_service"], local.db_master_secret["alerts"]], local.alert_holdings_secret_arns)
+  task_role_policies = merge(
+    { service = data.aws_iam_policy_document.send_audit.json },
+    var.alert_search_on_add ? { search_on_add = data.aws_iam_policy_document.start_alert_worker.json } : {},
+  )
   tls = {
     mode            = "java"
     ca_pem          = local.ca_pem
