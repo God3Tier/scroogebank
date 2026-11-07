@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { getClient } from '../api/clients.js'
 import { searchNow } from '../api/searchSources.js'
@@ -10,6 +10,9 @@ import { problemText, searchText } from './searchSourcesText.js'
 
 const number = new Intl.NumberFormat('en-SG', { maximumFractionDigits: 4 })
 const money = new Intl.NumberFormat('en-SG', { maximumFractionDigits: 0 })
+
+// Holders are shown five at a time, with a search box, once a company has more than five.
+const HOLDERS_PER_PAGE = 5
 
 function shortId(id) {
   return String(id).slice(0, 8)
@@ -54,6 +57,18 @@ function Company({ company, admin, clientNames, agentNames, tickers }) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [find, setFind] = useState('')
+  const [page, setPage] = useState(0)
+  const paged = company.holders.length > HOLDERS_PER_PAGE
+  const nameOf = (holder) => clientNames[holder.clientId] || `Client ${shortId(holder.clientId)}`
+  const matching = useMemo(() => {
+    const needle = find.trim().toLowerCase()
+    if (!paged || !needle) return company.holders
+    return company.holders.filter((holder) => (clientNames[holder.clientId] || `Client ${shortId(holder.clientId)}`).toLowerCase().includes(needle))
+  }, [company.holders, clientNames, find, paged])
+  const pages = Math.max(1, Math.ceil(matching.length / HOLDERS_PER_PAGE))
+  const current = Math.min(page, pages - 1)
+  const shown = paged ? matching.slice(current * HOLDERS_PER_PAGE, (current + 1) * HOLDERS_PER_PAGE) : company.holders
 
   async function search() {
     if (busy) return
@@ -77,6 +92,16 @@ function Company({ company, admin, clientNames, agentNames, tickers }) {
         {company.officialDomains.length === 0 ? <span className="muted">none</span>
           : company.officialDomains.map((site) => <span key={site} className="source-chip">{site}</span>)}
       </p>
+      {paged && (
+        <div className="clients-search">
+          <label>
+            <span>Search clients</span>
+            <input type="search" value={find} placeholder="Type a client name" aria-label={`Search the clients holding ${company.issuerName}`}
+              onChange={(e) => { setFind(e.target.value); setPage(0) }} />
+          </label>
+          <span role="status" className="clients-search__count">{matching.length} of {company.holders.length} clients</span>
+        </div>
+      )}
       <table className="holders-table">
         <caption className="visually-hidden">Clients holding {company.issuerName}</caption>
         <thead>
@@ -89,17 +114,27 @@ function Company({ company, admin, clientNames, agentNames, tickers }) {
           </tr>
         </thead>
         <tbody>
-          {company.holders.map((holder) => (
+          {shown.map((holder) => (
             <tr key={`${holder.accountId}`}>
-              <td>{clientNames[holder.clientId] || `Client ${shortId(holder.clientId)}`}</td>
+              <td>{nameOf(holder)}</td>
               <td className="num">{number.format(holder.sharePercent)}%</td>
               <td className="num">{number.format(holder.quantity)}</td>
               <td className="num">{money.format(holder.valueSgd)}</td>
               {admin && <td>{agentNames[holder.ownerAgentSubject] || holder.ownerAgentSubject || '—'}</td>}
             </tr>
           ))}
+          {paged && shown.length === 0 && (
+            <tr><td colSpan={admin ? 5 : 4} className="muted">No client matches &quot;{find.trim()}&quot;.</td></tr>
+          )}
         </tbody>
       </table>
+      {paged && (
+        <nav className="clients-pager" aria-label={`${company.issuerName} client pages`}>
+          <button type="button" disabled={current === 0} onClick={() => setPage(current - 1)}>Previous</button>
+          <span>Page {current + 1} of {pages}</span>
+          <button type="button" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>Next</button>
+        </nav>
+      )}
       {error && <p className="error-text" role="alert">{error}</p>}
       {notice && <p className="holdings-note" role="status">{notice}</p>}
       <div className="source-add">
