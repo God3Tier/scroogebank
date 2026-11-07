@@ -29,4 +29,6 @@ ADR-0084 part 3 sent each approved ticker report to each client straight from Ev
 - Agents can correct a report, and the client receives exactly what was approved, as a document they can keep.
 - New audit events: `alert.report-edited`, `alert.report-approved`, `alert.summary-generated`, `alert.sent-out`.
 - The edit checks are deterministic, not a model: an agent can still write something misleading that passes them. Azeez must accept them before an edited report goes to clients under the bank's name.
+- **Accepted: the block on dismissing a client who is on an open news draft is made by the page only.** event-alert-service cannot see engagement's database, so a direct API call can still dismiss that client. It is safe: the send-check then returns `NOT_INFORMED` and nothing is sent to them. This is the one place "hiding a control is never the only check" does not hold, and it is accepted for that reason.
+- The Edit box is one plain-text box in the page (headings and one item per line); the page turns it back into the sections the API takes, so the API and its checks are unchanged.
 - The API task still makes no model call; the summary sentence runs in the worker, which already has the Bedrock grant.

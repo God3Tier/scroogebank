@@ -11,7 +11,15 @@ Based on: `feat/event-driven-alerts` at `d6573cf`. This version replaces the 202
 - The send makes one server call to build the combined PDF, not one call per report.
 - A staleness warning is shown on approved reports.
 
-**Changes in this revision (review of 2026-11-07)**
+**Changes in the round-2 revision (2026-11-07, testing and Jiawen's review)**
+1. **Edit mode (5.2):** one Edit / Preview toggle turns the report into a single plain-text box in the same place, with no separate form.
+2. **Notify several tickers at once (5.2):** two buttons under the page summary make drafts across all tickers, one for every ready client and one for the ticked clients; the ticks are kept when the agent switches ticker; a hint under the per-ticker Notify explains them; a floating button scrolls back to them. None of them approves or sends anything.
+3. **One open news draft per client (5.5, 7.2):** a unique index and a retry, so two Notify clicks at once cannot make two drafts for a client. A draft that is being sent is not added to.
+4. **A final Sent Out refusal ends the retry (5.6, 10):** a report refused for good after sending is listed as not marked.
+5. **The dismiss block is page-only (8):** accepted, with the reason.
+6. **An old Monitoring status** reads as "Monitoring (old option)".
+
+**Changes in the first revision (review of 2026-11-07)**
 1. The summary is built from **one AI sentence per report**, which the worker writes once and every client then reuses. No model call sees which reports one client holds. This replaces the one model call per draft.
 2. Every send must finish within API Gateway's **30-second** limit (section 11).
 3. The PDF call gets its own timeout, separate from the 5-second limit for other calls between the services.
@@ -75,21 +83,23 @@ Based on: `feat/event-driven-alerts` at `d6573cf`. This version replaces the 202
 
 ### 5.2 Event Alerts page: edit and approve the report (alerts team)
 
-1. **Edit (optional).** "Edit report" opens large text boxes for:
-   - the executive summary
-   - key facts
-   - why it matters
-   - what to monitor
-   - uncertainty
-
-   The headline and sources are shown but cannot be changed. Saving an edit runs the checks in 5.3. Edits belong to this agent only; other agents holding the ticker still see the original.
+1. **Edit (optional).** One toggle in the report bar, **Edit** / **Preview**, changes the report in place. In Edit the report is **one large text box** holding the whole report as plain text, with these headings: EXECUTIVE SUMMARY, KEY FACTS (only if the report has any), WHY IT MATTERS, WHAT TO MONITOR and UNCERTAINTY. The headline and the sources stay on the page as fixed text. There is no separate form and no scrolling to another place.
+   - Items are one per line: numbered for the summary and why it matters, `Label | Value | Context` for key facts, a dash for what to monitor. Citation markers are not shown; each stays with its item by position.
+   - The number of summary sentences, key facts and why-it-matters points is fixed (each is tied to its sources). What to monitor can be 2 to 4 lines.
+   - **Preview** reads the text back. A wrong count, a missing heading or a key fact without three parts is refused in the page with the line named. Otherwise the text is sent to the server, which runs the checks in 5.3 and saves it; a refusal keeps the agent in Edit with the section, item and line named. Approve is disabled while editing.
+   - Edits belong to this agent only; other agents holding the ticker still see the original.
 2. **Approve.** One button, "Approve report for X selected clients", replaces the branch's checkbox and "Send report to X selected clients". Before approving, the page warns: "Approval is final. You cannot edit this report again after approving."
 3. **On approval,** event-alert-service saves an **approved report**: the agent, report ID and version, the final text (edited or not), an `edited` flag, the original and final hashes, and `approved_at`.
 4. **Visible replacement.** The button becomes **"Notify selected clients of news"** in a different style. Above it: "Approved by you at HH:MM" (with "with your edits" when edited). An `aria-live` message announces the change.
-5. **"Notify selected clients of news"** calls `POST /api/engagement/drafts/news` (5.5), then opens Follow-up Emails showing the drafts it made or extended.
+5. **"Notify selected clients of news"** calls `POST /api/engagement/drafts/news` (5.5), then opens that client's draft in Follow-up Emails. Under it a hint reads: "Opens this client's draft in Follow-up Emails. Working through several tickers? Use "Notify all ready clients" at the top of this page to make every draft in one go."
 6. **Approval is final.** It cannot be undone or edited. It stays usable for `alert.reports.approval-valid-for` (default 7 days). After that the page offers "Approve again", which starts from the current report. A newer event on the same ticker is a separate report with its own approval.
 7. **Staleness warning.** Wherever an approved report is shown (Event Alerts and the news draft), the page shows the news date and "Approved N days ago, can be sent for M more days". From day 5 the line is highlighted, and the wording says the same thing as the highlight, so colour is not the only signal.
 8. **Download.** Any report can be downloaded as a PDF before approval, and by admins, through the single-report endpoint (5.4).
+9. **Notify several tickers at once.** The ticked clients are kept by the page, so they survive switching ticker. A panel under the "N need a decision" summary has two buttons, each with a short description, and shows how many clients and reports each covers (from `GET /api/alerts/approved-reports`):
+   - **Notify all ready clients:** makes a draft for every client who is in Plan client briefing and whose report the agent has approved, across all tickers.
+   - **Notify ticked clients:** the same, but only for the ticked clients.
+   Each groups the clients by event, calls `POST /api/engagement/drafts/news` once per event, then opens the Follow-up Emails **list** (no draft is opened) with a notice. **Neither button approves or sends anything**: approval stays final and one ticker at a time.
+10. **Floating helper.** When the panel is scrolled out of view and at least two reports are ready, a small button floats at the bottom right: "Several tickers? Notify them all at once". Its tooltip says "Make drafts for every approved report in one go. Click to jump to the buttons at the top." Clicking scrolls the panel into view, moves focus to it and highlights it briefly (without motion if the browser asks for reduced motion).
 
 ### 5.3 Checks on edited text (alerts team)
 
@@ -133,7 +143,8 @@ A failure returns 422 naming the section and sentence. Nothing is saved until th
 
 **Creating or extending drafts.** `POST /api/engagement/drafts/news` takes `{eventId, alertIds}`. For each client:
 - If the client has an open news draft, this report is added to it.
-- Otherwise a new news draft is made for the client.
+- Otherwise a new news draft is made for the client. A unique index allows one open draft (`DRAFT` or `SENDING`) per client; two clicks at once retry by adding to the first.
+- A client whose draft is being sent is skipped (`DRAFT_BEING_SENT`): its reports were already read for the send.
 - A report already on an open or sent draft for that client is not added again.
 - A client whose draft is at the safety limit is skipped, and the page names them.
 - **No model call happens here.** The summary sentences come with the approval package (7.1), so a "Notify" click for many clients is quick.
@@ -331,6 +342,8 @@ Every endpoint that takes `approvalIds` checks that each approval belongs to the
   - `email_draft_news`, one row per news draft:
     - `draft_id` (primary key)
     - `built_summary_hash`: the hash of the last summary engagement-service built, used to tell whether the agent changed it (5.5)
+    - `sent_out_unmarked`: after sending, the alerts the alerts service refused to mark Sent Out for good, with the reason (`NOT_AUTHORISED` or `INVALID_STATUS`)
+  - Migration `V4__one_open_news_draft_per_client.sql` adds the partial unique index on `email_drafts (owner_agent_sub, client_id)` where the purpose is `NEWS_ALERT` and the status is `DRAFT` or `SENDING`, and the `sent_out_unmarked` column. `SENDING` is included because a failed send sets the draft back to `DRAFT`, which a second draft made meanwhile would break.
 
 **Rules**
 - `NEWS_ALERT` requires `tone = NONE`, `source = NEWS` and at least one report. `NONE` and `NEWS` are refused with any other purpose.
@@ -362,7 +375,7 @@ The uncommitted work on `task/event-driven-alerts/combined-client-report` (inclu
 
 - Every call between the two services uses the agent's own token. Ownership, `INFORMED` and approval are checked again at draft creation, at report add, and at send.
 - Admins: read-only on Event Alerts, including the Sent out tab and single-report PDF download. They cannot edit, approve, draft or send.
-- Hiding a control on the page is never the only check.
+- Hiding a control on the page is never the only check. **One accepted exception:** the block on dismissing a client who is on an open news draft (5.1) is made by the page, because event-alert-service cannot see engagement's database. A direct API call can still dismiss that client. This is safe, since the send-check then returns `NOT_INFORMED` and nothing is sent to that client, and it is recorded as accepted in ADR-0085 and ADR-0086.
 
 ## 9. Audit
 
@@ -391,7 +404,9 @@ The auditor allow-list adds the six new events and drops the four `ALERT_REPORT_
 | event-alert-service down | 503. Nothing created or sent. |
 | No summary sentence for a report (switched off, Bedrock down, failed checks) | That report's line uses its first sentence. Nothing blocks. |
 | The draft is at the safety limit | That client is skipped and named. |
-| Sent Out update fails after SES accepted | Draft `SENT`, with "Retry status update". |
+| Sent Out update fails after SES accepted (the alerts service is unreachable) | Draft `SENT`, with "Retry status update". |
+| A report is refused for good after sending (the client was reassigned, or is not in Plan client briefing) | The draft counts as synced; the page lists the reports that could not be marked and why. No retry is offered for them. |
+| Two Notify clicks at once for one client | One draft; the second adds to it. |
 | Two tabs send the same draft | The existing draft send lease stops the second. |
 
 ## 11. Non-functional requirements, cost and security
@@ -454,6 +469,8 @@ The auditor allow-list adds the six new events and drops the four `ALERT_REPORT_
 - endpoint tests, including requests for other agents' approvals
 
 **Engagement**
+- two parallel Notify calls for one client make one draft; the database refuses a second open draft (`DRAFT` or `SENDING`); a draft being sent is skipped
+- a report refused for good after sending is listed and ends the retry; an unreachable alerts service still offers it
 - `NEWS_ALERT` / `NONE` / `NEWS` validation
 - draft creation:
   - a report is added to the client's existing draft
@@ -473,6 +490,10 @@ The auditor allow-list adds the six new events and drops the four `ALERT_REPORT_
 - the old V3 and `alertreports/` are gone
 
 **Frontend**
+- the Edit / Preview toggle: one text box in place, the text format, the line-numbered errors, and a refused save keeping the agent in Edit
+- the batch panel: all ready clients, ticked clients, the kept ticks, the descriptions, the floating helper and the hint under Notify
+- the unmarked-reports message and no retry for them
+- an old Monitoring status reads as "Monitoring (old option)"
 - two decision options
 - edit and approve, with the final warning
 - the visible button replacement, and the Notify link

@@ -113,3 +113,7 @@ It changes `email_drafts` constraints only (purpose `NEWS_ALERT`, tone `NONE`, s
 adds `email_draft_reports` (the approved reports on a news draft; a partial unique index keeps a client's report on
 at most one open or sent draft) and `email_draft_news` (the built summary's hash and whether Sent Out was recorded).
 Client addresses are never stored; the report summary lines are cleared when the draft is sent or discarded.
+
+Engagement service `V4__one_open_news_draft_per_client.sql` adds a partial unique index on `email_drafts (owner_agent_sub, client_id)`
+where the purpose is `NEWS_ALERT` and the status is `DRAFT` or `SENDING` (one open news draft per client), and
+`email_draft_news.sent_out_unmarked` (the alerts refused for good after a send, with the reason).

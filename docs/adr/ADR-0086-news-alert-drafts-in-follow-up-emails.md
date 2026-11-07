@@ -29,3 +29,7 @@ All client email should leave from one place with one set of rules. Event Alerts
 - One send path, one throttle, one audit trail (`DRAFT_GENERATE`, `EMAIL_SEND` with approval IDs and hashes, `DRAFT_REPORT_REMOVED`).
 - engagement-service attaches files: `OutgoingMail` has a general attachment list and `MimeMessageFactory` builds `multipart/mixed` for any attachment.
 - One Bcc per email means one per client (open question for Neo Jia Wen).
+- **One open draft per client.** A partial unique index (V4) allows one `DRAFT` or `SENDING` News Alert draft per client; two Notify clicks at once retry by adding to the first. A draft being sent is skipped (`DRAFT_BEING_SENT`).
+- **A final Sent Out refusal ends the retry.** After a send, `NOT_AUTHORISED` or `INVALID_STATUS` is final: the report is listed as not marked (`sent_out_unmarked`) and the retry button is no longer offered for it; only an unreachable alerts service is retried.
+- **Accepted: the dismiss block is page-only** (see ADR-0085): a direct API call can still dismiss a client on a draft; the send-check stops the send for them.
+- The batch Notify buttons on Event Alerts call the same `POST /api/engagement/drafts/news` once per event and approve and send nothing.
