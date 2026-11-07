@@ -30,7 +30,9 @@ the agent's clients hold). Two optional extras:
 Clients (--create-clients). Creates the agent's 33 demo clients (DEMO_CLIENTS) when they are missing, so a fresh deployment
 needs no clicking: each is created under the signed-in agent, verified without a document, and given an active SGD investment
 account. A client that already exists (same first and last name) is reused, and one that has an active investment account keeps
-it, so a rerun creates nothing twice. Every client gets a made-up address, first.last@example.test, which cannot receive mail.
+it, so a rerun creates nothing twice. Every client gets a random Singapore mobile number (phone numbers are unique across the
+CRM, so a fixed one would clash with the same client under another agent), tried again with a new one on a 409, and a made-up
+address, first.last@example.test, which cannot receive mail.
 --client-emails A,B,C replaces the addresses of the first clients, in the order of DEMO_CLIENTS, with ones that can receive
 mail (in the SES sandbox, verified ones); give one for every client you will send an email to. Each address must be unused. The agent itself is not created here: an admin creates it
 in Manage Agents (docs/runbooks/deploy-aws.md, "Evaluation accounts"), and it then signs in once.
@@ -47,6 +49,7 @@ shell history. It expires after an hour.
 import argparse
 import json
 import os
+import random
 import sys
 import urllib.error
 import urllib.parse
@@ -86,6 +89,7 @@ OTHER_COMPANIES = [
 CORE_MIXES = [("apple",), ("anthropic",), ("shell",), ("apple", "anthropic"), ("apple", "shell"), ("anthropic", "shell"),
               ("apple", "anthropic", "shell")]
 NEWS_WEBSITES = ["cnbc.com", "finance.yahoo.com", "thenextweb.com", "techspot.com", "adage.com"]
+PHONE_ATTEMPTS = 5  # random phone numbers tried per client before a 409 is put down to the email
 
 
 def positions_for(profile, index):
@@ -137,10 +141,16 @@ def search_now(base_url, token, instrument_id):
     print(f"search {instrument_id}: {body.get('outcome')}; reports appear in about 5 to 7 minutes, refresh the page")
 
 
-def client_body(first, last, email, index):
+def random_phone():
+    """A random Singapore mobile number. Phone numbers are unique across the whole CRM, so a fixed one per client would
+    clash with the same demo client seeded under another agent."""
+    return f"+659{random.randrange(10 ** 7):07d}"
+
+
+def client_body(first, last, email, index, phone=None):
     """A valid demo client: adult, Singapore address, a phone number of its own (a phone number cannot be shared)."""
     return {"first_name": first, "last_name": last, "date_of_birth": "1985-06-15T00:00:00Z", "gender": "Male" if index % 2 == 0 else "Female",
-            "email": email, "phone_number": f"+65910000{index:02d}", "address": f"{10 + index} Demo Street",
+            "email": email, "phone_number": phone or random_phone(), "address": f"{10 + index} Demo Street",
             "city": "Singapore", "state": "Singapore", "country": "Singapore", "postal_code": f"{180000 + index}"}
 
 
@@ -166,9 +176,15 @@ def create_clients(base_url, token, emails, dry_run):
             if dry_run:
                 print(f"would create client {first} {last} <{email}>, verify it and open an active investment account")
                 continue
-            status, body = request(base_url, token, "POST", "/api/clients", client_body(first, last, email, index + 1))
+            # A 409 means the email or the phone number is taken. The phone is random, so try a new one a few times;
+            # a 409 on every try means the email belongs to another client.
+            for _ in range(PHONE_ATTEMPTS):
+                status, body = request(base_url, token, "POST", "/api/clients", client_body(first, last, email, index + 1))
+                if status != 409:
+                    break
             if status == 409:
-                sys.exit(f"create {first} {last}: 409, that email or phone number belongs to another client")
+                sys.exit(f"create {first} {last}: 409 on {PHONE_ATTEMPTS} random phone numbers, so the email {email} "
+                         "most likely belongs to another client; pass another one with --client-emails")
             if status == 401:
                 sys.exit(f"create {first} {last}: 401, the token is missing or expired; copy a new one")
             if status == 403:

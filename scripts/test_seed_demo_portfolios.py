@@ -127,12 +127,43 @@ class CreateClientsTest(unittest.TestCase):
                 seed.create_clients("http://x", "t", ["a@x.com"] * (len(seed.DEMO_CLIENTS) + 1), False)
         self.assertFalse([c for c in calls if c[0] == "POST"])
 
-    def test_every_generated_client_has_its_own_phone_and_a_valid_shape(self):
+    def test_every_generated_client_gets_a_random_singapore_mobile_and_a_valid_shape(self):
         bodies = [seed.client_body(f, l, "e@x.com", i + 1) for i, (f, l) in enumerate(seed.DEMO_CLIENTS)]
-        self.assertEqual(len({b["phone_number"] for b in bodies}), len(seed.DEMO_CLIENTS))
+        self.assertGreater(len({b["phone_number"] for b in bodies}), 1, "the numbers are not all the same")
         for b in bodies:
-            self.assertRegex(b["phone_number"], r"^\+[0-9]{10,15}$")
+            self.assertRegex(b["phone_number"], r"^\+659[0-9]{7}$")
             self.assertRegex(b["postal_code"], r"^[0-9]{6}$")
+
+    def fake_with_taken_phones(self, taken):
+        """The CRM answering 409 to the first `taken` client creations, as when the phone number is already used."""
+        base, calls = self.fake([])
+        phones = []
+
+        def request(basepath, token, method, path, body=None, headers=None):
+            if method == "POST" and path == "/api/clients":
+                phones.append(body["phone_number"])
+                if len(phones) <= taken:
+                    calls.append((method, path))
+                    return 409, {}
+            return base(basepath, token, method, path, body, headers)
+        return request, calls, phones
+
+    def test_a_taken_phone_number_is_retried_with_a_new_one(self):
+        request, calls, phones = self.fake_with_taken_phones(2)
+        with mock.patch.object(seed, "request", side_effect=request), \
+                mock.patch.object(seed, "random_phone", side_effect=[f"+659000000{n}" for n in range(9)] + ["+6591234567"] * 40):
+            seed.create_clients("http://x", "t", self.EMAILS, False)
+        self.assertEqual(phones[:3], ["+6590000000", "+6590000001", "+6590000002"], "a new number on each try")
+        self.assertEqual(sum(c == ("POST", "/api/accounts") for c in calls), len(seed.DEMO_CLIENTS))
+
+    def test_a_409_on_every_try_stops_and_names_the_email(self):
+        request, calls, phones = self.fake_with_taken_phones(seed.PHONE_ATTEMPTS)
+        with mock.patch.object(seed, "request", side_effect=request):
+            with self.assertRaises(SystemExit) as stop:
+                seed.create_clients("http://x", "t", self.EMAILS, False)
+        self.assertEqual(len(phones), seed.PHONE_ATTEMPTS)
+        self.assertIn("a@x.com", str(stop.exception.code))
+        self.assertFalse([c for c in calls if c == ("POST", "/api/accounts")])
 
 
 if __name__ == "__main__":
