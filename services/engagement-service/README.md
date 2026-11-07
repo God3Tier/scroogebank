@@ -68,7 +68,6 @@ ENGAGEMENT_MAIL_PROVIDER=log \
 | `ENGAGEMENT_MAIL_DOMAIN` | The sending domain (the sender address's domain without a custom domain), also the calendar `UID` suffix |
 | `CRM_APP_URL` | The CRM's address, linked from invites and reminders |
 | `ENGAGEMENT_AI_ENABLED` | The kill switch. Default `false`: every draft is a template |
-| `ENGAGEMENT_ALERT_REPORTS_ENABLED` | The rollout kill switch for emailing event reports to clients (ADR-0084). Default `true`. Set `false` and `POST /api/engagement/alert-report-deliveries` answers 503 and nothing is queued or sent |
 | `ENGAGEMENT_HOLIDAY_SYNC_ENABLED` | Add newly published Singapore holidays from data.gov.sg (ADR-0057). Default `false`; `true` in AWS |
 | `BEDROCK_REGION`, `BEDROCK_MODEL_ID` | Default `ap-southeast-1` and `apac.amazon.nova-lite-v1:0` (ADR-0067). A `global.` profile is refused at startup |
 | `ENGAGEMENT_AI_DAILY_DRAFTS_PER_AGENT`, `ENGAGEMENT_AI_MONTHLY_TOKEN_QUOTA` | Caps. Default 20 and 300,000 |
@@ -103,3 +102,13 @@ Docker must be running: the integration tests use one Testcontainers PostgreSQL 
 - Logs and audit events hold IDs only: never titles, descriptions, email bodies or addresses.
 - The model never sees who the client is (ADR-0054 decision 2), nor anything from a Client Health task or an alert (ADR-0068), and a person approves every email.
 - A draft's text is kept only while it is open (ADR-0068 decision 4).
+
+## News Alert drafts (ADR-0086)
+
+A News Alert draft is one client's email with the reports the agent approved on Event Alerts, attached as one combined
+PDF that event-alert-service renders. `POST /api/engagement/drafts/news` makes or extends the drafts; the summary is
+built from the reports with no model call, and the agent may edit it. On send, every report is checked again
+(`/api/alerts/send-check`), the PDF is fetched (`/api/alerts/approved-reports/pdf`, `engagement.sources.pdf-timeout`,
+default 15s) and checked against the approved hashes, the guide to the PDF and the fixed text are added, and the
+clients move to Sent Out (`/api/alerts/sent-out`, retried with `POST /api/engagement/drafts/{id}/news-status`).
+`engagement.news.max-reports-per-email` (default 30) and `engagement.news.summary-lines` (default 10) are the limits.
