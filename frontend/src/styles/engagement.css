@@ -1512,7 +1512,11 @@
 /* News Alert drafts (news-alert-drafts plan 5.5 and 5.7). */
 .news-entry { display: grid; gap: 0.6rem; }
 .news-entry__reports { display: grid; gap: 0.4rem; margin: 0; padding: 0.6rem; border: 1px solid var(--outline-variant); border-radius: var(--radius); }
-.news-entry__report { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.875rem; }
+.draft-generate__fields .news-entry__report { display: flex; flex-direction: row; gap: 0.5rem; align-items: flex-start; font-size: 0.875rem; font-weight: 400; }
+.news-entry__report input[type='checkbox'],
+.drafts-bulk input[type='checkbox'] { flex: none; width: 14px; height: 14px; margin: 2px 0 0; padding: 0; accent-color: var(--secondary); }
+.drafts-bulk label { display: inline-flex; align-items: center; gap: 6px; }
+.drafts-bulk input[type='checkbox'] { margin-top: 0; }
 .news-entry__report small { display: block; color: var(--on-surface-variant); }
 .news-reports { display: grid; gap: 0.5rem; margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); background: var(--surface-low); }
 .news-reports__head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
