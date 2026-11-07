@@ -17,7 +17,7 @@ vi.mock('../api/searchSources.js', () => ({
 vi.mock('../api/clients.js', () => ({ getClient: vi.fn() }))
 vi.mock('../api/users.js', () => ({ listUsers: vi.fn() }))
 vi.mock('../components/AlertWorkspace.jsx', () => ({ default: ({ readOnly }) => <section>Alert workspace {readOnly ? 'read only' : 'editable'}</section> }))
-vi.mock('../components/TickerReports.jsx', () => ({ default: () => <section>Ticker reports</section> }))
+vi.mock('../components/TickerReports.jsx', () => ({ default: ({ readOnly }) => <section>Ticker reports {readOnly ? 'read only' : 'editable'}</section> }))
 
 // Synthetic data only.
 const MINE = { id: 'w1', domain: 'businesstimes.com.sg', addedAt: '2026-11-04T04:00:00Z', addedByYou: true }
@@ -350,7 +350,7 @@ describe('the event alerts page', () => {
     const { container } = render(<MemoryRouter><EventAlerts /></MemoryRouter>)
 
     expect(screen.queryByText('Events that may affect your clients')).not.toBeInTheDocument()
-    expect(screen.getByText('Ticker reports')).toBeInTheDocument()
+    expect(screen.getByText('Ticker reports editable')).toBeInTheDocument()
     expect(container.querySelector('details')).toBeNull()
     expect(await screen.findByText('Search sources')).toBeInTheDocument()
   })
@@ -358,7 +358,7 @@ describe('the event alerts page', () => {
   it('keeps the client alerts open for an admin too, read only', async () => {
     const { container } = render(<MemoryRouter><EventAlerts readOnly /></MemoryRouter>)
 
-    expect(screen.getByText('Alert workspace read only')).toBeInTheDocument()
+    expect(screen.getByText('Ticker reports read only')).toBeInTheDocument()
     expect(container.querySelector('details')).toBeNull()
     expect(await screen.findByText('Search sources')).toBeInTheDocument()
   })

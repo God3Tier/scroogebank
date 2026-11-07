@@ -3,6 +3,7 @@ package bank.alert.api;
 import bank.alert.domain.AlertDecisionType;
 import bank.alert.event.AgentEventActionService;
 import bank.alert.event.AgentEventController;
+import bank.alert.service.AlertNotFoundException;
 import bank.alert.event.AgentEventModels.ActionResult;
 import bank.alert.event.AgentEventModels.EventPage;
 import bank.alert.event.AgentEventQueryService;
@@ -56,9 +57,24 @@ class AgentEventControllerTest {
         mockMvc.perform(get("/api/alerts/events").param("cursor", "opaque-page")
                         .with(user("agent-a").roles("AGENT"))).andExpect(status().isOk());
         verify(queries).list("agent-a", false, false, "opaque-page", 25);
-        mockMvc.perform(get("/api/alerts/events").with(user("admin-1").roles("ADMIN")))
-                .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/alerts/events")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anAdministratorReadsEveryAgentsEventsButCannotAct() throws Exception {
+        when(queries.list(null, false, false, null, 25)).thenReturn(new EventPage(List.of(), null));
+
+        mockMvc.perform(get("/api/alerts/events").with(user("admin-1").roles("ADMIN")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isArray());
+        verify(queries).list(null, false, false, null, 25); // null: not limited to one agent's clients
+        when(queries.detail(EVENT, null)).thenThrow(new AlertNotFoundException());
+        mockMvc.perform(get("/api/alerts/events/{id}", EVENT).with(user("admin-1").roles("ADMIN")))
+                .andExpect(status().isNotFound()); // allowed through to the service, which found nothing: not 403
+        verify(queries).detail(EVENT, null);
+        mockMvc.perform(post("/api/alerts/events/{id}/actions", EVENT).with(user("admin-1").roles("ADMIN"))
+                        .header("Idempotency-Key", "action-key-0001")
+                        .contentType(MediaType.APPLICATION_JSON).content(BODY))
+                .andExpect(status().isForbidden());
     }
 
     @Test

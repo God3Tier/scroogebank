@@ -55,12 +55,19 @@ function problemText(error) {
   return error.message || 'Something went wrong. Try again.'
 }
 
+/** The newest publication date among the report's sources, or null. */
+function newestSourceDate(report) {
+  const dates = (report?.sources || []).map((source) => source.publishedAt).filter(Boolean).sort()
+  return dates.length > 0 ? dates[dates.length - 1] : null
+}
+
 function clientLabel(client, names) {
   return names[client.clientRef] || `${client.clientRef.slice(0, 8)}`
 }
 
 // selected: { alertId: true } for the ticked clients, kept by the page so the ticks survive switching ticker.
-function TickerDetail({ eventId, selected, setSelected, onChanged }) {
+// readOnly (an administrator): the same view, with no ticks, decisions, approval or notifying.
+function TickerDetail({ eventId, selected, setSelected, onChanged, readOnly = false }) {
   const [detail, setDetail] = useState(null)
   const [review, setReview] = useState(null)
   const [error, setError] = useState('')
@@ -93,12 +100,15 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
       },
       (e) => { if (current) setError(problemText(e)) },
     )
-    getReportReview(eventId).then(
-      (next) => { if (current) setReview(next) },
-      () => { if (current) setReview(null) },
-    )
+    // The edits and approvals belong to one agent, so an administrator is shown the report as it was written.
+    if (!readOnly) {
+      getReportReview(eventId).then(
+        (next) => { if (current) setReview(next) },
+        () => { if (current) setReview(null) },
+      )
+    }
     return () => { current = false }
-  }, [eventId, reloadKey])
+  }, [eventId, reloadKey, readOnly])
 
   // Names come from the CRM, in the browser; the alerts service never sees them.
   useEffect(() => {
@@ -196,15 +206,17 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
         <section className="detail-section" aria-labelledby="ticker-report-title" ref={reportPanel} tabIndex={-1}>
           <div className="section-heading">
             <div><Icon name="auto_awesome" /><h3 id="ticker-report-title">Report</h3></div>
-            <span>Review, edit and approve</span>
+            <span>{readOnly ? 'Read only' : 'Review, edit and approve'}</span>
           </div>
           {report ? (
             <>
-              <NewsFreshnessNotice report={report} review={review} />
+              <NewsFreshnessNotice report={report} review={review || { newsDate: newestSourceDate(report) || card.latestAlertAt, approval: null }} />
               <EventReport report={report} eventId={eventId} body={shownBody} label={shownLabel} editor={editor} />
-              <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
-                company={card.issuer || card.ticker}
-                editing={editor.editing} onReviewChanged={() => { reload(); onChanged() }} />
+              {!readOnly && (
+                <ReportReview eventId={eventId} report={report} review={review} clients={clients} selected={selected}
+                  company={card.issuer || card.ticker}
+                  editing={editor.editing} onReviewChanged={() => { reload(); onChanged() }} />
+              )}
             </>
           ) : (
             <div className="inline-empty">
@@ -217,7 +229,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
             <div><Icon name="find_in_page" /><h3 id="ticker-why-title">Why this appeared</h3></div>
           </div>
           <ul className="ticker-why">
-            <li>{clients.length} of your client{clients.length === 1 ? '' : 's'} hold {card.issuer || 'this company'}.</li>
+            <li>{clients.length} {readOnly ? '' : 'of your '}client{clients.length === 1 ? '' : 's'} hold{readOnly && clients.length === 1 ? 's' : ''} {card.issuer || 'this company'}.</li>
             <li>The highest client score is {Number(card.topScore).toFixed(1)} out of 100.</li>
             {severity && <li>{severityText(severity)}</li>}
             <li>The report combines what was newly found for this ticker in the latest search run.</li>
@@ -232,9 +244,9 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
           <span>{open.length} new · {informed.length} in Plan client briefing</span>
         </div>
         <ClientsTable clients={clients} names={names} selected={selected} setSelected={setSelected}
-          selectable={selectable} statusLabels={STATUS_LABELS} clientLabel={clientLabel} />
+          selectable={selectable} statusLabels={STATUS_LABELS} clientLabel={clientLabel} readOnly={readOnly} />
 
-        {clients.length > 0 && (
+        {!readOnly && clients.length > 0 && (
           <form className="decision-section" onSubmit={submitDecision} aria-label="Decide for the selected clients">
             <fieldset className="decision-options">
               <legend>What would you like to do for the selected clients?</legend>
@@ -285,7 +297,7 @@ function TickerDetail({ eventId, selected, setSelected, onChanged }) {
   )
 }
 
-function TickerReports() {
+function TickerReports({ readOnly = false }) {
   const [view, setView] = useState('open')
   const [selected, setSelected] = useState({})
   const [ready, setReady] = useState([])
@@ -318,12 +330,13 @@ function TickerReports() {
 
   // The agent's approved reports for clients in Plan client briefing: what the batch buttons would make drafts for.
   const loadReady = useCallback(async () => {
+    if (readOnly) return
     try {
       setReady(await listApprovedReports())
     } catch {
       setReady([])
     }
-  }, [])
+  }, [readOnly])
 
   useEffect(() => {
     // The list is server-owned; fetching it is the external synchronization for this view.
@@ -370,21 +383,23 @@ function TickerReports() {
           <h1>Event alerts</h1>
           <p>One report per ticker for what was newly found in each search run, with the clients it may affect.</p>
         </div>
-        <div className="queue-summary" aria-label={`${needDecision} tickers need a decision`}>
-          <Icon name="notifications_active" />
-          <span><strong>{needDecision}</strong> need a decision</span>
-        </div>
+        {!readOnly && (
+          <div className="queue-summary" aria-label={`${needDecision} tickers need a decision`}>
+            <Icon name="notifications_active" />
+            <span><strong>{needDecision}</strong> need a decision</span>
+          </div>
+        )}
       </header>
 
-      {view === 'open' && <BatchNotify ready={ready} selected={selected} panelRef={panelRef} />}
-      {view === 'open' && <FloatingBatchHint panelRef={panelRef} readyCount={ready.length} />}
+      {!readOnly && view === 'open' && <BatchNotify ready={ready} selected={selected} panelRef={panelRef} />}
+      {!readOnly && view === 'open' && <FloatingBatchHint panelRef={panelRef} readyCount={ready.length} />}
 
       <div className="drafts-tabs alerts-tabs" role="tablist" aria-label="Open reports or sent out">
         <button type="button" role="tab" aria-selected={view === 'open'} onClick={() => setView('open')}>Open reports</button>
         <button type="button" role="tab" aria-selected={view === 'sent'} onClick={() => setView('sent')}>Sent out</button>
       </div>
 
-      {view === 'sent' ? <SentOutList /> : (
+      {view === 'sent' ? <SentOutList readOnly={readOnly} /> : (
         <section className="alerts-workspace" aria-label="Tickers and their reports">
           <aside className="alert-queue" aria-label="Tickers">
             <div className="queue-toolbar">
@@ -392,15 +407,17 @@ function TickerReports() {
               <button className="icon-button" type="button" onClick={() => refresh()} aria-label="Refresh tickers"><Icon name="refresh" /></button>
             </div>
             <p className="queue-auto">Checks for new reports by itself every {POLL_MS / 1000} seconds.</p>
-            <div className="queue-filters">
-              <label>
-                <input type="checkbox" checked={onlyOpen} onChange={(e) => {
-                  setOnlyOpen(e.target.checked)
-                  setState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
-                }} />
-                {' '}Only tickers needing a decision
-              </label>
-            </div>
+            {!readOnly && (
+              <div className="queue-filters">
+                <label>
+                  <input type="checkbox" checked={onlyOpen} onChange={(e) => {
+                    setOnlyOpen(e.target.checked)
+                    setState({ loading: true, error: '', items: [], nextCursor: null, loadingMore: false })
+                  }} />
+                  {' '}Only tickers needing a decision
+                </label>
+              </div>
+            )}
             {state.error && <div className="queue-error" role="alert">{state.error}</div>}
             {state.loading && <div className="queue-loading" role="status"><Icon name="autorenew" /> Loading tickers…</div>}
             {!state.loading && !state.error && state.items.length === 0 && (
@@ -440,7 +457,7 @@ function TickerReports() {
 
           <article className="alert-detail" aria-live="polite">
             {selectedId
-              ? <TickerDetail key={selectedId} eventId={selectedId} selected={selected} setSelected={setSelected} onChanged={refresh} />
+              ? <TickerDetail key={selectedId} eventId={selectedId} selected={selected} setSelected={setSelected} onChanged={refresh} readOnly={readOnly} />
               : <div className="detail-empty"><Icon name="find_in_page" /><h2>Select a ticker to review</h2><p>Its report, sources and affected clients will open here.</p></div>}
           </article>
         </section>

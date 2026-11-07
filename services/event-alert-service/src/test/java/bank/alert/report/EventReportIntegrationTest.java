@@ -360,6 +360,26 @@ class EventReportIntegrationTest {
     }
 
     @Test
+    void anAdministratorSeesTheEventsOfEveryAgentWhileAnotherAgentSeesNone() {
+        store("one.example", "2026-09-26T22:00:00Z", "a");
+        reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.GENERATED, report("v1"), null, 1));
+        pipeline.processPending();
+        reports.refresh(20);
+        String owner = jdbc.queryForObject("SELECT assigned_agent_subject FROM alert LIMIT 1", String.class);
+        UUID eventId = jdbc.queryForObject("SELECT id FROM public_event", UUID.class);
+
+        assertThat(eventQueries.list(null, false, false, null, 25).items()).as("an administrator: every agent's events").hasSize(1);
+        assertThat(eventQueries.list("someone-else", false, false, null, 25).items()).as("another agent: none").isEmpty();
+        AgentEventModels.EventDetail asAdmin = eventQueries.detail(eventId, null);
+        assertThat(asAdmin.report()).isNotNull();
+        assertThat(asAdmin.clients()).as("the clients of every agent").isNotEmpty();
+        assertThat(asAdmin.severity()).isNotNull();
+        assertThat(eventQueries.detail(eventId, owner).clients()).as("an agent: only their own clients")
+                .isNotEmpty().hasSizeLessThanOrEqualTo(asAdmin.clients().size());
+        assertThatThrownBy(() -> eventQueries.detail(eventId, "someone-else")).isInstanceOf(AlertNotFoundException.class);
+    }
+
+    @Test
     void anEventStillBeingTriedHasNoFallbackYet() {
         store("one.example", "2026-09-26T22:00:00Z", "a");
         reportOutcome.set(ReportOutcome.of(ReportOutcome.Status.PENDING, null, "MODEL_DISABLED", 0));

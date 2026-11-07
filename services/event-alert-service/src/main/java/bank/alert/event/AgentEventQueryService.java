@@ -93,13 +93,14 @@ public class AgentEventQueryService {
                   JOIN public_event pe ON pe.id = a.public_event_id
                   JOIN source_result sr ON sr.id = pe.source_result_id
                   LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
-                 WHERE %s = ?
+                 WHERE (CAST(? AS text) IS NULL OR %s = CAST(? AS text))
                    AND NOT (NOT EXISTS (SELECT 1 FROM event_report r0 WHERE r0.public_event_id = pe.id)
                             AND COALESCE((SELECT t0.attempts FROM event_report_attempt t0 WHERE t0.public_event_id = pe.id), 0) >= ?)
                  GROUP BY pe.id, sr.title, sr.canonical_url, sr.source_domain, sr.published_at, sr.retrieved_at
                 """.formatted(OWNER));
         List<Object> args = new ArrayList<>();
         args.add(agentSubject);
+        args.add(agentSubject); // a null agent (an administrator) matches every owner
         // An event whose report the model could not write and that has no fallback either is left out: nothing is shown for it.
         args.add(bank.alert.report.SafeClientReportGenerator.GIVE_UP_AFTER_FAILED_DRAFTS);
         List<String> having = new ArrayList<>();
@@ -155,9 +156,9 @@ public class AgentEventQueryService {
                   JOIN public_event pe ON pe.id = a.public_event_id
                   JOIN source_result sr ON sr.id = pe.source_result_id
                   LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
-                 WHERE pe.id = ? AND %s = ?
+                 WHERE pe.id = ? AND (CAST(? AS text) IS NULL OR %s = CAST(? AS text))
                  GROUP BY pe.id, sr.title, sr.canonical_url, sr.source_domain, sr.published_at, sr.retrieved_at
-                """.formatted(OWNER), (rs, n) -> card(rs), eventId, agentSubject);
+                """.formatted(OWNER), (rs, n) -> card(rs), eventId, agentSubject, agentSubject);
         if (cards.isEmpty()) throw new AlertNotFoundException();
 
         List<AffectedClient> clients = jdbc.query("""
@@ -174,7 +175,7 @@ public class AgentEventQueryService {
                   FROM alert a
                   JOIN holding_snapshot hs ON hs.id = a.holding_snapshot_id
                   LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
-                 WHERE a.public_event_id = ? AND %s = ?
+                 WHERE a.public_event_id = ? AND (CAST(? AS text) IS NULL OR %s = CAST(? AS text))
                  ORDER BY a.score DESC, a.client_ref, a.instrument_id
                 """.formatted(OWNER), (rs, n) -> new AffectedClient(
                 rs.getObject("id", UUID.class), rs.getString("client_ref"), rs.getString("account_ref"),
@@ -182,12 +183,12 @@ public class AgentEventQueryService {
                 AlertStatus.valueOf(rs.getString("status")), rs.getBigDecimal("score"),
                 rs.getBigDecimal("pct"),
                 rs.getBigDecimal("value_sgd").setScale(2, RoundingMode.HALF_UP).toPlainString(),
-                rs.getLong("version")), eventId, agentSubject);
+                rs.getLong("version")), eventId, agentSubject, agentSubject);
 
         List<UUID> actions = jdbc.queryForList("""
-                SELECT id FROM agent_event_action WHERE public_event_id = ? AND actor_subject = ?
+                SELECT id FROM agent_event_action WHERE public_event_id = ? AND (CAST(? AS text) IS NULL OR actor_subject = CAST(? AS text))
                  ORDER BY created_at DESC, id DESC LIMIT 1
-                """, UUID.class, eventId, agentSubject);
+                """, UUID.class, eventId, agentSubject, agentSubject);
         ActionResult latest = actions.isEmpty() ? null : loadAction(actions.getFirst());
         return new EventDetail(cards.getFirst(), clients, latest, loadReport(eventId, clients), loadSeverity(eventId, agentSubject));
     }
@@ -200,11 +201,11 @@ public class AgentEventQueryService {
                   JOIN alert_factor f ON f.alert_id = a.id AND f.code = 'EVENT_SEVERITY'
                   JOIN public_event pe ON pe.id = a.public_event_id
                   LEFT JOIN client_assignment ca ON ca.client_ref = a.client_ref
-                 WHERE a.public_event_id = ? AND %s = ?
+                 WHERE a.public_event_id = ? AND (CAST(? AS text) IS NULL OR %s = CAST(? AS text))
                  ORDER BY f.contribution DESC LIMIT 1
                 """.formatted(OWNER), (rs, n) -> new EventSeverity(rs.getBigDecimal("contribution"),
                 MaterialityScorer.SEVERITY_WEIGHT.intValue(), rs.getString("classification"), rs.getString("direction")),
-                eventId, agentSubject);
+                eventId, agentSubject, agentSubject);
         return found.isEmpty() ? null : found.getFirst();
     }
 

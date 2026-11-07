@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
-/** The agent's event briefings: one card per public event, with the affected clients on drill-down. */
+/** The agent's event briefings: one card per public event, with the affected clients on drill-down. An administrator can read them all. */
 @RestController
 @RequestMapping("/api/alerts/events")
 @Validated
@@ -40,20 +40,26 @@ public class AgentEventController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('AGENT','ADMIN')")
     public EventPage list(
             @RequestParam(defaultValue = "false") boolean onlyOpen,
             @RequestParam(defaultValue = "false") boolean includeClosed,
             @RequestParam(defaultValue = "25") @Min(1) @Max(100) int limit,
             @RequestParam(required = false) @Size(max = 512) String cursor,
             Authentication authentication) {
-        return queries.list(authentication.getName(), onlyOpen, includeClosed, cursor, limit);
+        return queries.list(ownerOf(authentication), onlyOpen, includeClosed, cursor, limit);
     }
 
     @GetMapping("/{eventId}")
-    @PreAuthorize("hasRole('AGENT')")
+    @PreAuthorize("hasAnyRole('AGENT','ADMIN')")
     public EventDetail detail(@PathVariable UUID eventId, Authentication authentication) {
-        return queries.detail(eventId, authentication.getName());
+        return queries.detail(eventId, ownerOf(authentication));
+    }
+
+    /** An agent sees the events of their own clients; an administrator, who may only read, sees every agent's (null = all). */
+    private static String ownerOf(Authentication authentication) {
+        boolean admin = authentication.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        return admin ? null : authentication.getName();
     }
 
     @PostMapping("/{eventId}/actions")
