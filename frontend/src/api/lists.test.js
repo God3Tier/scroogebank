@@ -1,11 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authorizationHeader } from '../auth/session.js'
 import { createAccount, listAccountTransactions, listAccounts } from './accounts.js'
 import { listClients } from './clients.js'
 import { getDashboard, panelData, windowForDays } from './dashboard.js'
 import { listTransactions } from './transactions.js'
-import { createUser, disableUser, listUsers } from './users.js'
+import { createUser, disableUser, listUsers, resetPassword } from './users.js'
+
+vi.hoisted(() => { vi.stubEnv('VITE_API_URL', '') })
+afterAll(() => vi.unstubAllEnvs())
 
 vi.mock('../auth/session.js', () => ({ authorizationHeader: vi.fn() }))
 
@@ -84,6 +87,22 @@ describe('list and admin APIs', () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 
     await expect(disableUser('user-1')).resolves.toBeNull()
+  })
+
+  it('requests a password reset with the caller token and accepts an empty 202', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 202 }))
+
+    await expect(resetPassword('user-2')).resolves.toBeNull()
+    const [url, options] = lastCall()
+    expect(url).toBe('/api/users/user-2/reset-password')
+    expect(options.method).toBe('POST')
+    expect(options.headers).toMatchObject({ Authorization: 'Bearer synthetic-token' })
+  })
+
+  it('preserves password-reset permission errors', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ message: 'Forbidden' }, 403))
+
+    await expect(resetPassword('user-2')).rejects.toMatchObject({ status: 403, message: 'Forbidden' })
   })
 
   it('asks the dashboard for a window and its options', async () => {

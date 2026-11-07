@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 
 import { reassignClients } from '../api/clients.js'
-import { disableUser, listUsers } from '../api/users.js'
+import { disableUser, listUsers, resetPassword } from '../api/users.js'
 import { Pager, ViewAll } from './ListFooter.jsx'
 import ReassignForm from './ReassignForm.jsx'
 import { numberedSource, usePagedList } from './paging.js'
@@ -31,6 +31,8 @@ function UserList({ role, title, paged = false }) {
   const [reassigning, setReassigning] = useState(null)
   const [receivers, setReceivers] = useState({ loading: false, users: [] })
   const [moved, setMoved] = useState('')
+  const [resettingId, setResettingId] = useState(null)
+  const [resetMessage, setResetMessage] = useState('')
   const auth = useAuth()
   const currentSub = auth.user?.profile?.sub
 
@@ -48,6 +50,23 @@ function UserList({ role, title, paged = false }) {
       await list.reload()
     } catch (error) {
       setProblem(disableProblem(error))
+    }
+  }
+
+  async function handleResetPassword(user) {
+    if (role !== 'AGENT' || resettingId !== null) return
+    setProblem('')
+    setResetMessage('')
+    setResettingId(user.id)
+    try {
+      await resetPassword(user.id)
+      setResetMessage(`${agentName(user)}: password reset requested. Cognito will email a reset code.`)
+    } catch (error) {
+      setProblem(error.status === 403
+        ? 'You do not have permission to reset this password.'
+        : 'The password reset could not be requested. Try again.')
+    } finally {
+      setResettingId(null)
     }
   }
 
@@ -81,6 +100,7 @@ function UserList({ role, title, paged = false }) {
       {list.error && <p className="form-error" role="alert">Users could not be loaded.</p>}
       {problem && <p className="form-error" role="alert">{problem}</p>}
       {moved && <p className="success-message" role="status">{moved}</p>}
+      {resetMessage && <p className="success-message" role="status">{resetMessage}</p>}
       {empty && <p className="empty-note">None yet.</p>}
       <ul className="row-list">
         {list.rows.map((user) => (
@@ -88,6 +108,11 @@ function UserList({ role, title, paged = false }) {
             <span>
               {user.firstName} {user.lastName} ({user.email})
             </span>
+            {agentList && (
+              <button type="button" disabled={resettingId !== null} onClick={() => handleResetPassword(user)}>
+                {resettingId === user.id ? 'Requesting reset…' : 'Reset password'}
+              </button>
+            )}
             {agentList && reassigning !== user.id && (
               <button type="button" onClick={() => openReassign(user)}>Reassign clients</button>
             )}

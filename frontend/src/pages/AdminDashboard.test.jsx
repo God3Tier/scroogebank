@@ -1,15 +1,15 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { listClients, reassignClients } from '../api/clients.js'
 import { listTransactions } from '../api/transactions.js'
-import { createUser, disableUser, listUsers } from '../api/users.js'
+import { createUser, disableUser, listUsers, resetPassword } from '../api/users.js'
 import AdminDashboard from './AdminDashboard.jsx'
 
 vi.mock('../api/clients.js', () => ({ listClients: vi.fn(), reassignClients: vi.fn() }))
 vi.mock('../api/transactions.js', () => ({ listTransactions: vi.fn() }))
-vi.mock('../api/users.js', () => ({ createUser: vi.fn(), disableUser: vi.fn(), listUsers: vi.fn() }))
+vi.mock('../api/users.js', () => ({ createUser: vi.fn(), disableUser: vi.fn(), listUsers: vi.fn(), resetPassword: vi.fn() }))
 vi.mock('../api/activities.js', () => ({
   listActivities: vi.fn().mockResolvedValue({ content: [], nextCursor: null }),
 }))
@@ -114,6 +114,42 @@ describe('admin dashboard', () => {
     expect(disableUser).toHaveBeenCalledWith('user-2')
   })
 
+  it('requests an agent password reset once while pending, then explains the next step', async () => {
+    let finishReset
+    resetPassword.mockReturnValue(new Promise((resolve) => { finishReset = resolve }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    const button = within(row).getByRole('button', { name: 'Reset password' })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('Requesting reset')
+    fireEvent.click(button)
+    expect(resetPassword).toHaveBeenCalledExactlyOnceWith('user-2')
+
+    await act(async () => { finishReset(null) })
+    expect(await screen.findByRole('status')).toHaveTextContent('Synthetic Agent: password reset requested. Cognito will email a reset code.')
+    expect(button).toBeEnabled()
+  })
+
+  it('explains a refused password reset and allows retrying', async () => {
+    resetPassword.mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }))
+    renderDashboard()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Agents' }))
+
+    const row = (await screen.findByText(/Synthetic Agent/)).closest('li')
+    const button = within(row).getByRole('button', { name: 'Reset password' })
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have permission to reset this password.')
+    expect(button).toBeEnabled()
+
+    resetPassword.mockResolvedValueOnce(null)
+    fireEvent.click(button)
+    expect(await screen.findByRole('status')).toHaveTextContent('password reset requested')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   // Requirements Q&A UM17, ADR-0060.
   it("moves all of a disabled agent's clients to an enabled agent", async () => {
     listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([], 2) : page([AGENT, LEAVER, OTHER])))
@@ -149,12 +185,13 @@ describe('admin dashboard', () => {
     expect(await within(row).findByRole('alert')).toHaveTextContent('nothing was moved')
   })
 
-  it('offers no reassignment for admins', async () => {
+  it('offers no reassignment or password reset for admins', async () => {
     listUsers.mockImplementation(({ role }) => Promise.resolve(role === 'ADMIN' ? page([{ ...OTHER, id: 'admin-1', role: 'ADMIN' }]) : page([AGENT])))
     renderDashboard()
     fireEvent.click(screen.getByRole('button', { name: 'Manage Admins' }))
 
     const row = (await screen.findByText(/Other Agent/)).closest('li')
     expect(within(row).queryByRole('button', { name: 'Reassign clients' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Reset password' })).not.toBeInTheDocument()
   })
 })
