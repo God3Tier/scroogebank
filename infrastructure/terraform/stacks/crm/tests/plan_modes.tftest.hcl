@@ -700,12 +700,12 @@ run "search_on_add_lets_the_api_start_the_worker" {
   }
 }
 
-run "page_schedule_defaults_to_twenty_minutes_for_the_check" {
+run "page_schedule_defaults_to_four_hours" {
   command = plan
 
   assert {
-    condition     = module.event_alert_service.app_environment["ALERT_SCHEDULE_INTERVAL"] == "PT20M"
-    error_message = "The page says the automatic search runs every twenty minutes during the 2026-11-07 check; set it back to PT4H afterwards."
+    condition     = module.event_alert_service.app_environment["ALERT_SCHEDULE_INTERVAL"] == "PT4H"
+    error_message = "The page says the automatic search runs every four hours, matching the alert-worker schedule (ADR-0081)."
   }
 }
 
@@ -713,12 +713,12 @@ run "page_schedule_follows_the_variable" {
   command = plan
 
   variables {
-    alert_schedule_interval = "PT4H"
+    alert_schedule_interval = "PT20M"
   }
 
   assert {
-    condition     = module.event_alert_service.app_environment["ALERT_SCHEDULE_INTERVAL"] == "PT4H"
-    error_message = "Setting it back to four hours changes what the page says."
+    condition     = module.event_alert_service.app_environment["ALERT_SCHEDULE_INTERVAL"] == "PT20M"
+    error_message = "Setting a short test interval changes what the page says."
   }
 }
 
